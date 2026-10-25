@@ -446,10 +446,12 @@ function AboutPanel() {
 export interface SettingsModalProps {
   onClose: () => void;
   initialSection?: Section;
+  /** 独立窗口模式：不套用 Modal 遮罩，渲染为完整页面。 */
+  standalone?: boolean;
 }
 
-/** 设置对话框。 */
-export function SettingsModal({ onClose, initialSection = 'appearance' }: SettingsModalProps) {
+/** 设置对话框；支持独立窗口模式。 */
+export function SettingsModal({ onClose, initialSection = 'appearance', standalone = false }: SettingsModalProps) {
   const [section, setSection] = useState<Section>(initialSection);
   const [conflicts, setConflicts] = useState<string[]>([]);
   const state = useStore();
@@ -458,6 +460,90 @@ export function SettingsModal({ onClose, initialSection = 'appearance' }: Settin
     void bridge.shortcutConflicts().then(setConflicts);
   }, []);
 
+  // 独立窗口下 Esc 直接关闭；模态下沿用 Modal 自身的 Esc 行为。
+  useEffect(() => {
+    if (!standalone) return;
+    const handler = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handler, true);
+    return () => document.removeEventListener('keydown', handler, true);
+  }, [standalone, onClose]);
+
+  const body = (
+    <div className="settings-layout">
+      <nav className="settings-nav" aria-label="设置分类" role="tablist" aria-orientation="vertical">
+        {SECTIONS.map(({ id, label }) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            className={`settings-nav-button settings-nav-item${section === id ? ' active' : ''}`}
+            aria-selected={section === id}
+            data-section={id}
+            tabIndex={section === id ? 0 : -1}
+            onClick={() => setSection(id)}
+            onKeyDown={(event) => {
+              const index = SECTIONS.findIndex((s) => s.id === section);
+              if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                setSection(SECTIONS[(index + 1) % SECTIONS.length].id);
+              } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                setSection(SECTIONS[(index - 1 + SECTIONS.length) % SECTIONS.length].id);
+              }
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      <div
+        id="settings-panel"
+        className="settings-panel settings-content"
+        role="tabpanel"
+        aria-labelledby={`settings-tab-${section}`}
+      >
+        <div className="settings-panel-heading settings-content-header">
+          <h3>{SECTIONS.find((s) => s.id === section)?.label}</h3>
+        </div>
+
+        {section === 'appearance' ? <AppearancePanel settings={state.settings} /> : null}
+        {section === 'shortcuts' ? <ShortcutsPanel conflicts={conflicts} /> : null}
+        {section === 'data' ? <DataPanel settings={state.settings} /> : null}
+        {section === 'trash' ? <TrashPanel settings={state.settings} /> : null}
+        {section === 'about' ? <AboutPanel /> : null}
+      </div>
+    </div>
+  );
+
+  if (standalone) {
+    return (
+      <div className="settings-window">
+        <header className="settings-window-header">
+          <h2>设置</h2>
+          <div className="window-actions">
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="关闭设置"
+              title="关闭设置"
+              onClick={onClose}
+            >
+              <Icon name="x" />
+            </button>
+          </div>
+        </header>
+        {body}
+      </div>
+    );
+  }
+
   return (
     <Modal
       title="设置"
@@ -465,51 +551,7 @@ export function SettingsModal({ onClose, initialSection = 'appearance' }: Settin
       onClose={onClose}
       footer={null}
     >
-      <div className="settings-layout">
-        <nav className="settings-nav" aria-label="设置分类" role="tablist" aria-orientation="vertical">
-          {SECTIONS.map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              className={`settings-nav-button settings-nav-item${section === id ? ' active' : ''}`}
-              aria-selected={section === id}
-              data-section={id}
-              tabIndex={section === id ? 0 : -1}
-              onClick={() => setSection(id)}
-              onKeyDown={(event) => {
-                const index = SECTIONS.findIndex((s) => s.id === section);
-                if (event.key === 'ArrowDown') {
-                  event.preventDefault();
-                  setSection(SECTIONS[(index + 1) % SECTIONS.length].id);
-                } else if (event.key === 'ArrowUp') {
-                  event.preventDefault();
-                  setSection(SECTIONS[(index - 1 + SECTIONS.length) % SECTIONS.length].id);
-                }
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </nav>
-
-        <div
-          id="settings-panel"
-          className="settings-panel settings-content"
-          role="tabpanel"
-          aria-labelledby={`settings-tab-${section}`}
-        >
-          <div className="settings-panel-heading settings-content-header">
-            <h3>{SECTIONS.find((s) => s.id === section)?.label}</h3>
-          </div>
-
-          {section === 'appearance' ? <AppearancePanel settings={state.settings} /> : null}
-          {section === 'shortcuts' ? <ShortcutsPanel conflicts={conflicts} /> : null}
-          {section === 'data' ? <DataPanel settings={state.settings} /> : null}
-          {section === 'trash' ? <TrashPanel settings={state.settings} /> : null}
-          {section === 'about' ? <AboutPanel /> : null}
-        </div>
-      </div>
+      {body}
     </Modal>
   );
 }

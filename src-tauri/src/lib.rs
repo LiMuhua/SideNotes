@@ -82,6 +82,8 @@ pub fn run() {
             commands::show_capture,
             commands::hide_capture,
             commands::toggle_capture,
+            commands::show_settings,
+            commands::hide_settings,
             commands::inspect_file,
             commands::copy_file_paths,
             commands::set_sidebar_pinned,

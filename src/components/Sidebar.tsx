@@ -86,6 +86,43 @@ export function Sidebar() {
     window.clearTimeout(hideTimer.current);
   }, []);
 
+  /* ==================== 拖拽调整侧栏宽度 ==================== */
+  // 拖拽期间通过 pointer capture 锁定事件，避免划过文本触发选区。
+  const resizing = useRef(false);
+  const startX = useRef(0);
+  const startWidth = useRef(0);
+
+  const handleResizePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    resizing.current = true;
+    startX.current = event.clientX;
+    startWidth.current = state.settings.width;
+    (event.target as HTMLElement).setPointerCapture(event.pointerId);
+    document.body.style.userSelect = 'none';
+  }, [state.settings.width]);
+
+  const handleResizePointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!resizing.current) return;
+    event.preventDefault();
+    const delta = event.clientX - startX.current;
+    // 右侧边：往左拖增大宽度；左侧边：往右拖增大宽度。
+    const adjusted = state.settings.edge === 'left' ? delta : -delta;
+    const next = Math.min(720, Math.max(360, startWidth.current + adjusted));
+    void store.updateSettings({ width: next });
+    void bridge.applySidebarLayout(
+      { edge: state.settings.edge, width: next },
+      state.settings.edgeTrigger,
+    );
+  }, [state.settings.edge, state.settings.edgeTrigger]);
+
+  const handleResizePointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!resizing.current) return;
+    resizing.current = false;
+    document.body.style.userSelect = '';
+    try { (event.target as HTMLElement).releasePointerCapture(event.pointerId); } catch { /* 忽略已释放 */ }
+  }, []);
+
   /* ==================== 过滤后的列表 ==================== */
   const listNotes = useMemo(() => {
     const baseList = state.notes
@@ -137,6 +174,17 @@ export function Sidebar() {
     store.changeDraft(composerText);
   }, [composerText]);
 
+  /* ==================== 窗口失焦自动收起 ==================== */
+  useEffect(() => {
+    const handleBlur = (): void => {
+      // 打开了浮层或正在编辑/输入时不自动收起，避免点进设置弹窗就消失。
+      if (pinned || editing || composerActive || contextMenu || emojiTarget) return;
+      scheduleHide();
+    };
+    window.addEventListener('blur', handleBlur);
+    return () => window.removeEventListener('blur', handleBlur);
+  }, [pinned, editing, composerActive, contextMenu, emojiTarget, scheduleHide]);
+
   /* ==================== 键盘快捷键 ==================== */
   useEffect(() => {
     const handler = (event: KeyboardEvent): void => {
@@ -156,11 +204,20 @@ export function Sidebar() {
         if (emojiTarget) { setEmojiTarget(null); return; }
         if (imagePreview) { setImagePreview(null); return; }
         if (editing) { cancelEdit(); return; }
-        if (composerActive) { setComposerActive(false); }
+        if (composerActive) { setComposerActive(false); return; }
+        // 搜索面板开着时 Esc 收起搜索（清空查询）。
+        if (searchOpen) { setSearchOpen(false); setQuery(''); setSelectedTag(''); return; }
+        // 都没有，收起侧栏。
+        void bridge.hideSidebar();
       }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
         event.preventDefault();
-        document.getElementById('search-input')?.focus();
+        if (!searchOpen) {
+          setSearchOpen(true);
+          setTimeout(() => document.getElementById('search-input')?.focus(), 50);
+        } else {
+          document.getElementById('search-input')?.focus();
+        }
       }
     };
     document.addEventListener('keydown', handler, true);
@@ -370,7 +427,18 @@ export function Sidebar() {
         onMouseLeave={scheduleHide}
       >
         {/* 拖动宽度手柄 */}
-        <div className="sidebar-resizer" data-edge={state.settings.edge} />
+        <div
+          className="sidebar-resizer"
+          data-edge={state.settings.edge}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="调整侧栏宽度"
+          tabIndex={0}
+          onPointerDown={handleResizePointerDown}
+          onPointerMove={handleResizePointerMove}
+          onPointerUp={handleResizePointerUp}
+          onPointerCancel={handleResizePointerUp}
+        />
 
         <header className="sidebar-header">
           <div className="sidebar-brand">
@@ -488,6 +556,12 @@ export function Sidebar() {
                 autoComplete="off"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
+                onBlur={(event) => {
+                  // 失焦时若未输入内容则自动收起搜索面板。
+                  if (!query && !event.currentTarget.closest('#header-search')?.contains(event.relatedTarget as Node | null)) {
+                    setSearchOpen(false);
+                  }
+                }}
               />
               {query ? (
                 <button

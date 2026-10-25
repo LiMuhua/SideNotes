@@ -7,34 +7,27 @@
  * 材质应用到 body 上，供 CSS 切换外观。
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Capture } from './components/Capture';
 import { SettingsModal } from './components/SettingsModal';
 import { ToastProvider } from './hooks/useToast';
+import { useStoreSlice } from './hooks/useStore';
 import * as store from './core/store';
 import * as bridge from './core/bridge';
 import { resolveTheme, resolveFontFamily } from './core/settings';
 import type { WindowRole } from './main';
-
 export interface AppProps {
   role: WindowRole;
 }
 
 /** 应用根。 */
 export function App({ role }: AppProps) {
-  const [ready, setReady] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const ready = useStoreSlice((s) => s.ready);
 
   /* ==================== 首次加载 ==================== */
   useEffect(() => {
-    let cancelled = false;
-    void store.initialize().then(() => {
-      if (!cancelled) setReady(true);
-    });
-    return () => {
-      cancelled = true;
-    };
+    void store.initialize();
   }, []);
 
   /* ==================== 主题、字体与材质 ==================== */
@@ -73,8 +66,13 @@ export function App({ role }: AppProps) {
       void bridge.showSidebar({ edge: store.getState().settings.edge, width: store.getState().settings.width });
     }).then((unlisten) => cleanups.push(unlisten));
 
-    // 打开设置的自定义事件（侧栏与托盘共用）。
-    const openSettings = (): void => setSettingsOpen(true);
+    // 托盘/按钮：打开设置窗口。
+    void bridge.onAppEvent(bridge.APP_EVENTS.traySettings, () => {
+      void bridge.showSettings();
+    }).then((unlisten) => cleanups.push(unlisten));
+
+    // 旧的自定义事件兼容：侧栏按钮等发出此事件时也打开设置窗口。
+    const openSettings = (): void => { void bridge.showSettings(); };
     window.addEventListener('sidenotes:open-settings', openSettings);
     cleanups.push(() => window.removeEventListener('sidenotes:open-settings', openSettings));
 
@@ -129,8 +127,9 @@ export function App({ role }: AppProps) {
 
   return (
     <ToastProvider>
-      {role === 'sidebar' ? <Sidebar /> : <Capture />}
-      {settingsOpen ? <SettingsModal onClose={() => setSettingsOpen(false)} /> : null}
+      {role === 'sidebar' ? <Sidebar /> : role === 'capture' ? <Capture /> : (
+        <SettingsModal onClose={() => void bridge.hideSettings()} standalone />
+      )}
     </ToastProvider>
   );
 }

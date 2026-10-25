@@ -37,15 +37,38 @@ body[data-window='sidebar'] .sidebar.open {
   max-width: none;
   transform: none !important;
   visibility: visible;
-  transition: none;
-  border-left: 1px solid var(--line);
-  border-right: none;
+  border-radius: 0;
   box-shadow: none;
 }
 
+/* 右侧边：左侧一条分隔线，无右边距。 */
+body[data-window='sidebar'][data-edge='right'] .sidebar {
+  border-left: 1px solid var(--line);
+  border-right: none;
+}
+
+/* 左侧边：右侧一条分隔线，无左边距；消除原型 left 定位偏移。 */
 body[data-window='sidebar'][data-edge='left'] .sidebar {
   border-left: none;
   border-right: 1px solid var(--line);
+  left: 0 !important;
+  right: auto !important;
+}
+
+/* 侧栏显示/隐藏动画：透明度 + 横向微移。窗口始终存在，靠前端控制过渡。 */
+body[data-window='sidebar'] .sidebar {
+  transition:
+    opacity var(--sidebar-anim-duration, 220ms) ease,
+    transform var(--sidebar-anim-duration, 220ms) cubic-bezier(0.22, 0.7, 0.36, 1);
+}
+
+body[data-window='sidebar'] .sidebar.is-hiding {
+  opacity: 0;
+  transform: translateX(var(--sidebar-hide-offset, 18px));
+}
+
+body[data-window='sidebar'][data-edge='left'] .sidebar.is-hiding {
+  transform: translateX(calc(var(--sidebar-hide-offset, 18px) * -1));
 }
 
 /* 标题栏可拖动窗口；其中的按钮保持可点击。 */
@@ -300,6 +323,11 @@ body[data-window='capture'] .capture-body {
 
 /* ==================== 桌面端新增状态 ==================== */
 
+/* Composer 水平间距与列表上方元素一致（原型为 20px）。 */
+body[data-window='sidebar'] .composer-sticky-slot {
+  padding: 0 20px;
+}
+
 /* 热键冲突与保存失败的提示沿用原型的警告条外观。 */
 .desktop-notice {
   display: flex;
@@ -361,4 +389,46 @@ body[data-theme='dark'] .desktop-notice.is-error {
   .app-loading .icon {
     animation: none;
   }
+}
+
+/* ==================== 设置独立窗口 ==================== */
+
+body[data-window='settings'] {
+  overflow: auto;
+}
+
+.settings-window {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--paper);
+}
+
+.settings-window-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px 10px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.settings-window-header h2 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.settings-window-header .window-actions {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.settings-window .settings-layout {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
 }

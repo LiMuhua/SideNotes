@@ -15,13 +15,16 @@ import './styles/prototype.css';
 import './styles/desktop.css';
 
 /** 当前窗口承担的角色。 */
-export type WindowRole = 'sidebar' | 'capture';
+export type WindowRole = 'sidebar' | 'capture' | 'settings';
 
 /** 读取窗口角色；浏览器预览时默认显示侧栏。 */
 function resolveRole(): WindowRole {
   if (!isDesktop()) return 'sidebar';
   try {
-    return getCurrentWindow().label === 'capture' ? 'capture' : 'sidebar';
+    const label = getCurrentWindow().label;
+    if (label === 'capture') return 'capture';
+    if (label === 'settings') return 'settings';
+    return 'sidebar';
   } catch {
     return 'sidebar';
   }

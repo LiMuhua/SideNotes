@@ -122,6 +122,18 @@ pub fn toggle_capture(app: AppHandle) -> AppResult<bool> {
     windows::toggle_capture(&app)
 }
 
+/// 显示设置窗口。
+#[tauri::command]
+pub fn show_settings(app: AppHandle) -> AppResult<()> {
+    windows::show_settings(&app)
+}
+
+/// 隐藏设置窗口。
+#[tauri::command]
+pub fn hide_settings(app: AppHandle) -> AppResult<()> {
+    windows::hide_settings(&app)
+}
+
 /// 读取指定路径的文件是否存在及其大小，供文件引用校验。
 #[tauri::command]
 pub fn inspect_file(path: String) -> AppResult<FileStatus> {

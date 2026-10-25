@@ -164,6 +164,16 @@ export function toggleCapture(): Promise<boolean> {
   return call<boolean>('toggle_capture', undefined, true);
 }
 
+/** 显示设置窗口。 */
+export function showSettings(): Promise<void> {
+  return call<void>('show_settings', undefined, undefined as unknown as void);
+}
+
+/** 隐藏设置窗口。 */
+export function hideSettings(): Promise<void> {
+  return call<void>('hide_settings', undefined, undefined as unknown as void);
+}
+
 /** 同步固定状态：固定时保留任务栏图标便于 Alt+Tab 切回。 */
 export function setSidebarPinned(pinned: boolean): Promise<void> {
   return call<void>('set_sidebar_pinned', { pinned }, undefined as unknown as void);

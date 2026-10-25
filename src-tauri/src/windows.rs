@@ -14,6 +14,8 @@ use crate::error::{AppError, AppResult};
 pub const SIDEBAR_LABEL: &str = "main";
 /// 速记浮窗标签。
 pub const CAPTURE_LABEL: &str = "capture";
+/// 设置窗口标签。
+pub const SETTINGS_LABEL: &str = "settings";
 
 /// 侧栏几何配置，由前端设置驱动。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -116,6 +118,34 @@ pub fn toggle_capture(app: &AppHandle) -> AppResult<bool> {
         Ok(false)
     } else {
         show_capture(app)?;
+        Ok(true)
+    }
+}
+
+/// 显示设置窗口：居中并交出焦点。
+pub fn show_settings(app: &AppHandle) -> AppResult<()> {
+    let settings = window(app, SETTINGS_LABEL)?;
+    settings.center()?;
+    settings.show()?;
+    settings.set_focus()?;
+    Ok(())
+}
+
+/// 隐藏设置窗口。
+pub fn hide_settings(app: &AppHandle) -> AppResult<()> {
+    let settings = window(app, SETTINGS_LABEL)?;
+    settings.hide()?;
+    Ok(())
+}
+
+/// 切换设置窗口可见性，返回切换后的状态。
+pub fn toggle_settings(app: &AppHandle) -> AppResult<bool> {
+    let settings = window(app, SETTINGS_LABEL)?;
+    if settings.is_visible().unwrap_or(false) {
+        settings.hide()?;
+        Ok(false)
+    } else {
+        show_settings(app)?;
         Ok(true)
     }
 }
