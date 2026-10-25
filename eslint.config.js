@@ -9,7 +9,8 @@ export default tseslint.config(
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
-  reactHooks.configs['recommended-latest'],
+  // 插件 7.x 的 configs.flat 才是扁平配置形态，顶层同名入口仍是旧结构。
+  reactHooks.configs.flat['recommended-latest'],
   {
     files: ['**/*.{ts,tsx}'],
     languageOptions: {

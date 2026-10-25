@@ -1,4 +1,6 @@
-import { defineConfig } from 'vite';
+// 使用 vitest/config 的 defineConfig：它在 Vite 配置类型上补充 test 字段，
+// Vite 自身会忽略该字段，两个工具因此共用同一份别名与插件配置。
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath, URL } from 'node:url';
 
