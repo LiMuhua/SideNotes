@@ -1,0 +1,364 @@
+/* ==================== 桌面端窗口适配 ====================
+ *
+ * 原型 CSS 原样保留在 prototype.css 中以维持视觉一致；此处只覆盖
+ * 「网页内模拟窗口」与「真实桌面窗口」之间的差异：
+ * - 侧栏与速记浮窗各自占满所属窗口，不再使用页面内的平移动画；
+ * - 原型用于演示的画布、介绍文案与边缘热区在桌面端不存在；
+ * - 无边框窗口需要自定义拖动区域与窗口圆角。
+ */
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+/* 原型演示元素在桌面端不渲染，这里兜底隐藏以防样式残留。 */
+.demo-canvas,
+.demo-brand,
+.demo-help,
+.intro,
+.ambient-orbit,
+.edge-trigger {
+  display: none !important;
+}
+
+/* ==================== 侧栏窗口 ==================== */
+
+/* 窗口本身就是侧栏：占满视口，去掉页面内的滑入变换与投影偏移。 */
+body[data-window='sidebar'] .sidebar,
+body[data-window='sidebar'] .sidebar.open {
+  position: fixed;
+  inset: 0;
+  width: 100% !important;
+  max-width: none;
+  transform: none !important;
+  visibility: visible;
+  transition: none;
+  border-left: 1px solid var(--line);
+  border-right: none;
+  box-shadow: none;
+}
+
+body[data-window='sidebar'][data-edge='left'] .sidebar {
+  border-left: none;
+  border-right: 1px solid var(--line);
+}
+
+/* 标题栏可拖动窗口；其中的按钮保持可点击。 */
+body[data-window='sidebar'] .sidebar-header {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+body[data-window='sidebar'] .sidebar-header button,
+body[data-window='sidebar'] .sidebar-header .version-button {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+/* 宽度拖拽手柄贴在窗口内侧边缘。 */
+body[data-window='sidebar'] .sidebar-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 60;
+  width: 6px;
+  cursor: ew-resize;
+  background: transparent;
+}
+
+body[data-window='sidebar'] .sidebar-resizer[data-edge='right'] {
+  left: 0;
+}
+
+body[data-window='sidebar'] .sidebar-resizer[data-edge='left'] {
+  right: 0;
+}
+
+body[data-window='sidebar'] .sidebar-resizer:hover,
+body[data-window='sidebar'] .sidebar-resizer:focus-visible {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+/* 提示条在窗口内居中，不再按演示页面的侧栏偏移计算。 */
+body[data-window='sidebar'] .toast-region,
+body[data-window='capture'] .toast-region {
+  left: 50%;
+  right: auto;
+  bottom: 18px;
+  transform: translateX(-50%);
+  max-width: calc(100% - 28px);
+}
+
+/* ==================== 速记浮窗 ==================== */
+
+/* 浮窗独占窗口：铺满视口并保留圆角与边框。 */
+body[data-window='capture'] .capture,
+body[data-window='capture'] .capture.open {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  max-height: none;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  border-radius: 10px;
+  transform: none !important;
+  opacity: 1;
+  visibility: visible;
+  transition: none;
+  box-shadow: none;
+}
+
+body[data-window='capture'] .capture-header {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+body[data-window='capture'] .capture-header button {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+body[data-window='capture'] .capture-body {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+
+/* ==================== 实时 Markdown 编辑面 ==================== */
+
+.live-markdown-editor {
+  font-family: var(--note-font-family);
+  font-size: var(--note-font-size);
+  line-height: 1.85;
+  color: var(--ink);
+  outline: none;
+  caret-color: var(--accent);
+}
+
+.live-markdown-editor:focus-visible {
+  outline: none;
+}
+
+.live-markdown-editor.is-empty::before {
+  content: attr(data-placeholder);
+  display: block;
+  color: #97a38c;
+  font-size: 12px;
+  line-height: 1.8;
+  white-space: pre-line;
+  pointer-events: none;
+}
+
+.md-editor-line {
+  min-height: 1.85em;
+}
+
+/* 隐藏的原始标记仍在 DOM 中，保证复制与偏移映射完整。 */
+.md-syntax.is-hidden {
+  display: none;
+}
+
+.md-syntax.is-revealed {
+  color: var(--muted);
+  opacity: 0.72;
+  font-weight: 400;
+}
+
+.md-heading {
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.55;
+}
+
+.md-heading-1 {
+  font-size: 1.35em;
+}
+.md-heading-2 {
+  font-size: 1.22em;
+}
+.md-heading-3 {
+  font-size: 1.12em;
+}
+
+.md-quote {
+  padding-left: 10px;
+  border-left: 2px solid #b5c6a3;
+  color: var(--muted);
+}
+
+.md-fenced-code,
+.md-fence-marker {
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 0.9em;
+  background: var(--soft);
+  padding: 0 8px;
+}
+
+.md-fence-marker.is-collapsed {
+  min-height: 4px;
+  line-height: 4px;
+  border-radius: 4px;
+}
+
+.md-fenced-code code {
+  background: none;
+  padding: 0;
+  color: var(--subtle);
+  white-space: pre-wrap;
+}
+
+.md-inline-code {
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 0.9em;
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: var(--soft);
+  color: var(--accent);
+}
+
+.md-list-item {
+  padding-left: 18px;
+  position: relative;
+}
+
+.md-list-bullet {
+  position: absolute;
+  left: 2px;
+  color: var(--muted);
+}
+
+.md-rule {
+  display: flex;
+  align-items: center;
+  min-height: 1.4em;
+}
+
+.md-rule-line {
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.md-task-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-right: 6px;
+  padding: 0;
+  border: 1px solid #b6c6a6;
+  border-radius: 3px;
+  background: var(--card);
+  color: var(--accent);
+  font-size: 10px;
+  line-height: 1;
+  vertical-align: -2px;
+}
+
+.md-task-checkbox[aria-checked='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.md-editor-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.md-editor-link.is-file {
+  text-decoration: none;
+  border-bottom: 1px dashed color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+.md-editor-image {
+  display: inline-flex;
+  padding: 0;
+  margin: 4px 0;
+  border: 0;
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--soft);
+  cursor: zoom-in;
+  vertical-align: middle;
+}
+
+.md-editor-image .markdown-image {
+  display: block;
+  max-height: 150px;
+  max-width: 100%;
+  object-fit: cover;
+}
+
+/* ==================== 桌面端新增状态 ==================== */
+
+/* 热键冲突与保存失败的提示沿用原型的警告条外观。 */
+.desktop-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 20px 10px;
+  padding: 10px 11px;
+  border-radius: 8px;
+  background: #f3f0e4;
+  border: 1px solid #e8dec1;
+  color: #8c7b47;
+  font-size: 10px;
+  line-height: 1.7;
+  flex-shrink: 0;
+}
+
+.desktop-notice > .icon {
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.desktop-notice.is-error {
+  background: #f9ede7;
+  border-color: #ead4c8;
+  color: var(--danger);
+}
+
+body[data-theme='dark'] .desktop-notice {
+  background: #3b3925;
+  border-color: #555034;
+  color: #c6b578;
+}
+
+body[data-theme='dark'] .desktop-notice.is-error {
+  background: #432f28;
+  border-color: #614134;
+  color: #e3aa92;
+}
+
+/* 加载态：首次读取数据库期间保持窗口安静。 */
+.app-loading {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: var(--muted);
+  font-size: 11px;
+  gap: 10px;
+}
+
+.app-loading .icon {
+  width: 22px;
+  height: 22px;
+  animation: status-spin 1.1s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-loading .icon {
+    animation: none;
+  }
+}

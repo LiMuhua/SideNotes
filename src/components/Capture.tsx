@@ -1,0 +1,208 @@
+/**
+ * 速记浮窗。
+ *
+ * 独占一个 Tauri 窗口；草稿与侧栏共享同一数据库，
+ * 保存后侧栏列表刷新时自动拾取新记录。
+ */
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { IconSprite } from './Icon';
+import { LiveEditor } from './LiveEditor';
+import { ToastRegion } from './Modal';
+import { ImagePreview } from './Modal';
+import { useStore } from '../hooks/useStore';
+import { useToast } from '../hooks/useToast';
+import * as store from '../core/store';
+import * as bridge from '../core/bridge';
+import type { NoteImage } from '../core/types';
+import type { MarkdownEditor } from '../core/editor';
+
+export function Capture() {
+  const state = useStore();
+  const toast = useToast();
+  const editorRef = useRef<MarkdownEditor | null>(null);
+  const [localText, setLocalText] = useState(state.draft.text);
+  const [imagePreview, setImagePreview] = useState<{ src: string; alt: string } | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  // 同步到共享草稿（防抖写盘由外层 persistDraft 处理）。
+  useEffect(() => {
+    store.changeDraft(localText);
+  }, [localText]);
+
+  // 浮窗获焦时重新读取草稿（例如侧栏输入了一半再切到浮窗）。
+  useEffect(() => {
+    const handler = (): void => {
+      const current = store.getState().draft.text;
+      setLocalText(current);
+    };
+    window.addEventListener('focus', handler);
+    return () => window.removeEventListener('focus', handler);
+  }, []);
+
+  const saveDraft = useCallback(async (hideWindow: boolean): Promise<void> => {
+    if (!localText.trim() && !state.draft.images.length) {
+      if (hideWindow) void bridge.hideCapture();
+      return;
+    }
+    const note = await store.saveDraftAsNote('workspace');
+    if (!note) { toast('保存失败', null, true); return; }
+    setLocalText('');
+    if (hideWindow) void bridge.hideCapture();
+    else toast('记录已保存');
+  }, [localText, state.draft.images.length, toast]);
+
+  // 全局热键 Ctrl+Enter 保存并隐藏浮窗。
+  useEffect(() => {
+    const handler = (event: KeyboardEvent): void => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+        event.preventDefault();
+        void saveDraft(true);
+      }
+      if (event.key === 'Escape') void bridge.hideCapture();
+    };
+    document.addEventListener('keydown', handler, true);
+    return () => document.removeEventListener('keydown', handler, true);
+  }, [saveDraft]);
+
+  const handleFileSelected = async (event: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = '';
+    if (!files.length) return;
+    store.setPendingAttachments(files.length);
+    const images: NoteImage[] = [];
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) { toast(`${file.name} 不是图片`, null, true); store.setPendingAttachments(-1); continue; }
+      if (file.size > 2 * 1024 * 1024) { toast(`${file.name} 超过 2 MB`, null, true); store.setPendingAttachments(-1); continue; }
+      await new Promise<void>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          images.push({ id: crypto.randomUUID(), name: file.name, type: file.type, data: String(reader.result) });
+          store.setPendingAttachments(-1);
+          resolve();
+        };
+        reader.onerror = () => { toast(`读取失败`, null, true); store.setPendingAttachments(-1); resolve(); };
+        reader.readAsDataURL(file);
+      });
+    }
+    store.addDraftImages(images);
+  };
+
+  const empty = !localText.trim() && !state.draft.images.length;
+
+  return (
+    <>
+      <IconSprite />
+      <div className="capture open">
+        <header className="capture-header">
+          <div className="capture-heading">
+            <div className="capture-mark">
+              <div className="brand-mark small"><i /><i /><i /></div>
+            </div>
+            <div>
+              <h2>速记</h2>
+              <p>Ctrl+Enter 保存 · Esc 收起</p>
+            </div>
+          </div>
+          <div className="window-actions">
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="关闭速记浮窗"
+              title="关闭速记浮窗"
+              onClick={() => void bridge.hideCapture()}
+            >
+              ×
+            </button>
+          </div>
+        </header>
+
+        <div className="capture-body">
+          <LiveEditor
+            value={localText}
+            placeholder={'随手记… 支持 Markdown 与 #标签\nCtrl+Enter 保存并收起，Esc 直接收起'}
+            ariaLabel="速记输入，Ctrl+Enter 保存并收起"
+            autoFocus
+            onChange={setLocalText}
+            onReady={(editor) => { editorRef.current = editor; }}
+            onPreviewImage={(src, alt) => setImagePreview({ src, alt })}
+            maxHeight={Math.min(280, Math.max(100, window.innerHeight * 0.4))}
+          />
+
+          {state.draft.images.length ? (
+            <div className="attachment-list">
+              {state.draft.images.map((image) => (
+                <div key={image.id} className="attachment-item">
+                  <button
+                    type="button"
+                    className="attachment-preview"
+                    aria-label={`预览 ${image.name}`}
+                    onClick={() => setImagePreview({ src: image.data, alt: image.name })}
+                  >
+                    <img src={image.data} alt={image.name} />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button attachment-remove"
+                    aria-label={`移除 ${image.name}`}
+                    onClick={() => store.removeDraftImage(image.id)}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="capture-meta">
+          <span id="draft-status">
+            {state.draftDirty ? '草稿未保存' : '草稿已同步'}
+          </span>
+        </div>
+
+        <footer className="capture-footer">
+          <div className="capture-tools">
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="添加图片"
+              title="添加图片"
+              onClick={() => fileInput.current?.click()}
+            >
+              🖼
+            </button>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              type="button"
+              className="button secondary save-button"
+              disabled={empty || state.pendingAttachments > 0}
+              onClick={() => void saveDraft(false)}
+            >
+              保存
+              <span>保持浮窗</span>
+            </button>
+            <button
+              type="button"
+              className="button primary save-button"
+              disabled={empty || state.pendingAttachments > 0}
+              onClick={() => void saveDraft(true)}
+            >
+              保存并收起
+              <span>Ctrl+Enter</span>
+            </button>
+          </div>
+        </footer>
+
+        <ToastRegion />
+      </div>
+
+      <input ref={fileInput} type="file" hidden multiple accept="image/*" onChange={handleFileSelected} />
+
+      {imagePreview ? (
+        <ImagePreview src={imagePreview.src} name={imagePreview.alt} onClose={() => setImagePreview(null)} />
+      ) : null}
+    </>
+  );
+}
