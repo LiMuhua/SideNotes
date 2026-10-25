@@ -1,0 +1,22 @@
+# 统一使用 LF 存储，避免跨平台与编辑器配置冲突。
+* text=auto eol=lf
+
+# 二进制文件不做换行转换。
+*.png binary
+*.ico binary
+*.icns binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.db binary
+
+# 锁文件参与版本管理但不计入语言统计与差异审阅。
+pnpm-lock.yaml -diff linguist-generated
+src-tauri/Cargo.lock -diff linguist-generated
+
+# 归档原型不参与语言统计。
+docs/prototype/** linguist-documentation

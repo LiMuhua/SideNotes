@@ -1,0 +1,92 @@
+//! SideNotes 桌面端入口。
+
+mod commands;
+mod edge;
+mod error;
+mod models;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+mod shortcuts;
+mod store;
+mod tray;
+mod windows;
+
+use std::sync::Arc;
+
+use tauri::{Manager, WindowEvent};
+
+use commands::AppState;
+use edge::EdgeWatcher;
+use store::Store;
+
+/// 数据库文件名。
+const DATABASE_FILE: &str = "sidenotes.db";
+
+/// 启动应用。
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_notification::init())
+        .setup(|app| {
+            let handle = app.handle().clone();
+
+            // 数据默认落在系统应用数据目录，随用户配置迁移由设置页处理。
+            let data_dir = handle.path().app_data_dir()?;
+            std::fs::create_dir_all(&data_dir)?;
+            let store = Store::open(&data_dir.join(DATABASE_FILE))?;
+
+            let watcher = Arc::new(EdgeWatcher::new());
+
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            let conflicts = {
+                handle.plugin(tauri_plugin_global_shortcut::Builder::new().build())?;
+                shortcuts::register_all(&handle)
+            };
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            let conflicts: Vec<String> = Vec::new();
+
+            app.manage(AppState {
+                store,
+                edge: watcher.clone(),
+                shortcut_conflicts: conflicts,
+            });
+
+            #[cfg(desktop)]
+            tray::setup(&handle)?;
+
+            edge::spawn(handle.clone(), watcher);
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            // 关闭按钮只隐藏窗口；退出统一走托盘菜单，避免误关导致后台驻留消失。
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
+        .invoke_handler(tauri::generate_handler![
+            commands::load_snapshot,
+            commands::save_snapshot,
+            commands::save_settings,
+            commands::purge_expired,
+            commands::compact_database,
+            commands::storage_info,
+            commands::shortcut_conflicts,
+            commands::show_sidebar,
+            commands::hide_sidebar,
+            commands::toggle_sidebar,
+            commands::apply_sidebar_layout,
+            commands::show_capture,
+            commands::hide_capture,
+            commands::toggle_capture,
+            commands::inspect_file,
+            commands::copy_file_paths,
+            commands::set_sidebar_pinned,
+            commands::quit_app,
+        ])
+        .run(tauri::generate_context!())
+        .expect("SideNotes 启动失败");
+}

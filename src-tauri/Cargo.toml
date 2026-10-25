@@ -1,0 +1,38 @@
+[package]
+name = "sidenotes"
+version = "0.6.0"
+description = "SideNotes 本地快速记录工具"
+authors = ["LiMuhua"]
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+# Tauri 2 的桌面与移动端共用库入口。
+name = "sidenotes_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-notification = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+thiserror = "2"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-global-shortcut = "2"
+
+[profile.release]
+# 发布包优先体积与启动速度。
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

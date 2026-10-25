@@ -1,0 +1,55 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "SideNotes 侧栏与速记窗口所需的最小权限集合",
+  "windows": ["main", "capture"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-center",
+    "core:window:allow-set-focus",
+    "core:window:allow-set-size",
+    "core:window:allow-set-position",
+    "core:window:allow-set-always-on-top",
+    "core:window:allow-set-skip-taskbar",
+    "core:window:allow-is-visible",
+    "core:window:allow-start-dragging",
+    "core:window:allow-current-monitor",
+    "core:window:allow-primary-monitor",
+    "core:window:allow-monitor-from-point",
+    "core:window:allow-available-monitors",
+    "core:window:allow-cursor-position",
+    "core:window:allow-scale-factor",
+    "core:webview:allow-internal-toggle-devtools",
+    "core:event:default",
+    "core:app:allow-version",
+    "core:app:allow-name",
+    "opener:default",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "dialog:allow-message",
+    "clipboard-manager:allow-write-text",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-image",
+    "notification:default",
+    {
+      "identifier": "fs:allow-read-text-file",
+      "allow": [{ "path": "$APPDATA/**" }, { "path": "$DOWNLOAD/**" }, { "path": "$DOCUMENT/**" }]
+    },
+    {
+      "identifier": "fs:allow-write-text-file",
+      "allow": [{ "path": "$APPDATA/**" }, { "path": "$DOWNLOAD/**" }, { "path": "$DOCUMENT/**" }]
+    },
+    {
+      "identifier": "fs:allow-read-file",
+      "allow": [{ "path": "$APPDATA/**" }, { "path": "$DOWNLOAD/**" }, { "path": "$DOCUMENT/**" }]
+    },
+    {
+      "identifier": "fs:allow-write-file",
+      "allow": [{ "path": "$APPDATA/**" }, { "path": "$DOWNLOAD/**" }, { "path": "$DOCUMENT/**" }]
+    },
+    "fs:allow-exists",
+    "global-shortcut:default"
+  ]
+}

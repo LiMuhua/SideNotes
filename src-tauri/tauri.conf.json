@@ -1,0 +1,83 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "SideNotes",
+  "version": "0.6.0",
+  "identifier": "com.limuhua.sidenotes",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "SideNotes",
+        "url": "index.html",
+        "width": 456,
+        "height": 900,
+        "minWidth": 360,
+        "decorations": false,
+        "transparent": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "visible": false,
+        "shadow": true,
+        "focus": false
+      },
+      {
+        "label": "capture",
+        "title": "SideNotes 速记",
+        "url": "index.html",
+        "width": 560,
+        "height": 420,
+        "minWidth": 370,
+        "minHeight": 260,
+        "decorations": false,
+        "transparent": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "center": true,
+        "visible": false,
+        "shadow": true,
+        "focus": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data: asset: http://asset.localhost https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost"
+    },
+    "trayIcon": {
+      "id": "sidenotes-tray",
+      "iconPath": "icons/32x32.png",
+      "iconAsTemplate": false,
+      "tooltip": "SideNotes · 侧栏速记",
+      "menuOnLeftClick": false
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "copyright": "© 2026 LiMuhua",
+    "category": "Productivity",
+    "shortDescription": "本地速记与侧栏取用",
+    "longDescription": "SideNotes 是面向 Windows 的本地快速记录工具：鼠标移到屏幕边缘唤出侧栏，也可用快捷键浮窗随手记录。支持 Markdown、标签、图片附件与本地 SQLite 存储。",
+    "windows": {
+      "nsis": {
+        "languages": ["SimpChinese", "English"],
+        "installMode": "currentUser"
+      }
+    }
+  }
+}

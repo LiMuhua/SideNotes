@@ -1,0 +1,58 @@
+# ==================== Node.js ====================
+node_modules/
+.pnpm-store/
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log
+
+# ==================== Vite 构建产物 ====================
+dist/
+dist-ssr/
+*.local
+.vite/
+
+# ==================== Rust / Tauri ====================
+src-tauri/target/
+src-tauri/gen/
+**/*.rs.bk
+
+# ==================== 测试与覆盖率 ====================
+coverage/
+.vitest/
+*.lcov
+
+# ==================== 日志与临时文件 ====================
+*.log
+logs/
+tmp/
+temp/
+.cache/
+
+# ==================== 本地环境与敏感配置 ====================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.keystore
+
+# ==================== 操作系统 ====================
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ==================== IDE 用户级配置 ====================
+.idea/
+*.swp
+*.swo
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+
+# ==================== 其它工具缓存 ====================
+.eslintcache
+.tsbuildinfo
+*.tsbuildinfo

@@ -1,0 +1,13 @@
+# 项目级 crates 源：使用稀疏索引协议。
+#
+# 全局 CARGO_HOME 配置把 crates-io 替换为 USTC 的 git 索引，而该镜像已停止
+# 提供 git 协议（请求返回 404）导致依赖无法解析。这里在项目内改用同一镜像的
+# sparse 协议，不修改全局开发环境配置。
+[source.crates-io]
+replace-with = "ustc-sparse"
+
+[source.ustc-sparse]
+registry = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"
+
+[net]
+git-fetch-with-cli = true
