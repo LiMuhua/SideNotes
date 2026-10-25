@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { IconSprite } from './Icon';
+import { Icon, IconSprite } from './Icon';
 import { LiveEditor } from './LiveEditor';
 import { ToastRegion } from './Modal';
 import { ImagePreview } from './Modal';
@@ -101,18 +101,32 @@ export function Capture() {
             </div>
             <div>
               <h2>速记</h2>
-              <p>Ctrl+Enter 保存 · Esc 收起</p>
+              <p>Markdown · #标签</p>
             </div>
           </div>
           <div className="window-actions">
             <button
               type="button"
               className="icon-button"
-              aria-label="关闭速记浮窗"
-              title="关闭速记浮窗"
+              aria-label="在侧栏继续"
+              title="在侧栏继续"
+              onClick={async () => {
+                // 把当前浮窗草稿带到侧栏：先确保侧栏可见，再聚焦侧栏输入入口。
+                await bridge.hideCapture();
+                await bridge.showSidebar({ edge: store.getState().settings.edge, width: store.getState().settings.width });
+                window.dispatchEvent(new CustomEvent('sidenotes:focus-composer'));
+              }}
+            >
+              <Icon name="expand" />
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="保留草稿并收起速记浮窗"
+              title="保留草稿并收起 · Esc"
               onClick={() => void bridge.hideCapture()}
             >
-              ×
+              <Icon name="x" />
             </button>
           </div>
         </header>
@@ -147,7 +161,7 @@ export function Capture() {
                     aria-label={`移除 ${image.name}`}
                     onClick={() => store.removeDraftImage(image.id)}
                   >
-                    ×
+                    <Icon name="x" />
                   </button>
                 </div>
               ))}
@@ -157,40 +171,56 @@ export function Capture() {
 
         <div className="capture-meta">
           <span id="draft-status">
-            {state.draftDirty ? '草稿未保存' : '草稿已同步'}
+            <span className="small-dot" />
+            {state.draftDirty ? ' 草稿未保存' : ' 草稿已同步'}
           </span>
+          <span id="capture-char-count">{localText.length} 字</span>
         </div>
 
         <footer className="capture-footer">
-          <div className="capture-tools">
+          <div className="composer-tools">
             <button
               type="button"
               className="icon-button"
-              aria-label="添加图片"
-              title="添加图片"
+              aria-label="添加图片，也可粘贴或拖入"
+              title="添加图片，也可粘贴或拖入"
               onClick={() => fileInput.current?.click()}
             >
-              🖼
+              <Icon name="image" />
             </button>
-          </div>
-          <div style={{ display: 'flex', gap: 6 }}>
             <button
               type="button"
-              className="button secondary save-button"
+              className="icon-button"
+              aria-label="引用文件，也可直接拖入"
+              title="引用文件，也可直接拖入"
+              onClick={() => {
+                // 文件引用：在草稿中插入路径占位符
+                const path = '[文件名](路径)';
+                setLocalText((prev) => prev + (prev ? '\n' : '') + path);
+              }}
+            >
+              <Icon name="file" />
+            </button>
+          </div>
+          <div className="composer-actions">
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="保留草稿并收起"
+              title="保留草稿并收起 · Esc"
+              onClick={() => void bridge.hideCapture()}
+            >
+              <Icon name="x" />
+            </button>
+            <button
+              type="button"
+              className="icon-button primary"
+              aria-label="保存记录，保持浮窗展开"
+              title="保存记录，保持浮窗展开"
               disabled={empty || state.pendingAttachments > 0}
               onClick={() => void saveDraft(false)}
             >
-              保存
-              <span>保持浮窗</span>
-            </button>
-            <button
-              type="button"
-              className="button primary save-button"
-              disabled={empty || state.pendingAttachments > 0}
-              onClick={() => void saveDraft(true)}
-            >
-              保存并收起
-              <span>Ctrl+Enter</span>
+              <Icon name="check" />
             </button>
           </div>
         </footer>

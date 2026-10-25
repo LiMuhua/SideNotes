@@ -47,6 +47,7 @@ export function Sidebar() {
   /* ==================== 侧栏与 Tab 状态 ==================== */
   const [tab, setTab] = useState<TabKey>('workspace');
   const [query, setQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
   const [selectedTag, setSelectedTag] = useState('');
   const [composerActive, setComposerActive] = useState(false);
   const [pinned, setPinned] = useState(false);
@@ -176,6 +177,17 @@ export function Sidebar() {
     void bridge.onAppEvent(bridge.APP_EVENTS.trayQuit, () => {
       void store.persistDraft().then(() => bridge.quitApp());
     }).then((unlisten) => cleanups.push(unlisten));
+
+    // 从速记浮窗切换到侧栏时聚焦 Composer 输入区。
+    const focusComposer = (): void => {
+      setComposerActive(true);
+      setTimeout(() => {
+        (document.querySelector('#quick-composer .live-editor-host [contenteditable]') as HTMLElement | null)?.focus();
+      }, 100);
+    };
+    window.addEventListener('sidenotes:focus-composer', focusComposer);
+    cleanups.push(() => window.removeEventListener('sidenotes:focus-composer', focusComposer));
+
     return () => cleanups.forEach((fn) => fn());
   }, []);
 
@@ -362,12 +374,19 @@ export function Sidebar() {
 
         <header className="sidebar-header">
           <div className="sidebar-brand">
-            <div className="brand-mark small">
+            <div className="brand-mark" aria-hidden="true">
               <i /><i /><i />
             </div>
             <div>
               <h2>SideNotes</h2>
-              <p>本地速记</p>
+              <button
+                type="button"
+                className="version-button"
+                aria-label="版本 0.6.0"
+                onClick={() => window.dispatchEvent(new CustomEvent('sidenotes:open-settings'))}
+              >
+                <span>0.6.0 PREVIEW</span>
+              </button>
             </div>
           </div>
           <div className="window-actions">
@@ -388,8 +407,8 @@ export function Sidebar() {
             <button
               type="button"
               className="icon-button"
-              aria-label="关闭侧栏"
-              title="关闭侧栏"
+              aria-label="收起侧栏"
+              title="收起侧栏 · Esc"
               onClick={() => void bridge.hideSidebar()}
             >
               <Icon name={state.settings.edge === 'left' ? 'arrow-left' : 'arrow-right'} />
@@ -397,46 +416,90 @@ export function Sidebar() {
           </div>
         </header>
 
-        {/* 页签 */}
-        <nav className="sidebar-tabs" aria-label="记录分类">
-          {(Object.entries(TAB_LABELS) as Array<[TabKey, string]>).map(([key, label]) => (
+        {/* 导航：页签 + 搜索切换 */}
+        <div className={`sidebar-navigation${query ? ' has-search-query' : ''}${searchOpen ? ' is-searching' : ''}`}>
+          <nav className="sidebar-tabs" aria-label="记录列表">
             <button
-              key={key}
               type="button"
               role="tab"
-              className={tab === key ? 'tab active' : 'tab'}
-              data-tab={key}
-              aria-selected={tab === key}
-              onClick={() => { setTab(key); setQuery(''); setSelectedTag(''); }}
+              className={tab === 'workspace' ? 'tab active' : 'tab'}
+              data-tab="workspace"
+              aria-selected={tab === 'workspace'}
+              onClick={() => { setTab('workspace'); setQuery(''); setSearchOpen(false); setSelectedTag(''); }}
             >
-              {label}
-              <span aria-hidden="true">{tabCounts[key]}</span>
+              工作区
+              <span data-count="workspace">{tabCounts.workspace}</span>
             </button>
-          ))}
-        </nav>
-
-        {/* 搜索 */}
-        <div className="sidebar-controls">
-          <div className="search-box">
-            <Icon name="search" />
-            <input
-              id="search-input"
-              type="search"
-              placeholder="搜索记录或 #标签"
-              aria-label="搜索记录与标签"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-            {query ? (
-              <button
-                type="button"
-                className="icon-button"
-                aria-label="清除搜索"
-                onClick={() => { setQuery(''); setSelectedTag(''); }}
-              >
-                <Icon name="x" />
-              </button>
-            ) : null}
+            <button
+              type="button"
+              role="tab"
+              className={tab === 'pinned' ? 'tab active' : 'tab'}
+              data-tab="pinned"
+              aria-selected={tab === 'pinned'}
+              onClick={() => { setTab('pinned'); setQuery(''); setSearchOpen(false); setSelectedTag(''); }}
+            >
+              <Icon name="pin" />
+              {' '}置顶
+              <span data-count="pinned">{tabCounts.pinned}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              className={tab === 'archive' ? 'tab active' : 'tab'}
+              data-tab="archive"
+              aria-selected={tab === 'archive'}
+              onClick={() => { setTab('archive'); setQuery(''); setSearchOpen(false); setSelectedTag(''); }}
+            >
+              <Icon name="archive" />
+              {' '}归档
+              <span data-count="archive">{tabCounts.archive}</span>
+            </button>
+          </nav>
+          <div
+            id="header-search"
+            className={`header-search${searchOpen ? ' is-open' : ''}${query ? ' has-query' : ''}`}
+          >            <button
+              type="button"
+              className={`icon-button search-toggle${searchOpen ? ' is-active' : ''}`}
+              aria-label="搜索记录 · Ctrl+F"
+              aria-controls="search-panel"
+              aria-expanded={searchOpen}
+              title="搜索 · Ctrl+F"
+              onClick={() => {
+                const next = !searchOpen;
+                setSearchOpen(next);
+                if (!next) setQuery('');
+                else setTimeout(() => document.getElementById('search-input')?.focus(), 50);
+              }}
+            >
+              <Icon name="search" />
+            </button>
+            <div
+              id="search-panel"
+              className="header-search-field"
+              aria-hidden={!searchOpen}
+              inert={!searchOpen || undefined}
+            >
+              <label htmlFor="search-input" className="sr-only">搜索记录与标签</label>
+              <input
+                id="search-input"
+                type="search"
+                placeholder="搜索记录、#标签…"
+                autoComplete="off"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+              {query ? (
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label="清空搜索"
+                  onClick={() => { setQuery(''); setSelectedTag(''); }}
+                >
+                  <Icon name="x" />
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
 
@@ -580,21 +643,25 @@ export function Sidebar() {
 
         {/* 底部状态栏 */}
         <footer className="sidebar-footer">
-          <span id="storage-status" className={state.saveFailed ? 'is-error' : ''}>
-            {state.saveFailed ? <Icon name="alert" /> : null}
-            {state.notes.length} 条
+          <span
+            id="storage-status"
+            className={state.saveFailed ? 'is-error' : ''}
+            aria-label={state.saveFailed ? '本地存储失败' : '本地已保存'}
+            title={state.saveFailed ? '本地存储失败' : '本地已保存'}
+          >
+            {state.saveFailed ? <Icon name="alert" /> : <span className="small-dot" />}
           </span>
-          <div className="footer-right">
+          <span className="footer-right">
             <button
               type="button"
               className="icon-button"
-              aria-label="打开设置"
-              title="打开设置"
+              aria-label="偏好设置与数据"
+              title="偏好设置与数据"
               onClick={() => window.dispatchEvent(new CustomEvent('sidenotes:open-settings'))}
             >
               <Icon name="settings" />
             </button>
-          </div>
+          </span>
         </footer>
 
         <ToastRegion />
