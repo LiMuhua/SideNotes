@@ -1,0 +1,113 @@
+/* 第六版设置布局：所有网格允许收缩，标签与控件使用固定对齐轨道。 */
+.settings-modal .settings-layout{width:100%;min-width:0;max-width:100%}
+.settings-modal .settings-panel{min-width:0;max-width:100%;overflow-x:hidden}
+.settings-modal .settings-dashboard{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:stretch;min-width:0;width:100%;max-width:100%}
+.settings-modal .settings-dashboard .settings-group{min-width:0;width:100%;max-width:100%;padding:14px 15px}
+.settings-modal .settings-dashboard .settings-group-title{display:flex;align-items:center;gap:6px;margin:0 0 13px;min-width:0;line-height:1.5}
+.settings-modal .settings-field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 20px;align-items:stretch;min-width:0;width:100%}
+.settings-modal .settings-typography{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)}
+.settings-modal .settings-dashboard .settings-row,
+.settings-modal .settings-dashboard .settings-row:has(input[type=checkbox]){display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(18px,auto) minmax(34px,auto);gap:6px;align-items:start;min-width:0;min-height:0;padding:0;margin:0 0 13px;border:0}
+.settings-modal .settings-dashboard .settings-row:last-child,
+.settings-modal .settings-field-grid>.settings-row{margin:0}
+.settings-modal .settings-row-info{display:flex;align-items:center;flex-direction:row;justify-content:flex-start;gap:5px;min-width:0;min-height:18px}
+.settings-modal .settings-row-label{display:block;min-width:0;margin:0;font-size:11px;line-height:18px;overflow-wrap:anywhere}
+.settings-modal .settings-dashboard .settings-control{display:flex;align-items:center;justify-content:flex-start;min-width:0;width:100%;max-width:none;min-height:34px;flex-shrink:1}
+.settings-modal .settings-dashboard .form-control{min-width:0;max-width:100%;width:100%;height:34px;min-height:34px;margin:0}
+.settings-modal .settings-range{display:flex;align-items:center;gap:8px;min-width:0;width:100%;max-width:100%;height:34px;margin:0;padding:0}
+.settings-modal .settings-range input[type=range]{display:block;flex:1 1 0;min-width:0!important;width:0!important;max-width:100%;margin:0;height:20px}
+.settings-modal .settings-range output{flex:0 0 44px;min-width:0;font-size:10px;line-height:18px;font-variant-numeric:tabular-nums}
+.settings-modal .font-combobox,.settings-modal .font-combobox-field{min-width:0;width:100%;max-width:100%}
+.settings-modal .font-combobox-field{min-height:34px;height:34px}
+.settings-modal .font-combobox-field>.form-control{height:32px;min-height:32px}
+.settings-modal .font-combobox-status:empty{display:none}
+.settings-modal .font-combobox-list{min-width:0;width:100%;max-width:100%;box-sizing:border-box}
+.settings-modal .settings-font-preview{margin-top:13px;min-width:0;overflow-wrap:anywhere}
+
+/* 帮助文本不占用字段高度，鼠标、键盘和点击均可查看。 */
+.settings-help{display:inline-flex;align-items:center;position:relative;flex:0 0 16px;width:16px;height:16px;vertical-align:middle;font-weight:400;letter-spacing:0}
+.settings-help-button{display:inline-flex;align-items:center;justify-content:center;flex:0 0 15px;width:15px;height:15px;padding:0;border:1px solid var(--line);border-radius:50%;background:transparent;color:var(--muted);font-family:inherit;font-size:10px;font-weight:500;line-height:1;cursor:help}
+.settings-help-button:hover,.settings-help-button[aria-expanded=true]{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.settings-help-button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.settings-help-text{position:absolute;z-index:40;left:0;top:calc(100% + 7px);display:block;width:210px;max-width:calc(100vw - 48px);padding:9px 11px;border:1px solid var(--line);border-radius:7px;background:var(--card);box-shadow:0 5px 20px #0002;color:var(--subtle);font-size:10px;font-weight:400;line-height:1.7;white-space:normal;overflow-wrap:anywhere;text-align:left}
+.settings-help-text[hidden]{display:none}
+
+/* 主题预览始终由网格宽度决定，不允许材质卡片撑开弹窗。 */
+.settings-modal .appearance-display-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:15px;min-width:0;max-width:100%}
+.settings-modal .settings-option-block{min-width:0;width:100%;max-width:100%}
+.settings-modal .settings-option-label{margin:0 0 7px;color:var(--muted);font-size:10px;font-weight:400;line-height:1.5}
+.settings-modal .appearance-display .theme-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0;padding:0;min-width:0;width:100%}
+.settings-modal .appearance-display .surface-choice-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:0;padding:0;min-width:0;width:100%}
+.settings-modal .appearance-display :is(.settings-choice,.surface-choice){display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:6px;min-width:0;width:100%;max-width:100%;min-height:0;padding:7px 8px;border-radius:7px;font-size:10px;line-height:1.5;overflow-wrap:anywhere}
+.settings-modal .appearance-display :is(.theme-swatch,.theme-preview,.surface-preview){display:block;flex:0 0 auto;width:100%;max-width:100%;height:33px;margin:0;border-radius:4px}
+.settings-modal .appearance-display .surface-choice:before{display:none}
+.settings-modal .appearance-display :is(.settings-choice,.surface-choice).selected:after{right:5px;bottom:5px;font-size:9px}
+
+/* 两张轻量设置卡共享两行控件，左右标签与数值基线保持一致。 */
+.settings-modal .settings-dashboard .settings-balanced-card{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(34px,auto) minmax(34px,auto);gap:10px;align-content:start}
+.settings-modal .settings-dashboard .settings-balanced-card>.settings-group-title{margin:0 0 1px}
+.settings-modal .settings-dashboard .settings-balanced-card>.settings-row,
+.settings-modal .settings-dashboard .settings-balanced-card>.settings-row:has(input[type=checkbox]){display:grid;grid-template-columns:minmax(0,1fr) 76px;grid-template-rows:minmax(34px,auto);gap:8px;align-items:center;margin:0}
+.settings-modal .settings-balanced-card .settings-row-info{min-height:34px}
+.settings-modal .settings-dashboard .settings-balanced-card .settings-control{justify-content:flex-end}
+.settings-modal .settings-balanced-card .form-control{width:76px;text-align:right}
+
+/* 同步输入框使用相同标签高度，说明全部折叠进问号。 */
+.settings-modal .data-dashboard .settings-field-grid{gap:14px 20px}
+.settings-modal .data-dashboard .settings-group>.settings-row:has(input[type=checkbox]),
+.settings-modal .data-dashboard .settings-group>.settings-row:has(button){grid-template-columns:minmax(0,1fr) auto;grid-template-rows:minmax(34px,auto);align-items:center;gap:12px}
+.settings-modal .data-dashboard .settings-group>.settings-row:has(button) .settings-control,
+.settings-modal .data-dashboard .settings-group>.settings-row:has(input[type=checkbox]) .settings-control{width:auto}
+.settings-modal .data-dashboard .sync-provider-grid{min-width:0;max-width:100%;grid-template-columns:repeat(3,minmax(0,1fr))}
+.settings-modal .data-dashboard .sync-provider{min-width:0;max-width:100%;overflow-wrap:anywhere}
+.settings-modal .data-dashboard .settings-inline>.form-control{flex:1 1 0;width:0;min-width:0;max-width:none}
+.settings-modal .data-dashboard .current-directory{min-width:0;margin-top:10px}
+.settings-modal .data-dashboard .current-directory .settings-path{margin:0;min-width:0}
+.settings-modal .data-dashboard .settings-actions{padding-top:0;margin-top:0}
+.settings-modal .data-dashboard .settings-status+.settings-actions{margin-top:10px}
+
+/* 保留天数并入回收站标题栏，主要区域交给查询与记录。 */
+.settings-modal .settings-panel[data-section=trash] .settings-panel-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:15px}
+.trash-retention-inline{display:inline-flex;align-items:center;justify-content:flex-end;gap:6px;min-width:0;max-width:100%;margin-left:auto}
+.trash-retention-label{font-size:10px;color:var(--muted);line-height:1.5}
+.settings-modal .trash-retention-inline .form-control{width:76px;min-width:0;max-width:76px;height:29px;min-height:29px;padding:4px 7px;font-size:10px}
+.trash-retention-inline .settings-help-text{left:auto;right:0}
+.settings-modal .settings-trash-toolbar{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,112px) minmax(0,80px);min-width:0;gap:7px;margin:0 0 9px}
+.settings-modal .settings-trash-toolbar>.form-control{width:100%;min-width:0;max-width:none;height:33px;font-size:10px}
+.settings-modal .trash-toolbar{margin:0 0 11px;padding:0;gap:6px}
+.settings-modal .settings-trash-list{margin-top:0}
+
+/* 项目入口使用相同按钮逻辑；更新入口位于按钮组末尾。 */
+.settings-modal .settings-about-links{align-items:center;padding-bottom:0;margin-bottom:0;border:0}
+.settings-modal .settings-about-links .sponsor-button{margin-left:0}
+.settings-modal .settings-about-links .settings-update-button{margin:0;font-size:11px}
+.settings-modal .settings-about-links .settings-update-button>.icon{width:15px;height:15px}
+
+@media(max-width:760px){
+  .settings-modal .settings-dashboard{grid-template-columns:minmax(0,1fr)}
+  .settings-modal .settings-dashboard .settings-wide{grid-column:auto}
+  .settings-modal .settings-dashboard .settings-balanced-card{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:auto minmax(34px,auto);gap:9px 18px}
+  .settings-modal .settings-balanced-card>.settings-group-title{grid-column:1/-1}
+}
+@media(max-width:560px){
+  .settings-modal .settings-layout{display:flex;flex-direction:column;min-height:0}
+  .settings-modal .settings-nav{flex-direction:row;overflow-x:auto;flex:0 0 auto;border-right:0;border-bottom:1px solid var(--line)}
+  .settings-modal .settings-nav-button{width:auto;flex:0 0 auto;padding:8px 9px;min-height:33px}
+  .settings-modal .settings-panel{padding:17px 14px 22px;width:100%;height:auto;flex:1 1 auto}
+  .settings-modal .settings-dashboard .settings-group{padding:13px}
+  .settings-modal .settings-field-grid,.settings-modal .settings-typography{grid-template-columns:repeat(2,minmax(0,1fr));gap:13px 14px}
+  .settings-modal .settings-dashboard .settings-balanced-card{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(34px,auto) minmax(34px,auto);gap:9px}
+  .settings-modal .appearance-display .surface-choice-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+  .settings-modal .appearance-display :is(.settings-choice,.surface-choice){padding:6px 4px;font-size:9px}
+  .settings-modal .appearance-display :is(.theme-swatch,.theme-preview,.surface-preview){height:29px}
+  .settings-modal .settings-trash-toolbar{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .settings-modal .settings-trash-toolbar>input{grid-column:1/-1}
+  .settings-modal .settings-trash-toolbar>select{grid-column:auto}
+  .settings-modal .settings-about-links .settings-update-button{font-size:10px}
+}
+@media(max-width:390px){
+  .settings-modal .settings-field-grid,.settings-modal .settings-typography{grid-template-columns:minmax(0,1fr)}
+  .settings-modal .appearance-display .surface-choice-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .settings-modal .data-dashboard .sync-provider-grid{grid-template-columns:minmax(0,1fr)}
+  .settings-modal .data-dashboard .sync-provider{flex-direction:row;min-height:35px}
+}

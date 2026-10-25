@@ -1,0 +1,181 @@
+/* ==================== 第三版：表情图标与紧凑卡片 ==================== */
+.note-format-icon,.note-kind,.note-format-tooltip{display:none!important}
+.note-header{gap:8px;min-height:25px;margin-bottom:5px}
+.note-header .note-title{font-size:14px;line-height:1.5;font-weight:600;letter-spacing:0}
+.note-header .note-time{font-size:10px;color:var(--muted);line-height:1.5}
+.note-emoji{display:inline-flex;align-items:center;justify-content:center;flex:0 0 27px;width:27px;height:27px;border-radius:7px;padding:0;background:transparent;font-family:'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',sans-serif;font-size:20px;line-height:1;transition:background .15s,transform .15s}
+.note-emoji:hover{background:var(--soft);transform:scale(1.08)}
+.note-emoji:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.note-card{padding-top:11px;max-height:320px}
+.note-bottom{align-items:center;gap:9px;min-width:0;padding-top:5px;margin-top:8px;overflow:visible}
+.note-tags{flex:1 1 0;flex-wrap:nowrap;min-width:0;gap:5px;overflow:visible;min-height:23px}
+.tag-chip-wrap{position:relative;display:inline-flex;align-items:center;flex:0 0 auto;min-width:0;max-width:150px;gap:0;overflow:visible}
+.tag-chip-wrap .tag-chip{max-width:150px;font-size:10px;line-height:15px;min-height:22px;padding:2px 7px;border-radius:6px}
+.tag-chip-wrap>.tag-remove{position:absolute;z-index:3;right:-5px;top:-5px;display:none;align-items:center;justify-content:center;width:15px;height:15px;min-width:15px;min-height:15px;margin:0;padding:0;border:1px solid var(--card);border-radius:50%;background:var(--muted);color:var(--card);box-shadow:0 1px 3px #00000018;font-size:11px;line-height:1}
+.tag-chip-wrap>.tag-remove .icon{width:9px;height:9px;stroke-width:2}
+.tags-expanded .tag-chip-wrap{max-width:180px;margin-top:4px;margin-right:3px}
+.tags-expanded .tag-chip-wrap .tag-chip{max-width:180px}
+.tags-expanded .tag-chip-wrap>.tag-remove{display:inline-flex}
+.tags-expanded .tag-chip-wrap>.tag-remove:hover{background:var(--danger);color:#fff}
+.note-tags.tags-expanded{flex-wrap:wrap;gap:7px 5px;padding-top:1px;padding-bottom:2px;overflow:visible}
+.note-bottom:has(.tags-expanded){flex-wrap:wrap;align-items:flex-end;row-gap:6px}
+.note-bottom:has(.tags-expanded) .note-tags{flex-basis:100%}
+.note-bottom:has(.tags-expanded) .note-actions{margin-left:auto}
+.note-card:has(.tags-expanded){max-height:none}
+.tags-more{flex:0 0 24px;width:24px;height:22px;margin-left:0;padding:0;border-radius:6px}
+.note-actions{align-self:flex-end;flex:0 0 auto;gap:1px}
+.note-card .note-content :is(h1,h2,h3,h4,h5,h6){font-size:14px;line-height:1.6;font-weight:600;margin:8px 0 4px;letter-spacing:0}
+.note-card .note-content :is(h3,h4,h5,h6){font-size:13px}
+.note-card .note-content>:first-child{margin-top:0}
+.note-list{scroll-behavior:auto}
+.load-more-sentinel{height:1px;min-height:1px;pointer-events:none}
+.load-more-status{display:flex;justify-content:center;align-items:center;gap:6px;padding:9px 0 12px;font-size:10px;line-height:1.6;color:var(--muted);min-height:30px}
+.load-more-status .icon{width:12px;height:12px}
+
+/* ==================== 表情选择：分类、搜索与键盘焦点 ==================== */
+.emoji-modal.modal{width:540px;max-width:min(540px,calc(100vw - 32px));max-height:min(620px,86dvh);display:flex;flex-direction:column;overflow:hidden}
+.emoji-modal .modal-header{padding:19px 22px 15px;border-bottom:0;flex-shrink:0}
+.emoji-modal .modal-header h2{font-size:15px}
+.emoji-modal .modal-body{padding:0 22px 20px;min-height:0;overflow:auto;scrollbar-width:thin}
+.emoji-search{display:flex;align-items:center;gap:9px;width:100%;min-height:39px;padding:9px 12px;border:1px solid var(--line);border-radius:9px;background:var(--soft);color:var(--muted);margin-bottom:13px}
+.emoji-search>.icon{width:15px;height:15px;flex-shrink:0}
+.emoji-search input{width:100%;min-width:0;padding:0;border:0;background:none;outline:none;font-size:12px;color:var(--ink);line-height:1.6}
+.emoji-search:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.emoji-search input::placeholder{color:var(--muted)}
+.emoji-categories{display:flex;align-items:center;gap:5px;overflow-x:auto;scrollbar-width:none;padding:1px 0 12px;margin:0 0 7px}
+.emoji-categories::-webkit-scrollbar{display:none}
+.emoji-categories>button{flex:0 0 auto;padding:6px 9px;border:1px solid transparent;border-radius:7px;font-size:11px;line-height:1.5;white-space:nowrap;color:var(--subtle);background:transparent}
+.emoji-categories>button:hover{background:var(--soft)}
+.emoji-categories>button:is(.active,.is-active,[aria-selected=true],[aria-pressed=true]){color:var(--accent);background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 18%,transparent)}
+.emoji-current-caption{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--muted);font-size:10px;line-height:1.8;margin:0 1px 9px}
+.emoji-grid{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));gap:5px;align-content:start;min-height:100px;max-height:350px;overflow:auto;scrollbar-width:thin;padding:3px 3px 4px}
+.emoji-grid>button.emoji-choice{position:relative;display:flex;align-items:center;justify-content:center;aspect-ratio:1;width:100%;min-width:0;min-height:37px;padding:3px;border:1px solid transparent;border-radius:8px;font-family:'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',sans-serif;font-size:25px;line-height:1;background:transparent;transition:background .12s,border-color .12s,transform .12s}
+.emoji-grid>button.emoji-choice:hover{background:var(--soft);transform:translateY(-1px)}
+.emoji-grid>button.emoji-choice:is(.selected,.is-selected,.is-current,[aria-pressed=true],[aria-selected=true]){background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 38%,transparent)}
+.emoji-grid>button.emoji-choice:focus-visible{outline:2px solid var(--accent);outline-offset:0}
+.emoji-empty{grid-column:1/-1;display:flex;align-items:center;justify-content:center;padding:40px 12px;color:var(--muted);font-size:12px;line-height:1.8}
+
+/* ==================== 实时 Markdown：编辑当前块时保留暗色标记 ==================== */
+.live-markdown-editor{display:block;width:100%;min-width:0;outline:none;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font-family:var(--note-font-family);font-size:var(--note-font-size);line-height:1.85;color:var(--ink);caret-color:var(--accent);tab-size:4;-webkit-user-modify:read-write-plaintext-only}
+.live-markdown-editor[contenteditable=true]{-webkit-user-modify:read-write;cursor:text}
+.live-markdown-editor:focus-visible{outline:none}
+.live-markdown-editor.is-empty:before{content:attr(data-placeholder);position:absolute;pointer-events:none;white-space:pre-wrap;color:var(--muted);font-weight:400;font-size:inherit}
+.live-markdown-editor .md-editor-line{position:relative;display:block;min-height:1.85em;margin:0;padding:0;line-height:1.85;white-space:pre-wrap}
+.live-markdown-editor .md-syntax{font-weight:400;font-style:normal;text-decoration:none;color:color-mix(in srgb,var(--ink) 42%,var(--card))}
+.live-markdown-editor .md-syntax.is-hidden{display:none}
+.live-markdown-editor .md-syntax.is-revealed{display:inline;color:color-mix(in srgb,var(--ink) 42%,var(--card))}
+.live-markdown-editor .md-heading{font-weight:600;color:var(--ink);margin:0;line-height:1.85}
+.live-markdown-editor .md-heading-1{font-size:1.05em}
+.live-markdown-editor .md-heading-2{font-size:1.03em}
+.live-markdown-editor :is(.md-heading-3,.md-heading-4,.md-heading-5,.md-heading-6){font-size:1em}
+.live-markdown-editor .md-quote{border-left:2px solid color-mix(in srgb,var(--accent) 45%,var(--line));padding-left:10px;color:var(--subtle)}
+.live-markdown-editor .md-list-item{padding-left:4px}
+.live-markdown-editor .md-fenced-code{padding:0 9px;background:var(--soft);font: .94em/1.85 'Cascadia Code',Consolas,'Microsoft YaHei',monospace;border-left:2px solid var(--line);color:var(--subtle)}
+.live-markdown-editor .md-rule{min-height:1.85em;background:linear-gradient(var(--line),var(--line)) center/100% 1px no-repeat}
+.live-markdown-editor .md-rule.is-active{background:none}
+.live-markdown-editor :is(strong,em,code,del){white-space:pre-wrap}
+.live-markdown-editor code{padding:1px 3px;font-size:.94em}
+.live-markdown-editor img{max-width:100%;max-height:170px;border-radius:6px;vertical-align:middle;object-fit:contain}
+#quick-composer .live-markdown-editor{position:relative;margin:0;padding:4px 1px 2px;min-height:40px;max-height:min(300px,38vh);height:auto;overflow-y:auto;border:0;background:none;resize:none;font-family:var(--note-font-family);font-size:var(--note-font-size);line-height:1.8}
+#quick-composer .live-markdown-editor .md-editor-line{line-height:1.8;min-height:1.8em}
+#quick-composer .live-markdown-editor.is-empty:before{font-size:12px;color:#97a38c}
+.capture-body .live-markdown-editor{position:relative;min-height:125px;max-height:36vh;overflow-y:auto;padding:9px 0;line-height:1.9;font-size:var(--note-font-size);background:none;border:0}
+.note-edit-input.live-markdown-editor{position:relative;min-height:160px;max-height:40vh;overflow-y:auto;padding:10px;border:1px solid var(--line);border-radius:7px;background:var(--card);resize:none}
+
+/* ==================== 设置：分区留白、成对控件与字体搜索 ==================== */
+.settings-modal.modal{width:890px;height:min(700px,88dvh)}
+.settings-modal .settings-layout{grid-template-columns:164px minmax(0,1fr)}
+.settings-nav{padding:15px 10px;background:var(--paper)}
+.settings-nav-item,.settings-nav-button{border-radius:8px;font-size:11px;min-height:39px;gap:9px}
+.settings-panel,.settings-content{padding:25px 29px 30px}
+.settings-panel-heading,.settings-content-header{margin-bottom:23px}
+.settings-panel-heading h3,.settings-content-header h3{font-size:17px}
+.settings-panel-heading p,.settings-content-header p{font-size:11px;line-height:1.8}
+.settings-group,.settings-card,.settings-section{padding:0;margin:0 0 25px;border:0;box-shadow:none;background:none}
+.settings-group-title,.settings-section-title{padding:0;margin:0 0 12px;border:0;color:var(--ink);font-size:11px;font-weight:600;letter-spacing:0;line-height:1.7}
+.settings-section>.settings-section-title{padding-top:0}
+.settings-row,.settings-modal .setting-row{min-height:51px;padding:9px 0;border:0;gap:18px}
+.settings-row-label,.setting-label{font-size:12px;font-weight:500;line-height:1.7}
+.settings-row-description,.setting-description{font-size:10px;line-height:1.75;max-width:360px;margin-top:3px}
+.settings-row .settings-control{max-width:57%}
+.settings-control select,.settings-row .form-control{min-height:35px;height:35px;font-size:11px;border-radius:7px;padding:7px 10px}
+.settings-grid,.settings-font-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:15px 20px;margin:4px 0 12px}
+.settings-font-row{grid-template-columns:minmax(0,1.65fr) minmax(0,1fr);gap:18px}
+.settings-grid>.settings-row,.settings-grid>.setting-row,.settings-font-row>.settings-row,.settings-font-row>.setting-row,.setting-field{display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;min-width:0;min-height:0;padding:0;gap:8px;border:0}
+.settings-grid .settings-control,.settings-font-row .settings-control,.setting-field>.settings-control{width:100%;max-width:none;min-width:0;flex-shrink:1}
+.settings-grid :is(.settings-row-description,.setting-description),.settings-font-row :is(.settings-row-description,.setting-description){min-height:0;max-width:none}
+.settings-grid .form-control,.settings-font-row .form-control{width:100%;max-width:none;min-width:0}
+.setting-field-wide{grid-column:1/-1}
+.settings-grid input[type=number]{width:100%;min-width:0}
+.settings-font-row .settings-range{min-width:0;width:100%;height:35px;gap:10px;padding:0}
+.settings-font-row .settings-range input[type=range]{flex:1;width:100%!important;min-width:30px!important}
+.settings-font-row .settings-range output{font-size:11px;min-width:32px}
+.settings-font-preview{padding:12px 14px;margin-top:14px;font-size:var(--note-font-size);line-height:1.85;border:1px solid var(--line);background:var(--soft);border-radius:8px}
+.settings-inline{gap:9px}
+.settings-actions{padding-top:10px;gap:8px}
+.settings-notice{margin:12px 0;padding:10px 12px;border:0;background:var(--soft);border-radius:8px}
+.settings-section .shortcut-row{border:0;padding:10px 0;min-height:47px}
+.font-combobox{position:relative;width:100%;min-width:0;font-size:11px}
+.font-combobox-field{position:relative;display:flex;align-items:center;min-height:35px;width:100%;border:1px solid var(--line);border-radius:7px;background:var(--paper)}
+.font-combobox-field:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.font-combobox-field>.form-control{width:100%;min-width:0;max-width:none;height:33px;min-height:33px;padding:7px 32px 7px 10px;border:0!important;box-shadow:none;background:transparent;font-size:11px;outline:none}
+.font-combobox-field>.form-control:focus-visible{outline:none}
+.font-combobox-toggle{position:absolute;right:3px;top:3px;display:flex;align-items:center;justify-content:center;width:27px;height:27px;flex-shrink:0;border-radius:5px;color:var(--muted);padding:0}
+.font-combobox-toggle:hover{background:var(--accent-soft);color:var(--accent)}
+.font-combobox-toggle .icon{width:12px;height:12px}
+.font-combobox-list{position:absolute;z-index:20;top:calc(100% + 5px);left:0;right:0;min-width:100%;max-height:220px;padding:5px;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:9px;box-shadow:0 10px 30px #17261621;scrollbar-width:thin}
+.font-combobox-option{display:flex;align-items:center;gap:8px;width:100%;padding:8px 9px;min-height:32px;border-radius:5px;font-size:11px;text-align:left;color:var(--subtle);line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.font-combobox-option:is(:hover,.is-active){background:var(--soft);color:var(--ink)}
+.font-combobox-option.is-selected{background:var(--accent-soft);color:var(--accent)}
+.font-combobox-option .icon{width:12px;height:12px;flex-shrink:0}
+.font-permission-option{margin-top:4px;color:var(--accent);background:var(--soft);white-space:normal;font-family:inherit}
+.font-combobox-status{padding:9px;font-family:inherit;font-size:10px;color:var(--muted);line-height:1.75}
+.resource-links{display:flex;flex-wrap:wrap;gap:9px;margin:11px 0 0}
+.resource-link{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:35px;max-width:100%;padding:8px 11px;border:1px solid var(--line);border-radius:8px;background:var(--paper);font-size:11px;line-height:1.5;color:var(--subtle);text-decoration:none;transition:background .15s,border-color .15s,color .15s}
+.resource-link:hover{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 25%,var(--line));color:var(--accent);text-decoration:none}
+.resource-icon{display:inline-flex;align-items:center;justify-content:center;flex:0 0 17px;width:17px;height:17px;font-size:14px;line-height:1}
+.resource-icon svg,.resource-link>.icon{width:15px;height:15px}
+.resource-link.sponsor-button{font-size:10px;color:var(--muted)}
+.settings-about-logo{margin:0 0 25px}
+.settings-credit{border:0;padding:0}
+
+/* ==================== 版号与更新日志 ==================== */
+.sidebar-brand .version-button{position:relative;display:inline-flex;align-items:center;gap:5px;min-height:19px;padding:1px 2px;margin-top:2px;border-radius:4px;background:none;color:var(--muted);font-size:9px;font-weight:450;letter-spacing:.45px;line-height:1.5;white-space:nowrap}
+.sidebar-brand .version-button:hover{color:var(--accent);background:var(--accent-soft)}
+.version-button .update-dot{position:absolute;right:-4px;top:-1px;display:block;width:5px;height:5px;border-radius:50%;background:#438cf0;box-shadow:0 0 0 2px var(--paper)}
+.version-button .version-channel{font-size:8px;letter-spacing:.6px}
+.changelog-modal.modal{width:560px;max-width:min(560px,calc(100vw - 32px))}
+.changelog-modal .modal-header{border-bottom:0;padding-bottom:9px}
+.changelog-modal .modal-body{padding:5px 24px 22px}
+.changelog-version{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--ink);margin:11px 0}
+.changelog-version time{font-size:10px;color:var(--muted);font-weight:400;margin-left:auto}
+.changelog-list{margin:10px 0 18px;padding:0 0 0 17px;color:var(--subtle);font-size:12px;line-height:1.9}
+.changelog-list li{margin:6px 0;padding-left:3px}
+.changelog-list li::marker{color:var(--accent)}
+.update-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding-top:15px;margin-top:16px;border-top:1px solid var(--line)}
+.update-actions .button{font-size:11px;min-height:34px}
+.update-status{font-size:11px;line-height:1.8;color:var(--muted);margin:10px 0}
+
+/* ==================== 侧栏拖动：只占用朝向桌面的边缘 ==================== */
+.sidebar{min-width:min(360px,100vw)}
+.sidebar-resizer{position:absolute;z-index:42;left:-4px;right:auto;top:0;bottom:0;display:block;width:8px;touch-action:none;cursor:ew-resize;background:transparent}
+.sidebar-resizer:before{content:'';position:absolute;left:3px;top:0;bottom:0;width:2px;border-radius:2px;background:var(--accent);opacity:0;transition:opacity .15s}
+.sidebar-resizer:hover:before,.sidebar.is-resizing .sidebar-resizer:before,.sidebar-resizer.is-resizing:before{opacity:.45}
+.sidebar[data-edge=left]>.sidebar-resizer,.sidebar-resizer[data-edge=left]{left:auto;right:-4px}
+.sidebar[data-edge=right]>.sidebar-resizer,.sidebar-resizer[data-edge=right]{right:auto;left:-4px}
+body.is-resizing,.sidebar.is-resizing{cursor:ew-resize;user-select:none}
+.sidebar.is-resizing{transition:none}
+
+/* ==================== 适配窄屏与辅助操作 ==================== */
+@media(max-width:800px){.settings-modal.modal{height:min(720px,91dvh);max-height:91dvh}.settings-modal .settings-layout{grid-template-columns:143px minmax(0,1fr)}.settings-panel,.settings-content{padding:22px 22px 28px}.settings-font-row{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:13px}.settings-grid{gap:14px}.note-header .note-title{font-size:14px}.note-header .note-time{font-size:10px}}
+@media(max-width:560px){.settings-modal.modal{max-width:100%;height:91dvh;border-radius:12px}.settings-modal .settings-layout{display:flex;flex-direction:column}.settings-nav{padding:8px;gap:4px}.settings-nav-item,.settings-nav-button{font-size:10px;min-height:34px;padding:7px 10px}.settings-panel,.settings-content{padding:21px 19px 26px}.settings-row,.settings-modal .setting-row{padding:9px 0;gap:12px}.settings-grid>.settings-row,.settings-font-row>.settings-row{padding:0;gap:7px}.settings-font-row{gap:12px;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr)}.settings-grid{gap:14px}.settings-row-label{font-size:11px}.settings-font-row .settings-range{gap:6px}.settings-font-row .settings-range output{font-size:10px;min-width:28px}.resource-links{gap:7px}.resource-link{padding:7px 9px;min-height:33px;font-size:10px}.emoji-modal .modal-header{padding:17px 18px 13px}.emoji-modal .modal-body{padding:0 18px 18px}.emoji-grid{grid-template-columns:repeat(8,minmax(0,1fr));gap:4px}.emoji-grid>button.emoji-choice{font-size:24px}.emoji-categories{gap:3px}.emoji-categories>button{font-size:10px;padding:6px 8px}.note-header .note-title{font-size:14px}.note-header .note-time{font-size:9px}.tag-chip-wrap .tag-chip{font-size:10px}.note-emoji{flex-basis:25px;width:25px;height:25px;font-size:19px}}
+@media(max-width:390px){.settings-font-row,.settings-grid{grid-template-columns:minmax(0,1fr)}.settings-font-row .settings-range{max-width:100%}.emoji-grid{grid-template-columns:repeat(7,minmax(0,1fr))}.note-header{gap:6px}.note-header .note-time{font-size:8.5px}.note-header .note-title{font-size:13px}.note-card .note-content :is(h1,h2,h3,h4,h5,h6){font-size:13px}}
+@media(prefers-reduced-motion:reduce){.note-emoji,.sidebar-resizer:before,.resource-link,.emoji-choice{transition:none}}
+
+/* 就地编辑只限制输入区高度，完成操作不能被卡片预览裁切。 */
+.note-card.is-editing{max-height:none;overflow:visible}input.emoji-search{width:100%;max-width:none;padding:10px 12px}
+
+/* 拖动状态覆盖整个页面，避免指针离开边缘时指示消失。 */
+body.is-resizing-sidebar,body.is-resizing-sidebar *{cursor:ew-resize!important;user-select:none!important}body.is-resizing-sidebar .sidebar-resizer:before{opacity:.45}body.is-resizing-sidebar .sidebar{transition:none}
+/* 正文和书写区标题不大于卡片标题，字号配置保持一致。 */
+.note-header .note-title{font-size:max(14px,var(--note-font-size))}.note-card .note-content :is(h1,h2,h3,h4,h5,h6){font-size:1em}.live-markdown-editor :is(.md-heading-1,.md-heading-2){font-size:1em}

@@ -1,0 +1,71 @@
+/* 卡片菜单与折叠状态。 */
+.note-context-menu {
+  position: fixed;
+  z-index: 90;
+  width: 216px;
+  max-width: calc(100vw - 16px);
+  padding: 5px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px #17201924, 0 2px 5px #17201912;
+  animation: note-menu-appear 90ms ease-out;
+  scrollbar-width: thin;
+}
+.note-context-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 29px;
+  gap: 9px;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+}
+.note-context-item > .icon { width: 14px; height: 14px; flex: 0 0 14px; color: var(--subtle); }
+.note-context-item:hover,
+.note-context-item:focus-visible { background: var(--accent-soft); outline: none; }
+.note-context-item:focus-visible { box-shadow: inset 0 0 0 1px var(--accent); }
+.note-context-label { flex: 1; min-width: 0; }
+.note-context-hint { margin-left: 7px; color: var(--muted); font-size: 9px; }
+.note-context-item.is-danger { color: var(--danger); }
+.note-context-item.is-danger > .icon { color: inherit; }
+.note-context-item.is-danger:hover,
+.note-context-item.is-danger:focus-visible { background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.note-context-item.is-expanded[data-menu-command="collapse"] > .icon { transform: rotate(180deg); }
+.note-context-separator { height: 1px; margin: 4px 7px; background: var(--line); }
+
+/* 折叠仅隐藏正文；进入编辑时始终显示完整输入区。 */
+.note-card.is-collapsed:not(.is-editing) > .note-content,
+.note-card.is-collapsed:not(.is-editing) > .note-expand { display: none !important; }
+.note-card.is-collapsed:not(.is-editing) { min-height: 0; }
+.note-card.is-collapsed:not(.is-editing) > .note-bottom { margin-top: 4px; }
+.note-card button.note-time {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-width: 0;
+  padding: 3px 1px;
+  margin-top: -3px;
+  margin-bottom: -3px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+}
+.note-card button.note-time:hover { color: var(--accent); background: var(--accent-soft); }
+.note-card button.note-time:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.note-card.is-collapsed:not(.is-editing) button.note-time { color: var(--accent); }
+@keyframes note-menu-appear { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .note-context-menu { animation: none; } }

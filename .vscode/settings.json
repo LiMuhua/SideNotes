@@ -1,0 +1,189 @@
+{
+  // 使用项目内 TypeScript 版本，避免 VS Code 内置版本与项目版本不一致
+  "js/ts.tsdk.path": "node_modules/typescript/lib",
+
+  // 指定项目包管理器
+  "npm.packageManager": "pnpm",
+
+  // 前端项目通常使用 2 空格缩进
+  "editor.tabSize": 2,
+
+  // Prettier 单行最大长度
+  "prettier.printWidth": 100, // 超过最大值换行
+
+  // 默认使用 Prettier 格式化
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+
+  // 统一使用 LF 换行，避免跨平台 Git 差异
+  "files.eol": "\n",
+
+  // 搜索时忽略生成文件、依赖目录等无关内容
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/*.log": true,
+    "**/*.log*": true,
+    "**/bower_components": true,
+    "**/dist": true,
+    "**/elehukouben": true,
+    "**/.git": true,
+    "**/.gitignore": true,
+    "**/.svn": true,
+    "**/.DS_Store": true,
+    "**/.idea": true,
+    "**/.vscode": false,
+    "**/yarn.lock": true,
+    "**/tmp": true,
+    "out": true,
+    "dist": true,
+    "node_modules": true,
+    "CHANGELOG.md": true,
+    "examples": true,
+    "res": true,
+    "screenshots": true,
+    "yarn-error.log": true,
+    "**/.yarn": true
+  },
+
+  // 文件资源管理器中隐藏不需要关注的文件
+  "files.exclude": {
+    "**/.cache": true,
+    "**/.editorconfig": true,
+    "**/.eslintcache": true,
+    "**/bower_components": true,
+    "**/.idea": true,
+    "**/tmp": true,
+    "**/.git": true,
+    "**/.svn": true,
+    "**/.hg": true,
+    "**/CVS": true,
+    "**/.DS_Store": true
+  },
+
+  // 减少大项目文件监听压力，提高 VS Code 性能
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/.vscode/**": true,
+    "**/node_modules/**": true,
+    "**/tmp/**": true,
+    "**/bower_components/**": true,
+    "**/dist/**": true,
+    "**/yarn.lock": true
+  },
+
+  // 开启 CSS 类代码规范检查
+  "stylelint.enable": true,
+
+  // Stylelint 支持的文件类型
+  "stylelint.validate": ["css", "less", "postcss", "scss", "vue", "sass"],
+
+  // 配置 @ 路径别名提示
+  "path-intellisense.mappings": {
+    "@/": "${workspaceRoot}/src"
+  },
+
+  // 不同语言统一使用 Prettier
+  "[javascriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[html]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[css]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[less]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[scss]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[markdown]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+
+  // 保存时自动执行 ESLint、Stylelint 修复
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit",
+    "source.fixAll.stylelint": "explicit"
+  },
+
+  // 保存文件自动格式化
+  "editor.formatOnSave": true,
+
+  "[vue]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+
+  // i18n-ally 翻译文件配置
+  "i18n-ally.localesPaths": ["src/locales"],
+  "i18n-ally.keystyle": "nested",
+  "i18n-ally.sortKeys": true,
+  "i18n-ally.namespace": false,
+  "i18n-ally.enabledParsers": ["ts"],
+  "i18n-ally.sourceLanguage": "en",
+  "i18n-ally.displayLanguage": "zh-CN",
+  "i18n-ally.enabledFrameworks": ["vue", "react"],
+
+  // cSpell 拼写检查白名单
+  "cSpell.words": [
+    "brotli",
+    "browserslist",
+    "codemirror",
+    "commitlint",
+    "cropperjs",
+    "echart",
+    "echarts",
+    "esnext",
+    "esno",
+    "iconify",
+    "INTLIFY",
+    "lintstagedrc",
+    "logicflow",
+    "nprogress",
+    "pinia",
+    "pnpm",
+    "qrcode",
+    "sider",
+    "sortablejs",
+    "stylelint",
+    "svgs",
+    "unocss",
+    "unplugin",
+    "unref",
+    "videojs",
+    "VITE",
+    "vitejs",
+    "vueuse",
+    "wangeditor",
+    "xingyu",
+    "yudao",
+    "zxcvbn"
+  ],
+
+  // 控制 VS Code 文件嵌套展示
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.expand": false,
+
+  // 将测试文件、环境文件、配置文件归类显示
+  "explorer.fileNesting.patterns": {
+    "*.ts": "$(capture).test.ts, $(capture).test.tsx",
+    "*.tsx": "$(capture).test.ts, $(capture).test.tsx",
+    "*.env": ".env.*",
+
+    // package.json 下折叠锁文件和项目配置文件
+    "package.json": "pnpm-lock.yaml,yarn.lock,LICENSE,README*,CHANGELOG*,CNAME,.gitattributes,.eslintrc-auto-import.json,.gitignore,prettier.config.js,stylelint.config.js,commitlint.config.js,.stylelintignore,.prettierignore,.gitpod.yml,.eslintrc.js,.eslintignore,electron-builder.json5"
+  },
+
+  // VS Code 集成终端保留历史输出行数
+  "terminal.integrated.scrollback": 10000,
+
+  // 当前项目不是 Nuxt 项目
+  "nuxt.isNuxtApp": false
+}

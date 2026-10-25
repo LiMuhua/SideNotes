@@ -1,0 +1,84 @@
+/* 第七版：标签与控件始终左右对齐，数值与保留策略支持紧凑直接输入。 */
+.settings-modal .appearance-dashboard .settings-row,
+.settings-modal .appearance-dashboard .settings-row:has(input[type=checkbox]){display:grid;grid-template-columns:104px minmax(0,1fr);grid-template-rows:auto;align-items:center;gap:11px;min-height:34px;margin:0;padding:0;border:0}
+.settings-modal .appearance-dashboard .settings-row-info{min-height:34px;align-items:center}
+.settings-modal .appearance-dashboard .settings-control{min-width:0;min-height:34px;width:100%;justify-content:flex-end;align-items:center}
+.settings-modal .appearance-dashboard .settings-field-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:15px 22px}
+.settings-modal .appearance-dashboard .settings-typography .settings-row{grid-template-columns:34px minmax(0,1fr);gap:9px}
+.settings-modal .appearance-dashboard .sidebar-settings-grid .settings-row{grid-template-columns:105px minmax(0,1fr);gap:9px}
+.settings-modal .appearance-dashboard .settings-balanced-card{display:flex;flex-direction:column;gap:12px}
+.settings-modal .appearance-dashboard .settings-balanced-card>.settings-group-title{margin:0}
+.settings-modal .appearance-dashboard .settings-balanced-card>.settings-row{grid-template-columns:minmax(0,1fr) 76px;grid-template-rows:auto;gap:8px;width:100%}
+.settings-modal .appearance-dashboard .settings-balanced-card .settings-control{width:76px}
+.settings-modal .appearance-display .settings-row{grid-template-columns:72px minmax(0,1fr);align-items:start;gap:13px}
+.settings-modal .appearance-display .settings-row-info{align-self:center}
+.settings-modal .appearance-display .settings-control{justify-content:flex-start}
+.settings-modal .appearance-display :is(.theme-grid,.surface-choice-grid){flex:1 1 0;width:100%;min-width:0}
+.settings-modal .appearance-display :is(.settings-choice,.surface-choice){padding:7px;gap:5px}
+.settings-modal .appearance-display :is(.theme-preview,.surface-preview){height:27px}
+
+/* 滑块占可用宽度，绝对值可点击直接编辑，单位与数字分离。 */
+.settings-modal .settings-range{min-width:0;gap:7px}
+.settings-modal .settings-range-number{display:inline-flex;flex:0 0 auto;align-items:center;justify-content:flex-end;gap:3px;min-width:0;white-space:nowrap}
+.settings-modal .settings-range-value{display:block;box-sizing:border-box;flex:0 0 43px;width:43px;min-width:0;max-width:43px;height:28px;min-height:28px;margin:0;padding:4px;border:1px solid transparent;border-radius:5px;background:transparent;color:var(--ink);font:inherit;font-size:11px;line-height:18px;text-align:right;font-variant-numeric:tabular-nums;appearance:textfield;-moz-appearance:textfield}
+.settings-modal .settings-range-value::-webkit-inner-spin-button,.settings-modal .settings-range-value::-webkit-outer-spin-button{appearance:none;margin:0}
+.settings-modal .settings-range-value:hover{border-color:var(--line);background:var(--soft)}
+.settings-modal .settings-range-value:focus{border-color:var(--accent);background:var(--card);outline:2px solid var(--accent-soft)}
+.settings-modal .settings-range-unit{font-size:10px;color:var(--muted);line-height:1}
+.settings-modal .settings-range input[type=range]{min-width:24px!important}
+
+/* 记录与浏览各占一栏；组内每行动作在左、快捷键在右。 */
+.settings-modal .shortcuts-dashboard{grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch}
+.settings-modal .shortcuts-dashboard .shortcut-section{grid-column:auto}
+.settings-modal .shortcuts-dashboard .shortcut-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:5px}
+.settings-modal .shortcuts-dashboard .settings-row{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto;gap:9px;align-items:center;min-height:37px;margin:0;padding:0}
+.settings-modal .shortcuts-dashboard .settings-row-info{min-height:30px}
+.settings-modal .shortcuts-dashboard .settings-control{width:auto;min-height:30px;justify-content:flex-end}
+.settings-modal .shortcuts-dashboard .settings-row-label{font-size:10px}
+.settings-modal .shortcuts-dashboard kbd{font-size:9px;padding:5px 6px;white-space:nowrap;line-height:1.4}
+
+/* 保留策略只有一个数值输入和预设箭头，避免占用回收站内容空间。 */
+.trash-retention-control{display:inline-flex;position:relative;align-items:center;gap:3px;height:28px;padding:0 2px 0 0;border:1px solid var(--line);border-radius:6px;background:var(--card)}
+.settings-modal .trash-retention-control .trash-retention-days{appearance:textfield;-moz-appearance:textfield;box-sizing:border-box;width:37px;min-width:37px;max-width:37px;height:26px;min-height:26px;padding:3px 1px 3px 5px;border:0;border-radius:5px;background:transparent;color:var(--ink);font:inherit;font-size:10px;line-height:20px;text-align:right;outline:0}
+.trash-retention-days::-webkit-inner-spin-button,.trash-retention-days::-webkit-outer-spin-button{appearance:none;margin:0}
+.trash-retention-control:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.trash-retention-unit{font-size:10px;color:var(--muted);padding-right:1px}
+.trash-retention-control .trash-retention-toggle{display:grid;place-items:center;width:20px;min-width:20px;height:22px;min-height:22px;margin:0;padding:3px;border:0;border-left:1px solid var(--line);border-radius:0 4px 4px 0;overflow:hidden}
+.trash-retention-toggle .icon{width:12px;height:12px;flex:0 0 12px}
+.trash-retention-toggle>span{display:none}
+.trash-retention-options{position:absolute;z-index:50;right:-1px;top:calc(100% + 5px);width:104px;min-width:104px;max-height:240px;padding:4px;border:1px solid var(--line);border-radius:7px;background:var(--card);box-shadow:0 7px 22px #0002;overflow:auto}
+.trash-retention-options[hidden]{display:none}
+.trash-retention-option{display:block;width:100%;padding:6px 8px;border:0;border-radius:4px;background:transparent;color:var(--ink);font:inherit;font-size:11px;text-align:left;line-height:1.5;cursor:pointer}
+.trash-retention-option:hover,.trash-retention-option:focus-visible{background:var(--accent-soft);color:var(--accent);outline:0}
+.trash-retention-option[aria-selected=true]{color:var(--accent);font-weight:600}
+
+/* 二次确认保留原设置页、搜索和滚动位置；取消后回到原操作。 */
+.settings-confirm-backdrop{position:fixed;z-index:120;inset:0;display:grid;place-items:center;padding:20px;background:#0005;backdrop-filter:blur(3px)}
+.settings-confirm-dialog{width:min(360px,calc(100vw - 40px));max-height:calc(100dvh - 40px);padding:18px;border:1px solid var(--line);border-radius:11px;background:var(--card);color:var(--ink);box-shadow:0 18px 60px #0003;overflow-y:auto;box-sizing:border-box}
+.settings-confirm-header{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:0 0 10px}
+.settings-confirm-header h3{margin:0;font-size:15px;font-weight:600;line-height:1.5}
+.settings-confirm-header .icon-button{width:26px;min-width:26px;height:26px;min-height:26px}
+.settings-confirm-message{font-size:12px;line-height:1.9;margin:0;color:var(--subtle)}
+.settings-confirm-actions{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin:19px 0 0;padding:0;border:0}
+.settings-confirm-actions .button{font-size:11px;min-height:31px;padding:7px 11px}
+.settings-confirm-error{margin:10px 0 0;font-size:11px;color:var(--danger);line-height:1.7}
+.settings-confirm-error[hidden]{display:none}
+
+@media(max-width:760px){
+  .settings-modal .appearance-dashboard .settings-balanced-card{grid-column:auto}
+  .settings-modal .appearance-dashboard .settings-field-grid{grid-template-columns:minmax(0,1fr);gap:13px}
+  .settings-modal .appearance-dashboard .settings-typography{grid-template-columns:repeat(2,minmax(0,1fr));gap:13px 16px}
+}
+@media(max-width:650px){
+  .settings-modal .shortcuts-dashboard{grid-template-columns:minmax(0,1fr)}
+  .settings-modal .shortcuts-dashboard .settings-row-label{font-size:11px}
+}
+@media(max-width:560px){
+  .settings-modal .appearance-dashboard .settings-field-grid{grid-template-columns:minmax(0,1fr)}
+  .settings-modal .appearance-dashboard .settings-row{grid-template-columns:104px minmax(0,1fr)}
+  .settings-modal .appearance-dashboard .settings-typography .settings-row{grid-template-columns:104px minmax(0,1fr)}
+  .settings-modal .appearance-display .settings-row{grid-template-columns:65px minmax(0,1fr);gap:10px}
+  .settings-modal .appearance-display .surface-choice-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .settings-modal .settings-panel[data-section=trash] .settings-panel-heading{gap:8px}
+  .settings-modal .trash-retention-inline{gap:4px}
+}
