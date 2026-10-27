@@ -5,23 +5,23 @@
  * 数据类操作调用存储桥接，而非直接写 localStorage；其余交互与原型相同。
  */
 
-import { useCallback, useEffect, useState } from 'react';
-import { Modal } from './Modal';
-import { Icon } from './Icon';
-import { useStore } from '../hooks/useStore';
-import * as store from '../core/store';
-import * as bridge from '../core/bridge';
-import { WIDTH_RANGE, FONT_SIZE_RANGE, TRASH_DAYS_RANGE } from '../core/settings';
-import type { Settings } from '../core/types';
+import { useCallback, useEffect, useState } from "react";
+import { Modal } from "./Modal";
+import { Icon } from "./Icon";
+import { useStore } from "../hooks/useStore";
+import * as store from "../core/store";
+import * as bridge from "../core/bridge";
+import { WIDTH_RANGE, FONT_SIZE_RANGE, TRASH_DAYS_RANGE } from "../core/settings";
+import type { Settings } from "../core/types";
 
-type Section = 'appearance' | 'shortcuts' | 'data' | 'trash' | 'about';
+type Section = "appearance" | "shortcuts" | "data" | "trash" | "about";
 
 const SECTIONS: Array<{ id: Section; label: string; icon: string }> = [
-  { id: 'appearance', label: '外观', icon: 'settings' },
-  { id: 'shortcuts', label: '快捷键', icon: 'code' },
-  { id: 'data', label: '数据与同步', icon: 'cloud' },
-  { id: 'trash', label: '回收站', icon: 'trash' },
-  { id: 'about', label: '关于', icon: 'info' },
+  { id: "appearance", label: "外观", icon: "settings" },
+  { id: "shortcuts", label: "快捷键", icon: "code" },
+  { id: "data", label: "数据与同步", icon: "cloud" },
+  { id: "trash", label: "回收站", icon: "trash" },
+  { id: "about", label: "关于", icon: "info" },
 ];
 
 /* ==================== 通用控件 ==================== */
@@ -39,7 +39,9 @@ function Row({
     <div className="settings-row setting-row">
       <div className="settings-row-info setting-copy">
         <span className="settings-row-label setting-label">{label}</span>
-        {description ? <span className="settings-row-description setting-description">{description}</span> : null}
+        {description ? (
+          <span className="settings-row-description setting-description">{description}</span>
+        ) : null}
       </div>
       <div className="settings-control">{children}</div>
     </div>
@@ -100,25 +102,25 @@ function AppearancePanel({ settings }: { settings: Settings }) {
     await store.updateSettings(patch);
   }, []);
 
-  const themes: Array<[Settings['theme'], string]> = [
-    ['light', '浅色'],
-    ['dark', '深色'],
-    ['system', '跟随系统'],
+  const themes: Array<[Settings["theme"], string]> = [
+    ["light", "浅色"],
+    ["dark", "深色"],
+    ["system", "跟随系统"],
   ];
-  const surfaces: Array<[Settings['surface'], string]> = [
-    ['standard', '标准'],
-    ['paper', '纸感'],
-    ['glass', '磨砂'],
-    ['win11', 'Win 11'],
+  const surfaces: Array<[Settings["surface"], string]> = [
+    ["standard", "标准"],
+    ["paper", "纸感"],
+    ["glass", "磨砂"],
+    ["win11", "Win 11"],
   ];
-  const edges: Array<[Settings['edge'], string]> = [
-    ['right', '屏幕右侧'],
-    ['left', '屏幕左侧'],
+  const edges: Array<[Settings["edge"], string]> = [
+    ["right", "屏幕右侧"],
+    ["left", "屏幕左侧"],
   ];
   const delays: Array<[number, string]> = [
-    [300, '300 毫秒'],
-    [600, '600 毫秒'],
-    [1000, '1 秒'],
+    [300, "300 毫秒"],
+    [600, "600 毫秒"],
+    [1000, "1 秒"],
   ];
 
   return (
@@ -126,10 +128,20 @@ function AppearancePanel({ settings }: { settings: Settings }) {
       <div className="settings-group">
         <h3>显示</h3>
         <Row label="主题">
-          <Select label="主题" options={themes} value={settings.theme} onChange={(value) => void save({ theme: value })} />
+          <Select
+            label="主题"
+            options={themes}
+            value={settings.theme}
+            onChange={(value) => void save({ theme: value })}
+          />
         </Row>
         <Row label="材质">
-          <Select label="材质" options={surfaces} value={settings.surface} onChange={(value) => void save({ surface: value })} />
+          <Select
+            label="材质"
+            options={surfaces}
+            value={settings.surface}
+            onChange={(value) => void save({ surface: value })}
+          />
         </Row>
       </div>
       <div className="settings-group">
@@ -152,7 +164,12 @@ function AppearancePanel({ settings }: { settings: Settings }) {
       <div className="settings-group">
         <h3>侧栏</h3>
         <Row label="显示位置">
-          <Select label="触发边缘" options={edges} value={settings.edge} onChange={(value) => void save({ edge: value })} />
+          <Select
+            label="触发边缘"
+            options={edges}
+            value={settings.edge}
+            onChange={(value) => void save({ edge: value })}
+          />
         </Row>
         <Row label="侧栏宽度" description="可拖动侧栏边缘直接调整。">
           <div className="settings-range">
@@ -169,13 +186,26 @@ function AppearancePanel({ settings }: { settings: Settings }) {
           </div>
         </Row>
         <Row label="移出后收起">
-          <Select label="移出后收起" options={delays} value={settings.hideDelay} onChange={(value) => void save({ hideDelay: Number(value) })} />
+          <Select
+            label="移出后收起"
+            options={delays}
+            value={settings.hideDelay}
+            onChange={(value) => void save({ hideDelay: Number(value) })}
+          />
         </Row>
         <Row label="边缘唤出" description="鼠标移到屏幕边缘时自动显示侧栏。">
-          <Toggle label="边缘唤出" checked={settings.edgeTrigger} onChange={(value) => void save({ edgeTrigger: value })} />
+          <Toggle
+            label="边缘唤出"
+            checked={settings.edgeTrigger}
+            onChange={(value) => void save({ edgeTrigger: value })}
+          />
         </Row>
         <Row label="编辑时保持展开" description="正在书写时，鼠标移出也保持侧栏展开。">
-          <Toggle label="编辑时保持展开" checked={settings.protectEditing} onChange={(value) => void save({ protectEditing: value })} />
+          <Toggle
+            label="编辑时保持展开"
+            checked={settings.protectEditing}
+            onChange={(value) => void save({ protectEditing: value })}
+          />
         </Row>
       </div>
     </div>
@@ -186,18 +216,18 @@ function AppearancePanel({ settings }: { settings: Settings }) {
 
 function ShortcutsPanel({ conflicts }: { conflicts: string[] }) {
   const shortcuts: Array<[string, string]> = [
-    ['新建记录', 'Ctrl + N'],
-    ['呼出速记浮窗', 'Ctrl + Shift + Space'],
-    ['保存并收起', 'Ctrl + Enter'],
-    ['搜索记录与标签', 'Ctrl + F'],
-    ['呼出侧栏', 'Alt + Shift + S'],
+    ["新建记录", "Ctrl + N"],
+    ["呼出速记浮窗", "Ctrl + Shift + Space"],
+    ["保存并收起", "Ctrl + Enter"],
+    ["搜索记录与标签", "Ctrl + F"],
+    ["呼出侧栏", "Alt + Shift + S"],
   ];
   return (
     <div>
       {conflicts.length ? (
         <div className="desktop-notice is-error">
           <Icon name="alert" />
-          以下快捷键注册失败（可能被其他软件占用）：{conflicts.join('、')}
+          以下快捷键注册失败（可能被其他软件占用）：{conflicts.join("、")}
         </div>
       ) : null}
       <div className="settings-group">
@@ -216,7 +246,9 @@ function ShortcutsPanel({ conflicts }: { conflicts: string[] }) {
 /* ==================== 数据与同步 ==================== */
 
 function DataPanel(_props: { settings: Settings }) {
-  const [info, setInfo] = useState<{ directory: string; size: number; noteCount: number } | null>(null);
+  const [info, setInfo] = useState<{ directory: string; size: number; noteCount: number } | null>(
+    null,
+  );
 
   useEffect(() => {
     void bridge.storageInfo().then((data) => setInfo(data));
@@ -229,10 +261,15 @@ function DataPanel(_props: { settings: Settings }) {
         <div className="settings-group">
           <h3>存储位置</h3>
           <div className="current-directory settings-inline">
-            <code className="settings-path directory-field" aria-label="当前数据目录">{info.directory}</code>
+            <code className="settings-path directory-field" aria-label="当前数据目录">
+              {info.directory}
+            </code>
           </div>
           <p className="setting-description">
-            {info.noteCount} 条记录 · {info.size < 1024 * 1024 ? `${Math.round(info.size / 1024)} KB` : `${(info.size / 1024 / 1024).toFixed(1)} MB`}
+            {info.noteCount} 条记录 ·{" "}
+            {info.size < 1024 * 1024
+              ? `${Math.round(info.size / 1024)} KB`
+              : `${(info.size / 1024 / 1024).toFixed(1)} MB`}
           </p>
         </div>
       ) : null}
@@ -245,11 +282,23 @@ function DataPanel(_props: { settings: Settings }) {
             onClick={() => {
               const state = store.getState();
               const blob = new Blob(
-                [JSON.stringify({ version: 2, exportedAt: Date.now(), notes: state.notes, draft: state.draft, settings: state.settings }, null, 2)],
-                { type: 'application/json' },
+                [
+                  JSON.stringify(
+                    {
+                      version: 2,
+                      exportedAt: Date.now(),
+                      notes: state.notes,
+                      draft: state.draft,
+                      settings: state.settings,
+                    },
+                    null,
+                    2,
+                  ),
+                ],
+                { type: "application/json" },
               );
               const url = URL.createObjectURL(blob);
-              const link = document.createElement('a');
+              const link = document.createElement("a");
               link.href = url;
               link.download = `sidenotes-backup-${new Date().toISOString().slice(0, 10)}.json`;
               link.click();
@@ -265,7 +314,7 @@ function DataPanel(_props: { settings: Settings }) {
             className="button secondary compact"
             onClick={async () => {
               // 触发文件选择器，由外部实现读取导入逻辑。
-              window.dispatchEvent(new CustomEvent('sidenotes:import-backup'));
+              window.dispatchEvent(new CustomEvent("sidenotes:import-backup"));
             }}
           >
             <Icon name="upload" />
@@ -286,7 +335,9 @@ function DataPanel(_props: { settings: Settings }) {
       </div>
       <div className="settings-group">
         <h3>同步</h3>
-        <p className="setting-description">云端同步功能正在开发中，敬请期待。当前版本支持手动导出备份到 OneDrive、坚果云等同步盘。</p>
+        <p className="setting-description">
+          云端同步功能正在开发中，敬请期待。当前版本支持手动导出备份到 OneDrive、坚果云等同步盘。
+        </p>
       </div>
     </div>
   );
@@ -295,16 +346,21 @@ function DataPanel(_props: { settings: Settings }) {
 /* ==================== 回收站 ==================== */
 
 function TrashPanel({ settings }: { settings: Settings }) {
-  const [trashQuery, setTrashQuery] = useState('');
+  const [trashQuery, setTrashQuery] = useState("");
   const state = useStore();
-  const trashed = state.notes.filter((note) => note.status === 'trash').sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0));
+  const trashed = state.notes
+    .filter((note) => note.status === "trash")
+    .sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0));
   // useState 懒初始化是调用 Date.now() 的合规方式（不在渲染函数体中直接调用）。
   const [now] = useState<number>(() => Date.now());
   const retainMs = settings.trashDays * 86_400_000;
 
   const visible = trashed.filter((note) => {
     const lower = trashQuery.toLowerCase();
-    return !lower || (note.text + note.images.map((image) => image.name).join(' ')).toLowerCase().includes(lower);
+    return (
+      !lower ||
+      (note.text + note.images.map((image) => image.name).join(" ")).toLowerCase().includes(lower)
+    );
   });
 
   return (
@@ -339,7 +395,9 @@ function TrashPanel({ settings }: { settings: Settings }) {
         </Row>
       </div>
       <div className="trash-toolbar settings-inline">
-        <span className="settings-trash-summary setting-description">{visible.length} / {trashed.length} 条</span>
+        <span className="settings-trash-summary setting-description">
+          {visible.length} / {trashed.length} 条
+        </span>
         <button
           type="button"
           className="button secondary compact"
@@ -366,43 +424,48 @@ function TrashPanel({ settings }: { settings: Settings }) {
       </div>
       <div className="settings-trash-list">
         {visible.length === 0 ? (
-          <div className="empty-state">{trashed.length ? '没有匹配的记录' : '回收站为空'}</div>
-        ) : visible.map((note) => {
-          const expired = now - (note.deletedAt ?? 0) > retainMs;
-          const lines = note.text.split('\n');
-          const title = lines.find((line) => line.trim()) || (note.images.length ? '图片记录' : '');
-          return (
-            <div key={note.id} className="settings-trash-item trash-card">
-              <div className="trash-item-main">
-                <h4 className="trash-title">{title}</h4>
-                <p className="trash-item-meta">
-                  {note.deletedAt ? new Date(note.deletedAt).toLocaleString('zh-CN', { hour12: false }) : '—'}
-                  {expired ? ' · 已到期' : ''}
-                </p>
+          <div className="empty-state">{trashed.length ? "没有匹配的记录" : "回收站为空"}</div>
+        ) : (
+          visible.map((note) => {
+            const expired = now - (note.deletedAt ?? 0) > retainMs;
+            const lines = note.text.split("\n");
+            const title =
+              lines.find((line) => line.trim()) || (note.images.length ? "图片记录" : "");
+            return (
+              <div key={note.id} className="settings-trash-item trash-card">
+                <div className="trash-item-main">
+                  <h4 className="trash-title">{title}</h4>
+                  <p className="trash-item-meta">
+                    {note.deletedAt
+                      ? new Date(note.deletedAt).toLocaleString("zh-CN", { hour12: false })
+                      : "—"}
+                    {expired ? " · 已到期" : ""}
+                  </p>
+                </div>
+                <div className="trash-item-actions">
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label="恢复此记录"
+                    title="恢复记录"
+                    onClick={() => void store.restoreFromTrash([note.id])}
+                  >
+                    <Icon name="restore" />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label="永久删除此记录"
+                    title="永久删除"
+                    onClick={() => void store.deleteForever([note.id])}
+                  >
+                    <Icon name="trash" />
+                  </button>
+                </div>
               </div>
-              <div className="trash-item-actions">
-                <button
-                  type="button"
-                  className="icon-button"
-                  aria-label="恢复此记录"
-                  title="恢复记录"
-                  onClick={() => void store.restoreFromTrash([note.id])}
-                >
-                  <Icon name="restore" />
-                </button>
-                <button
-                  type="button"
-                  className="icon-button"
-                  aria-label="永久删除此记录"
-                  title="永久删除"
-                  onClick={() => void store.deleteForever([note.id])}
-                >
-                  <Icon name="trash" />
-                </button>
-              </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
     </div>
   );
@@ -412,24 +475,30 @@ function TrashPanel({ settings }: { settings: Settings }) {
 
 function AboutPanel() {
   const links: Array<[string, string, string, string]> = [
-    ['Tauri', 'https://tauri.app/', '◈', '桌面与跨平台运行时'],
-    ['React', 'https://react.dev/', '⚛', '界面方案参考'],
-    ['Vite', 'https://vite.dev/', 'ϟ', '开发与构建工具'],
-    ['SQLite', 'https://sqlite.org/', '▱', '本地数据存储'],
+    ["Tauri", "https://tauri.app/", "◈", "桌面与跨平台运行时"],
+    ["React", "https://react.dev/", "⚛", "界面方案参考"],
+    ["Vite", "https://vite.dev/", "ϟ", "开发与构建工具"],
+    ["SQLite", "https://sqlite.org/", "▱", "本地数据存储"],
   ];
   return (
     <div>
       <div className="about-hero settings-about-logo">
         <img src="/src/assets/favicon.svg" alt="" width={40} height={40} />
         <h3>SideNotes</h3>
-        <span className="settings-version">0.6.0</span>
+        <span className="settings-version">0.6.1</span>
         <p className="setting-description">本地速记 · 置顶取用 · 用后归档</p>
       </div>
       <div className="settings-group">
         <h3>开源致谢</h3>
         <div className="resource-links settings-about-links">
           {links.map(([name, url, icon, desc]) => (
-            <a key={name} href={url} target="_blank" rel="noopener noreferrer" className="resource-link">
+            <a
+              key={name}
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="resource-link"
+            >
               <span className="resource-icon">{icon}</span>
               <span>{name}</span>
               <span className="resource-desc">{desc}</span>
@@ -451,7 +520,11 @@ export interface SettingsModalProps {
 }
 
 /** 设置对话框；支持独立窗口模式。 */
-export function SettingsModal({ onClose, initialSection = 'appearance', standalone = false }: SettingsModalProps) {
+export function SettingsModal({
+  onClose,
+  initialSection = "appearance",
+  standalone = false,
+}: SettingsModalProps) {
   const [section, setSection] = useState<Section>(initialSection);
   const [conflicts, setConflicts] = useState<string[]>([]);
   const state = useStore();
@@ -464,35 +537,40 @@ export function SettingsModal({ onClose, initialSection = 'appearance', standalo
   useEffect(() => {
     if (!standalone) return;
     const handler = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') {
+      if (event.key === "Escape") {
         event.preventDefault();
         event.stopImmediatePropagation();
         onClose();
       }
     };
-    document.addEventListener('keydown', handler, true);
-    return () => document.removeEventListener('keydown', handler, true);
+    document.addEventListener("keydown", handler, true);
+    return () => document.removeEventListener("keydown", handler, true);
   }, [standalone, onClose]);
 
   const body = (
     <div className="settings-layout">
-      <nav className="settings-nav" aria-label="设置分类" role="tablist" aria-orientation="vertical">
+      <nav
+        className="settings-nav"
+        aria-label="设置分类"
+        role="tablist"
+        aria-orientation="vertical"
+      >
         {SECTIONS.map(({ id, label }) => (
           <button
             key={id}
             type="button"
             role="tab"
-            className={`settings-nav-button settings-nav-item${section === id ? ' active' : ''}`}
+            className={`settings-nav-button settings-nav-item${section === id ? " active" : ""}`}
             aria-selected={section === id}
             data-section={id}
             tabIndex={section === id ? 0 : -1}
             onClick={() => setSection(id)}
             onKeyDown={(event) => {
               const index = SECTIONS.findIndex((s) => s.id === section);
-              if (event.key === 'ArrowDown') {
+              if (event.key === "ArrowDown") {
                 event.preventDefault();
                 setSection(SECTIONS[(index + 1) % SECTIONS.length].id);
-              } else if (event.key === 'ArrowUp') {
+              } else if (event.key === "ArrowUp") {
                 event.preventDefault();
                 setSection(SECTIONS[(index - 1 + SECTIONS.length) % SECTIONS.length].id);
               }
@@ -513,11 +591,11 @@ export function SettingsModal({ onClose, initialSection = 'appearance', standalo
           <h3>{SECTIONS.find((s) => s.id === section)?.label}</h3>
         </div>
 
-        {section === 'appearance' ? <AppearancePanel settings={state.settings} /> : null}
-        {section === 'shortcuts' ? <ShortcutsPanel conflicts={conflicts} /> : null}
-        {section === 'data' ? <DataPanel settings={state.settings} /> : null}
-        {section === 'trash' ? <TrashPanel settings={state.settings} /> : null}
-        {section === 'about' ? <AboutPanel /> : null}
+        {section === "appearance" ? <AppearancePanel settings={state.settings} /> : null}
+        {section === "shortcuts" ? <ShortcutsPanel conflicts={conflicts} /> : null}
+        {section === "data" ? <DataPanel settings={state.settings} /> : null}
+        {section === "trash" ? <TrashPanel settings={state.settings} /> : null}
+        {section === "about" ? <AboutPanel /> : null}
       </div>
     </div>
   );
@@ -545,12 +623,7 @@ export function SettingsModal({ onClose, initialSection = 'appearance', standalo
   }
 
   return (
-    <Modal
-      title="设置"
-      className="settings-modal"
-      onClose={onClose}
-      footer={null}
-    >
+    <Modal title="设置" className="settings-modal" onClose={onClose} footer={null}>
       {body}
     </Modal>
   );
