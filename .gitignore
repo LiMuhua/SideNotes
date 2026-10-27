@@ -52,6 +52,10 @@ $RECYCLE.BIN/
 !.vscode/extensions.json
 !.vscode/launch.json
 
+# Claude Code：本地会话配置不纳管，保留共享的预览启动配置。
+.claude/*
+!.claude/launch.json
+
 # ==================== 其它工具缓存 ====================
 .eslintcache
 .tsbuildinfo
