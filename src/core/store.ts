@@ -115,6 +115,8 @@ export async function reloadFromDisk(): Promise<void> {
  * 记录变化则重新读库。窗口获得焦点时再读一次，兜底错过的通知。
  */
 export function connectSync(): () => void {
+  // 浏览器预览只有一个窗口且没有数据库，读库只会得到空快照，反而清空界面数据。
+  if (!bridge.isDesktop()) return () => {};
   let disposed = false;
   let unlisten: (() => void) | null = null;
   void bridge
