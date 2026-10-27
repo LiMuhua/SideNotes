@@ -19,11 +19,14 @@ import {
   mergeImported,
   moveNotes,
   reloadFromDisk,
+  removeTagEverywhere,
+  renameTag,
   reorderNotes,
   resetForTest,
   restoreFromTrash,
   restoreNotes,
   saveDraftAsNote,
+  trackTagUsage,
   updateNote,
   updateSettings,
 } from './store';
@@ -279,5 +282,41 @@ describe('状态仓库', () => {
     resetForTest({ notes: [note({ id: 'a', text: '现有内容', updatedAt: 5000 })], ready: true });
     await mergeImported([note({ id: 'a', text: '过期内容', updatedAt: 1000 })], null);
     expect(getState().notes[0].text).toBe('现有内容');
+  });
+
+  it('标签筛选记录访问次数与时间', async () => {
+    await trackTagUsage('工作');
+    await trackTagUsage('工作');
+    expect(getState().tagUsage['工作'].count).toBe(2);
+    expect(getState().tagUsage['工作'].last).toBeGreaterThan(0);
+  });
+
+  it('全局重命名标签只改标签，并迁移访问统计', async () => {
+    resetForTest({
+      ready: true,
+      notes: [note({ id: 'a', text: '正文 A\n\n#工作 #会议' }), note({ id: 'b', text: '正文 B\n\n#生活' })],
+      tagUsage: { 工作: { count: 3, last: 10 } },
+    });
+    expect(await renameTag('工作', '项目')).toBe(true);
+    expect(getState().notes.find((item) => item.id === 'a')?.text).toBe('正文 A\n\n#项目 #会议');
+    expect(getState().notes.find((item) => item.id === 'b')?.text).toBe('正文 B\n\n#生活');
+    expect(getState().tagUsage['项目']).toEqual({ count: 3, last: 10 });
+    expect(getState().tagUsage['工作']).toBeUndefined();
+  });
+
+  it('重命名为已有标签时两者合并', async () => {
+    resetForTest({ ready: true, notes: [note({ id: 'a', text: '正文\n\n#工作 #会议' })] });
+    await renameTag('工作', '会议');
+    expect(getState().notes[0].text).toBe('正文\n\n#会议');
+  });
+
+  it('全局移除标签保留正文，空记录保留标签名', async () => {
+    resetForTest({
+      ready: true,
+      notes: [note({ id: 'a', text: '正文\n\n#工作 #会议' }), note({ id: 'b', text: '#工作' })],
+    });
+    expect(await removeTagEverywhere('工作')).toBe(true);
+    expect(getState().notes.find((item) => item.id === 'a')?.text).toBe('正文\n\n#会议');
+    expect(getState().notes.find((item) => item.id === 'b')?.text).toBe('工作');
   });
 });

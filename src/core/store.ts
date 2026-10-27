@@ -10,7 +10,7 @@
 
 import * as bridge from './bridge';
 import type { StoreChange } from './bridge';
-import { canonicalize } from './tags';
+import { canonicalize, compose, hasTag, parse, removeTag, tagKey } from './tags';
 import { createId, createNote, ensureEmoji, MAX_IMAGES_PER_NOTE } from './notes';
 import { DEFAULT_SETTINGS, normalizeSettings } from './settings';
 import { createSampleNotes, shouldLoadSampleData } from '../debug/sample-notes';
@@ -405,14 +405,54 @@ export async function duplicateNote(note: Note, tab: TabKey): Promise<boolean> {
   return persist({ notes: [duplicate, ...state.notes] });
 }
 
-/** 记录标签访问并保存，用于标签菜单评分。 */
-export async function trackTagUsage(_tag: string, key: string): Promise<void> {
+/** 记录一次标签筛选并保存，作为标签菜单「访问频率」与「近期访问」的评分依据。 */
+export async function trackTagUsage(tag: string): Promise<boolean> {
+  const key = tagKey(tag);
   const current = state.tagUsage[key] ?? { count: 0, last: 0 };
   const tagUsage = {
     ...state.tagUsage,
     [key]: { count: Math.min(10_000, current.count + 1), last: Date.now() },
   };
-  await persist({ tagUsage });
+  return persist({ tagUsage });
+}
+
+/**
+ * 在所有记录中重命名标签；新名称已存在时两者合并。
+ *
+ * 与原型 manageTag 一致：只改标签，不动正文；访问统计随之迁移到新名称。
+ */
+export async function renameTag(tag: string, next: string): Promise<boolean> {
+  const oldKey = tagKey(tag);
+  const newKey = tagKey(next);
+  const changedAt = Date.now();
+  const notes = state.notes.map((note) => {
+    if (!hasTag(note.text, tag)) return note;
+    const parsed = parse(note.text);
+    const tags = parsed.tags.map((item) => (tagKey(item) === oldKey ? next : item));
+    return { ...note, text: compose(parsed.body, tags), updatedAt: changedAt };
+  });
+  const tagUsage = { ...state.tagUsage };
+  if (tagUsage[oldKey]) {
+    tagUsage[newKey] = tagUsage[oldKey];
+    if (newKey !== oldKey) delete tagUsage[oldKey];
+  }
+  return persist({ notes, tagUsage });
+}
+
+/**
+ * 从所有记录中移除标签，正文与附件保留。
+ *
+ * 只剩这个标签的空记录改用标签名作为正文，避免产生没有内容的记录。
+ */
+export async function removeTagEverywhere(tag: string): Promise<boolean> {
+  const changedAt = Date.now();
+  const notes = state.notes.map((note) => {
+    if (!hasTag(note.text, tag)) return note;
+    let text = removeTag(note.text, tag);
+    if (!text.trim() && !note.images.length) text = tag;
+    return { ...note, text, updatedAt: changedAt };
+  });
+  return persist({ notes });
 }
 
 /* ==================== 设置 ==================== */

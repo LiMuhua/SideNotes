@@ -80,7 +80,14 @@ export function Modal({ title, className, children, footer, onClose }: ModalProp
       >
         <header className="modal-header">
           <h2 id={titleId}>{title}</h2>
-          <button type="button" className="icon-button" aria-label="关闭对话框" title="关闭对话框" onClick={onClose}>
+          <button
+            type="button"
+            className="icon-button"
+            data-action="close-modal"
+            aria-label="关闭对话框"
+            title="关闭对话框"
+            onClick={onClose}
+          >
             <Icon name="x" />
           </button>
         </header>
@@ -109,12 +116,22 @@ export function ConfirmDialog({ title, description, confirmLabel = '确认', onC
       onClose={onCancel}
       footer={
         <>
-          <button type="button" className="button secondary" onClick={onCancel}>
+          <button
+            type="button"
+            className="button secondary"
+            data-action="close-modal"
+            aria-label="取消"
+            title="取消"
+            onClick={onCancel}
+          >
             取消
           </button>
           <button
             type="button"
             className="button danger"
+            data-action=""
+            aria-label={confirmLabel}
+            title={confirmLabel}
             onClick={() => {
               void Promise.resolve(onConfirm()).then((result) => {
                 if (result !== false) onCancel();

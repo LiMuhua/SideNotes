@@ -1,131 +1,157 @@
 /**
- * 标签筛选下拉菜单。
+ * 标签筛选菜单。
  *
- * 按评分排序展示当前页签内的标签，输入 `#` 前缀时进入筛选模式；
- * 与原型一致，评分综合访问频率、近期访问、记录条数与置顶情况。
+ * 结构与行为对应原型 app.js 的 renderTagMenu、rankedTags 与 selectTag：
+ * 「全部标签」清除筛选；随后列出评分最高的六个标签，点击即按该标签筛选记录；
+ * 排在首位且命中搜索或已被选中的标签移到最上方，并提供「管理」入口；
+ * 底部提示剩余标签数量，可转到 #标签 搜索。
+ * 展开状态由侧栏统一管理：搜索框输入 # 时自动展开，切换页签或按 Esc 时收起。
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Icon } from './Icon';
 import { rankTags } from '../core/notes';
-import { tagKey } from '../core/tags';
 import { useStoreSlice } from '../hooks/useStore';
 import type { TabKey } from '../core/types';
 
+/** 菜单中最多展示的候选数，与原型一致。 */
+const MAX_CANDIDATES = 6;
+/** 候选标签的悬停说明，列出评分权重。 */
+const SCORE_HINT = '访问频率 40 · 近期访问 30 · 条数 4 · 置顶 3';
+
 export interface TagFilterProps {
   tab: TabKey;
-  selectedTag: string;
   query: string;
+  selectedTag: string;
+  /** 当前页签内的记录总数，显示在「全部标签」一行。 */
+  total: number;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onSelect: (tag: string) => void;
   onClear: () => void;
+  onManage: (tag: string) => void;
+  onSearch: () => void;
 }
 
-/** 标签筛选按钮与下拉菜单。 */
-export function TagFilter({ tab, selectedTag, query, onSelect, onClear }: TagFilterProps) {
-  const [open, setOpen] = useState(false);
-  const button = useRef<HTMLButtonElement>(null);
-  const menu = useRef<HTMLDivElement>(null);
+export function TagFilter({
+  tab,
+  query,
+  selectedTag,
+  total,
+  open,
+  onOpenChange,
+  onSelect,
+  onClear,
+  onManage,
+  onSearch,
+}: TagFilterProps) {
   const notes = useStoreSlice((state) => state.notes);
   const tagUsage = useStoreSlice((state) => state.tagUsage);
-
-  // 输入 # 前缀时展开菜单并按后续文字过滤。
-  const tagQuery = useMemo(() => {
-    const match = query.match(/(?:^|\s)#([\p{L}\p{N}_-]*)$/u);
-    return match ? match[1] : '';
-  }, [query]);
-
-  // 进入 # 输入时自动展开：直接在渲染期根据 tagQuery 派生，而非写入 effect。
-  const effectiveOpen = open || tagQuery !== '';
-
-  const ranked = useMemo(
+  const candidates = useMemo(
     () => rankTags(notes, tab, tagUsage, query, selectedTag),
     [notes, tab, tagUsage, query, selectedTag],
   );
+  const shown = candidates.slice(0, MAX_CANDIDATES);
+  // 首个候选命中搜索或已被选中时，移到「全部标签」之前并提供管理入口。
+  const priority = shown.length > 0 && (shown[0].match || shown[0].selected) ? shown[0] : null;
+  const others = priority ? shown.slice(1) : shown;
 
-  // 进入 # 输入时自动展开。
-  // （effectiveOpen 已在上方由 tagQuery 派生，无需 effect）
-
-  // 点击外部收起。
+  // 点击菜单以外的位置收起，与原型的文档级点击处理一致。
   useEffect(() => {
-    if (!effectiveOpen) return;
-    const handle = (event: PointerEvent): void => {
-      if (menu.current && !menu.current.contains(event.target as Node) && !button.current?.contains(event.target as Node)) {
-        setOpen(false);
-      }
+    if (!open) return;
+    const dismiss = (event: MouseEvent): void => {
+      if (!(event.target as Element | null)?.closest?.('.tag-filter-wrap')) onOpenChange(false);
     };
-    document.addEventListener('pointerdown', handle, true);
-    return () => document.removeEventListener('pointerdown', handle, true);
-  }, [effectiveOpen]);
+    document.addEventListener('click', dismiss);
+    return () => document.removeEventListener('click', dismiss);
+  }, [open, onOpenChange]);
 
-  const filtered = tagQuery ? ranked.filter((item) => item.match) : ranked;
-  const hasFilter = Boolean(selectedTag);
+  const option = (tag: string, count: number) => (
+    <button
+      type="button"
+      className="tag-option"
+      data-action="filter-tag"
+      aria-label={`#${tag}`}
+      title={SCORE_HINT}
+      data-tag={tag}
+      role="menuitem"
+      onClick={() => onSelect(tag)}
+    >
+      {`#${tag}`}
+      <span className="tag-option-count">{count}</span>
+    </button>
+  );
 
   return (
     <div className="tag-filter-wrap">
       <button
-        ref={button}
+        id="tag-filter-button"
         type="button"
-        className={`tag-filter-button${effectiveOpen ? ' is-open' : ''}${hasFilter ? ' is-filtered' : ''}`}
-        aria-expanded={effectiveOpen}
-        aria-haspopup="listbox"
-        aria-label="按标签筛选记录"
-        title={selectedTag ? `当前筛选：#${selectedTag}` : '按标签筛选'}
-        onClick={() => setOpen((value) => !value)}
+        className="tag-filter-button"
+        data-action="toggle-tag-menu"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => onOpenChange(!open)}
       >
         <Icon name="hash" />
-        <span>{selectedTag ? `#${selectedTag}` : '标签'}</span>
+        <span>{selectedTag ? `#${selectedTag}` : '全部标签'}</span>
         <Icon name="chevron-down" />
       </button>
-      {effectiveOpen ? (
-        <div ref={menu} className="tag-dropdown" role="listbox" aria-label="标签候选">
-          <div className="tag-dropdown-heading">
-            {tagQuery ? `匹配 #${tagQuery} 的标签` : '按使用频率排序'}
-          </div>
-          {selectedTag ? (
-            <div className="current-tag-row">
-              <button
-                type="button"
-                role="option"
-                className="tag-option is-selected"
-                aria-selected="true"
-                onClick={() => {
-                  onClear();
-                  setOpen(false);
-                }}
-              >
-                <Icon name="check" />
-                <span>#{selectedTag}</span>
-                <Icon name="x" />
-              </button>
-            </div>
-          ) : null}
-          {filtered.slice(0, 50).map((item) => (
+      <div id="tag-dropdown" className="tag-dropdown" role="menu" aria-label="标签筛选" hidden={!open}>
+        {priority ? (
+          <div className="tag-option-row current-tag-row">
+            {option(priority.tag, priority.count)}
             <button
-              key={item.tag}
               type="button"
-              role="option"
-              className={`tag-option${item.selected ? ' is-selected' : ''}${item.exact ? ' is-exact' : ''}`}
-              aria-selected={item.selected}
-              title={`共 ${item.count} 条${item.pinned ? ` · ${item.pinned} 条置顶` : ''}`}
-              onClick={() => {
-                onSelect(tagKey(item.tag) === tagKey(selectedTag) ? '' : item.tag);
-                setOpen(false);
-              }}
+              className="icon-button"
+              data-action="manage-tag"
+              aria-label={`管理 #${priority.tag}`}
+              title={`管理 #${priority.tag}`}
+              data-tag={priority.tag}
+              onClick={() => onManage(priority.tag)}
             >
-              <Icon name="hash" />
-              <span>{`#${item.tag}`}</span>
-              <small>{item.count}</small>
+              <Icon name="more" />
             </button>
-          ))}
-          {filtered.length === 0 ? (
-            <div className="tag-menu-footer">
-              {tagQuery ? `没有匹配 #${tagQuery} 的标签` : '当前页签暂无标签'}
-            </div>
-          ) : (
-            <div className="tag-menu-footer">点击标签筛选，再次点击取消</div>
-          )}
+          </div>
+        ) : null}
+        <button
+          type="button"
+          className="tag-option"
+          data-action="clear-tag"
+          aria-label="全部标签"
+          title="全部标签"
+          onClick={onClear}
+        >
+          全部标签
+          <span className="tag-option-count">{total}</span>
+        </button>
+        {others.map((item) => (
+          <div key={item.tag} className="tag-option-row">
+            {option(item.tag, item.count)}
+          </div>
+        ))}
+        {candidates.length === 0 ? (
+          <p className="tag-menu-empty">{query ? '没有匹配的标签' : '输入 #标签 创建分组'}</p>
+        ) : null}
+        <div className="tag-menu-footer">
+          <span>
+            {candidates.length > MAX_CANDIDATES
+              ? `另有 ${candidates.length - MAX_CANDIDATES} 个标签，使用搜索查找`
+              : '搜索 #标签 可快速定位'}
+          </span>
+          <button
+            type="button"
+            className="tag-search-button"
+            data-action="focus-tag-search"
+            aria-label="搜索"
+            title="搜索"
+            onClick={onSearch}
+          >
+            <Icon name="search" />
+            搜索
+          </button>
         </div>
-      ) : null}
+      </div>
     </div>
   );
 }

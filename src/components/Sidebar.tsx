@@ -16,6 +16,7 @@ import { NoteCard } from "./NoteCard";
 import { NoteMenu, type MenuAnchor, type MenuCommand } from "./NoteMenu";
 import { EmojiPicker } from "./EmojiPicker";
 import { TagFilter } from "./TagFilter";
+import { TagManageDialog } from "./TagManageDialog";
 import { ConfirmDialog, ImagePreview, ToastRegion } from "./Modal";
 import { useStore } from "../hooks/useStore";
 import { useToast } from "../hooks/useToast";
@@ -57,6 +58,9 @@ export function Sidebar() {
   const [emojiTarget, setEmojiTarget] = useState<Note | null>(null);
   const [imagePreview, setImagePreview] = useState<{ src: string; alt: string } | null>(null);
   const [nudgeDismissed, setNudgeDismissed] = useState(false);
+  /* 标签筛选菜单与标签管理对话框。 */
+  const [tagMenuOpen, setTagMenuOpen] = useState(false);
+  const [managingTag, setManagingTag] = useState<string | null>(null);
 
   /* ==================== 拖排序多选（占位：下一步迭代实现） ==================== */
   const sortPendingId: string | null = null;
@@ -78,13 +82,18 @@ export function Sidebar() {
     [state.settings.edge, state.settings.width, state.settings.animDuration],
   );
 
+  // 对话框打开期间鼠标移出侧栏不收起，否则对话框会随侧栏一起消失。
+  const dialogOpen = Boolean(confirmTrash || managingTag || imagePreview || emojiTarget);
+
   const scheduleHide = useCallback(() => {
-    if (pinned || editing || composerActive) return;
+    if (pinned || editing || composerActive || dialogOpen) return;
     window.clearTimeout(hideTimer.current);
     hideTimer.current = window.setTimeout(() => {
+      // 与原型一致：侧栏收起时一并收起标签菜单。
+      setTagMenuOpen(false);
       void bridge.hideSidebar(currentLayout());
     }, state.settings.hideDelay);
-  }, [pinned, editing, composerActive, state.settings.hideDelay, currentLayout]);
+  }, [pinned, editing, composerActive, dialogOpen, state.settings.hideDelay, currentLayout]);
 
   const cancelHide = useCallback(() => {
     window.clearTimeout(hideTimer.current);
@@ -259,6 +268,18 @@ export function Sidebar() {
           setImagePreview(null);
           return;
         }
+        if (managingTag) {
+          setManagingTag(null);
+          return;
+        }
+        if (confirmTrash) {
+          setConfirmTrash(null);
+          return;
+        }
+        if (tagMenuOpen) {
+          setTagMenuOpen(false);
+          return;
+        }
         if (editing) {
           cancelEdit();
           return;
@@ -267,14 +288,14 @@ export function Sidebar() {
           setComposerActive(false);
           return;
         }
-        // 搜索面板开着时 Esc 收起搜索（清空查询）。
+        // 搜索面板开着时 Esc 收起搜索并清空查询；标签筛选独立保留。
         if (searchOpen) {
           setSearchOpen(false);
           setQuery("");
-          setSelectedTag("");
           return;
         }
         // 都没有，收起侧栏。
+        setTagMenuOpen(false);
         void bridge.hideSidebar(currentLayout());
       }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
@@ -511,11 +532,46 @@ export function Sidebar() {
     [editing, toast],
   );
 
-  /* ==================== 选择区域计数 ==================== */
-  const activeCount = useMemo(
-    () => state.notes.filter((note) => inTab(note, "workspace")).length,
-    [state.notes],
+  /* ==================== 标签筛选 ==================== */
+  // 对应原型 selectTag：先结束正在进行的编辑，筛选后清空搜索，并记录访问作为菜单评分依据。
+  const selectTag = useCallback(
+    (tag: string) => {
+      if (editing) void commitEdit();
+      setSelectedTag(tag);
+      setQuery("");
+      setTagMenuOpen(false);
+      void store.trackTagUsage(tag);
+    },
+    [editing, commitEdit],
   );
+
+  const clearTagFilter = useCallback(() => {
+    setSelectedTag("");
+    setTagMenuOpen(false);
+  }, []);
+
+  /** 空状态中的「清除筛选」：同时清除标签与搜索。 */
+  const clearFilters = useCallback(() => {
+    setSelectedTag("");
+    setQuery("");
+  }, []);
+
+  const manageTag = useCallback((tag: string) => {
+    setTagMenuOpen(false);
+    setManagingTag(tag);
+  }, []);
+
+  // 菜单底部「搜索」：打开搜索并预填 #，光标停在 # 之后，继续输入即按标签查找。
+  const searchTags = useCallback(() => {
+    setTagMenuOpen(false);
+    setSearchOpen(true);
+    setQuery("#");
+    window.setTimeout(() => {
+      const input = document.getElementById("search-input") as HTMLInputElement | null;
+      input?.focus();
+      input?.setSelectionRange(1, 1);
+    }, 50);
+  }, []);
 
   /* ==================== 渲染 ==================== */
   const tabCounts: Record<TabKey, number> = useMemo(
@@ -612,6 +668,7 @@ export function Sidebar() {
                 setQuery("");
                 setSearchOpen(false);
                 setSelectedTag("");
+                setTagMenuOpen(false);
               }}
             >
               工作区
@@ -628,6 +685,7 @@ export function Sidebar() {
                 setQuery("");
                 setSearchOpen(false);
                 setSelectedTag("");
+                setTagMenuOpen(false);
               }}
             >
               <Icon name="pin" /> 置顶
@@ -644,6 +702,7 @@ export function Sidebar() {
                 setQuery("");
                 setSearchOpen(false);
                 setSelectedTag("");
+                setTagMenuOpen(false);
               }}
             >
               <Icon name="archive" /> 归档
@@ -686,7 +745,11 @@ export function Sidebar() {
                 placeholder="搜索记录、#标签…"
                 autoComplete="off"
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  // 与原型一致：输入 # 时展开标签菜单，匹配的标签排在前面。
+                  if (event.target.value.includes("#")) setTagMenuOpen(true);
+                }}
                 onBlur={(event) => {
                   // 失焦时若未输入内容则自动收起搜索面板。
                   if (
@@ -749,19 +812,18 @@ export function Sidebar() {
 
         {/* 列表顶部：记录数、标签筛选 */}
         <div className="list-topline">
-          <p>
-            {selectedTag
-              ? `#${selectedTag}`
-              : tab === "workspace"
-                ? `${activeCount} 条`
-                : `${listNotes.length} 条`}
-          </p>
+          <p id="list-summary">{`${listNotes.length} 条${selectedTag ? ` · #${selectedTag}` : ""}`}</p>
           <TagFilter
             tab={tab}
-            selectedTag={selectedTag}
             query={query}
-            onSelect={(value) => setSelectedTag(tagKey(value) === tagKey(selectedTag) ? "" : value)}
-            onClear={() => setSelectedTag("")}
+            selectedTag={selectedTag}
+            total={tabCounts[tab]}
+            open={tagMenuOpen}
+            onOpenChange={setTagMenuOpen}
+            onSelect={selectTag}
+            onClear={clearTagFilter}
+            onManage={manageTag}
+            onSearch={searchTags}
           />
         </div>
 
@@ -803,16 +865,19 @@ export function Sidebar() {
         >
           {listNotes.length === 0 ? (
             <div className="empty-state">
-              <div className="empty-icon">
-                <Icon name="search" />
-              </div>
-              <h3>{query || selectedTag ? "没有匹配的记录" : `${TAB_LABELS[tab]}暂无记录`}</h3>
-              {tab === "workspace" && !query && !selectedTag ? (
-                <p>
-                  在上方输入框快速记录，
-                  <br />
-                  或使用 Ctrl+Shift+Space 呼出速记浮窗
-                </p>
+              <h3>{query || selectedTag ? "没有匹配的记录" : "暂无记录"}</h3>
+              <p>{query || selectedTag ? "调整搜索或标签筛选。" : "在上方直接输入。"}</p>
+              {query || selectedTag ? (
+                <button
+                  type="button"
+                  className="button secondary"
+                  data-action="clear-filters"
+                  aria-label="清除筛选"
+                  title="清除筛选"
+                  onClick={clearFilters}
+                >
+                  清除筛选
+                </button>
               ) : null}
             </div>
           ) : (
@@ -854,9 +919,7 @@ export function Sidebar() {
                 onTogglePin={() => void store.updateNote(note.id, { pinned: !note.pinned })}
                 onArchive={() => void handleArchiveNote(note)}
                 onMore={(anchor) => setContextMenu({ note, anchor })}
-                onFilterTag={(tag) =>
-                  setSelectedTag(tagKey(tag) === tagKey(selectedTag) ? "" : tag)
-                }
+                onFilterTag={selectTag}
                 onRemoveTag={async (tag) => {
                   const newText = removeTag(note.text, tag);
                   await store.commitEdit(note.id, newText, note.images);
@@ -958,6 +1021,22 @@ export function Sidebar() {
           confirmLabel="移入回收站"
           onConfirm={handleDeleteForever}
           onCancel={() => setConfirmTrash(null)}
+        />
+      ) : null}
+
+      {/* 标签管理：重命名或合并、全局移除 */}
+      {managingTag ? (
+        <TagManageDialog
+          tag={managingTag}
+          onClose={() => setManagingTag(null)}
+          onRenamed={(next) => {
+            if (selectedTag && tagKey(selectedTag) === tagKey(managingTag)) setSelectedTag(next);
+            setManagingTag(null);
+          }}
+          onRemoved={() => {
+            if (selectedTag && tagKey(selectedTag) === tagKey(managingTag)) setSelectedTag("");
+            setManagingTag(null);
+          }}
         />
       ) : null}
     </>

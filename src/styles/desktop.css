@@ -111,6 +111,13 @@ body[data-window='sidebar'] .sidebar-resizer:focus-visible {
   background: color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
+/* 修正原型的层级缺陷：列表顶栏（z-index 6）低于粘性输入卡片（z-index 12），
+ * 展开的标签菜单会被输入卡片遮住上半部分。顶栏只有菜单会越出自身范围，
+ * 提到输入卡片之上不影响其它布局。 */
+body[data-window='sidebar'] .list-topline {
+  z-index: 13;
+}
+
 /* 提示条在窗口内居中，不再按演示页面的侧栏偏移计算。 */
 body[data-window='sidebar'] .toast-region,
 body[data-window='capture'] .toast-region,
