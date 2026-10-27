@@ -6,6 +6,8 @@ vi.mock('./bridge', () => ({
   saveSnapshot: vi.fn(),
   saveSettings: vi.fn(),
   purgeExpired: vi.fn(),
+  emitStoreChange: vi.fn(),
+  onStoreChange: vi.fn(async () => () => {}),
   isDesktop: () => false,
 }));
 
@@ -16,6 +18,7 @@ import {
   getState,
   mergeImported,
   moveNotes,
+  reloadFromDisk,
   reorderNotes,
   resetForTest,
   restoreFromTrash,
@@ -24,7 +27,8 @@ import {
   updateNote,
   updateSettings,
 } from './store';
-import type { Note } from './types';
+import { DEFAULT_SETTINGS } from './settings';
+import type { Note, Snapshot } from './types';
 
 /** 构造记录。 */
 function note(overrides: Partial<Note> = {}): Note {
@@ -46,11 +50,26 @@ function note(overrides: Partial<Note> = {}): Note {
 }
 
 const saveSnapshot = vi.mocked(bridge.saveSnapshot);
+const saveSettings = vi.mocked(bridge.saveSettings);
+const loadSnapshot = vi.mocked(bridge.loadSnapshot);
+const emitStoreChange = vi.mocked(bridge.emitStoreChange);
+
+/** 构造数据库快照。 */
+function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
+  return {
+    notes: [],
+    draft: { text: '', images: [], updatedAt: 0 },
+    settings: DEFAULT_SETTINGS,
+    tagUsage: {},
+    ...overrides,
+  };
+}
 
 describe('状态仓库', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     saveSnapshot.mockResolvedValue(true);
+    saveSettings.mockResolvedValue(true);
     resetForTest({ notes: [note(), note({ id: 'note-2', text: '其它 #设计' })], ready: true });
   });
 
@@ -162,6 +181,64 @@ describe('状态仓库', () => {
   it('设置变更经过校验', async () => {
     await updateSettings({ width: 9999 });
     expect(getState().settings.width).toBe(720);
+  });
+
+  it('设置只经 save_settings 写入，不整体重写记录', async () => {
+    const ok = await updateSettings({ theme: 'dark' });
+    expect(ok).toBe(true);
+    expect(saveSettings).toHaveBeenCalledTimes(1);
+    expect(saveSnapshot).not.toHaveBeenCalled();
+    expect(emitStoreChange).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'settings', settings: expect.objectContaining({ theme: 'dark' }) }),
+    );
+  });
+
+  it('连续的设置变更合并为一次写入', async () => {
+    const first = updateSettings({ width: 400 });
+    const second = updateSettings({ width: 420 });
+    // 界面立即应用最新值，不等待写入完成。
+    expect(getState().settings.width).toBe(420);
+    await Promise.all([first, second]);
+    expect(saveSettings).toHaveBeenCalledTimes(1);
+    expect(saveSettings.mock.calls[0][0].width).toBe(420);
+  });
+
+  it('设置写入失败时回滚并标记失败', async () => {
+    saveSettings.mockResolvedValue(false);
+    const ok = await updateSettings({ theme: 'dark' });
+    expect(ok).toBe(false);
+    expect(getState().settings.theme).toBe('light');
+    expect(getState().saveFailed).toBe(true);
+    expect(emitStoreChange).not.toHaveBeenCalled();
+  });
+
+  it('记录写入成功后通知其它窗口刷新', async () => {
+    await updateNote('note-1', { pinned: true });
+    expect(emitStoreChange).toHaveBeenCalledWith(expect.objectContaining({ kind: 'data' }));
+  });
+
+  it('重新读库时采用数据库中的记录', async () => {
+    loadSnapshot.mockResolvedValue(snapshot({ notes: [note({ id: 'from-disk' })] }));
+    await reloadFromDisk();
+    expect(getState().notes.map((item) => item.id)).toEqual(['from-disk']);
+  });
+
+  it('重新读库期间本窗口有新写入时丢弃过时结果', async () => {
+    let resolveLoad: (value: Snapshot) => void = () => {};
+    loadSnapshot.mockReturnValue(new Promise((resolve) => (resolveLoad = resolve)));
+    const reloading = reloadFromDisk();
+    await updateNote('note-1', { pinned: true });
+    resolveLoad(snapshot({ notes: [note({ id: 'stale' })] }));
+    await reloading;
+    expect(getState().notes.find((item) => item.id === 'note-1')?.pinned).toBe(true);
+    expect(getState().notes.some((item) => item.id === 'stale')).toBe(false);
+  });
+
+  it('重新读库保留本窗口尚未落盘的草稿', async () => {
+    resetForTest({ ready: true, draftDirty: true, draft: { text: '写了一半', images: [], updatedAt: 1 } });
+    loadSnapshot.mockResolvedValue(snapshot({ draft: { text: '', images: [], updatedAt: 2 } }));
+    await reloadFromDisk();
+    expect(getState().draft.text).toBe('写了一半');
   });
 
   it('永久删除只影响回收站中的目标记录', async () => {

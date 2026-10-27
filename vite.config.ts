@@ -2,13 +2,22 @@
 // Vite 自身会忽略该字段，两个工具因此共用同一份别名与插件配置。
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 
 // Tauri 在开发期通过固定端口加载前端，端口冲突时应直接失败而非静默切换。
 const host = process.env.TAURI_DEV_HOST;
 
+// 版本号只在 package.json 维护一处，构建时注入界面，避免多处手写版本。
+const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8')) as {
+  version: string;
+};
+
 export default defineConfig({
   plugins: [react()],
+  define: {
+    __APP_VERSION__: JSON.stringify(version),
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

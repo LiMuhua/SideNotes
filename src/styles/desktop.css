@@ -113,7 +113,8 @@ body[data-window='sidebar'] .sidebar-resizer:focus-visible {
 
 /* 提示条在窗口内居中，不再按演示页面的侧栏偏移计算。 */
 body[data-window='sidebar'] .toast-region,
-body[data-window='capture'] .toast-region {
+body[data-window='capture'] .toast-region,
+body[data-window='settings'] .toast-region {
   left: 50%;
   right: auto;
   bottom: 18px;
@@ -419,63 +420,41 @@ body[data-theme='dark'] .desktop-notice.is-error {
   }
 }
 
-/* ==================== 设置独立窗口 ==================== */
+/* ==================== 设置窗口 ====================
+ *
+ * 设置窗口本身就是原型的设置对话框：`.modal.settings-modal` 铺满无边框窗口。
+ * 保留原型的 1px 边框，使内容区尺寸与原型逐像素一致；外圈圆角与投影由系统窗口
+ * 提供（Windows 11 自动圆角），因此去掉对话框自身的圆角、投影与弹出动画。
+ * 其余样式全部沿用 prototype.css，不在此重写。
+ * 窗口尺寸固定为原型桌面端的 880×720，宽于原型最小断点 801px，
+ * 保证命中与大屏浏览器相同的设置样式。 */
 
 body[data-window='settings'] {
-  overflow: auto;
+  background: var(--card);
 }
 
-/* 设置窗口：占用系统原生标题栏，内部只需铺满内容区。
- * 布局沿用原型 settings-modal 的「左侧分类 + 右侧内容」两栏结构。 */
-body[data-window='settings'] {
-  overflow: hidden;
-}
-
-.settings-window {
-  display: flex;
-  flex-direction: column;
+body[data-window='settings'] #root {
   height: 100%;
-  background: var(--paper);
 }
 
-.settings-window .settings-layout {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: 168px minmax(0, 1fr);
-  overflow: hidden;
+body[data-window='settings'] .settings-modal.modal {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  border-radius: 0;
+  box-shadow: none;
+  animation: none;
 }
 
-/* 左栏分类列表与原型 settings-nav 一致：贴顶、独立滚动。 */
-.settings-window .settings-nav {
+/* 标题栏承担窗口拖动，文字不参与选择。 */
+body[data-window='settings'] .settings-modal > .modal-header {
+  user-select: none;
+}
+
+/* 最小化与关闭按钮成组靠右，间距与侧栏标题栏的窗口按钮一致。 */
+.settings-window-actions {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 14px 10px;
-  border-right: 1px solid var(--line);
-  overflow: auto;
-}
-
-/* 右栏内容区独立滚动，标题固定在顶部。 */
-.settings-window .settings-panel {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: auto;
-  padding: 0 22px 22px;
-}
-
-.settings-window .settings-panel-heading {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  padding: 16px 0 12px;
-  background: var(--paper);
-  border-bottom: 1px solid var(--line);
-}
-
-.settings-window .settings-panel-heading h3 {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ink);
+  align-items: center;
+  gap: 3px;
 }

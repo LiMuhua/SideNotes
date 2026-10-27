@@ -9,11 +9,13 @@
  */
 
 import * as bridge from './bridge';
+import type { StoreChange } from './bridge';
 import { canonicalize } from './tags';
-import { createNote, ensureEmoji, MAX_IMAGES_PER_NOTE } from './notes';
+import { createId, createNote, ensureEmoji, MAX_IMAGES_PER_NOTE } from './notes';
 import { DEFAULT_SETTINGS, normalizeSettings } from './settings';
 import { createSampleNotes, shouldLoadSampleData } from '../debug/sample-notes';
-import type { Draft, Note, NoteImage, NoteStatus, Settings, TabKey, TagUsage } from './types';
+import type { Draft, Note, NoteImage, NoteStatus, Settings, Snapshot, TabKey, TagUsage } from './types';
+
 /** 仓库状态。 */
 export interface StoreState {
   notes: Note[];
@@ -61,6 +63,86 @@ function setState(patch: Partial<StoreState>): void {
   listeners.forEach((listener) => listener());
 }
 
+/* ==================== 跨窗口同步 ==================== */
+
+/** 本 WebView 的实例标识，用来忽略自己广播出去的变化。 */
+const INSTANCE_ID = createId();
+/** 本窗口完成写入的次数；重新读库期间若有新写入，读到的结果即已过时。 */
+let localWrites = 0;
+/** 最近一次成功落盘的设置，写入失败时据此回滚界面。 */
+let persistedSettings: Settings = DEFAULT_SETTINGS;
+/** 获得焦点时的读库节流，避免频繁切换窗口时重复读取。 */
+const FOCUS_RELOAD_INTERVAL = 800;
+let lastReloadAt = 0;
+
+/** 记录一次本窗口写入并通知其它窗口。 */
+function announce(change: Omit<StoreChange, 'source'>): void {
+  localWrites += 1;
+  void bridge.emitStoreChange({ source: INSTANCE_ID, ...change });
+}
+
+/**
+ * 从数据库重新读取，替换本窗口的内存状态。
+ *
+ * 尚未落盘的草稿与设置以本窗口为准；读取期间本窗口若又写入过，
+ * 结果会缺少这次写入，直接丢弃，避免把新数据回退成旧快照。
+ */
+export async function reloadFromDisk(): Promise<void> {
+  if (!state.ready) return;
+  const writes = localWrites;
+  let snapshot: Snapshot;
+  try {
+    snapshot = await bridge.loadSnapshot();
+  } catch (error) {
+    console.error('重新读取本地数据失败', error);
+    return;
+  }
+  if (writes !== localWrites) return;
+  lastReloadAt = Date.now();
+  persistedSettings = snapshot.settings;
+  setState({
+    notes: ensureEmoji(snapshot.notes),
+    tagUsage: snapshot.tagUsage,
+    settings: pendingSettings ?? snapshot.settings,
+    draft: state.draftDirty ? state.draft : snapshot.draft,
+  });
+}
+
+/**
+ * 接入跨窗口同步，返回取消函数。
+ *
+ * 设置变化直接携带新值，避免拖动滑块时每帧都整库读取；
+ * 记录变化则重新读库。窗口获得焦点时再读一次，兜底错过的通知。
+ */
+export function connectSync(): () => void {
+  let disposed = false;
+  let unlisten: (() => void) | null = null;
+  void bridge
+    .onStoreChange((change) => {
+      if (change.source === INSTANCE_ID) return;
+      if (change.kind === 'settings' && change.settings) {
+        persistedSettings = normalizeSettings(change.settings);
+        if (!pendingSettings) setState({ settings: persistedSettings });
+        return;
+      }
+      void reloadFromDisk();
+    })
+    .then((dispose) => {
+      if (disposed) dispose();
+      else unlisten = dispose;
+    });
+  const handleFocus = (): void => {
+    if (Date.now() - lastReloadAt < FOCUS_RELOAD_INTERVAL) return;
+    void reloadFromDisk();
+  };
+  window.addEventListener('focus', handleFocus);
+  return () => {
+    disposed = true;
+    unlisten?.();
+    window.removeEventListener('focus', handleFocus);
+  };
+}
+
 /** 首次加载：读取快照并清理到期回收站记录。 */
 export async function initialize(): Promise<void> {
   let snapshot;
@@ -74,6 +156,8 @@ export async function initialize(): Promise<void> {
   }
 
   const notes = ensureEmoji(snapshot.notes);
+  persistedSettings = snapshot.settings;
+  lastReloadAt = Date.now();
   setState({
     notes,
     draft: snapshot.draft,
@@ -97,6 +181,7 @@ export async function initialize(): Promise<void> {
     if (removed > 0) {
       const refreshed = await bridge.loadSnapshot();
       setState({ notes: ensureEmoji(refreshed.notes) });
+      announce({ kind: 'data' });
     }
   } catch (error) {
     console.error('启动维护任务失败', error);
@@ -124,7 +209,9 @@ export async function persist(patch: {
     setState({ saveFailed: true });
     return false;
   }
+  persistedSettings = settings;
   setState({ notes, draft, settings, tagUsage, saveFailed: false, draftDirty: false });
+  announce({ kind: 'data' });
   return true;
 }
 
@@ -326,10 +413,49 @@ export async function trackTagUsage(_tag: string, key: string): Promise<void> {
   await persist({ tagUsage });
 }
 
-/** 保存设置变更。 */
-export async function updateSettings(patch: Partial<Settings>): Promise<boolean> {
+/* ==================== 设置 ==================== */
+
+/** 设置写入的合并间隔：拖动滑块时只落盘最后一个值。 */
+const SETTINGS_FLUSH_DELAY = 120;
+let settingsTimer: ReturnType<typeof setTimeout> | null = null;
+/** 已应用到界面、尚未落盘的设置。 */
+let pendingSettings: Settings | null = null;
+let settingsWaiters: Array<(saved: boolean) => void> = [];
+
+/**
+ * 保存设置变更。
+ *
+ * 界面立即应用新值，写入在短暂合并后经 `save_settings` 单独完成，
+ * 不再整体重写记录，避免设置窗口持有的旧记录覆盖其它窗口的新内容。
+ * 写入失败时回滚到最后一次成功落盘的设置，返回 false。
+ */
+export function updateSettings(patch: Partial<Settings>): Promise<boolean> {
   const settings = normalizeSettings({ ...state.settings, ...patch });
-  return persist({ settings });
+  pendingSettings = settings;
+  setState({ settings });
+  return new Promise((resolve) => {
+    settingsWaiters.push(resolve);
+    if (!settingsTimer) settingsTimer = setTimeout(() => void flushSettings(), SETTINGS_FLUSH_DELAY);
+  });
+}
+
+/** 把合并后的设置写入数据库并通知其它窗口。 */
+async function flushSettings(): Promise<void> {
+  settingsTimer = null;
+  const settings = pendingSettings;
+  const waiters = settingsWaiters;
+  pendingSettings = null;
+  settingsWaiters = [];
+  if (!settings) return;
+  const saved = await bridge.saveSettings(settings);
+  if (saved) {
+    persistedSettings = settings;
+    if (state.saveFailed) setState({ saveFailed: false });
+    announce({ kind: 'settings', settings });
+  } else if (!pendingSettings) {
+    setState({ settings: persistedSettings, saveFailed: true });
+  }
+  waiters.forEach((resolve) => resolve(saved));
 }
 
 /** 永久删除回收站中的记录。 */
@@ -364,6 +490,12 @@ export async function mergeImported(imported: Note[], importedDraft: Draft | nul
 
 /** 仅用于测试：重置模块级状态。 */
 export function resetForTest(next?: Partial<StoreState>): void {
+  if (settingsTimer) clearTimeout(settingsTimer);
+  settingsTimer = null;
+  pendingSettings = null;
+  settingsWaiters = [];
+  localWrites = 0;
+  lastReloadAt = 0;
   state = {
     notes: [],
     draft: { text: '', images: [], updatedAt: 0 },
@@ -375,5 +507,6 @@ export function resetForTest(next?: Partial<StoreState>): void {
     pendingAttachments: 0,
     ...next,
   };
+  persistedSettings = state.settings;
   listeners.forEach((listener) => listener());
 }

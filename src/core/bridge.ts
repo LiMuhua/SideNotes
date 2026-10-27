@@ -6,7 +6,12 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
+import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
+import { isPermissionGranted, requestPermission } from '@tauri-apps/plugin-notification';
+import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener';
 import type { Draft, EdgeSide, FileStatus, Note, Settings, Snapshot, StorageInfo, TagUsage } from './types';
 import { normalizeDraft, normalizeNote } from './notes';
 import { normalizeSettings } from './settings';
@@ -35,7 +40,23 @@ export const APP_EVENTS = {
   traySettings: 'sidenotes://tray-settings',
   /** 托盘：请求退出。 */
   trayQuit: 'sidenotes://tray-quit',
+  /** 任一窗口写入数据库后广播，其它窗口据此刷新内存状态。 */
+  storeChanged: 'sidenotes://store-changed',
 } as const;
+
+/**
+ * 跨窗口同步通知。
+ *
+ * 侧栏、速记与设置是三个独立的 WebView，各自持有一份内存状态；
+ * 任何一方写库后都要告知其它窗口，否则旧快照会在下次整体保存时覆盖新数据。
+ */
+export interface StoreChange {
+  /** 发出方实例标识，接收方据此忽略自己发出的通知。 */
+  source: string;
+  /** settings 只携带设置本身；data 表示记录或草稿变化，需重新读库。 */
+  kind: 'settings' | 'data';
+  settings?: Settings;
+}
 
 /** 判断当前是否运行在 Tauri 环境。 */
 export function isDesktop(): boolean {
@@ -176,6 +197,12 @@ export function hideSettings(): Promise<void> {
   return call<void>('hide_settings', undefined, undefined as unknown as void);
 }
 
+/** 最小化当前窗口；浏览器预览下无操作。 */
+export async function minimizeWindow(): Promise<void> {
+  if (!isDesktop()) return;
+  await getCurrentWindow().minimize();
+}
+
 /** 同步固定状态：固定时保留任务栏图标便于 Alt+Tab 切回。 */
 export function setSidebarPinned(pinned: boolean): Promise<void> {
   return call<void>('set_sidebar_pinned', { pinned }, undefined as unknown as void);
@@ -203,10 +230,93 @@ export function copyFilePaths(paths: string[]): Promise<boolean> {
   return call<boolean>('copy_file_paths', { paths }, false);
 }
 
+/** 备份文件的体积上限，与原型一致。 */
+export const MAX_BACKUP_BYTES = 25 * 1024 * 1024;
+
+const BACKUP_FILTERS = [{ name: 'SideNotes JSON 备份', extensions: ['json'] }];
+
+/**
+ * 让用户选择保存位置并写入备份文本。
+ *
+ * 路径来自系统对话框，对话框插件会把所选路径加入文件系统作用域，
+ * 因此不需要放宽固定目录之外的写入权限。返回 false 表示用户取消。
+ */
+export async function saveBackupFile(defaultName: string, contents: string): Promise<boolean> {
+  if (!isDesktop()) throw new Error('浏览器预览不支持写入本地文件');
+  const path = await saveDialog({ defaultPath: defaultName, filters: BACKUP_FILTERS });
+  if (!path) return false;
+  await writeTextFile(path, contents);
+  return true;
+}
+
+/** 让用户选择备份文件并读取文本；取消时返回 null。 */
+export async function openBackupFile(): Promise<string | null> {
+  if (!isDesktop()) throw new Error('浏览器预览不支持读取本地文件');
+  const path = await openDialog({ multiple: false, directory: false, filters: BACKUP_FILTERS });
+  if (!path || Array.isArray(path)) return null;
+  const status = await inspectFile(path);
+  if (status.size > MAX_BACKUP_BYTES) throw new Error('备份文件超过 25 MB，请选择较小的 JSON 文件');
+  return readTextFile(path);
+}
+
+/** 让用户选择目录；取消时返回 null。 */
+export async function pickDirectory(): Promise<string | null> {
+  if (!isDesktop()) return null;
+  const path = await openDialog({ multiple: false, directory: true });
+  return typeof path === 'string' ? path : null;
+}
+
+/** 在资源管理器中定位文件或目录。 */
+export async function revealInFolder(path: string): Promise<void> {
+  if (!isDesktop()) throw new Error('浏览器预览不能打开系统文件夹');
+  await revealItemInDir(path);
+}
+
+/** 用系统浏览器打开外部链接；浏览器预览由链接自身处理。 */
+export async function openExternal(url: string): Promise<void> {
+  if (!isDesktop()) {
+    window.open(url, '_blank', 'noopener,noreferrer');
+    return;
+  }
+  await openUrl(url);
+}
+
+/** 读取系统通知权限；非桌面环境视为不支持。 */
+export async function notificationGranted(): Promise<boolean | null> {
+  if (!isDesktop()) return null;
+  try {
+    return await isPermissionGranted();
+  } catch {
+    return null;
+  }
+}
+
+/** 申请系统通知权限，返回是否已允许。 */
+export async function requestNotifications(): Promise<boolean> {
+  if (!isDesktop()) return false;
+  return (await requestPermission()) === 'granted';
+}
+
 /* ==================== 事件订阅 ==================== */
 
 /** 订阅后端事件；非桌面环境返回空的取消函数。 */
 export async function onAppEvent(event: string, handler: () => void): Promise<UnlistenFn> {
   if (!isDesktop()) return () => {};
   return listen(event, () => handler());
+}
+
+/** 向所有窗口广播一次数据变化；通知失败不影响本窗口已完成的写入。 */
+export async function emitStoreChange(change: StoreChange): Promise<void> {
+  if (!isDesktop()) return;
+  try {
+    await emit(APP_EVENTS.storeChanged, change);
+  } catch {
+    /* 其它窗口获得焦点时会重新读库兜底。 */
+  }
+}
+
+/** 订阅其它窗口的数据变化。 */
+export async function onStoreChange(handler: (change: StoreChange) => void): Promise<UnlistenFn> {
+  if (!isDesktop()) return () => {};
+  return listen<StoreChange>(APP_EVENTS.storeChanged, (event) => handler(event.payload));
 }

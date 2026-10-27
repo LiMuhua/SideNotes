@@ -54,10 +54,11 @@ export function normalizeSettings(value: unknown = {}): Settings {
     surface: ['standard', 'paper', 'glass', 'win11'].includes(input.surface as string)
       ? (input.surface as Settings['surface'])
       : 'standard',
-    fontFamily: typeof input.fontFamily === 'string' ? input.fontFamily.slice(0, 120) : '',
+    // 默认字体与宽度取原型的默认值；空字符串表示用户选择了「系统默认」。
+    fontFamily: typeof input.fontFamily === 'string' ? input.fontFamily.slice(0, 120) : 'Segoe UI',
     fontSize: clampInt(input.fontSize, FONT_SIZE_RANGE.min, FONT_SIZE_RANGE.max, 13),
     edge: input.edge === 'left' ? 'left' : 'right',
-    width: clampInt(input.width, WIDTH_RANGE.min, WIDTH_RANGE.max, 456),
+    width: clampInt(input.width, WIDTH_RANGE.min, WIDTH_RANGE.max, 416),
     hideDelay: HIDE_DELAYS.includes(Number(input.hideDelay) as (typeof HIDE_DELAYS)[number])
       ? Number(input.hideDelay)
       : 600,

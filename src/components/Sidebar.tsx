@@ -286,6 +286,12 @@ export function Sidebar() {
           document.getElementById("search-input")?.focus();
         }
       }
+      // Ctrl+N：与原型「新建记录」一致，先提交正在进行的编辑，再聚焦顶部输入卡片。
+      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "n") {
+        event.preventDefault();
+        if (editing) void commitEdit();
+        window.dispatchEvent(new CustomEvent("sidenotes:focus-composer"));
+      }
     };
     document.addEventListener("keydown", handler, true);
     return () => document.removeEventListener("keydown", handler, true);
@@ -556,10 +562,10 @@ export function Sidebar() {
               <button
                 type="button"
                 className="version-button"
-                aria-label="版本 0.6.1"
+                aria-label={`版本 ${__APP_VERSION__}`}
                 onClick={() => window.dispatchEvent(new CustomEvent("sidenotes:open-settings"))}
               >
-                <span>0.6.1 PREVIEW</span>
+                <span>{__APP_VERSION__} PREVIEW</span>
               </button>
             </div>
           </div>

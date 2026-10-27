@@ -17,9 +17,12 @@ import './styles/desktop.css';
 /** 当前窗口承担的角色。 */
 export type WindowRole = 'sidebar' | 'capture' | 'settings';
 
-/** 读取窗口角色；浏览器预览时默认显示侧栏。 */
+/** 读取窗口角色；浏览器预览可用 `?window=capture|settings` 指定，默认显示侧栏。 */
 function resolveRole(): WindowRole {
-  if (!isDesktop()) return 'sidebar';
+  if (!isDesktop()) {
+    const requested = new URLSearchParams(window.location.search).get('window');
+    return requested === 'capture' || requested === 'settings' ? requested : 'sidebar';
+  }
   try {
     const label = getCurrentWindow().label;
     if (label === 'capture') return 'capture';

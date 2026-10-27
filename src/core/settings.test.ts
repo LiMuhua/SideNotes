@@ -8,7 +8,8 @@ describe('设置校验', () => {
     expect(settings.theme).toBe('light');
     expect(settings.surface).toBe('standard');
     expect(settings.edge).toBe('right');
-    expect(settings.width).toBe(456);
+    expect(settings.width).toBe(416);
+    expect(settings.fontFamily).toBe('Segoe UI');
     expect(settings.pageSize).toBe(10);
     expect(settings.trashDays).toBe(30);
     expect(settings.protectEditing).toBe(true);
