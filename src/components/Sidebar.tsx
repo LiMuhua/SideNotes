@@ -782,7 +782,7 @@ export function Sidebar() {
           onAttachFile={() => triggerFileInput("file", "composer")}
           onRemoveImage={(id) => store.removeDraftImage(id)}
           onPreviewImage={(src, alt) => setImagePreview({ src, alt })}
-          maxHeight={Math.min(300, Math.max(120, window.innerHeight * 0.35))}
+          maxHeight={Math.min(340, window.innerHeight * 0.42)}
         />
 
         {/* 保存失败提示 */}

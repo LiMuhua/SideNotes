@@ -340,12 +340,6 @@ body[data-window='sidebar'] .sidebar-composer {
   margin-right: 0;
 }
 
-/* 编辑面给足初始高度，避免默认状态就出现滚动条。 */
-body[data-window='sidebar'] .sidebar-composer .live-editor-host,
-body[data-window='sidebar'] .sidebar-composer .live-markdown-editor {
-  min-height: 88px;
-}
-
 /* 热键冲突与保存失败的提示沿用原型的警告条外观。 */
 .desktop-notice {
   display: flex;
