@@ -8,6 +8,7 @@
  */
 
 import { useEffect } from 'react';
+import { Icon } from './components/Icon';
 import { Sidebar } from './components/Sidebar';
 import { Capture } from './components/Capture';
 import { SettingsModal } from './components/SettingsModal';
@@ -42,6 +43,23 @@ export function App({ role }: AppProps) {
     root.style.setProperty('--note-font-size', `${state.settings.fontSize}px`);
     root.style.setProperty('--sidebar-width', `${state.settings.width}px`);
   });
+
+  /* ==================== 全局退出事件 ==================== */
+  // 托盘菜单的退出必须在任何窗口、任何加载状态下都可用，
+  // 因此不放在 Sidebar 内部——加载失败时 Sidebar 不会挂载。
+  useEffect(() => {
+    if (role !== 'sidebar') return;
+    let dispose: (() => void) | null = null;
+    void bridge
+      .onAppEvent(bridge.APP_EVENTS.trayQuit, () => {
+        // 先让草稿落盘，再真正退出；失败也允许退出，避免卡住。
+        void store.persistDraft().finally(() => void bridge.quitApp());
+      })
+      .then((unlisten) => {
+        dispose = unlisten;
+      });
+    return () => dispose?.();
+  }, [role]);
 
   /* ==================== 后端事件 ==================== */
   useEffect(() => {
@@ -119,7 +137,9 @@ export function App({ role }: AppProps) {
   if (!ready) {
     return (
       <div className="app-loading" role="status" aria-label="正在加载记录">
-        <span className="icon" aria-hidden="true">⟳</span>
+        <span className="app-loading-spinner" aria-hidden="true">
+          <Icon name="loader" />
+        </span>
         正在加载记录…
       </div>
     );

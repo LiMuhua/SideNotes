@@ -27,9 +27,9 @@ export default defineConfig({
     },
   },
   // 目标为 Tauri 自带 WebView2（Chromium），无需兼容旧版浏览器。
+  // Vite 8 起压缩由 Oxc 承担，`esbuild` 需额外安装且已废弃，这里使用默认压缩器。
   build: {
     target: 'chrome120',
-    minify: 'esbuild',
     sourcemap: Boolean(process.env.TAURI_ENV_DEBUG),
   },
   test: {

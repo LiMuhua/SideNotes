@@ -15,6 +15,8 @@ import { normalizeSettings } from './settings';
 export interface SidebarLayout {
   edge: EdgeSide;
   width: number;
+  /** 出入动画时长（毫秒），0 表示关闭动画。 */
+  animDuration?: number;
 }
 
 /** 后端事件名。 */
@@ -134,9 +136,9 @@ export function showSidebar(layout: SidebarLayout): Promise<void> {
   return call<void>('show_sidebar', { layout }, undefined as unknown as void);
 }
 
-/** 隐藏侧栏。 */
-export function hideSidebar(): Promise<void> {
-  return call<void>('hide_sidebar', undefined, undefined as unknown as void);
+/** 隐藏侧栏；传入布局以支持滑出动画。 */
+export function hideSidebar(layout: SidebarLayout): Promise<void> {
+  return call<void>('hide_sidebar', { layout }, undefined as unknown as void);
 }
 
 /** 切换侧栏，返回切换后的可见状态。 */

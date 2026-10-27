@@ -68,23 +68,41 @@ export function Sidebar() {
   /* ==================== 鼠标移出收起 ==================== */
   const hideTimer = useRef<number>(0);
 
+  /** 组装当前侧栏布局，供窗口命令使用。 */
+  const currentLayout = useCallback(
+    () => ({
+      edge: state.settings.edge,
+      width: state.settings.width,
+      animDuration: state.settings.animDuration,
+    }),
+    [state.settings.edge, state.settings.width, state.settings.animDuration],
+  );
+
   const scheduleHide = useCallback(() => {
     if (pinned || editing || composerActive) return;
     window.clearTimeout(hideTimer.current);
     hideTimer.current = window.setTimeout(() => {
-      void bridge.hideSidebar();
+      void bridge.hideSidebar(currentLayout());
     }, state.settings.hideDelay);
-  }, [pinned, editing, composerActive, state.settings.hideDelay]);
+  }, [pinned, editing, composerActive, state.settings.hideDelay, currentLayout]);
 
   const cancelHide = useCallback(() => {
     window.clearTimeout(hideTimer.current);
   }, []);
 
   /* ==================== 拖拽调整侧栏宽度 ==================== */
-  // 拖拽期间通过 pointer capture 锁定事件，避免划过文本触发选区。
+  // 拖动期只更新本地 CSS 变量并节流调用窗口尺寸，不写数据库：
+  // 每帧持久化会触发整棵树重渲染，表现为闪动与交互失效。
   const resizing = useRef(false);
   const startX = useRef(0);
   const startWidth = useRef(0);
+  const latestWidth = useRef(0);
+  const resizeFrame = useRef(0);
+
+  const commitWidth = useCallback((width: number) => {
+    document.documentElement.style.setProperty("--sidebar-width", `${width}px`);
+    latestWidth.current = width;
+  }, []);
 
   const handleResizePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -93,38 +111,53 @@ export function Sidebar() {
       resizing.current = true;
       startX.current = event.clientX;
       startWidth.current = state.settings.width;
-      (event.target as HTMLElement).setPointerCapture(event.pointerId);
+      latestWidth.current = state.settings.width;
+      (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
       document.body.style.userSelect = "none";
+      document.body.classList.add("is-resizing-sidebar");
+      cancelHide();
     },
-    [state.settings.width],
+    [state.settings.width, cancelHide],
   );
 
   const handleResizePointerMove = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       if (!resizing.current) return;
-      event.preventDefault();
       const delta = event.clientX - startX.current;
       // 右侧边：往左拖增大宽度；左侧边：往右拖增大宽度。
       const adjusted = state.settings.edge === "left" ? delta : -delta;
-      const next = Math.min(720, Math.max(360, startWidth.current + adjusted));
-      void store.updateSettings({ width: next });
-      void bridge.applySidebarLayout(
-        { edge: state.settings.edge, width: next },
-        state.settings.edgeTrigger,
-      );
+      const next = Math.min(720, Math.max(360, Math.round((startWidth.current + adjusted) / 4) * 4));
+      if (next === latestWidth.current) return;
+      commitWidth(next);
+      // 窗口尺寸跟随受 rAF 节流，避免每帧下发命令。
+      if (resizeFrame.current) return;
+      resizeFrame.current = window.requestAnimationFrame(() => {
+        resizeFrame.current = 0;
+        void bridge.applySidebarLayout(
+          { edge: state.settings.edge, width: latestWidth.current },
+          state.settings.edgeTrigger,
+        );
+      });
     },
-    [state.settings.edge, state.settings.edgeTrigger],
+    [state.settings.edge, state.settings.edgeTrigger, commitWidth],
   );
 
   const handleResizePointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (!resizing.current) return;
     resizing.current = false;
     document.body.style.userSelect = "";
+    document.body.classList.remove("is-resizing-sidebar");
+    if (resizeFrame.current) {
+      window.cancelAnimationFrame(resizeFrame.current);
+      resizeFrame.current = 0;
+    }
     try {
-      (event.target as HTMLElement).releasePointerCapture(event.pointerId);
+      (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
     } catch {
       /* 忽略已释放 */
     }
+    // 松手才把宽度写入设置并落盘一次。
+    void store.updateSettings({ width: latestWidth.current });
   }, []);
 
   /* ==================== 过滤后的列表 ==================== */
@@ -179,9 +212,9 @@ export function Sidebar() {
       setComposerText("");
       setComposerActive(false);
       toast("记录已保存");
-      if (hideSidebar) void bridge.hideSidebar();
+      if (hideSidebar) void bridge.hideSidebar(currentLayout());
     },
-    [tab, toast],
+    [tab, toast, currentLayout],
   );
 
   useEffect(() => {
@@ -242,7 +275,7 @@ export function Sidebar() {
           return;
         }
         // 都没有，收起侧栏。
-        void bridge.hideSidebar();
+        void bridge.hideSidebar(currentLayout());
       }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
         event.preventDefault();
@@ -261,17 +294,7 @@ export function Sidebar() {
   /* ==================== 托盘与系统事件 ==================== */
   useEffect(() => {
     const cleanups: Array<() => void> = [];
-    void bridge
-      .onAppEvent(bridge.APP_EVENTS.traySettings, () => {
-        // 打开设置：通过事件通知应用层
-        window.dispatchEvent(new CustomEvent("sidenotes:open-settings"));
-      })
-      .then((unlisten) => cleanups.push(unlisten));
-    void bridge
-      .onAppEvent(bridge.APP_EVENTS.trayQuit, () => {
-        void store.persistDraft().then(() => bridge.quitApp());
-      })
-      .then((unlisten) => cleanups.push(unlisten));
+    // 设置与退出的托盘事件统一在 App 层处理，这里只保留侧栏内的交互。
 
     // 从速记浮窗切换到侧栏时聚焦 Composer 输入区。
     const focusComposer = (): void => {
@@ -307,7 +330,7 @@ export function Sidebar() {
         originalImages: note.images.map((image) => ({ ...image })),
       });
     },
-    [editing],
+    [editing, commitEdit],
   );
 
   /* ==================== 卡片操作 ==================== */
@@ -560,7 +583,7 @@ export function Sidebar() {
               className="icon-button"
               aria-label="收起侧栏"
               title="收起侧栏 · Esc"
-              onClick={() => void bridge.hideSidebar()}
+              onClick={() => void bridge.hideSidebar(currentLayout())}
             >
               <Icon name={state.settings.edge === "left" ? "arrow-left" : "arrow-right"} />
             </button>

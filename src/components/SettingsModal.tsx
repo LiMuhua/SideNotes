@@ -601,25 +601,9 @@ export function SettingsModal({
   );
 
   if (standalone) {
-    return (
-      <div className="settings-window">
-        <header className="settings-window-header">
-          <h2>设置</h2>
-          <div className="window-actions">
-            <button
-              type="button"
-              className="icon-button"
-              aria-label="关闭设置"
-              title="关闭设置"
-              onClick={onClose}
-            >
-              <Icon name="x" />
-            </button>
-          </div>
-        </header>
-        {body}
-      </div>
-    );
+    // 独立窗口使用系统原生标题栏（含最小化与关闭按钮），
+    // 因此这里不再重复绘制标题栏与关闭按钮。
+    return <div className="settings-window">{body}</div>;
   }
 
   return (

@@ -91,6 +91,8 @@ export interface Settings {
   width: number;
   /** 鼠标移出后收起侧栏的延迟，毫秒。 */
   hideDelay: number;
+  /** 侧栏出入动画时长，毫秒；0 表示关闭动画。 */
+  animDuration: number;
   /** 编辑期间保持侧栏展开。 */
   protectEditing: boolean;
   /** 鼠标移到屏幕边缘时唤出侧栏。 */

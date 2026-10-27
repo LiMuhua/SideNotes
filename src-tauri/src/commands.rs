@@ -80,10 +80,10 @@ pub fn show_sidebar(app: AppHandle, layout: SidebarLayout) -> AppResult<()> {
     windows::show_sidebar(&app, &layout)
 }
 
-/// 隐藏侧栏。
+/// 隐藏侧栏；传入布局以支持滑出动画。
 #[tauri::command]
-pub fn hide_sidebar(app: AppHandle) -> AppResult<()> {
-    windows::hide_sidebar(&app)
+pub fn hide_sidebar(app: AppHandle, layout: SidebarLayout) -> AppResult<()> {
+    windows::hide_sidebar(&app, &layout)
 }
 
 /// 切换侧栏，返回切换后的可见状态。

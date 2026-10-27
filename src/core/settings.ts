@@ -17,6 +17,8 @@ export const PAGE_SIZE_RANGE = { min: 5, max: 100 } as const;
 export const TRASH_DAYS_RANGE = { min: 1, max: 365 } as const;
 /** 移出后收起的可选延迟。 */
 export const HIDE_DELAYS = [300, 600, 1000] as const;
+/** 侧栏出入动画时长范围（毫秒），0 表示关闭动画。 */
+export const ANIM_DURATION_RANGE = { min: 0, max: 600, step: 20 } as const;
 
 /** 把数值限制到范围内并取整。 */
 function clampInt(value: unknown, min: number, max: number, fallback: number): number {
@@ -59,6 +61,7 @@ export function normalizeSettings(value: unknown = {}): Settings {
     hideDelay: HIDE_DELAYS.includes(Number(input.hideDelay) as (typeof HIDE_DELAYS)[number])
       ? Number(input.hideDelay)
       : 600,
+    animDuration: clampInt(input.animDuration, ANIM_DURATION_RANGE.min, ANIM_DURATION_RANGE.max, 260),
     protectEditing: input.protectEditing !== false,
     edgeTrigger: input.edgeTrigger !== false,
     lazyLoading: input.lazyLoading !== false,

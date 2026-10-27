@@ -25,6 +25,16 @@ pub struct SidebarLayout {
     pub edge: String,
     /// 逻辑宽度，前端限制 360–720。
     pub width: f64,
+    /// 出入动画时长（毫秒）；0 表示不做动画。
+    #[serde(default)]
+    pub anim_duration: f64,
+}
+
+impl SidebarLayout {
+    /// 动画时长收敛到合理区间，避免前端传入异常值导致长时间阻塞。
+    fn duration(&self) -> u64 {
+        self.anim_duration.clamp(0.0, 800.0) as u64
+    }
 }
 
 /// 取得窗口；窗口缺失说明配置与运行状态不一致。
@@ -33,11 +43,10 @@ fn window(app: &AppHandle, label: &str) -> AppResult<WebviewWindow> {
         .ok_or_else(|| AppError::Other(format!("窗口 {label} 不存在")))
 }
 
-/// 按当前鼠标所在显示器的工作区对齐侧栏。
+/// 计算侧栏目标几何：贴边位置、尺寸与屏幕外起始位置。
 ///
-/// 使用工作区而非完整屏幕尺寸，避免覆盖任务栏；按缩放因子换算为逻辑坐标，
-/// 保证高 DPI 下宽度与前端设置一致。
-pub fn align_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
+/// 返回 (最终 x, 动画起始 x, y, 宽度, 高度)。
+fn sidebar_geometry(app: &AppHandle, layout: &SidebarLayout) -> AppResult<(f64, f64, f64, f64, f64)> {
     let sidebar = window(app, SIDEBAR_LABEL)?;
     let monitor = sidebar
         .cursor_position()
@@ -55,30 +64,92 @@ pub fn align_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
     let area_height = work_area.size.height as f64 / scale;
 
     let width = layout.width.clamp(360.0, area_width.max(360.0));
-    let x = if layout.edge == "left" {
-        area_x
+    let (final_x, offscreen_x) = if layout.edge == "left" {
+        // 左侧贴边：收起时整块窗口滑到屏幕左侧之外。
+        (area_x, area_x - width)
     } else {
-        area_x + area_width - width
+        // 右侧贴边：收起时整块窗口滑到屏幕右侧之外。
+        (area_x + area_width - width, area_x + area_width)
     };
+    Ok((final_x, offscreen_x, area_y, width, area_height))
+}
 
-    sidebar.set_size(LogicalSize::new(width, area_height))?;
-    sidebar.set_position(LogicalPosition::new(x, area_y))?;
+/// 让窗口沿水平方向平滑移动。
+///
+/// Tauri 没有内置窗口动画，这里按帧插值位置；缓动曲线与前端 CSS 保持一致，
+/// 使窗口边缘和内部内容的位移看起来是同一个动作。
+fn animate_x(sidebar: &WebviewWindow, from: f64, to: f64, y: f64, duration: u64) {
+    if duration == 0 || (from - to).abs() < 0.5 {
+        let _ = sidebar.set_position(LogicalPosition::new(to, y));
+        return;
+    }
+    // 60fps 左右的分片，最少 8 步以免低时长时出现跳变。
+    let steps = ((duration / 16).max(8)) as u32;
+    for step in 1..=steps {
+        let t = step as f64 / steps as f64;
+        // easeOutCubic，起步快、收尾稳，观感接近原型。
+        let eased = 1.0 - (1.0 - t).powi(3);
+        let x = from + (to - from) * eased;
+        if sidebar.set_position(LogicalPosition::new(x, y)).is_err() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(duration / steps as u64));
+    }
+}
+
+/// 按当前鼠标所在显示器的工作区对齐侧栏（不做动画，用于拖拽调宽）。
+pub fn align_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
+    let sidebar = window(app, SIDEBAR_LABEL)?;
+    let (final_x, _, y, width, height) = sidebar_geometry(app, layout)?;
+    sidebar.set_size(LogicalSize::new(width, height))?;
+    sidebar.set_position(LogicalPosition::new(final_x, y))?;
     Ok(())
 }
 
-/// 显示侧栏并交出焦点，必要时先重新对齐。
+/// 显示侧栏：从屏幕外侧平滑滑入，并在结束后交出焦点。
 pub fn show_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
-    align_sidebar(app, layout)?;
     let sidebar = window(app, SIDEBAR_LABEL)?;
+    let (final_x, offscreen_x, y, width, height) = sidebar_geometry(app, layout)?;
+
+    sidebar.set_size(LogicalSize::new(width, height))?;
+    // 先摆到屏幕外再显示，避免出现一帧停在最终位置再跳回去。
+    sidebar.set_position(LogicalPosition::new(offscreen_x, y))?;
     sidebar.show()?;
     sidebar.set_focus()?;
+
+    let duration = layout.duration();
+    if duration == 0 {
+        sidebar.set_position(LogicalPosition::new(final_x, y))?;
+        return Ok(());
+    }
+    // 动画放到后台线程，避免阻塞调用方与主线程事件循环。
+    let handle = sidebar.clone();
+    std::thread::spawn(move || {
+        animate_x(&handle, offscreen_x, final_x, y, duration);
+    });
     Ok(())
 }
 
-/// 隐藏侧栏，界面完全消失并把焦点交回原应用。
-pub fn hide_sidebar(app: &AppHandle) -> AppResult<()> {
+/// 隐藏侧栏：先平滑滑出屏幕，再真正隐藏窗口。
+pub fn hide_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
     let sidebar = window(app, SIDEBAR_LABEL)?;
-    sidebar.hide()?;
+    if !sidebar.is_visible().unwrap_or(false) {
+        return Ok(());
+    }
+    let (final_x, offscreen_x, y, _, _) = sidebar_geometry(app, layout)?;
+
+    let duration = layout.duration();
+    if duration == 0 {
+        sidebar.hide()?;
+        return Ok(());
+    }
+    let handle = sidebar.clone();
+    std::thread::spawn(move || {
+        animate_x(&handle, final_x, offscreen_x, y, duration);
+        let _ = handle.hide();
+        // 收起后复位到贴边位置，避免下次淡入时从错误坐标开始。
+        let _ = handle.set_position(LogicalPosition::new(final_x, y));
+    });
     Ok(())
 }
 
@@ -86,7 +157,7 @@ pub fn hide_sidebar(app: &AppHandle) -> AppResult<()> {
 pub fn toggle_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<bool> {
     let sidebar = window(app, SIDEBAR_LABEL)?;
     if sidebar.is_visible().unwrap_or(false) {
-        sidebar.hide()?;
+        hide_sidebar(app, layout)?;
         Ok(false)
     } else {
         show_sidebar(app, layout)?;
@@ -136,16 +207,4 @@ pub fn hide_settings(app: &AppHandle) -> AppResult<()> {
     let settings = window(app, SETTINGS_LABEL)?;
     settings.hide()?;
     Ok(())
-}
-
-/// 切换设置窗口可见性，返回切换后的状态。
-pub fn toggle_settings(app: &AppHandle) -> AppResult<bool> {
-    let settings = window(app, SETTINGS_LABEL)?;
-    if settings.is_visible().unwrap_or(false) {
-        settings.hide()?;
-        Ok(false)
-    } else {
-        show_settings(app)?;
-        Ok(true)
-    }
 }
