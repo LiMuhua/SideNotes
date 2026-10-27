@@ -11,7 +11,7 @@ import { Icon } from "./Icon";
 import { useStore } from "../hooks/useStore";
 import * as store from "../core/store";
 import * as bridge from "../core/bridge";
-import { WIDTH_RANGE, FONT_SIZE_RANGE, TRASH_DAYS_RANGE } from "../core/settings";
+import { WIDTH_RANGE, FONT_SIZE_RANGE, TRASH_DAYS_RANGE, ANIM_DURATION_RANGE } from "../core/settings";
 import type { Settings } from "../core/types";
 
 type Section = "appearance" | "shortcuts" | "data" | "trash" | "about";
@@ -183,6 +183,20 @@ function AppearancePanel({ settings }: { settings: Settings }) {
               onChange={(event) => void save({ width: Number(event.target.value) })}
             />
             <output>{settings.width} px</output>
+          </div>
+        </Row>
+        <Row label="出入动画" description="侧栏滑入与滑出的时长，0 表示不使用动画。">
+          <div className="settings-range">
+            <input
+              type="range"
+              min={ANIM_DURATION_RANGE.min}
+              max={ANIM_DURATION_RANGE.max}
+              step={ANIM_DURATION_RANGE.step}
+              value={settings.animDuration}
+              aria-label="侧栏出入动画时长"
+              onChange={(event) => void save({ animDuration: Number(event.target.value) })}
+            />
+            <output>{settings.animDuration === 0 ? '关闭' : `${settings.animDuration} ms`}</output>
           </div>
         </Row>
         <Row label="移出后收起">

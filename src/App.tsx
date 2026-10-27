@@ -66,22 +66,28 @@ export function App({ role }: AppProps) {
     if (role !== 'sidebar') return;
     const cleanups: Array<() => void> = [];
 
+    // 统一的布局参数：带上动画时长，否则窗口会瞬间跳转而不平移。
+    const layout = () => {
+      const { edge, width, animDuration } = store.getState().settings;
+      return { edge, width, animDuration };
+    };
+
     // 鼠标进入屏幕边缘：交由侧栏自身决定是否展开。
     void bridge.onAppEvent(bridge.APP_EVENTS.edgeEnter, () => {
       // 编辑中或正在输入时不自动展开，避免打断。
       const active = document.activeElement;
       if (active && active.closest('.live-markdown-editor')) return;
-      void bridge.showSidebar({ edge: store.getState().settings.edge, width: store.getState().settings.width });
+      void bridge.showSidebar(layout());
     }).then((unlisten) => cleanups.push(unlisten));
 
     // 全局热键：呼出侧栏。
     void bridge.onAppEvent(bridge.APP_EVENTS.hotkeySidebar, () => {
-      void bridge.toggleSidebar({ edge: store.getState().settings.edge, width: store.getState().settings.width });
+      void bridge.toggleSidebar(layout());
     }).then((unlisten) => cleanups.push(unlisten));
 
     // 托盘：显示侧栏。
     void bridge.onAppEvent(bridge.APP_EVENTS.traySidebar, () => {
-      void bridge.showSidebar({ edge: store.getState().settings.edge, width: store.getState().settings.width });
+      void bridge.showSidebar(layout());
     }).then((unlisten) => cleanups.push(unlisten));
 
     // 托盘/按钮：打开设置窗口。
