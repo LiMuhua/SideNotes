@@ -881,9 +881,7 @@ export function Sidebar() {
                     toast("文件不存在或已移动", null, true);
                     return;
                   }
-                  await bridge.onAppEvent("", () => {}); // 防止 tree-shake
-                  const { openPath } = await import("@tauri-apps/plugin-opener");
-                  void openPath(path).catch(() => toast("无法打开文件", null, true));
+                  void bridge.openFile(path).catch(() => toast("无法打开文件", null, true));
                 }}
                 onTaskToggle={(offset, checked) => void handleTaskToggle(note.id, offset, checked)}
               />

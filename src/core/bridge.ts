@@ -11,7 +11,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import { isPermissionGranted, requestPermission } from '@tauri-apps/plugin-notification';
-import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener';
+import { openPath, openUrl, revealItemInDir } from '@tauri-apps/plugin-opener';
 import type { Draft, EdgeSide, FileStatus, Note, Settings, Snapshot, StorageInfo, TagUsage } from './types';
 import { normalizeDraft, normalizeNote } from './notes';
 import { normalizeSettings } from './settings';
@@ -270,6 +270,12 @@ export async function pickDirectory(): Promise<string | null> {
 export async function revealInFolder(path: string): Promise<void> {
   if (!isDesktop()) throw new Error('浏览器预览不能打开系统文件夹');
   await revealItemInDir(path);
+}
+
+/** 用系统默认程序打开卡片中引用的文件。 */
+export async function openFile(path: string): Promise<void> {
+  if (!isDesktop()) throw new Error('浏览器预览不能打开本地文件');
+  await openPath(path);
 }
 
 /** 用系统浏览器打开外部链接；浏览器预览由链接自身处理。 */
