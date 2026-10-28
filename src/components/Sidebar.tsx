@@ -176,7 +176,11 @@ export function Sidebar() {
       const delta = (event.screenX - startScreenX.current) * logicalPerCss.current;
       // 右侧边：往左拖增大宽度；左侧边：往右拖增大宽度。
       const adjusted = state.settings.edge === "left" ? delta : -delta;
-      const next = Math.min(720, Math.max(360, Math.round((startWidth.current + adjusted) / 4) * 4));
+      const raw = startWidth.current + adjusted;
+      // 窗口每次移动后，浏览器会按新位置补发指针事件，同一鼠标位置换算出的屏幕坐标可能相差 1 像素；
+      // 宽度按 4 像素取整，恰在取整边界上时会因此来回跳一档。离当前宽度不足 3 像素时保持不变。
+      if (Math.abs(raw - latestWidth.current) < 3) return;
+      const next = Math.min(720, Math.max(360, Math.round(raw / 4) * 4));
       if (next === latestWidth.current) return;
       commitWidth(next);
       // 窗口尺寸跟随受 rAF 节流，避免每帧下发命令。
