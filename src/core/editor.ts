@@ -477,19 +477,20 @@ export class MarkdownEditor {
     return key;
   }
 
-  /** 为原文标记生成可折叠节点。 */
+  /** 为原文标记生成可折叠节点；`extra` 为附加类名，供样式区分标记种类。 */
   private syntax(
     parent: HTMLElement,
     text: string,
     caret: number | null,
     start = 0,
     range: { start: number; end: number } | null = null,
+    extra = '',
   ): void {
     if (!text) return;
     const revealed = range
       ? markerVisible(caret, range.start, range.end - range.start)
       : markerVisible(caret, start, text.length);
-    const node = element('span', `md-syntax ${revealed ? 'is-revealed' : 'is-hidden'}`, text);
+    const node = element('span', `md-syntax ${revealed ? 'is-revealed' : 'is-hidden'}${extra ? ` ${extra}` : ''}`, text);
     node.dataset.mdStart = String(start);
     node.dataset.mdEnd = String(start + text.length);
     node.dataset.mdRevealStart = String(range ? range.start : start);
@@ -755,12 +756,14 @@ export class MarkdownEditor {
           }
         } else if (item) {
           line.classList.add('md-list-item');
+          // 缩进的列表项整体右移，项头仍落在悬挂区内。
+          if (item[1].length) line.style.setProperty('--md-list-indent', String(item[1].length));
           const prefix = item[1] + item[2] + item[3];
           const task = item[4].match(/^(\[[ xX]\][\t ]+)(.*)$/);
           if (!task && !markerVisible(caret, model.start, prefix.length)) {
             this.decoration(line, 'md-list-bullet', /^\d/.test(item[2]) ? `${item[2]} ` : '• ');
           }
-          this.syntax(line, prefix, caret, model.start);
+          this.syntax(line, prefix, caret, model.start, null, 'md-list-marker');
           if (task) {
             this.renderTask(line, model.start + prefix.length + 1, /[xX]/.test(task[1]));
             this.syntax(line, task[1], caret, model.start + prefix.length);
