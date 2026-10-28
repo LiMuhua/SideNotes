@@ -208,6 +208,14 @@ export function hideSettings(): Promise<void> {
   return call<void>('hide_settings', undefined, undefined as unknown as void);
 }
 
+/** 窗口标签：侧栏、速记浮窗与设置。 */
+export type WindowLabel = 'main' | 'capture' | 'settings';
+
+/** 打开指定窗口的开发者工具；浏览器预览下不可用。 */
+export function openDevtools(label: WindowLabel): Promise<void> {
+  return call<void>('open_devtools', { label });
+}
+
 /**
  * 设置窗口当前是否显示在屏幕上（可见且未最小化）。
  *

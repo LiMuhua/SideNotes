@@ -134,6 +134,16 @@ pub fn hide_settings(app: AppHandle) -> AppResult<()> {
     windows::hide_settings(&app)
 }
 
+/// 打开指定窗口的开发者工具，供设置页「关于 › 调试」排查界面问题。
+#[tauri::command]
+pub fn open_devtools(app: AppHandle, label: String) -> AppResult<()> {
+    let window = app
+        .get_webview_window(&label)
+        .ok_or_else(|| AppError::Other(format!("窗口 {label} 不存在")))?;
+    window.open_devtools();
+    Ok(())
+}
+
 /// 读取指定路径的文件是否存在及其大小，供文件引用校验。
 #[tauri::command]
 pub fn inspect_file(path: String) -> AppResult<FileStatus> {

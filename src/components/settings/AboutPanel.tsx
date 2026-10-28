@@ -3,6 +3,7 @@
  *
  * 结构对应原型 settings.js 的 renderAbout：版本信息、项目入口与开源致谢。
  * 外部链接交给系统浏览器打开，不在设置窗口内跳转。
+ * 末尾的「调试」为桌面端新增，打开各窗口的开发者工具，便于排查界面问题。
  */
 
 import { useState } from 'react';
@@ -19,6 +20,13 @@ const CREDITS: ReadonlyArray<readonly [string, string, string, string]> = [
   ['Vite', 'https://vite.dev/', 'ϟ', '开发与构建工具'],
   ['SQLite', 'https://sqlite.org/', '▱', '本地数据方案参考'],
   ['Filee', 'https://github.com/KnifeLemon/Filee', '▣', '桌面外观与交互参考'],
+];
+
+/** 可打开开发者工具的窗口。 */
+const DEVTOOLS: ReadonlyArray<readonly [bridge.WindowLabel, string]> = [
+  ['main', '侧栏'],
+  ['capture', '速记浮窗'],
+  ['settings', '设置'],
 ];
 
 /** 图标式外部链接。 */
@@ -87,6 +95,22 @@ export function AboutPanel() {
         <div className="resource-links settings-credits">
           {CREDITS.map(([label, url, glyph, description]) => (
             <ExternalLink key={label} label={label} url={url} glyph={glyph} description={description} />
+          ))}
+        </div>
+      </Group>
+      <Group title="调试">
+        <p className="setting-description">打开窗口的开发者工具，查看控制台输出与页面结构。</p>
+        <div className="resource-links settings-debug-links">
+          {DEVTOOLS.map(([label, name]) => (
+            <ActionButton
+              key={label}
+              label={name}
+              icon="code"
+              className="resource-link"
+              title={`打开${name}的开发者工具`}
+              aria-label={`打开${name}的开发者工具`}
+              onClick={() => void bridge.openDevtools(label).catch(() => toast('无法打开开发者工具', null, true))}
+            />
           ))}
         </div>
       </Group>
