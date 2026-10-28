@@ -418,8 +418,8 @@ body[data-theme='dark'] .desktop-notice.is-error {
  * 保留原型的 1px 边框，使内容区尺寸与原型逐像素一致；外圈圆角与投影由系统窗口
  * 提供（Windows 11 自动圆角），因此去掉对话框自身的圆角、投影与弹出动画。
  * 其余样式全部沿用 prototype.css，不在此重写。
- * 窗口尺寸固定为原型桌面端的 880×720，宽于原型最小断点 801px，
- * 保证命中与大屏浏览器相同的设置样式。 */
+ * 窗口默认按原型桌面端的 880×720 网页像素打开（系统文本缩放时按比例放大窗口），
+ * 可以调整大小，最小 720×560 网页像素，见 windows.rs 的 place_settings。 */
 
 body[data-window='settings'] {
   background: var(--card);
@@ -543,4 +543,13 @@ body[data-theme='dark'] #note-list .note-card.is-editing {
   .note-context-menu {
     animation: none;
   }
+}
+
+/* 设置窗口可以调整大小：「侧栏」分组首行的三列在窗口变窄时不再按比例挤到内容之下，
+ * 标签与下拉框始终完整显示。默认尺寸下各列都宽于内容，宽度与原型一致。 */
+body[data-window='settings'] .settings-modal .sidebar-settings-primary {
+  grid-template-columns:
+    minmax(max-content, 1.06fr)
+    minmax(max-content, 0.94fr)
+    minmax(max-content, 1.04fr);
 }

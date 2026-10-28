@@ -207,7 +207,10 @@ export function AppearancePanel({ settings, save }: PanelProps) {
                 onChange={(edge) => void save({ edge: edge === 'left' ? 'left' : 'right' })}
               />
             </Row>
-            <Row title="移出后收起">
+            <Row
+              title="移出后收起"
+              description="鼠标移出侧栏或点到其它窗口后，等待所选时间再自动收起。固定侧栏、打开菜单或对话框期间不收起。"
+            >
               <SelectField
                 label="移出后收起"
                 options={DELAYS}

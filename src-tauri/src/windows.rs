@@ -3,10 +3,10 @@
 //! 原型在网页内用 CSS transform 模拟侧栏滑入；桌面端改为真实窗口：
 //! - 侧栏窗口贴附屏幕边缘，按设置的宽度与边缘定位，出入时平移真实窗口，隐藏后完全消失。
 //! - 速记浮窗居中显示，与侧栏共享同一数据库中的草稿。
-//! - 设置窗口即原型的设置对话框，按原型尺寸在鼠标所在屏幕居中。
+//! - 设置窗口即原型的设置对话框，按原型尺寸在鼠标所在屏幕居中，可调整大小。
 //! - 显示前重新读取显示器工作区，适配多屏与 DPI 变化。
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, Monitor, WebviewWindow};
@@ -20,10 +20,14 @@ pub const CAPTURE_LABEL: &str = "capture";
 /// 设置窗口标签。
 pub const SETTINGS_LABEL: &str = "settings";
 
-/// 设置窗口的设计尺寸，与原型桌面端设置对话框一致。
+/// 设置窗口的设计尺寸（网页像素），与原型桌面端设置对话框一致。
 const SETTINGS_SIZE: (f64, f64) = (880.0, 720.0);
+/// 设置窗口的最小尺寸（网页像素）：再小时部分设置项会被挤压或截断。
+const SETTINGS_MIN_SIZE: (f64, f64) = (720.0, 560.0);
 /// 屏幕较小时保留的外边距，对应原型的 calc(100vw - 36px) 与 calc(100dvh - 48px)。
 const SETTINGS_MARGIN: (f64, f64) = (36.0, 48.0);
+/// 设置窗口是否已按默认尺寸摆放过；此后再打开保留用户调整后的大小。
+static SETTINGS_PLACED: AtomicBool = AtomicBool::new(false);
 
 /// 侧栏动画代次：每次显示或隐藏都会递增，旧的动画线程据此提前结束，
 /// 避免快速移入移出时两段动画互相拉扯。
@@ -361,22 +365,61 @@ pub fn toggle_capture(app: &AppHandle) -> AppResult<bool> {
     }
 }
 
+/// 设置窗口在某块屏幕上的摆放（逻辑坐标）。
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct SettingsGeometry {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    min_width: f64,
+    min_height: f64,
+}
+
+/// 计算设置窗口的尺寸、最小尺寸与居中位置。
+///
+/// 设计尺寸与最小尺寸按网页像素给出。Windows 的文本缩放会让网页内容整体放大，
+/// 同样大小的窗口能容纳的网页像素随之变少，所以都乘以文本缩放比例 `zoom` 换算为窗口逻辑尺寸；
+/// 否则 125% 文本缩放下，880×720 的窗口在网页里只有 704×576，设置项会被挤压截断。
+/// `current` 为用户调整过的尺寸，存在时沿用；任何尺寸都不超过屏幕工作区减去原型的留边。
+fn place_settings(area: (f64, f64, f64, f64), zoom: f64, current: Option<(f64, f64)>) -> SettingsGeometry {
+    let (area_x, area_y, area_width, area_height) = area;
+    let zoom = if zoom.is_finite() { zoom.clamp(1.0, 3.0) } else { 1.0 };
+    let max_width = (area_width - SETTINGS_MARGIN.0).max(320.0);
+    let max_height = (area_height - SETTINGS_MARGIN.1).max(320.0);
+    let min_width = (SETTINGS_MIN_SIZE.0 * zoom).min(max_width);
+    let min_height = (SETTINGS_MIN_SIZE.1 * zoom).min(max_height);
+    let (width, height) = current.unwrap_or((SETTINGS_SIZE.0 * zoom, SETTINGS_SIZE.1 * zoom));
+    let width = width.clamp(min_width, max_width);
+    let height = height.clamp(min_height, max_height);
+    SettingsGeometry {
+        x: area_x + (area_width - width) / 2.0,
+        y: area_y + (area_height - height) / 2.0,
+        width,
+        height,
+        min_width,
+        min_height,
+    }
+}
+
 /// 显示设置窗口。
 ///
-/// 首次打开时按原型尺寸在鼠标所在屏幕居中，屏幕较小时按原型的留边规则收缩；
-/// 已打开时只还原并聚焦，保留用户拖动后的位置。
-pub fn show_settings(app: &AppHandle) -> AppResult<()> {
+/// 打开时在鼠标所在屏幕居中：首次按原型尺寸，之后沿用用户调整后的大小；
+/// 已打开时只还原并聚焦，保留用户拖动后的位置。`text_scale` 为页面像素比与窗口缩放比例之比，
+/// 即系统的文本缩放比例，由前端测得。
+pub fn show_settings(app: &AppHandle, text_scale: f64) -> AppResult<()> {
     let settings = window(app, SETTINGS_LABEL)?;
     if !settings.is_visible().unwrap_or(false) {
         let monitor = pick_monitor(&settings, true)?;
-        let (area_x, area_y, area_width, area_height) = work_area(&monitor);
-        let width = SETTINGS_SIZE.0.min(area_width - SETTINGS_MARGIN.0).max(320.0);
-        let height = SETTINGS_SIZE.1.min(area_height - SETTINGS_MARGIN.1).max(320.0);
-        settings.set_size(LogicalSize::new(width, height))?;
-        settings.set_position(LogicalPosition::new(
-            area_x + (area_width - width) / 2.0,
-            area_y + (area_height - height) / 2.0,
-        ))?;
+        let current = match (settings.inner_size(), settings.scale_factor()) {
+            (Ok(size), Ok(scale)) if scale > 0.0 => Some((f64::from(size.width) / scale, f64::from(size.height) / scale)),
+            _ => None,
+        };
+        let placed = SETTINGS_PLACED.swap(true, Ordering::SeqCst);
+        let geometry = place_settings(work_area(&monitor), text_scale, if placed { current } else { None });
+        settings.set_min_size(Some(LogicalSize::new(geometry.min_width, geometry.min_height)))?;
+        settings.set_size(LogicalSize::new(geometry.width, geometry.height))?;
+        settings.set_position(LogicalPosition::new(geometry.x, geometry.y))?;
     }
     if settings.is_minimized().unwrap_or(false) {
         settings.unminimize()?;
@@ -428,6 +471,30 @@ mod tests {
     fn width_is_clamped_to_work_area() {
         assert!(close(place_sidebar((0.0, 0.0, 1000.0, 800.0), 9999.0, false, (0.0, 0.0)).width, 1000.0));
         assert!(close(place_sidebar(AREA, 100.0, false, (0.0, 0.0)).width, 360.0));
+    }
+
+    #[test]
+    fn settings_size_follows_text_scale() {
+        let geometry = place_settings(AREA, 1.25, None);
+        assert!(close(geometry.width, 1100.0));
+        assert!(close(geometry.height, 900.0));
+        assert!(close(geometry.min_width, 900.0));
+        assert!(close(geometry.min_height, 700.0));
+        // 在工作区内居中。
+        assert!(close(geometry.x, (2560.0 - 1100.0) / 2.0));
+        assert!(close(geometry.y, (1440.0 - 900.0) / 2.0));
+    }
+
+    #[test]
+    fn settings_keep_user_size_within_limits() {
+        let resized = place_settings(AREA, 1.0, Some((1200.0, 800.0)));
+        assert!(close(resized.width, 1200.0) && close(resized.height, 800.0));
+        // 小于最小尺寸时放大到最小尺寸，大于工作区时收回到留边之内。
+        let small = place_settings(AREA, 1.0, Some((300.0, 200.0)));
+        assert!(close(small.width, 720.0) && close(small.height, 560.0));
+        let large = place_settings((0.0, 0.0, 1280.0, 680.0), 1.25, None);
+        assert!(close(large.width, 1100.0) && close(large.height, 632.0));
+        assert!(close(large.min_width, 900.0) && close(large.min_height, 632.0));
     }
 
     #[test]

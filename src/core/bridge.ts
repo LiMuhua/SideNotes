@@ -187,9 +187,20 @@ export function toggleCapture(): Promise<boolean> {
   return call<boolean>('toggle_capture', undefined, true);
 }
 
-/** 显示设置窗口。 */
-export function showSettings(): Promise<void> {
-  return call<void>('show_settings', undefined, undefined as unknown as void);
+/** 系统文本缩放比例：页面像素比与窗口缩放比例之比，读取失败时按 1 处理。 */
+async function textScale(): Promise<number> {
+  try {
+    const ratio = window.devicePixelRatio / (await getCurrentWindow().scaleFactor());
+    return Number.isFinite(ratio) && ratio > 0 ? ratio : 1;
+  } catch {
+    return 1;
+  }
+}
+
+/** 显示设置窗口；带上文本缩放比例，使设置内容按原型尺寸完整显示。 */
+export async function showSettings(): Promise<void> {
+  if (!isDesktop()) return;
+  await invoke('show_settings', { textScale: await textScale() });
 }
 
 /** 隐藏设置窗口。 */

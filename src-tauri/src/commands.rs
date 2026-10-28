@@ -122,10 +122,10 @@ pub fn toggle_capture(app: AppHandle) -> AppResult<bool> {
     windows::toggle_capture(&app)
 }
 
-/// 显示设置窗口。
+/// 显示设置窗口。`text_scale` 为系统文本缩放比例，用于把设置窗口的设计尺寸换算为窗口尺寸。
 #[tauri::command]
-pub fn show_settings(app: AppHandle) -> AppResult<()> {
-    windows::show_settings(&app)
+pub fn show_settings(app: AppHandle, text_scale: Option<f64>) -> AppResult<()> {
+    windows::show_settings(&app, text_scale.unwrap_or(1.0))
 }
 
 /// 隐藏设置窗口。
