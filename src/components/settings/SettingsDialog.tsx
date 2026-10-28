@@ -46,6 +46,7 @@ export function SettingsDialog({ onClose, onMinimize }: SettingsDialogProps) {
   const settings = useStoreSlice((state) => state.settings);
   const notes = useStoreSlice((state) => state.notes);
   const saveFailed = useStoreSlice((state) => state.saveFailed);
+  const loadFailed = useStoreSlice((state) => state.loadFailed);
   const [section, setSection] = useState<SectionId>('appearance');
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   const [conflicts, setConflicts] = useState<string[]>([]);
@@ -182,7 +183,9 @@ export function SettingsDialog({ onClose, onMinimize }: SettingsDialogProps) {
               </div>
               {section === 'appearance' ? <AppearancePanel settings={settings} save={save} /> : null}
               {section === 'shortcuts' ? <ShortcutsPanel conflicts={conflicts} /> : null}
-              {section === 'data' ? <DataPanel settings={settings} save={save} saveFailed={saveFailed} /> : null}
+              {section === 'data' ? (
+                <DataPanel settings={settings} save={save} saveFailed={saveFailed} loadFailed={loadFailed} />
+              ) : null}
               {section === 'trash' ? <TrashPanel notes={notes} settings={settings} /> : null}
               {section === 'about' ? <AboutPanel /> : null}
             </div>

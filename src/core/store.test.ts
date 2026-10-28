@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // 桥接层在导入时不触碰 Tauri，这里改写其导出以模拟持久化成功与失败。
 vi.mock('./bridge', () => ({
@@ -13,9 +13,11 @@ vi.mock('./bridge', () => ({
 
 import * as bridge from './bridge';
 import {
+  changeDraft,
   commitEdit,
   deleteForever,
   getState,
+  initialize,
   mergeImported,
   moveNotes,
   reloadFromDisk,
@@ -25,6 +27,7 @@ import {
   resetForTest,
   restoreFromTrash,
   restoreNotes,
+  retryStorage,
   saveDraftAsNote,
   trackTagUsage,
   updateNote,
@@ -345,5 +348,80 @@ describe('状态仓库', () => {
     expect(await removeTagEverywhere('工作')).toBe(true);
     expect(getState().notes.find((item) => item.id === 'a')?.text).toBe('正文\n\n#会议');
     expect(getState().notes.find((item) => item.id === 'b')?.text).toBe('工作');
+  });
+
+  describe('首次读库', () => {
+    // 首次读库失败时内存中没有真实数据，任何整体写入都会覆盖数据库。
+    let warn: ReturnType<typeof vi.spyOn>;
+    let error: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      resetForTest();
+      warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      error = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      warn.mockRestore();
+      error.mockRestore();
+    });
+
+    /** 运行首次加载，并推进重试等待。 */
+    async function runInitialize(): Promise<void> {
+      const done = initialize();
+      await vi.runAllTimersAsync();
+      await done;
+    }
+
+    it('读库暂时失败时重试，读到后正常加载', async () => {
+      loadSnapshot
+        .mockRejectedValueOnce(new Error('state not managed'))
+        .mockResolvedValueOnce(snapshot({ notes: [note({ id: 'from-disk' })] }));
+      await runInitialize();
+      expect(loadSnapshot).toHaveBeenCalledTimes(2);
+      expect(getState()).toMatchObject({ ready: true, loadFailed: false });
+      expect(getState().notes.map((item) => item.id)).toEqual(['from-disk']);
+    });
+
+    it('重试后仍失败时暂停写入，不覆盖数据库', async () => {
+      loadSnapshot.mockRejectedValue(new Error('state not managed'));
+      await runInitialize();
+      expect(loadSnapshot).toHaveBeenCalledTimes(4);
+      expect(getState()).toMatchObject({ ready: true, loadFailed: true, notes: [] });
+
+      changeDraft('启动后立即新建的记录');
+      expect(await saveDraftAsNote('workspace')).toBeNull();
+      expect(await updateSettings({ theme: 'dark' })).toBe(false);
+      expect(saveSnapshot).not.toHaveBeenCalled();
+      expect(saveSettings).not.toHaveBeenCalled();
+      expect(getState().settings).toEqual(DEFAULT_SETTINGS);
+      // 草稿保留在窗口内，读库恢复后仍可保存。
+      expect(getState().draft.text).toBe('启动后立即新建的记录');
+    });
+
+    it('读库失败后重新读到数据即恢复写入', async () => {
+      loadSnapshot.mockRejectedValue(new Error('state not managed'));
+      await runInitialize();
+      loadSnapshot.mockResolvedValue(snapshot({ notes: [note({ id: 'from-disk' })] }));
+      expect(await reloadFromDisk()).toBe(true);
+      expect(getState().loadFailed).toBe(false);
+
+      expect(await updateNote('from-disk', { pinned: true })).toBe(true);
+      expect(saveSnapshot).toHaveBeenCalledTimes(1);
+      expect(saveSnapshot.mock.calls[0][0].map((item) => item.id)).toEqual(['from-disk']);
+    });
+
+    it('重试本地保存时先重新读库，读不到则不写入', async () => {
+      loadSnapshot.mockRejectedValue(new Error('state not managed'));
+      await runInitialize();
+      expect(await retryStorage()).toBe(false);
+      expect(saveSnapshot).not.toHaveBeenCalled();
+
+      loadSnapshot.mockResolvedValue(snapshot({ notes: [note({ id: 'from-disk' })] }));
+      expect(await retryStorage()).toBe(true);
+      expect(saveSnapshot.mock.calls[0][0].map((item) => item.id)).toEqual(['from-disk']);
+    });
   });
 });

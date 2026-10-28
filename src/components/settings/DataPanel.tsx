@@ -82,11 +82,16 @@ function parseBackup(text: string): { notes: Note[]; draft: Draft | null } {
 }
 
 /** 导入与导出。 */
-function BackupGroup({ saveFailed }: { saveFailed: boolean }) {
+function BackupGroup({ saveFailed, loadFailed }: { saveFailed: boolean; loadFailed: boolean }) {
   const toast = useToast();
   const confirm = useConfirm();
 
   const exportBackup = async (): Promise<void> => {
+    // 读库失败时内存中没有真实记录，导出的会是空备份，还可能覆盖用户已有的备份文件。
+    if (store.getState().loadFailed) {
+      toast('尚未读取到本地记录，暂不能导出', null, true);
+      return;
+    }
     const { notes, draft, settings, tagUsage } = store.getState();
     const payload = { application: 'SideNotes', exportedAt: new Date().toISOString(), notes, draft, settings, tagUsage };
     const name = `SideNotes-备份-${new Date().toISOString().slice(0, 10)}.json`;
@@ -124,8 +129,9 @@ function BackupGroup({ saveFailed }: { saveFailed: boolean }) {
   };
 
   const retry = async (): Promise<void> => {
-    if (await store.persist({})) toast('本地保存已恢复');
-    else toast('仍未保存，请导出备份', null, true);
+    const recovering = store.getState().loadFailed;
+    if (await store.retryStorage()) toast('本地保存已恢复');
+    else toast(recovering ? '仍未读取到本地记录，请稍后重试' : '仍未保存，请导出备份', null, true);
   };
 
   return (
@@ -138,9 +144,11 @@ function BackupGroup({ saveFailed }: { saveFailed: boolean }) {
         <ActionButton label="导出备份" icon="download" data-action="export-data" onClick={() => void exportBackup()} />
         <ActionButton label="导入备份" icon="upload" data-action="import-data" onClick={() => void importBackup()} />
       </div>
-      {saveFailed ? (
+      {saveFailed || loadFailed ? (
         <>
-          <p className="settings-notice is-error">本地存储受限，请先导出备份。</p>
+          <p className="settings-notice is-error">
+            {loadFailed ? '未能读取本地记录，已暂停保存，以免覆盖已有数据。' : '本地存储受限，请先导出备份。'}
+          </p>
           <ActionButton label="重试本地保存" icon="restore" data-action="retry-storage" onClick={() => void retry()} />
         </>
       ) : null}
@@ -320,7 +328,17 @@ function CloudGroup({ settings, save }: { settings: Settings; save: SaveSettings
   );
 }
 
-export function DataPanel({ settings, save, saveFailed }: { settings: Settings; save: SaveSettings; saveFailed: boolean }) {
+export function DataPanel({
+  settings,
+  save,
+  saveFailed,
+  loadFailed,
+}: {
+  settings: Settings;
+  save: SaveSettings;
+  saveFailed: boolean;
+  loadFailed: boolean;
+}) {
   const [info, setInfo] = useState<StorageInfo | null>(null);
 
   useEffect(() => {
@@ -342,7 +360,7 @@ export function DataPanel({ settings, save, saveFailed }: { settings: Settings; 
         记录保存在本机 SQLite 数据库，不会上传。更换存储位置与云端自动备份尚未接入桌面版，以下相关选项目前只保存配置，不会迁移或上传数据。
       </p>
       <div className="settings-dashboard data-dashboard">
-        <BackupGroup saveFailed={saveFailed} />
+        <BackupGroup saveFailed={saveFailed} loadFailed={loadFailed} />
         <DirectoryGroup settings={settings} save={save} info={info} />
         <CloudGroup settings={settings} save={save} />
       </div>

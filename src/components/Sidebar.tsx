@@ -225,9 +225,18 @@ export function Sidebar() {
 
   const saveComposer = useCallback(
     async (hideSidebar: boolean) => {
+      // 与原型一致：草稿为空时不保存也不提示。
+      const { draft } = store.getState();
+      if (!draft.text.trim() && !draft.images.length) return;
       const note = await store.saveDraftAsNote(tab);
       if (!note) {
-        toast("记录为空，已取消保存", null, true);
+        toast(
+          store.getState().loadFailed
+            ? "尚未读取到本地记录，已暂停保存，草稿仍在"
+            : "没有保存成功，草稿和图片仍在，可导出备份后重试",
+          null,
+          true,
+        );
         return;
       }
       setComposerText("");
@@ -606,6 +615,10 @@ export function Sidebar() {
     [state.notes],
   );
 
+  // 底部存储状态：读库失败与写入失败都显示为异常。
+  const storageError = state.loadFailed || state.saveFailed;
+  const storageStatus = state.loadFailed ? "未能读取本地记录" : state.saveFailed ? "本地存储失败" : "本地已保存";
+
   return (
     <>
       <IconSprite />
@@ -870,11 +883,11 @@ export function Sidebar() {
           maxHeight={Math.min(340, window.innerHeight * 0.42)}
         />
 
-        {/* 保存失败提示 */}
-        {state.saveFailed ? (
+        {/* 读库或保存失败提示：读库失败时已暂停保存，导出备份也没有意义。 */}
+        {state.loadFailed || state.saveFailed ? (
           <div className="desktop-notice is-error">
             <Icon name="alert" />
-            本地存储不可用，请导出备份后重试
+            {state.loadFailed ? "未能读取本地记录，已暂停保存，以免覆盖已有数据" : "本地存储不可用，请导出备份后重试"}
           </div>
         ) : null}
 
@@ -979,11 +992,11 @@ export function Sidebar() {
         <footer className="sidebar-footer">
           <span
             id="storage-status"
-            className={state.saveFailed ? "is-error" : ""}
-            aria-label={state.saveFailed ? "本地存储失败" : "本地已保存"}
-            title={state.saveFailed ? "本地存储失败" : "本地已保存"}
+            className={storageError ? "is-error" : ""}
+            aria-label={storageStatus}
+            title={storageStatus}
           >
-            {state.saveFailed ? <Icon name="alert" /> : <span className="small-dot" />}
+            {storageError ? <Icon name="alert" /> : <span className="small-dot" />}
           </span>
           <span className="footer-right">
             <button

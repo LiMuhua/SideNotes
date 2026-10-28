@@ -24,6 +24,11 @@ export interface StoreState {
   tagUsage: Record<string, TagUsage>;
   /** 是否已完成首次加载。 */
   ready: boolean;
+  /**
+   * 首次读库是否失败。此时内存中没有真实数据，暂停一切写入，
+   * 直到重新读库成功，避免用空列表或默认设置覆盖数据库。
+   */
+  loadFailed: boolean;
   /** 本地保存是否处于失败状态。 */
   saveFailed: boolean;
   /** 草稿是否有尚未落盘的修改。 */
@@ -39,6 +44,7 @@ let state: StoreState = {
   settings: DEFAULT_SETTINGS,
   tagUsage: {},
   ready: false,
+  loadFailed: false,
   saveFailed: false,
   draftDirty: false,
   pendingAttachments: 0,
@@ -86,18 +92,19 @@ function announce(change: Omit<StoreChange, 'source'>): void {
  *
  * 尚未落盘的草稿与设置以本窗口为准；读取期间本窗口若又写入过，
  * 结果会缺少这次写入，直接丢弃，避免把新数据回退成旧快照。
+ * 首次读库失败的窗口在这里读到数据后恢复写入。返回内存状态是否已与数据库一致。
  */
-export async function reloadFromDisk(): Promise<void> {
-  if (!state.ready) return;
+export async function reloadFromDisk(): Promise<boolean> {
+  if (!state.ready) return false;
   const writes = localWrites;
   let snapshot: Snapshot;
   try {
     snapshot = await bridge.loadSnapshot();
   } catch (error) {
     console.error('重新读取本地数据失败', error);
-    return;
+    return false;
   }
-  if (writes !== localWrites) return;
+  if (writes !== localWrites) return false;
   lastReloadAt = Date.now();
   persistedSettings = snapshot.settings;
   setState({
@@ -105,7 +112,9 @@ export async function reloadFromDisk(): Promise<void> {
     tagUsage: snapshot.tagUsage,
     settings: pendingSettings ?? snapshot.settings,
     draft: state.draftDirty ? state.draft : snapshot.draft,
+    loadFailed: false,
   });
+  return true;
 }
 
 /**
@@ -145,15 +154,33 @@ export function connectSync(): () => void {
   };
 }
 
+/** 首次读库失败后的重试间隔（毫秒）：数据库暂时不可用时，稍后通常即可读到。 */
+const LOAD_RETRY_DELAYS = [200, 500, 1000];
+
+/** 读取快照，失败时按间隔重试；全部失败才抛出最后一次的错误。 */
+async function loadSnapshotWithRetry(): Promise<Snapshot> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await bridge.loadSnapshot();
+    } catch (error) {
+      if (attempt >= LOAD_RETRY_DELAYS.length) throw error;
+      console.warn('读取本地数据失败，稍后重试', error);
+      await new Promise((resolve) => setTimeout(resolve, LOAD_RETRY_DELAYS[attempt]));
+    }
+  }
+}
+
 /** 首次加载：读取快照并清理到期回收站记录。 */
 export async function initialize(): Promise<void> {
-  let snapshot;
+  let snapshot: Snapshot;
   try {
-    snapshot = await bridge.loadSnapshot();
+    snapshot = await loadSnapshotWithRetry();
   } catch (error) {
     // 读取失败也必须结束加载态：否则界面停在加载页，托盘退出等入口全部不可用。
+    // 此时内存中没有真实数据，标记读库失败以暂停写入；窗口获得焦点、
+    // 收到其它窗口的通知或在设置中重试时会重新读库。
     console.error('读取本地数据失败', error);
-    setState({ ready: true, saveFailed: true });
+    setState({ ready: true, loadFailed: true });
     return;
   }
 
@@ -191,9 +218,20 @@ export async function initialize(): Promise<void> {
 }
 
 /**
+ * 是否允许写库。
+ *
+ * 后端保存记录时整体替换，首次读库成功之前内存状态不完整，
+ * 此时写入会用空列表或默认设置覆盖数据库，必须拒绝。
+ */
+function canWrite(): boolean {
+  return state.ready && !state.loadFailed;
+}
+
+/**
  * 原子持久化。
  *
  * 成功后替换权威状态；失败时保持原状并标记保存失败，返回 false。
+ * 尚未读到数据库内容时直接返回 false，不发起写入。
  */
 export async function persist(patch: {
   notes?: Note[];
@@ -201,6 +239,10 @@ export async function persist(patch: {
   settings?: Settings;
   tagUsage?: Record<string, TagUsage>;
 }): Promise<boolean> {
+  if (!canWrite()) {
+    console.warn('尚未读到本地数据，已跳过写入');
+    return false;
+  }
   const notes = ensureEmoji(patch.notes ?? state.notes);
   const draft = patch.draft ?? state.draft;
   const settings = patch.settings ?? state.settings;
@@ -367,6 +409,16 @@ export function persistDraft(): Promise<boolean> {
   return persist({});
 }
 
+/**
+ * 重试本地存储，对应设置页的「重试本地保存」。
+ *
+ * 首次读库失败时先重新读库，读到数据后才写入，否则会用空状态覆盖数据库。
+ */
+export async function retryStorage(): Promise<boolean> {
+  if (state.loadFailed && !(await reloadFromDisk())) return false;
+  return persist({});
+}
+
 /** 调整正在读取的附件计数。 */
 export function setPendingAttachments(delta: number): void {
   setState({ pendingAttachments: Math.max(0, state.pendingAttachments + delta) });
@@ -470,8 +522,10 @@ let settingsWaiters: Array<(saved: boolean) => void> = [];
  * 界面立即应用新值，写入在短暂合并后经 `save_settings` 单独完成，
  * 不再整体重写记录，避免设置窗口持有的旧记录覆盖其它窗口的新内容。
  * 写入失败时回滚到最后一次成功落盘的设置，返回 false。
+ * 尚未读到数据库内容时不应用也不写入，直接返回 false，避免把默认设置写回数据库。
  */
 export function updateSettings(patch: Partial<Settings>): Promise<boolean> {
+  if (!canWrite()) return Promise.resolve(false);
   const settings = normalizeSettings({ ...state.settings, ...patch });
   pendingSettings = settings;
   setState({ settings });
@@ -544,6 +598,7 @@ export function resetForTest(next?: Partial<StoreState>): void {
     settings: DEFAULT_SETTINGS,
     tagUsage: {},
     ready: false,
+    loadFailed: false,
     saveFailed: false,
     draftDirty: false,
     pendingAttachments: 0,
