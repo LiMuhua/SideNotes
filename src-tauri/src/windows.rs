@@ -233,8 +233,9 @@ fn set_bounds_native(window: &WebviewWindow, x: f64, y: f64, width: f64, height:
 
 /// 关闭侧栏窗口的系统显示与隐藏动画。
 ///
-/// 侧栏收起时先平移到屏幕外再隐藏，Windows 默认还会再播放一次窗口隐藏的淡出动画，
-/// 屏幕边缘会闪过一下窗口阴影；出入效果已由平移完成，系统动画是多余的。
+/// 侧栏收起时先平移到屏幕外、隐藏，再把窗口挪回贴边位置备用。Windows 默认会为隐藏播放
+/// 一次淡出动画，而这段动画出现在挪回后的位置：平移结束约 90 毫秒后，侧栏会在原处闪现
+/// 并淡出。出入效果已由平移完成，系统动画是多余的。
 pub fn disable_sidebar_transitions(app: &AppHandle) {
     #[cfg(windows)]
     if let Some(sidebar) = app.get_webview_window(SIDEBAR_LABEL) {
