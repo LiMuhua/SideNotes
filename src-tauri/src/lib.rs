@@ -60,6 +60,7 @@ pub fn run() {
             for config in handle.config().app.windows.iter().filter(|config| !config.create) {
                 WebviewWindowBuilder::from_config(&handle, config)?.build()?;
             }
+            windows::disable_sidebar_transitions(&handle);
 
             #[cfg(desktop)]
             tray::setup(&handle)?;

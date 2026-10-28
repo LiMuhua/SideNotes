@@ -156,9 +156,76 @@ pub fn align_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
     // 可见时跟随侧栏所在屏幕；隐藏时按鼠标所在屏幕预先摆好。
     let visible = sidebar.is_visible().unwrap_or(false);
     let geometry = sidebar_geometry(&sidebar, layout, !visible)?;
-    sidebar.set_size(LogicalSize::new(geometry.width, geometry.height))?;
-    sidebar.set_position(LogicalPosition::new(geometry.final_x, geometry.y))?;
+    set_bounds(&sidebar, geometry.final_x, geometry.y, geometry.width, geometry.height)
+}
+
+/// 同时设置窗口位置与内容区尺寸。
+///
+/// 分别调用 set_size 与 set_position 时，窗口会先在原位置改变宽度再移动，
+/// 拖动调整宽度的每一帧都会出现一次贴边一侧的跳动。Windows 上改用一次
+/// SetWindowPos 同时完成；其它平台或调用失败时退回分步设置。
+fn set_bounds(window: &WebviewWindow, x: f64, y: f64, width: f64, height: f64) -> AppResult<()> {
+    #[cfg(windows)]
+    if set_bounds_native(window, x, y, width, height).is_some() {
+        return Ok(());
+    }
+    window.set_size(LogicalSize::new(width, height))?;
+    window.set_position(LogicalPosition::new(x, y))?;
     Ok(())
+}
+
+/// 用一次 SetWindowPos 设置窗口矩形。坐标与 Tauri 一致：位置为窗口外框，尺寸为内容区。
+#[cfg(windows)]
+fn set_bounds_native(window: &WebviewWindow, x: f64, y: f64, width: f64, height: f64) -> Option<()> {
+    use ::windows::Win32::UI::WindowsAndMessaging::{SetWindowPos, SWP_NOACTIVATE, SWP_NOOWNERZORDER, SWP_NOZORDER};
+
+    let hwnd = window.hwnd().ok()?;
+    let scale = window.scale_factor().ok()?;
+    // SetWindowPos 设置的是整个窗口矩形，需要补上外框与内容区的尺寸差。
+    let outer = window.outer_size().ok()?;
+    let inner = window.inner_size().ok()?;
+    let frame_width = outer.width as i32 - inner.width as i32;
+    let frame_height = outer.height as i32 - inner.height as i32;
+    // SAFETY：hwnd 来自仍然存在的 Tauri 窗口，参数均为按值传入的整数。
+    unsafe {
+        SetWindowPos(
+            hwnd,
+            None,
+            (x * scale).round() as i32,
+            (y * scale).round() as i32,
+            (width * scale).round() as i32 + frame_width,
+            (height * scale).round() as i32 + frame_height,
+            SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER,
+        )
+        .ok()
+    }
+}
+
+/// 关闭侧栏窗口的系统显示与隐藏动画。
+///
+/// 侧栏收起时先平移到屏幕外再隐藏，Windows 默认还会再播放一次窗口隐藏的淡出动画，
+/// 屏幕边缘会闪过一下窗口阴影；出入效果已由平移完成，系统动画是多余的。
+pub fn disable_sidebar_transitions(app: &AppHandle) {
+    #[cfg(windows)]
+    if let Some(sidebar) = app.get_webview_window(SIDEBAR_LABEL) {
+        use ::windows::core::BOOL;
+        use ::windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_TRANSITIONS_FORCEDISABLED};
+
+        if let Ok(hwnd) = sidebar.hwnd() {
+            let disabled = BOOL::from(true);
+            // SAFETY：传入的指针指向本函数内的 BOOL，大小与之匹配。失败只会保留系统动画。
+            let _ = unsafe {
+                DwmSetWindowAttribute(
+                    hwnd,
+                    DWMWA_TRANSITIONS_FORCEDISABLED,
+                    (&disabled as *const BOOL).cast(),
+                    std::mem::size_of::<BOOL>() as u32,
+                )
+            };
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = app;
 }
 
 /// 显示侧栏：从屏幕外平滑滑入；若正在收起，则从当前位置滑回。

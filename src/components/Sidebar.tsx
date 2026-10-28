@@ -74,6 +74,8 @@ export function Sidebar() {
 
   /* ==================== 鼠标移出收起 ==================== */
   const hideTimer = useRef<number>(0);
+  /** 每次安排或取消收起都会递增；异步查询返回时据此判断这次收起是否已被取消。 */
+  const hideToken = useRef(0);
 
   /** 组装当前侧栏布局，供窗口命令使用。 */
   const currentLayout = useCallback(
@@ -99,26 +101,45 @@ export function Sidebar() {
   const scheduleHide = useCallback(() => {
     if (keepVisibleRef.current) return;
     window.clearTimeout(hideTimer.current);
+    const token = ++hideToken.current;
     hideTimer.current = window.setTimeout(() => {
       if (keepVisibleRef.current) return;
-      // 与原型一致：侧栏收起时一并收起标签菜单。
-      setTagMenuOpen(false);
-      void bridge.hideSidebar(currentLayout());
+      // 与原型一致：设置弹窗打开期间侧栏保持展开。设置是独立窗口，打开时侧栏会失焦，
+      // 鼠标也可能移到设置窗口上，所以到点时先查询设置窗口是否正在显示。
+      void bridge.isSettingsVisible().then((settingsOpen) => {
+        if (settingsOpen || token !== hideToken.current || keepVisibleRef.current) return;
+        // 与原型一致：侧栏收起时一并收起标签菜单。
+        setTagMenuOpen(false);
+        void bridge.hideSidebar(currentLayout());
+      });
     }, state.settings.hideDelay);
   }, [state.settings.hideDelay, currentLayout]);
 
   const cancelHide = useCallback(() => {
     window.clearTimeout(hideTimer.current);
+    hideToken.current += 1;
   }, []);
 
   /* ==================== 拖拽调整侧栏宽度 ==================== */
   // 拖动期只更新本地 CSS 变量并节流调用窗口尺寸，不写数据库：
   // 每帧持久化会触发整棵树重渲染，表现为闪动与交互失效。
   const resizing = useRef(false);
-  const startX = useRef(0);
+  const startScreenX = useRef(0);
   const startWidth = useRef(0);
   const latestWidth = useRef(0);
   const resizeFrame = useRef(0);
+  /** 页面像素换算为窗口逻辑像素的比例；Windows 文本缩放会让两者不一致。 */
+  const logicalPerCss = useRef(1);
+
+  const refreshPixelRatio = useCallback(() => {
+    void bridge.windowScaleFactor().then((scale) => {
+      if (scale > 0) logicalPerCss.current = window.devicePixelRatio / scale;
+    });
+  }, []);
+
+  useEffect(() => {
+    refreshPixelRatio();
+  }, [refreshPixelRatio]);
 
   const commitWidth = useCallback((width: number) => {
     document.documentElement.style.setProperty("--sidebar-width", `${width}px`);
@@ -130,21 +151,24 @@ export function Sidebar() {
       event.preventDefault();
       event.stopPropagation();
       resizing.current = true;
-      startX.current = event.clientX;
+      // 用屏幕坐标计算位移：调整宽度时窗口本身在移动，窗口内坐标会随之变化，
+      // 以它计算会和窗口位置互相反馈，表现为拖动时来回抖动。
+      startScreenX.current = event.screenX;
       startWidth.current = state.settings.width;
       latestWidth.current = state.settings.width;
+      refreshPixelRatio();
       (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
       document.body.style.userSelect = "none";
       document.body.classList.add("is-resizing-sidebar");
       cancelHide();
     },
-    [state.settings.width, cancelHide],
+    [state.settings.width, cancelHide, refreshPixelRatio],
   );
 
   const handleResizePointerMove = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       if (!resizing.current) return;
-      const delta = event.clientX - startX.current;
+      const delta = (event.screenX - startScreenX.current) * logicalPerCss.current;
       // 右侧边：往左拖增大宽度；左侧边：往右拖增大宽度。
       const adjusted = state.settings.edge === "left" ? delta : -delta;
       const next = Math.min(720, Math.max(360, Math.round((startWidth.current + adjusted) / 4) * 4));

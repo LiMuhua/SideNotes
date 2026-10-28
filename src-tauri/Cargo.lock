@@ -3457,6 +3457,7 @@ dependencies = [
  "tauri-plugin-notification",
  "tauri-plugin-opener",
  "thiserror 2.0.21",
+ "windows",
 ]
 
 [[package]]

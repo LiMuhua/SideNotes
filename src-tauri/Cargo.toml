@@ -29,6 +29,10 @@ thiserror = "2"
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-global-shortcut = "2"
 
+# 与 Tauri 使用的版本一致，直接调用 DWM 与窗口定位 API。
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_UI_WindowsAndMessaging"] }
+
 [profile.release]
 # 发布包优先体积与启动速度。
 codegen-units = 1

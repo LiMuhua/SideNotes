@@ -7,7 +7,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { getCurrentWindow, Window } from '@tauri-apps/api/window';
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import { isPermissionGranted, requestPermission } from '@tauri-apps/plugin-notification';
@@ -197,10 +197,42 @@ export function hideSettings(): Promise<void> {
   return call<void>('hide_settings', undefined, undefined as unknown as void);
 }
 
+/**
+ * 设置窗口当前是否显示在屏幕上（可见且未最小化）。
+ *
+ * 原型的设置是侧栏之上的弹窗，打开期间侧栏不会收起；桌面端设置是独立窗口，
+ * 侧栏据此判断。浏览器预览或查询失败时视为未显示。
+ */
+export async function isSettingsVisible(): Promise<boolean> {
+  if (!isDesktop()) return false;
+  try {
+    const settings = await Window.getByLabel('settings');
+    if (!settings || !(await settings.isVisible())) return false;
+    return !(await settings.isMinimized());
+  } catch {
+    return false;
+  }
+}
+
 /** 最小化当前窗口；浏览器预览下无操作。 */
 export async function minimizeWindow(): Promise<void> {
   if (!isDesktop()) return;
   await getCurrentWindow().minimize();
+}
+
+/**
+ * 当前窗口所在屏幕的缩放比例（物理像素 / 逻辑像素）。
+ *
+ * 页面像素比还叠加了系统的文本缩放，两者之比才是页面像素换算到窗口逻辑像素的比例。
+ * 浏览器预览没有窗口缩放，返回页面像素比，使换算比例为 1。
+ */
+export async function windowScaleFactor(): Promise<number> {
+  if (!isDesktop()) return window.devicePixelRatio;
+  try {
+    return await getCurrentWindow().scaleFactor();
+  } catch {
+    return window.devicePixelRatio;
+  }
 }
 
 /** 同步固定状态：固定时保留任务栏图标便于 Alt+Tab 切回。 */
