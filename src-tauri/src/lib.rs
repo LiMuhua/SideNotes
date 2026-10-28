@@ -12,7 +12,7 @@ mod windows;
 
 use std::sync::Arc;
 
-use tauri::{Manager, WindowEvent};
+use tauri::{Manager, WebviewWindowBuilder, WindowEvent};
 
 use commands::AppState;
 use edge::EdgeWatcher;
@@ -53,6 +53,13 @@ pub fn run() {
                 edge: watcher.clone(),
                 shortcut_conflicts: conflicts,
             });
+
+            // 窗口在状态就绪后才创建。配置中的窗口默认先于 setup 创建，页面会在
+            // manage 之前调用 load_snapshot 而失败，以空列表启动；此后的整体写入
+            // 会覆盖数据库中的其它记录。配置里三个窗口均设为 create: false，统一在此创建。
+            for config in handle.config().app.windows.iter().filter(|config| !config.create) {
+                WebviewWindowBuilder::from_config(&handle, config)?.build()?;
+            }
 
             #[cfg(desktop)]
             tray::setup(&handle)?;
