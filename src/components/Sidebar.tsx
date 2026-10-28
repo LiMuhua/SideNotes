@@ -87,16 +87,25 @@ export function Sidebar() {
 
   // 对话框打开期间鼠标移出侧栏不收起，否则对话框会随侧栏一起消失。
   const dialogOpen = Boolean(trashTarget || managingTag || imagePreview || emojiTarget);
+  // 卡片菜单与对话框渲染在侧栏元素之外，鼠标移上去就会触发侧栏的 mouseleave。
+  // 与原型的 keepVisible 一致：打开期间不安排收起，计时结束时再按最新状态判断一次，
+  // 避免先移出侧栏、随后才打开对话框时仍被收起。
+  const keepVisible = Boolean(pinned || editing || composerActive || dialogOpen || contextMenu);
+  const keepVisibleRef = useRef(keepVisible);
+  useEffect(() => {
+    keepVisibleRef.current = keepVisible;
+  }, [keepVisible]);
 
   const scheduleHide = useCallback(() => {
-    if (pinned || editing || composerActive || dialogOpen) return;
+    if (keepVisibleRef.current) return;
     window.clearTimeout(hideTimer.current);
     hideTimer.current = window.setTimeout(() => {
+      if (keepVisibleRef.current) return;
       // 与原型一致：侧栏收起时一并收起标签菜单。
       setTagMenuOpen(false);
       void bridge.hideSidebar(currentLayout());
     }, state.settings.hideDelay);
-  }, [pinned, editing, composerActive, dialogOpen, state.settings.hideDelay, currentLayout]);
+  }, [state.settings.hideDelay, currentLayout]);
 
   const cancelHide = useCallback(() => {
     window.clearTimeout(hideTimer.current);
