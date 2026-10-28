@@ -50,12 +50,15 @@ impl SidebarLayout {
 }
 
 /// 侧栏在某块屏幕上的目标几何（逻辑坐标）。
+///
+/// 横纵坐标是窗口外框的位置，宽高是内容区的尺寸，与 Tauri 的 set_position、set_size 一致。
 #[derive(Debug, Clone, Copy)]
 struct SidebarGeometry {
-    /// 贴边展开时的横坐标。
+    /// 贴边展开时外框的横坐标。
     final_x: f64,
-    /// 完全移出屏幕时的横坐标，作为滑入起点与滑出终点。
+    /// 内容区完全移出屏幕时外框的横坐标，作为滑入起点与滑出终点。
     offscreen_x: f64,
+    /// 外框的纵坐标。
     y: f64,
     width: f64,
     height: f64,
@@ -101,20 +104,47 @@ fn work_area(monitor: &Monitor) -> (f64, f64, f64, f64) {
 /// 计算侧栏的贴边位置、尺寸与屏幕外位置。
 fn sidebar_geometry(sidebar: &WebviewWindow, layout: &SidebarLayout, prefer_cursor: bool) -> AppResult<SidebarGeometry> {
     let monitor = pick_monitor(sidebar, prefer_cursor)?;
-    let (area_x, area_y, area_width, area_height) = work_area(&monitor);
-    let width = layout.width.clamp(360.0, area_width.max(360.0));
-    let (final_x, offscreen_x) = if layout.edge == "left" {
+    Ok(place_sidebar(
+        work_area(&monitor),
+        layout.width,
+        layout.edge == "left",
+        frame_inset(sidebar),
+    ))
+}
+
+/// 窗口外框左上角到内容区左上角的偏移（逻辑像素）。
+///
+/// Windows 上带阴影的无边框窗口保留了不可见的边框（150% 缩放下左右各 11、顶部 2 个物理像素），
+/// 外框比内容区大。按外框贴边时内容区会超出屏幕边缘，所以贴边要按内容区计算再换算回外框。
+fn frame_inset(window: &WebviewWindow) -> (f64, f64) {
+    match (window.inner_position(), window.outer_position(), window.scale_factor()) {
+        (Ok(inner), Ok(outer), Ok(scale)) if scale > 0.0 => (
+            f64::from(inner.x - outer.x) / scale,
+            f64::from(inner.y - outer.y) / scale,
+        ),
+        _ => (0.0, 0.0),
+    }
+}
+
+/// 让内容区贴住工作区的左或右边缘，收起时整块内容区移到工作区之外。
+///
+/// `area` 为工作区的逻辑坐标 (x, y, 宽, 高)，`inset` 为外框到内容区的偏移；
+/// 返回的坐标已换算为外框位置。
+fn place_sidebar(area: (f64, f64, f64, f64), width: f64, left_edge: bool, inset: (f64, f64)) -> SidebarGeometry {
+    let (area_x, area_y, area_width, area_height) = area;
+    let width = width.clamp(360.0, area_width.max(360.0));
+    let (content_x, offscreen_content_x) = if left_edge {
         (area_x, area_x - width)
     } else {
         (area_x + area_width - width, area_x + area_width)
     };
-    Ok(SidebarGeometry {
-        final_x,
-        offscreen_x,
-        y: area_y,
+    SidebarGeometry {
+        final_x: content_x - inset.0,
+        offscreen_x: offscreen_content_x - inset.0,
+        y: area_y - inset.1,
         width,
         height: area_height,
-    })
+    }
 }
 
 /// 窗口当前的逻辑横坐标，用于从中途位置继续动画。
@@ -360,4 +390,50 @@ pub fn hide_settings(app: &AppHandle) -> AppResult<()> {
     let settings = window(app, SETTINGS_LABEL)?;
     settings.hide()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 2560×1440 的逻辑工作区（4K 屏 150% 缩放）。
+    const AREA: (f64, f64, f64, f64) = (0.0, 0.0, 2560.0, 1440.0);
+    /// 150% 缩放下实测的外框偏移：左 11、上 2 个物理像素。
+    const INSET: (f64, f64) = (11.0 / 1.5, 2.0 / 1.5);
+
+    fn close(left: f64, right: f64) -> bool {
+        (left - right).abs() < 1e-9
+    }
+
+    #[test]
+    fn right_edge_content_touches_work_area() {
+        let geometry = place_sidebar(AREA, 452.0, false, INSET);
+        // 内容区左边 = 外框横坐标 + 偏移；右边再加上宽度，应正好落在工作区右边缘。
+        assert!(close(geometry.final_x + INSET.0 + geometry.width, 2560.0));
+        assert!(close(geometry.y + INSET.1, 0.0));
+        assert!(close(geometry.height, 1440.0));
+        // 收起时内容区整块位于工作区右边缘之外。
+        assert!(close(geometry.offscreen_x + INSET.0, 2560.0));
+    }
+
+    #[test]
+    fn left_edge_content_touches_work_area() {
+        let geometry = place_sidebar(AREA, 452.0, true, INSET);
+        assert!(close(geometry.final_x + INSET.0, 0.0));
+        assert!(close(geometry.offscreen_x + INSET.0 + geometry.width, 0.0));
+    }
+
+    #[test]
+    fn width_is_clamped_to_work_area() {
+        assert!(close(place_sidebar((0.0, 0.0, 1000.0, 800.0), 9999.0, false, (0.0, 0.0)).width, 1000.0));
+        assert!(close(place_sidebar(AREA, 100.0, false, (0.0, 0.0)).width, 360.0));
+    }
+
+    #[test]
+    fn without_frame_inset_positions_are_unchanged() {
+        let geometry = place_sidebar(AREA, 416.0, false, (0.0, 0.0));
+        assert!(close(geometry.final_x, 2144.0));
+        assert!(close(geometry.offscreen_x, 2560.0));
+        assert!(close(geometry.y, 0.0));
+    }
 }
