@@ -37,6 +37,18 @@ const role = resolveRole();
 // 供样式按窗口切换布局，避免在组件里判断窗口类型。
 document.body.dataset.window = role;
 
+// 桌面端不弹出浏览器的右键菜单（后退、刷新、另存为等对本应用没有意义）。
+// 卡片右键由侧栏换成记录菜单；输入框、编辑区与选中的文字保留系统菜单，便于剪切、复制、粘贴。
+// 浏览器预览仍保留原生菜单，方便检查元素。
+if (isDesktop()) {
+  document.addEventListener('contextmenu', (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest('input, textarea, [contenteditable="true"]')) return;
+    if (window.getSelection()?.toString()) return;
+    event.preventDefault();
+  });
+}
+
 const container = document.getElementById('root');
 if (!container) throw new Error('缺少应用挂载点 #root');
 

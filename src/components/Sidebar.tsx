@@ -41,6 +41,11 @@ const SAVE_FAILED_MESSAGE = "保存失败，原记录未改动。请导出备份
 /** 设置窗口打开期间推迟收起，按此间隔复查它是否已关闭。 */
 const SETTINGS_POLL_INTERVAL = 400;
 
+/** 两组图片附件是否相同（只比较标识与顺序）。 */
+function sameImages(left: NoteImage[], right: NoteImage[]): boolean {
+  return left.length === right.length && left.every((image, index) => image.id === right[index].id);
+}
+
 // 快捷键描述：Ctrl+Enter 触发保存并收起侧栏。
 
 export function Sidebar() {
@@ -58,11 +63,18 @@ export function Sidebar() {
   /* ==================== 编辑事务 ==================== */
   const [editing, setEditing] = useState<EditSession | null>(null);
   const editorRef = useRef<MarkdownEditor | null>(null);
+  // 计时回调与失焦处理读取最新的编辑事务，避免沿用旧闭包。
+  const editingRef = useRef<EditSession | null>(null);
+  useEffect(() => {
+    editingRef.current = editing;
+  }, [editing]);
 
   /* ==================== UI 层叠状态 ==================== */
   const [tagsExpandedId, setTagsExpandedId] = useState<string | null>(null);
   const [trashTarget, setTrashTarget] = useState<Note | null>(null);
-  const [contextMenu, setContextMenu] = useState<{ note: Note; anchor: MenuAnchor } | null>(null);
+  // key 每次打开递增：在另一张卡片上右键时重新挂载菜单，焦点回到首项。
+  const [contextMenu, setContextMenu] = useState<{ note: Note; anchor: MenuAnchor; key: number } | null>(null);
+  const menuSerial = useRef(0);
   const [emojiTarget, setEmojiTarget] = useState<Note | null>(null);
   const [imagePreview, setImagePreview] = useState<{ src: string; alt: string } | null>(null);
   const [nudgeDismissed, setNudgeDismissed] = useState(false);
@@ -72,17 +84,14 @@ export function Sidebar() {
   /* 版号打开的「版本与更新」弹窗。 */
   const [changelogOpen, setChangelogOpen] = useState(false);
 
-  /* ==================== 单击编辑（对应原型 editCard 的延迟编辑） ==================== */
-  // 单击后延迟开始编辑，留出双击复制与长按拖动的判断时间；任何手势都会让计时失效。
-  const clickTimer = useRef(0);
-  const clickEpoch = useRef(0);
-  const invalidateCardClick = useCallback(() => {
-    window.clearTimeout(clickTimer.current);
-    clickTimer.current = 0;
-    clickEpoch.current += 1;
-  }, []);
   const listRef = useRef<HTMLDivElement>(null);
   const trashRef = useRef<HTMLDivElement>(null);
+
+  /** 打开记录菜单：右下角「…」按钮传入按钮元素，右键传入鼠标位置。 */
+  const openNoteMenu = useCallback((note: Note, anchor: MenuAnchor) => {
+    menuSerial.current += 1;
+    setContextMenu({ note, anchor, key: menuSerial.current });
+  }, []);
 
   /* ==================== 鼠标移出收起 ==================== */
   const asideRef = useRef<HTMLElement>(null);
@@ -266,17 +275,50 @@ export function Sidebar() {
     editorRef.current = null;
   }, []);
 
+  /**
+   * 保存并退出当前编辑，返回是否成功。
+   *
+   * 正文以编辑器当前内容为准：失焦提交可能早于输入法收尾的状态更新。
+   * 内容与附件都没有变化时直接退出，不写库，也不改动修改时间。
+   */
   const commitEdit = useCallback(async () => {
-    if (!editing) return;
-    const text = editing.text.trim() ? editing.text : editing.originalText;
-    const ok = await store.commitEdit(editing.id, text, editing.images);
-    if (!ok) {
+    const session = editingRef.current;
+    if (!session) return true;
+    const current = editorRef.current?.getValue() ?? session.text;
+    const text = current.trim() ? current : session.originalText;
+    const changed = text !== session.originalText || !sameImages(session.images, session.originalImages);
+    if (changed && !(await store.commitEdit(session.id, text, session.images))) {
       toast("保存失败，请稍后重试", null, true);
-      return;
+      return false;
     }
-    setEditing(null);
-    editorRef.current = null;
-  }, [editing, toast]);
+    // 保存期间若已开始编辑另一条记录，不打断新的编辑。
+    if (editingRef.current?.id === session.id) {
+      editingRef.current = null;
+      setEditing(null);
+      editorRef.current = null;
+    }
+    return true;
+  }, [toast]);
+
+  /**
+   * 编辑卡片失去焦点后保存并回到预览，对应原型 scheduleEditBlur。
+   *
+   * 等焦点交接完成再判断：焦点仍在编辑卡片内（工具按钮、附件预览）时不提交；
+   * 切换到其它窗口时页面焦点仍留在卡片里，编辑保持不变，回来后可以继续；
+   * 附件还在读取时也先不提交，避免丢失刚选的图片。
+   */
+  const editBlurTimer = useRef(0);
+  const handleEditBlur = useCallback(() => {
+    const session = editingRef.current;
+    window.clearTimeout(editBlurTimer.current);
+    editBlurTimer.current = window.setTimeout(() => {
+      if (!session || editingRef.current?.id !== session.id) return;
+      const card = listRef.current?.querySelector(".note-card.is-editing");
+      if (card?.contains(document.activeElement)) return;
+      if (store.getState().pendingAttachments > 0) return;
+      void commitEdit();
+    }, 0);
+  }, [commitEdit]);
 
   /* ==================== 速记 Composer ==================== */
   const [composerText, setComposerText] = useState("");
@@ -309,6 +351,20 @@ export function Sidebar() {
   useEffect(() => {
     store.changeDraft(composerText);
   }, [composerText]);
+
+  /** 复制整条记录：菜单首项、卡片上的复制按钮与选中卡片后的 Ctrl+C 共用。 */
+  const handleCopyNote = useCallback(
+    async (note: Note) => {
+      try {
+        const plain = `${note.emoji || "📝"} ${note.text}`;
+        await navigator.clipboard.writeText(plain);
+        toast("已复制");
+      } catch {
+        toast("剪贴板不可用", null, true);
+      }
+    },
+    [toast],
+  );
 
   /* ==================== 窗口失焦自动收起 ==================== */
   // 点到侧栏窗口之外与鼠标移出同样触发收起；是否保持展开由到点时的状态决定，
@@ -395,6 +451,23 @@ export function Sidebar() {
         if (editing) void commitEdit();
         window.dispatchEvent(new CustomEvent("sidenotes:focus-composer"));
       }
+      // Ctrl+C：焦点在卡片上（单击选中）且没有选中文字时，复制整条记录。
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        !event.shiftKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === "c" &&
+        !window.getSelection()?.toString()
+      ) {
+        const active = document.activeElement;
+        if (active instanceof HTMLElement && active.matches(".note-card:not(.is-editing)")) {
+          const note = store.getState().notes.find((item) => item.id === active.dataset.noteId);
+          if (note) {
+            event.preventDefault();
+            void handleCopyNote(note);
+          }
+        }
+      }
     };
     document.addEventListener("keydown", handler, true);
     return () => document.removeEventListener("keydown", handler, true);
@@ -443,19 +516,6 @@ export function Sidebar() {
   );
 
   /* ==================== 卡片操作 ==================== */
-
-  const handleCopyNote = useCallback(
-    async (note: Note) => {
-      try {
-        const plain = `${note.emoji || "📝"} ${note.text}`;
-        await navigator.clipboard.writeText(plain);
-        toast("已复制");
-      } catch {
-        toast("剪贴板不可用", null, true);
-      }
-    },
-    [toast],
-  );
 
   const handleArchiveNote = useCallback(
     async (note: Note) => {
@@ -543,7 +603,6 @@ export function Sidebar() {
     onSwitchTab: switchTab,
     onMove: moveDragged,
     onReorder: (ids, targetId, after) => void reorderDragged(ids, targetId, after),
-    onInvalidateClick: invalidateCardClick,
   });
 
   // 与原型 keepVisible 一致：固定、弹层、菜单、拖动与多选期间不自动收起；
@@ -563,13 +622,7 @@ export function Sidebar() {
     if (!keepVisible && hidePending.current) scheduleHide();
   }, [keepVisible, scheduleHide]);
 
-  // 计时回调里使用最新的 beginEdit，避免沿用旧的编辑会话。
-  const beginEditRef = useRef(beginEdit);
-  useEffect(() => {
-    beginEditRef.current = beginEdit;
-  }, [beginEdit]);
-
-  /** 单击卡片：延迟开始编辑，期间的双击、长按或多选会让它失效。 */
+  /** 单击卡片只选中（获得焦点），供 Enter 编辑、Ctrl+C 复制；编辑改为双击。 */
   const handleListClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
       if (event.defaultPrevented || interactions.isBusy() || interactions.isSelecting() || tagsExpandedId) return;
@@ -577,32 +630,43 @@ export function Sidebar() {
       if (target.closest('button,a,input,textarea,select,[contenteditable="true"]')) return;
       const card = target.closest<HTMLElement>(".note-card");
       if (!card || card.classList.contains("is-editing")) return;
-      const id = card.dataset.noteId;
-      window.clearTimeout(clickTimer.current);
-      const epoch = clickEpoch.current;
-      clickTimer.current = window.setTimeout(() => {
-        if (epoch !== clickEpoch.current || interactions.isBusy()) return;
-        const note = store.getState().notes.find((item) => item.id === id);
-        if (note) beginEditRef.current(note);
-      }, 550);
+      // 按下时为避免选中文字阻止了默认行为，焦点不会自动移到卡片上。
+      card.focus({ preventScroll: true });
     },
     [interactions, tagsExpandedId],
   );
 
-  /** 双击卡片复制内容，对应原型 copyCard。 */
+  /** 双击卡片开始编辑；多选与拖动之后的双击已由卡片手势拦下。 */
   const handleListDoubleClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
-      if (event.defaultPrevented || interactions.isBusy() || interactions.isSelecting()) return;
+      if (event.defaultPrevented || interactions.isBusy() || interactions.isSelecting() || tagsExpandedId) return;
       const target = event.target as HTMLElement;
       if (target.closest('button,a,input,textarea,select,[contenteditable="true"]')) return;
       const card = target.closest<HTMLElement>(".note-card");
       if (!card || card.classList.contains("is-editing")) return;
-      invalidateCardClick();
       event.preventDefault();
+      window.getSelection()?.removeAllRanges();
       const note = store.getState().notes.find((item) => item.id === card.dataset.noteId);
-      if (note) void handleCopyNote(note);
+      if (note) beginEdit(note);
     },
-    [interactions, invalidateCardClick, handleCopyNote],
+    [interactions, tagsExpandedId, beginEdit],
+  );
+
+  /** 卡片右键打开记录菜单，对应原型 note-menu.js 的 handleContextMenu；编辑区保留系统菜单。 */
+  const handleListContextMenu = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      const target = event.target as HTMLElement;
+      const card = target.closest<HTMLElement>(".note-card");
+      if (!card || target.closest('input,textarea,[contenteditable="true"]')) return;
+      const note = store.getState().notes.find((item) => item.id === card.dataset.noteId);
+      if (!note) return;
+      event.preventDefault();
+      if (dialogOpen || tagsExpandedId) return;
+      // 与原型一致：打开菜单前先保存正在进行的编辑。
+      if (editingRef.current) void commitEdit();
+      openNoteMenu(note, { x: event.clientX, y: event.clientY });
+    },
+    [dialogOpen, tagsExpandedId, commitEdit, openNoteMenu],
   );
 
   /** 键盘焦点在卡片上时 Enter 或空格开始编辑。 */
@@ -1072,6 +1136,7 @@ export function Sidebar() {
           aria-label={`${TAB_LABELS[tab]}记录列表`}
           onClick={handleListClick}
           onDoubleClick={handleListDoubleClick}
+          onContextMenu={handleListContextMenu}
           onKeyDown={handleListKeyDown}
         >
           <Composer
@@ -1126,9 +1191,7 @@ export function Sidebar() {
                 onEditReady={(editor) => {
                   editorRef.current = editor;
                 }}
-                onEditBlur={() => {
-                  // 失焦不自动提交，给跨窗口点击留余地
-                }}
+                onEditBlur={handleEditBlur}
                 onFinishEdit={() => void commitEdit()}
                 onCancelEdit={cancelEdit}
                 onRemoveEditImage={(id) =>
@@ -1148,7 +1211,7 @@ export function Sidebar() {
                 onCopy={() => void handleCopyNote(note)}
                 onTogglePin={() => void store.updateNote(note.id, { pinned: !note.pinned })}
                 onArchive={() => void handleArchiveNote(note)}
-                onMore={(anchor) => setContextMenu({ note, anchor })}
+                onMore={(anchor) => openNoteMenu(note, anchor)}
                 onFilterTag={selectTag}
                 onRemoveTag={async (tag) => {
                   const newText = removeTag(note.text, tag);
@@ -1236,6 +1299,7 @@ export function Sidebar() {
       {/* 卡片上下文菜单 */}
       {contextMenu ? (
         <NoteMenu
+          key={contextMenu.key}
           note={contextMenu.note}
           anchor={contextMenu.anchor}
           onCommand={(command) => void handleMenuCommand(contextMenu.note, command)}

@@ -43,8 +43,8 @@ interface MenuEntry {
 /** 按记录状态生成菜单项。 */
 function buildEntries(note: Note): Array<MenuEntry | 'separator'> {
   const entries: Array<MenuEntry | 'separator'> = [
-    { command: 'copy', label: '复制内容与附件', icon: 'copy', hint: '双击' },
-    { command: 'edit', label: '编辑内容', icon: 'edit' },
+    { command: 'copy', label: '复制内容与附件', icon: 'copy', hint: 'Ctrl+C' },
+    { command: 'edit', label: '编辑内容', icon: 'edit', hint: '双击' },
     { command: 'collapse', label: note.collapsed ? '展开正文' : '收起正文', icon: 'chevron-down' },
     'separator',
   ];

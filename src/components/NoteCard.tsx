@@ -284,7 +284,9 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
       tabIndex={0}
       aria-label={title}
       aria-selected={props.selected}
-      title={isEditing ? undefined : '单击编辑，双击复制，长按拖动排序'}
+      title={isEditing ? undefined : '双击编辑，右键查看更多操作，长按拖动排序'}
+      // 编辑中焦点离开整张卡片（而不只是编辑面）才算失焦，卡片内的工具按钮不打断编辑。
+      onBlur={isEditing ? props.onEditBlur : undefined}
     >
       <header className="note-header">
         <button
@@ -329,7 +331,6 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
             autoFocus
             onChange={props.onEditChange}
             onReady={props.onEditReady}
-            onBlur={props.onEditBlur}
             onPreviewImage={props.onPreviewImage}
           />
           <Attachments

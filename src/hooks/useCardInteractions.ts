@@ -1,7 +1,7 @@
 /**
  * 卡片长按排序与多选，移植自原型 interactions.js。
  *
- * 手势在 document 捕获阶段处理，优先于卡片自身的单击编辑与双击复制：
+ * 手势在 document 捕获阶段处理，优先于卡片自身的单击选中与双击编辑：
  * - 在卡片上按住 300 毫秒后开始拖动：可在卡片之间排序；停在页签上会切换过去，
  *   松开即移到该页签；拖到右下角的回收站则移入回收站。松开后一次性保存并提供撤销。
  * - 在列表空白处拖动框选；Ctrl/⌘ 单击切换选择，Shift 单击连续选择；
@@ -50,8 +50,6 @@ export interface CardInteractionOptions {
   onMove: (ids: string[], destination: TabKey | 'trash') => Promise<boolean>;
   /** 插入到目标记录之前或之后。 */
   onReorder: (ids: Set<string>, targetId: string, after: boolean) => void;
-  /** 取消尚未生效的单击编辑，对应原型 invalidateCardClick。 */
-  onInvalidateClick: () => void;
 }
 
 export interface CardInteractions {
@@ -220,11 +218,10 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
         .map((note) => note.id);
     const findNote = (id: string): Note | undefined => opts().notes.find((note) => note.id === id);
 
-    /** 阻止本次事件继续触发卡片编辑。 */
+    /** 阻止本次事件继续触发卡片的选中与编辑。 */
     const consume = (event: Event): void => {
       event.preventDefault();
       event.stopImmediatePropagation();
-      opts().onInvalidateClick();
     };
 
     /** 单击选择：Shift 选择连续区间，否则切换单张卡片。 */
@@ -478,7 +475,6 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
       gesture.active = true;
       gesture.originTab = opts().tab;
       gesture.targetMode = 'list';
-      opts().onInvalidateClick();
       gesture.ids =
         t.selected.has(gesture.id) && t.selected.size ? new Set(selectedIds()) : new Set([gesture.id]);
       document.body.classList.add('is-sorting-cards');
@@ -532,7 +528,6 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
       if (gesture.active) {
         t.blockClick = true;
         t.lastDragAt = now();
-        opts().onInvalidateClick();
       }
       try {
         if (gesture.card && gesture.pointerId !== undefined && gesture.card.hasPointerCapture(gesture.pointerId)) {
@@ -569,7 +564,6 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
       const listBounds = list.getBoundingClientRect();
       if (event.clientX >= listBounds.left + list.clientLeft + list.clientWidth) return;
       const card = target.closest<HTMLElement>('.note-card');
-      opts().onInvalidateClick();
       const pointer = event as PointerEvent;
       const gesture: Gesture = {
         kind: card ? 'sort' : 'frame',
@@ -699,7 +693,7 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
       }
     };
 
-    /** 多选和拖动之后不再触发双击复制。 */
+    /** 多选和拖动之后不再触发双击编辑。 */
     const captureDoubleClick = (event: MouseEvent): void => {
       const target = targetOf(event);
       if (target?.closest('.note-card') && (hasSelection() || now() - t.lastDragAt < CLICK_GUARD)) consume(event);
