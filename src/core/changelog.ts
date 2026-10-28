@@ -14,6 +14,11 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: '0.6.8',
+    summary:
+      '侧栏按内容区贴边：右侧不再有一截内容落在屏幕之外，顶部也不再空出一条缝；拖动调整宽度时不再偶尔回跳一档。',
+  },
+  {
     version: '0.6.7',
     summary:
       '设置窗口打开期间侧栏保持展开，收起后不再闪过系统隐藏动画，拖动调整宽度不再抖动；新建卡片与记录卡片左右对齐；卡片支持长按拖动排序、拖到页签或回收站、框选与 Ctrl/Shift 多选；版号打开更新日志。',
