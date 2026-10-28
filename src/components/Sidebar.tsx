@@ -17,6 +17,7 @@ import { NoteMenu, type MenuAnchor, type MenuCommand } from "./NoteMenu";
 import { EmojiPicker } from "./EmojiPicker";
 import { TagFilter } from "./TagFilter";
 import { TagManageDialog } from "./TagManageDialog";
+import { ChangelogDialog } from "./ChangelogDialog";
 import { ConfirmDialog, ImagePreview, ToastRegion } from "./Modal";
 import { useStore } from "../hooks/useStore";
 import { useToast } from "../hooks/useToast";
@@ -65,6 +66,8 @@ export function Sidebar() {
   /* 标签筛选菜单与标签管理对话框。 */
   const [tagMenuOpen, setTagMenuOpen] = useState(false);
   const [managingTag, setManagingTag] = useState<string | null>(null);
+  /* 版号打开的「版本与更新」弹窗。 */
+  const [changelogOpen, setChangelogOpen] = useState(false);
 
   /* ==================== 单击编辑（对应原型 editCard 的延迟编辑） ==================== */
   // 单击后延迟开始编辑，留出双击复制与长按拖动的判断时间；任何手势都会让计时失效。
@@ -94,7 +97,7 @@ export function Sidebar() {
   );
 
   // 对话框打开期间鼠标移出侧栏不收起，否则对话框会随侧栏一起消失。
-  const dialogOpen = Boolean(trashTarget || managingTag || imagePreview || emojiTarget);
+  const dialogOpen = Boolean(trashTarget || managingTag || imagePreview || emojiTarget || changelogOpen);
   // 卡片菜单与对话框渲染在侧栏元素之外，鼠标移上去就会触发侧栏的 mouseleave。
   // 与原型的 keepVisible 一致：打开期间不安排收起，计时结束时再按最新状态判断一次，
   // 避免先移出侧栏、随后才打开对话框时仍被收起。实际值在卡片手势之后计算（见下方）。
@@ -317,6 +320,10 @@ export function Sidebar() {
         }
         if (managingTag) {
           setManagingTag(null);
+          return;
+        }
+        if (changelogOpen) {
+          setChangelogOpen(false);
           return;
         }
         if (trashTarget) {
@@ -818,12 +825,16 @@ export function Sidebar() {
             <div>
               <h2>SideNotes</h2>
               <button
+                id="app-version"
                 type="button"
                 className="version-button"
-                aria-label={`版本 ${__APP_VERSION__}`}
-                onClick={() => window.dispatchEvent(new CustomEvent("sidenotes:open-settings"))}
+                data-action="show-changelog"
+                aria-label="版本与更新"
+                title="版本与更新日志"
+                onClick={() => setChangelogOpen(true)}
               >
                 <span>{__APP_VERSION__} PREVIEW</span>
+                <span className="update-dot" hidden />
               </button>
             </div>
           </div>
@@ -1223,6 +1234,9 @@ export function Sidebar() {
           onCancel={() => setTrashTarget(null)}
         />
       ) : null}
+
+      {/* 版本与更新：对应原型版号按钮的 show-changelog */}
+      {changelogOpen ? <ChangelogDialog onClose={() => setChangelogOpen(false)} /> : null}
 
       {/* 标签管理：重命名或合并、全局移除 */}
       {managingTag ? (
