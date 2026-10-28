@@ -13,6 +13,7 @@ import { TagInput } from './TagInput';
 import { Markdown, MarkdownInline } from './Markdown';
 import { formatTime, likelyLong, noteTitle } from '../core/notes';
 import { parse } from '../core/tags';
+import { noteDisplay, sourceOffset } from '../core/display';
 import type { EditSession, Note, NoteImage } from '../core/types';
 import type { MarkdownEditor } from '../core/editor';
 
@@ -276,17 +277,8 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
     .join(' ');
 
   const title = noteTitle(note);
-  const lines = parsed.body.split('\n');
-  const firstIndex = lines.findIndex((line) => line.trim());
-  const firstLine = firstIndex < 0 ? '' : lines[firstIndex];
-  // 首行若是结构化内容（代码、列表、引用、图片等），标题不复用该行文本。
-  const structuredFirstLine =
-    firstLine.length > 120 ||
-    /^\s*(?:`{3,}|~{3,}|!\[|>|(?:-\s*){3,}$|(?:_\s*){3,}$|(?:\*\s*){3,}$)|^(?: {4}|\t)|^\s*[-*+]\s|^\s*\d+[.)]\s/.test(
-      firstLine,
-    );
-  const displayBody =
-    firstIndex < 0 ? '' : structuredFirstLine ? parsed.body : lines.slice(firstIndex + 1).join('\n');
+  // 首行若是结构化内容（代码、列表、引用、图片等），标题不复用该行文本，正文从头显示。
+  const display = noteDisplay(note.text);
 
   return (
     <article
@@ -313,7 +305,7 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
           {note.emoji || '📝'}
         </button>
         <h3 className="note-title">
-          {structuredFirstLine ? title : <MarkdownInline text={firstLine.replace(/^#{1,6}\s+/, '')} />}
+          {display.structured ? title : <MarkdownInline text={display.firstLine.replace(/^#{1,6}\s+/, '')} />}
         </h3>
         <button
           type="button"
@@ -396,11 +388,12 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
         <>
           <div ref={content} className="note-content markdown-body">
             <Markdown
-              text={displayBody}
+              text={display.body}
               handlers={{
                 onPreviewImage: props.onPreviewImage,
                 onOpenFile: props.onOpenFile,
-                onTaskToggle: props.onTaskToggle,
+                // 解析位置相对显示正文（去掉了标题行），换算回原文再切换待办。
+                onTaskToggle: (offset, checked) => props.onTaskToggle(sourceOffset(note.text, display, offset), checked),
               }}
             />
             {note.images.map((image) => (
