@@ -33,6 +33,9 @@ const TAB_LABELS: Record<TabKey, string> = {
   archive: "归档",
 };
 
+/** 修改记录写入失败时的提示，沿用原型 updateNote 的文案。 */
+const SAVE_FAILED_MESSAGE = "保存失败，原记录未改动。请导出备份后重试。";
+
 // 快捷键描述：Ctrl+Enter 触发保存并收起侧栏。
 
 export function Sidebar() {
@@ -53,7 +56,7 @@ export function Sidebar() {
 
   /* ==================== UI 层叠状态 ==================== */
   const [tagsExpandedId, setTagsExpandedId] = useState<string | null>(null);
-  const [confirmTrash, setConfirmTrash] = useState<Note[] | null>(null);
+  const [trashTarget, setTrashTarget] = useState<Note | null>(null);
   const [contextMenu, setContextMenu] = useState<{ note: Note; anchor: MenuAnchor } | null>(null);
   const [emojiTarget, setEmojiTarget] = useState<Note | null>(null);
   const [imagePreview, setImagePreview] = useState<{ src: string; alt: string } | null>(null);
@@ -83,7 +86,7 @@ export function Sidebar() {
   );
 
   // 对话框打开期间鼠标移出侧栏不收起，否则对话框会随侧栏一起消失。
-  const dialogOpen = Boolean(confirmTrash || managingTag || imagePreview || emojiTarget);
+  const dialogOpen = Boolean(trashTarget || managingTag || imagePreview || emojiTarget);
 
   const scheduleHide = useCallback(() => {
     if (pinned || editing || composerActive || dialogOpen) return;
@@ -272,8 +275,8 @@ export function Sidebar() {
           setManagingTag(null);
           return;
         }
-        if (confirmTrash) {
-          setConfirmTrash(null);
+        if (trashTarget) {
+          setTrashTarget(null);
           return;
         }
         if (tagMenuOpen) {
@@ -432,24 +435,35 @@ export function Sidebar() {
           window.dispatchEvent(new CustomEvent("sidenotes:note-info", { detail: note }));
           break;
         case "trash":
-          setConfirmTrash([note]);
+          setTrashTarget(note);
           break;
       }
     },
     [tab, beginEdit, handleCopyNote, handleArchiveNote, toast],
   );
 
-  const handleDeleteForever = useCallback(async () => {
-    if (!confirmTrash) return;
-    const ids = confirmTrash.map((note) => note.id);
-    const ok = await store.deleteForever(ids);
-    if (!ok) {
-      toast("删除失败", null, true);
-      return;
+  /**
+   * 确认后把记录移入回收站，并在提示条中提供撤销，对应原型 requestDelete。
+   * 保存失败时返回 false，确认对话框保持打开，记录原样保留。
+   */
+  const handleMoveToTrash = useCallback(async () => {
+    if (!trashTarget) return false;
+    const undo = await store.moveNotes([trashTarget.id], "trash");
+    if (!undo) {
+      toast(SAVE_FAILED_MESSAGE, null, true);
+      return false;
     }
-    setConfirmTrash(null);
-    toast("已永久删除");
-  }, [confirmTrash, toast]);
+    toast("已移入回收站", {
+      label: "撤销",
+      run: () => {
+        // 撤销还原删除前的状态、置顶与顺序；写入失败时与原型一样提示保存失败。
+        void store.restoreNotes(undo).then((ok) => {
+          if (!ok) toast(SAVE_FAILED_MESSAGE, null, true);
+        });
+      },
+    });
+    return true;
+  }, [trashTarget, toast]);
 
   const handleTaskToggle = useCallback(
     async (noteId: string, offset: number, checked: boolean) => {
@@ -1014,13 +1028,13 @@ export function Sidebar() {
       ) : null}
 
       {/* 移入回收站确认 */}
-      {confirmTrash ? (
+      {trashTarget ? (
         <ConfirmDialog
-          title="移入回收站"
-          description={`将 ${confirmTrash.length} 条记录移入回收站？保留 ${state.settings.trashDays} 天后会提示清理。`}
+          title="将这条记录移入回收站？"
+          description={`“${(trashTarget.text.split("\n")[0] || "图片记录").slice(0, 70)}”会暂存于回收站，可在设置中恢复。`}
           confirmLabel="移入回收站"
-          onConfirm={handleDeleteForever}
-          onCancel={() => setConfirmTrash(null)}
+          onConfirm={handleMoveToTrash}
+          onCancel={() => setTrashTarget(null)}
         />
       ) : null}
 

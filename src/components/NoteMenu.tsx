@@ -179,6 +179,7 @@ export function NoteMenu({ note, anchor, onCommand, onClose }: NoteMenuProps) {
             key={entry.command}
             type="button"
             role="menuitem"
+            data-menu-command={entry.command}
             className={`note-context-item${entry.danger ? ' is-danger' : ''}${
               entry.command === 'collapse' && !note.collapsed ? ' is-expanded' : ''
             }`}

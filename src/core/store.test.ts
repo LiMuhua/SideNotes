@@ -132,6 +132,33 @@ describe('状态仓库', () => {
     expect(getState().notes.every((item) => item.status === 'active')).toBe(true);
   });
 
+  it('移入回收站记住删除前位置，撤销后完整还原', async () => {
+    resetForTest({
+      notes: [note({ status: 'archived', pinned: true, order: 3, previousStatus: 'active' })],
+      ready: true,
+    });
+    const undo = await moveNotes(['note-1'], 'trash');
+    expect(getState().notes[0]).toMatchObject({ status: 'trash', previousStatus: 'archived' });
+    expect(getState().notes[0].deletedAt).not.toBeNull();
+
+    if (!undo) throw new Error('移入回收站未保存');
+    expect(await restoreNotes(undo)).toBe(true);
+    expect(getState().notes[0]).toMatchObject({
+      status: 'archived',
+      pinned: true,
+      order: 3,
+      previousStatus: 'active',
+      deletedAt: null,
+    });
+  });
+
+  it('移入回收站写入失败时记录保持原样', async () => {
+    saveSnapshot.mockResolvedValue(false);
+    expect(await moveNotes(['note-1'], 'trash')).toBeNull();
+    expect(getState().notes[0]).toMatchObject({ status: 'active', deletedAt: null });
+    expect(getState().saveFailed).toBe(true);
+  });
+
   it('移到置顶会设置置顶并清除手动顺序', async () => {
     resetForTest({ notes: [note({ order: 5 })], ready: true });
     await moveNotes(['note-1'], 'pinned');

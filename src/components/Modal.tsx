@@ -109,6 +109,8 @@ export interface ConfirmProps {
 
 /** 二次确认对话框。 */
 export function ConfirmDialog({ title, description, confirmLabel = '确认', onConfirm, onCancel }: ConfirmProps) {
+  // 确认操作通常要异步写库，进行中忽略重复点击，避免同一操作执行两次。
+  const pending = useRef(false);
   return (
     <Modal
       title={title}
@@ -133,9 +135,15 @@ export function ConfirmDialog({ title, description, confirmLabel = '确认', onC
             aria-label={confirmLabel}
             title={confirmLabel}
             onClick={() => {
-              void Promise.resolve(onConfirm()).then((result) => {
-                if (result !== false) onCancel();
-              });
+              if (pending.current) return;
+              pending.current = true;
+              void Promise.resolve(onConfirm())
+                .then((result) => {
+                  if (result !== false) onCancel();
+                })
+                .finally(() => {
+                  pending.current = false;
+                });
             }}
           >
             {confirmLabel}
@@ -201,6 +209,7 @@ export function ToastRegion() {
           <button
             type="button"
             className="icon-button"
+            data-action=""
             aria-label="关闭提示"
             title="关闭提示"
             onClick={() => dismiss(item.id)}
