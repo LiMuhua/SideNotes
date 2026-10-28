@@ -3,6 +3,7 @@
  *
  * 右下角「…」按钮与卡片右键共用同一菜单；固定定位并处理视口边界，
  * 支持上下键、Home/End 导航与 Esc 关闭。
+ * 与系统菜单一样，点到菜单之外（包括侧栏窗口之外）即关闭。
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -104,12 +105,14 @@ export function NoteMenu({ note, anchor, onCommand, onClose }: NoteMenuProps) {
     });
   }, [anchor]);
 
-  // 打开后把焦点交给首项。
+  // 定位完成、菜单可见后再把焦点交给首项：定位前菜单处于隐藏状态，无法获得焦点。
+  const placed = position !== null;
   useEffect(() => {
-    menu.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus({ preventScroll: true });
-  }, []);
+    if (placed) menu.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus({ preventScroll: true });
+  }, [placed]);
 
-  // 点击外部、窗口尺寸变化或列表滚动都收起菜单。
+  // 点击外部、窗口尺寸变化或列表滚动都收起菜单。点到侧栏窗口之外时页面收不到按下事件，
+  // 只会失焦，因此窗口失焦也关闭；否则菜单一直开着，侧栏也会因此不再自动收起。
   useEffect(() => {
     const handlePointer = (event: PointerEvent): void => {
       if (menu.current && !menu.current.contains(event.target as Node)) onClose();
@@ -119,10 +122,12 @@ export function NoteMenu({ note, anchor, onCommand, onClose }: NoteMenuProps) {
     };
     document.addEventListener('pointerdown', handlePointer, true);
     window.addEventListener('resize', onClose);
+    window.addEventListener('blur', onClose);
     document.addEventListener('scroll', handleScroll, true);
     return () => {
       document.removeEventListener('pointerdown', handlePointer, true);
       window.removeEventListener('resize', onClose);
+      window.removeEventListener('blur', onClose);
       document.removeEventListener('scroll', handleScroll, true);
     };
   }, [onClose]);

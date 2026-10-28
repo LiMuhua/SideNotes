@@ -38,6 +38,9 @@ const TAB_LABELS: Record<TabKey, string> = {
 /** 修改记录写入失败时的提示，沿用原型 updateNote 的文案。 */
 const SAVE_FAILED_MESSAGE = "保存失败，原记录未改动。请导出备份后重试。";
 
+/** 设置窗口打开期间推迟收起，按此间隔复查它是否已关闭。 */
+const SETTINGS_POLL_INTERVAL = 400;
+
 // 快捷键描述：Ctrl+Enter 触发保存并收起侧栏。
 
 export function Sidebar() {
@@ -82,9 +85,18 @@ export function Sidebar() {
   const trashRef = useRef<HTMLDivElement>(null);
 
   /* ==================== 鼠标移出收起 ==================== */
+  const asideRef = useRef<HTMLElement>(null);
   const hideTimer = useRef<number>(0);
+  /** 正在拖动边框调整宽度；拖动期间指针可能移出窗口，不能因此收起。 */
+  const resizing = useRef(false);
   /** 每次安排或取消收起都会递增；异步查询返回时据此判断这次收起是否已被取消。 */
   const hideToken = useRef(0);
+  /**
+   * 已触发收起（鼠标移出或窗口失焦）但还没有执行。
+   * 到点时若仍需保持展开（菜单、对话框、编辑等），保留此标记，条件解除后补一次收起；
+   * 否则这些条件在鼠标已移出时结束，侧栏会一直停留，直到鼠标再移入移出一次。
+   */
+  const hidePending = useRef(false);
 
   /** 组装当前侧栏布局，供窗口命令使用。 */
   const currentLayout = useCallback(
@@ -99,36 +111,48 @@ export function Sidebar() {
   // 对话框打开期间鼠标移出侧栏不收起，否则对话框会随侧栏一起消失。
   const dialogOpen = Boolean(trashTarget || managingTag || imagePreview || emojiTarget || changelogOpen);
   // 卡片菜单与对话框渲染在侧栏元素之外，鼠标移上去就会触发侧栏的 mouseleave。
-  // 与原型的 keepVisible 一致：打开期间不安排收起，计时结束时再按最新状态判断一次，
-  // 避免先移出侧栏、随后才打开对话框时仍被收起。实际值在卡片手势之后计算（见下方）。
+  // 与原型的 keepVisible 一致：到点时按最新状态再判断一次，避免先移出侧栏、随后才打开对话框时仍被收起。
+  // 实际值在卡片手势之后计算（见下方）。
   const keepVisibleRef = useRef(false);
 
   const scheduleHide = useCallback(() => {
-    if (keepVisibleRef.current) return;
     window.clearTimeout(hideTimer.current);
+    hidePending.current = true;
     const token = ++hideToken.current;
-    hideTimer.current = window.setTimeout(() => {
-      if (keepVisibleRef.current) return;
+    const attempt = (): void => {
+      if (token !== hideToken.current || keepVisibleRef.current || resizing.current) return;
+      // 与原型一致：鼠标仍在侧栏上时不收起。
+      if (asideRef.current?.matches(":hover")) {
+        hidePending.current = false;
+        return;
+      }
       // 与原型一致：设置弹窗打开期间侧栏保持展开。设置是独立窗口，打开时侧栏会失焦，
-      // 鼠标也可能移到设置窗口上，所以到点时先查询设置窗口是否正在显示。
+      // 鼠标也可能移到设置窗口上，所以到点时先查询设置窗口是否正在显示；
+      // 显示时稍后复查，设置窗口关闭（含最小化）后再收起，不需要鼠标重新移入移出。
       void bridge.isSettingsVisible().then((settingsOpen) => {
-        if (settingsOpen || token !== hideToken.current || keepVisibleRef.current) return;
+        if (token !== hideToken.current || keepVisibleRef.current) return;
+        if (settingsOpen) {
+          hideTimer.current = window.setTimeout(attempt, SETTINGS_POLL_INTERVAL);
+          return;
+        }
+        hidePending.current = false;
         // 与原型一致：侧栏收起时一并收起标签菜单。
         setTagMenuOpen(false);
         void bridge.hideSidebar(currentLayout());
       });
-    }, state.settings.hideDelay);
+    };
+    hideTimer.current = window.setTimeout(attempt, state.settings.hideDelay);
   }, [state.settings.hideDelay, currentLayout]);
 
   const cancelHide = useCallback(() => {
     window.clearTimeout(hideTimer.current);
     hideToken.current += 1;
+    hidePending.current = false;
   }, []);
 
   /* ==================== 拖拽调整侧栏宽度 ==================== */
   // 拖动期只更新本地 CSS 变量并节流调用窗口尺寸，不写数据库：
   // 每帧持久化会触发整棵树重渲染，表现为闪动与交互失效。
-  const resizing = useRef(false);
   const startScreenX = useRef(0);
   const startWidth = useRef(0);
   const latestWidth = useRef(0);
@@ -212,7 +236,9 @@ export function Sidebar() {
     }
     // 松手才把宽度写入设置并落盘一次。
     void store.updateSettings({ width: latestWidth.current });
-  }, []);
+    // 拖动途中指针移出过窗口时，松手后补上推迟的收起。
+    if (hidePending.current) scheduleHide();
+  }, [scheduleHide]);
 
   /* ==================== 过滤后的列表 ==================== */
   const listNotes = useMemo(() => {
@@ -285,15 +311,13 @@ export function Sidebar() {
   }, [composerText]);
 
   /* ==================== 窗口失焦自动收起 ==================== */
+  // 点到侧栏窗口之外与鼠标移出同样触发收起；是否保持展开由到点时的状态决定，
+  // 不在这里提前返回，否则菜单随失焦关闭后就再没有机会收起。
   useEffect(() => {
-    const handleBlur = (): void => {
-      // 打开了浮层或正在编辑/输入时不自动收起，避免点进设置弹窗就消失。
-      if (pinned || editing || composerActive || contextMenu || emojiTarget) return;
-      scheduleHide();
-    };
+    const handleBlur = (): void => scheduleHide();
     window.addEventListener("blur", handleBlur);
     return () => window.removeEventListener("blur", handleBlur);
-  }, [pinned, editing, composerActive, contextMenu, emojiTarget, scheduleHide]);
+  }, [scheduleHide]);
 
   /* ==================== 键盘快捷键 ==================== */
   useEffect(() => {
@@ -522,19 +546,22 @@ export function Sidebar() {
     onInvalidateClick: invalidateCardClick,
   });
 
-  // 与原型 keepVisible 一致：编辑、弹层、菜单、拖动与多选期间都不自动收起。
+  // 与原型 keepVisible 一致：固定、弹层、菜单、拖动与多选期间不自动收起；
+  // 「编辑时保持展开」开启时，编辑记录、整理标签，或新建卡片有未保存内容时也不收起。
+  const draftPending = Boolean(state.draft.text.trim() || state.draft.images.length || state.pendingAttachments);
   const keepVisible = Boolean(
     pinned ||
-      editing ||
-      composerActive ||
       dialogOpen ||
       contextMenu ||
       interactions.busy ||
-      interactions.hasSelection,
+      interactions.hasSelection ||
+      (state.settings.protectEditing && (editing || tagsExpandedId || (composerActive && draftPending))),
   );
   useEffect(() => {
     keepVisibleRef.current = keepVisible;
-  }, [keepVisible]);
+    // 保持展开的条件解除时，若之前已触发过收起（鼠标早已移出或窗口已失焦），补一次收起。
+    if (!keepVisible && hidePending.current) scheduleHide();
+  }, [keepVisible, scheduleHide]);
 
   // 计时回调里使用最新的 beginEdit，避免沿用旧的编辑会话。
   const beginEditRef = useRef(beginEdit);
@@ -800,6 +827,7 @@ export function Sidebar() {
     <>
       <IconSprite />
       <aside
+        ref={asideRef}
         className="sidebar open"
         data-edge={state.settings.edge}
         onMouseEnter={cancelHide}
