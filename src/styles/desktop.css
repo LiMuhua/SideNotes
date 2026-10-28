@@ -450,3 +450,97 @@ body[data-window='settings'] .settings-modal > .modal-header {
   align-items: center;
   gap: 3px;
 }
+
+/* ==================== 编辑焦点与浮层层次 ====================
+ *
+ * 原型中新建卡片始终带外圈光晕，编辑中的卡片只把边框加深一档，两者同时出现时
+ * 视觉重点落在新建卡片上。桌面端调整为「正在输入的地方才强调」：
+ * - 新建卡片保持实线边框与工具栏，未聚焦时去掉光晕，与记录卡片同级；聚焦后才强调。
+ * - 编辑中的卡片使用强调色边框、外圈与投影，其余卡片与新建卡片退后，悬停时恢复。
+ * - 卡片菜单比卡片高一层：边框更深、投影更重，所属卡片同时高亮，便于区分。 */
+
+body[data-window='sidebar'] #note-list > .composer-sticky-slot > #quick-composer.sidebar-composer {
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--line));
+  box-shadow: 0 1px 3px #283e2108;
+  transition:
+    border-color 0.16s,
+    box-shadow 0.16s,
+    opacity 0.16s;
+}
+
+body[data-window='sidebar'] #note-list > .composer-sticky-slot > #quick-composer.sidebar-composer:focus-within,
+body[data-window='sidebar'] #note-list .note-card.is-editing {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--card));
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent),
+    0 12px 28px -12px #293c2559;
+}
+
+body[data-window='sidebar'] #note-list .note-card {
+  transition:
+    border-color 0.16s,
+    box-shadow 0.16s,
+    transform 0.16s,
+    opacity 0.16s;
+}
+
+body[data-window='sidebar'] #note-list.has-editing > .note-card:not(.is-editing),
+body[data-window='sidebar'] #note-list.has-editing > .composer-sticky-slot > #quick-composer.sidebar-composer:not(:focus-within) {
+  opacity: 0.56;
+}
+
+body[data-window='sidebar'] #note-list.has-editing > .note-card:not(.is-editing):hover,
+body[data-window='sidebar'] #note-list.has-editing > .composer-sticky-slot > #quick-composer.sidebar-composer:hover {
+  opacity: 0.92;
+}
+
+/* 打开菜单的卡片：与菜单对应，提示当前操作的是哪一条记录。 */
+body[data-window='sidebar'] #note-list .note-card.is-menu-open {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--card));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.note-context-menu {
+  /* 比白色卡片略灰一档，配合更重的投影浮在卡片之上，接近系统菜单的观感。 */
+  background: color-mix(in srgb, var(--card) 97%, var(--ink));
+  border-color: color-mix(in srgb, var(--ink) 18%, var(--card));
+  box-shadow:
+    0 22px 48px -12px #1720195c,
+    0 8px 20px -8px #17201938,
+    0 0 0 1px #1720190f;
+  backdrop-filter: blur(18px) saturate(1.2);
+  transform-origin: top left;
+  animation: note-menu-pop 120ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+@keyframes note-menu-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-3px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+body[data-theme='dark'] .note-context-menu {
+  background: color-mix(in srgb, var(--card) 86%, #fff);
+  border-color: #ffffff21;
+  box-shadow:
+    0 20px 44px -8px #000000a6,
+    0 6px 14px -4px #00000066;
+}
+
+body[data-theme='dark'] #note-list > .composer-sticky-slot > #quick-composer.sidebar-composer:focus-within,
+body[data-theme='dark'] #note-list .note-card.is-editing {
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent),
+    0 14px 30px -12px #000000b3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .note-context-menu {
+    animation: none;
+  }
+}

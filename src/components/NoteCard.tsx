@@ -21,6 +21,8 @@ export interface NoteCardProps {
   editing: EditSession | null;
   /** 是否处于多选状态。 */
   selected: boolean;
+  /** 记录菜单正为这张卡片打开。 */
+  menuOpen: boolean;
   /** 标签整理模式：显示标签删除按钮。 */
   tagsExpanded: boolean;
   /** 长按待启动排序的视觉反馈。 */
@@ -254,6 +256,7 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
     isEditing ? 'is-editing' : '',
     note.collapsed ? 'is-collapsed' : '',
     props.selected ? 'is-selected' : '',
+    props.menuOpen ? 'is-menu-open' : '',
     props.sortPending ? 'is-sort-pending' : '',
     props.sorting ? 'is-sorting' : '',
     props.sortingMember ? 'is-sorting-member' : '',

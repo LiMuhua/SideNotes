@@ -1130,7 +1130,7 @@ export function Sidebar() {
         <div
           ref={listRef}
           id="note-list"
-          className="note-list"
+          className={editing ? "note-list has-editing" : "note-list"}
           tabIndex={-1}
           role="list"
           aria-label={`${TAB_LABELS[tab]}记录列表`}
@@ -1180,6 +1180,7 @@ export function Sidebar() {
                 note={note}
                 editing={editing}
                 selected={interactions.selected.has(note.id)}
+                menuOpen={contextMenu?.note.id === note.id}
                 tagsExpanded={tagsExpandedId === note.id}
                 sortPending={interactions.pendingId === note.id}
                 sorting={interactions.sortingId === note.id}
