@@ -25,6 +25,8 @@ export interface NoteCardProps {
   selected: boolean;
   /** 记录菜单正为这张卡片打开。 */
   menuOpen: boolean;
+  /** 拖动图片或引用时，这张卡片是放下的目标。 */
+  itemTarget: boolean;
   /** 标签整理模式：显示标签删除按钮。 */
   tagsExpanded: boolean;
   /** 长按待启动排序的视觉反馈。 */
@@ -266,6 +268,7 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
     note.collapsed ? 'is-collapsed' : '',
     props.selected ? 'is-selected' : '',
     props.menuOpen ? 'is-menu-open' : '',
+    props.itemTarget ? 'is-drop-target' : '',
     props.sortPending ? 'is-sort-pending' : '',
     props.sorting ? 'is-sorting' : '',
     props.sortingMember ? 'is-sorting-member' : '',
@@ -389,6 +392,7 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
           <div ref={content} className="note-content markdown-body">
             <Markdown
               text={display.body}
+              sourceMap
               handlers={{
                 onPreviewImage: props.onPreviewImage,
                 onOpenFile: props.onOpenFile,
@@ -402,12 +406,15 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
                 type="button"
                 className="note-image-button"
                 aria-label={`预览图片：${image.name}`}
+                title="点击放大，按住拖到另一张卡片"
+                data-drag-item="image"
+                data-image-id={image.id}
                 onClick={(event) => {
                   event.stopPropagation();
                   props.onPreviewImage(image.data, image.name);
                 }}
               >
-                <img className="note-image" src={image.data} alt={image.name} loading="lazy" />
+                <img className="note-image" src={image.data} alt={image.name} loading="lazy" draggable={false} />
               </button>
             ))}
           </div>

@@ -3,10 +3,12 @@
  *
  * 由 `core/markdown` 解析出的 AST 渲染为 React 元素：不使用
  * `dangerouslySetInnerHTML`，原生 HTML 一律作为文字输出。
+ * 打开 `sourceMap` 时为顶层块标出所占的行、为图片与文件引用标出原文位置，
+ * 供卡片之间拖动引用时定位落点与来源。
  */
 
 import { Fragment, type ReactNode } from 'react';
-import { parseBlocks, type BlockNode, type InlineNode } from '../core/markdown';
+import { parseBlocks, type BlockNode, type InlineNode, type SourceSpan } from '../core/markdown';
 import { fileLabel } from '../core/files';
 import { Icon } from './Icon';
 
@@ -20,8 +22,13 @@ export interface MarkdownHandlers {
   onOpenFile?: (path: string) => void;
 }
 
+/** 可拖动引用的位置标记；未开启 sourceMap 时不输出。 */
+function spanAttributes(span: SourceSpan, map: boolean): Record<string, string | number> {
+  return map ? { 'data-drag-item': 'text', 'data-src-start': span.start, 'data-src-end': span.end } : {};
+}
+
 /** 渲染行内节点。 */
-function renderInline(nodes: InlineNode[], handlers: MarkdownHandlers, keyPrefix = ''): ReactNode[] {
+function renderInline(nodes: InlineNode[], handlers: MarkdownHandlers, keyPrefix = '', map = false): ReactNode[] {
   return nodes.map((node, index) => {
     const key = `${keyPrefix}${index}`;
     switch (node.kind) {
@@ -31,15 +38,15 @@ function renderInline(nodes: InlineNode[], handlers: MarkdownHandlers, keyPrefix
       case 'code':
         return <code key={key}>{node.value}</code>;
       case 'strong':
-        return <strong key={key}>{renderInline(node.children, handlers, `${key}-`)}</strong>;
+        return <strong key={key}>{renderInline(node.children, handlers, `${key}-`, map)}</strong>;
       case 'em':
-        return <em key={key}>{renderInline(node.children, handlers, `${key}-`)}</em>;
+        return <em key={key}>{renderInline(node.children, handlers, `${key}-`, map)}</em>;
       case 'del':
-        return <del key={key}>{renderInline(node.children, handlers, `${key}-`)}</del>;
+        return <del key={key}>{renderInline(node.children, handlers, `${key}-`, map)}</del>;
       case 'link':
         return (
           <a key={key} className="markdown-link" href={node.href} target="_blank" rel="noopener noreferrer">
-            {renderInline(node.children, handlers, `${key}-`)}
+            {renderInline(node.children, handlers, `${key}-`, map)}
           </a>
         );
       case 'image':
@@ -49,12 +56,13 @@ function renderInline(nodes: InlineNode[], handlers: MarkdownHandlers, keyPrefix
             type="button"
             className="markdown-image-button"
             aria-label={`放大图片：${node.alt || '图片'}`}
+            {...spanAttributes(node, map)}
             onClick={(event) => {
               event.stopPropagation();
               handlers.onPreviewImage?.(node.src, node.alt);
             }}
           >
-            <img className="markdown-image" src={node.src} alt={node.alt} loading="lazy" />
+            <img className="markdown-image" src={node.src} alt={node.alt} loading="lazy" draggable={false} />
           </button>
         );
       case 'file':
@@ -64,6 +72,7 @@ function renderInline(nodes: InlineNode[], handlers: MarkdownHandlers, keyPrefix
             type="button"
             className="file-reference"
             title={`${node.path}\n点击校验并打开文件`}
+            {...spanAttributes(node, map)}
             onClick={(event) => {
               event.stopPropagation();
               handlers.onOpenFile?.(node.path);
@@ -79,34 +88,54 @@ function renderInline(nodes: InlineNode[], handlers: MarkdownHandlers, keyPrefix
   });
 }
 
-/** 渲染块级节点。 */
-function renderBlocks(blocks: BlockNode[], handlers: MarkdownHandlers, keyPrefix = ''): ReactNode[] {
+/** 渲染块级节点；`top` 为顶层时才标出所占的行。 */
+function renderBlocks(
+  blocks: BlockNode[],
+  handlers: MarkdownHandlers,
+  keyPrefix = '',
+  map = false,
+  top = true,
+): ReactNode[] {
   return blocks.map((block, index) => {
     const key = `${keyPrefix}${index}`;
+    const lines = map && top ? { 'data-line-start': block.line, 'data-line-end': block.lineEnd } : {};
     switch (block.kind) {
       case 'paragraph':
-        return <p key={key}>{renderInline(block.children, handlers, `${key}-`)}</p>;
+        return (
+          <p key={key} {...lines}>
+            {renderInline(block.children, handlers, `${key}-`, map)}
+          </p>
+        );
       case 'heading': {
         const Tag = `h${Math.min(6, Math.max(1, block.level))}` as 'h1';
-        return <Tag key={key}>{renderInline(block.children, handlers, `${key}-`)}</Tag>;
+        return (
+          <Tag key={key} {...lines}>
+            {renderInline(block.children, handlers, `${key}-`, map)}
+          </Tag>
+        );
       }
       case 'code':
         return (
-          <pre key={key} className="markdown-code">
+          <pre key={key} className="markdown-code" {...lines}>
             <code data-language={block.language || undefined}>{block.value}</code>
           </pre>
         );
       case 'quote':
-        return <blockquote key={key}>{renderBlocks(block.children, handlers, `${key}-`)}</blockquote>;
+        return (
+          <blockquote key={key} {...lines}>
+            {renderBlocks(block.children, handlers, `${key}-`, map, false)}
+          </blockquote>
+        );
       case 'rule':
-        return <hr key={key} />;
+        return <hr key={key} {...lines} />;
       case 'file':
         return (
-          <p key={key}>
+          <p key={key} {...lines}>
             <button
               type="button"
               className="file-reference"
               title={`${block.path}\n点击校验并打开文件`}
+              {...spanAttributes(block, map)}
               onClick={(event) => {
                 event.stopPropagation();
                 handlers.onOpenFile?.(block.path);
@@ -138,15 +167,17 @@ function renderBlocks(blocks: BlockNode[], handlers: MarkdownHandlers, keyPrefix
                 }}
               />
             ) : null}
-            {renderInline(item.children, handlers, `${key}-${itemIndex}-`)}
+            {renderInline(item.children, handlers, `${key}-${itemIndex}-`, map)}
           </li>
         ));
         return block.ordered ? (
-          <ol key={key} start={block.start}>
+          <ol key={key} start={block.start} {...lines}>
             {items}
           </ol>
         ) : (
-          <ul key={key}>{items}</ul>
+          <ul key={key} {...lines}>
+            {items}
+          </ul>
         );
       }
       default:
@@ -160,15 +191,18 @@ export function Markdown({
   text,
   className,
   handlers = {},
+  sourceMap = false,
 }: {
   text: string;
   className?: string;
   handlers?: MarkdownHandlers;
+  /** 标出顶层块所占的行与引用的原文位置，用于拖动引用。 */
+  sourceMap?: boolean;
 }) {
   const blocks = parseBlocks(text);
   return (
     <div className={className ? `markdown-body ${className}` : 'markdown-body'}>
-      {renderBlocks(blocks, handlers)}
+      {renderBlocks(blocks, handlers, '', sourceMap)}
     </div>
   );
 }

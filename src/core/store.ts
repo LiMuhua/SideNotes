@@ -323,6 +323,31 @@ export async function moveNotes(
 }
 
 /** 按撤销信息还原批量修改。 */
+/**
+ * 一次修改多条记录的正文或附件（如把图片从一张卡片移到另一张），返回撤销所需的原值；
+ * 写入失败返回 null，记录保持原样。
+ */
+export async function updateNotes(
+  changes: ReadonlyArray<{ id: string; text?: string; images?: NoteImage[] }>,
+): Promise<BatchUndo | null> {
+  const byId = new Map(changes.map((change) => [change.id, change]));
+  if (!byId.size) return null;
+  const previous = new Map<string, Partial<Note>>();
+  const changedAt = Date.now();
+  const notes = state.notes.map((note) => {
+    const change = byId.get(note.id);
+    if (!change) return note;
+    previous.set(note.id, { text: note.text, images: note.images });
+    return {
+      ...note,
+      ...(change.text !== undefined ? { text: canonicalize(change.text) } : {}),
+      ...(change.images ? { images: change.images } : {}),
+      updatedAt: changedAt,
+    };
+  });
+  return (await persist({ notes })) ? { previous } : null;
+}
+
 export async function restoreNotes(undo: BatchUndo): Promise<boolean> {
   const notes = state.notes.map((note) => {
     const previous = undo.previous.get(note.id);

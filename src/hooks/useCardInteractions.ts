@@ -7,6 +7,10 @@
  * - 在列表空白处拖动框选；Ctrl/⌘ 单击切换选择，Shift 单击连续选择；
  *   有选择时单击卡片切换选择，单击别处清除选择，Ctrl+A 全选当前列表。
  *
+ * - 按住卡片中的图片附件或文件引用（含内嵌图片）并移动，可以拖到另一张卡片里：
+ *   插入线标出落点（图片之间，或正文段落之间），松开后从原卡片移出并提供撤销。
+ * - 拖动途中按 Esc 取消。
+ *
  * 跟随指针的卡片、插入线与框选矩形是挂在 body 上的临时元素；卡片与页签的状态类
  * 经 React 状态下发，避免与 React 渲染互相覆盖。
  */
@@ -27,6 +31,21 @@ const INTERACTIVE = 'button,a,input,textarea,select,[contenteditable="true"]';
 export interface DropTarget {
   id: string;
   after: boolean;
+}
+
+/** 拖动图片附件或正文引用到另一张卡片。 */
+export interface ItemDrop {
+  sourceId: string;
+  targetId: string;
+  /** image：图片附件；text：正文中的文件引用或内嵌图片。 */
+  kind: 'image' | 'text';
+  /** 图片附件的标识。 */
+  imageId?: string;
+  /** 正文引用在来源卡片显示正文中的范围。 */
+  start?: number;
+  end?: number;
+  /** 图片：插入目标附件的序号；正文引用：插入目标显示正文的行号（超出时接在末尾）。 */
+  index: number;
 }
 
 export interface CardInteractionOptions {
@@ -50,6 +69,8 @@ export interface CardInteractionOptions {
   onMove: (ids: string[], destination: TabKey | 'trash') => Promise<boolean>;
   /** 插入到目标记录之前或之后。 */
   onReorder: (ids: Set<string>, targetId: string, after: boolean) => void;
+  /** 把图片附件或正文引用移到另一张卡片。 */
+  onMoveItem: (drop: ItemDrop) => void;
 }
 
 export interface CardInteractions {
@@ -71,6 +92,8 @@ export interface CardInteractions {
   busy: boolean;
   /** 存在选择或处于多选模式。 */
   hasSelection: boolean;
+  /** 拖动图片或引用时指针所在的目标卡片。 */
+  itemTargetId: string | null;
   /** 供事件处理函数同步读取最新状态。 */
   isBusy: () => boolean;
   isSelecting: () => boolean;
@@ -79,7 +102,7 @@ export interface CardInteractions {
 
 /** 一次按压或拖动手势。 */
 interface Gesture {
-  kind: 'sort' | 'frame';
+  kind: 'sort' | 'frame' | 'item';
   eventKind: 'pointer' | 'mouse';
   pointerId: number | undefined;
   pointerType: string;
@@ -106,6 +129,12 @@ interface Gesture {
   guide: HTMLElement | null;
   guideLabel: HTMLElement | null;
   overlay: HTMLElement | null;
+  /** 拖动的图片或引用元素。 */
+  item: HTMLElement | null;
+  itemKind: 'image' | 'text';
+  /** 放下时的目标卡片与插入序号；为空表示当前位置不能放下。 */
+  itemTarget: string;
+  itemIndex: number;
 }
 
 const now = (): number => performance.now();
@@ -155,6 +184,7 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
   const [dragTab, setDragTab] = useState<TabKey | null>(null);
   const [sorting, setSorting] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [itemTargetId, setItemTargetId] = useState<string | null>(null);
 
   // 手势与选择的即时状态：事件处理函数读写这里，再同步到 React 状态用于渲染。
   const tools = useRef({
@@ -169,6 +199,7 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
     scrollFrame: 0,
     drop: '',
     dragTab: '',
+    itemTarget: '',
   });
 
   const commitSelection = useCallback(() => {
@@ -246,6 +277,12 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
       if (key === t.drop) return;
       t.drop = key;
       setDrop(value);
+    };
+
+    const setItemHighlight = (id: string): void => {
+      if (id === t.itemTarget) return;
+      t.itemTarget = id;
+      setItemTargetId(id || null);
     };
 
     const setTabHighlight = (tab: string): void => {
@@ -408,6 +445,85 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
       }
     };
 
+    /**
+     * 拖动图片或引用时计算落点：指针下的另一张卡片中，图片附件之间或正文段落之间离指针最近的位置。
+     * 折叠的卡片与没有图片或正文的卡片放到末尾。
+     */
+    const updateItemTarget = (gesture: Gesture): void => {
+      const guide = gesture.guide;
+      const label = gesture.label;
+      gesture.itemTarget = '';
+      setItemHighlight('');
+      const hit = document.elementFromPoint(gesture.x, gesture.y);
+      const list = opts().listRef.current;
+      const card = hit?.closest<HTMLElement>('.note-card[data-note-id]') ?? null;
+      const note = card ? findNote(card.dataset.noteId ?? '') : undefined;
+      if (!card || !note || !list?.contains(card) || note.id === gesture.id || card.classList.contains('is-editing')) {
+        if (guide) guide.hidden = true;
+        if (label) label.textContent = note?.id === gesture.id ? '拖到另一张卡片上' : '移到另一张卡片上松开';
+        return;
+      }
+      const title = shortTitle(note);
+      const bounds = card.getBoundingClientRect();
+      const content = card.querySelector<HTMLElement>(':scope > .note-content');
+      const collapsed = card.classList.contains('is-collapsed') || !content;
+      const area = content && !collapsed ? content.getBoundingClientRect() : null;
+      let y = area ? area.bottom : bounds.bottom - 8;
+      let index: number;
+      let text: string;
+      if (gesture.itemKind === 'image') {
+        const images = collapsed ? [] : Array.from(content.querySelectorAll<HTMLElement>(':scope > .note-image-button[data-image-id]'));
+        index = images.length ? images.length : note.images.length;
+        text = `放到「${title}」的图片末尾`;
+        for (let position = 0; position < images.length; position += 1) {
+          const rect = images[position].getBoundingClientRect();
+          if (gesture.y < rect.top + rect.height / 2) {
+            index = position;
+            y = rect.top;
+            text = `放在「${title}」第 ${position + 1} 张图片之前`;
+            break;
+          }
+          y = rect.bottom;
+          if (position < images.length - 1) text = `放在「${title}」第 ${position + 1} 张图片之后`;
+        }
+      } else {
+        const blocks = collapsed ? [] : Array.from(content.querySelectorAll<HTMLElement>(':scope > .markdown-body > [data-line-start]'));
+        // 没有段落或放在最后时给一个足够大的行号，由移动逻辑接在正文末尾、标签之前。
+        index = Number.MAX_SAFE_INTEGER;
+        text = `放到「${title}」正文末尾`;
+        for (let position = 0; position < blocks.length; position += 1) {
+          const rect = blocks[position].getBoundingClientRect();
+          if (gesture.y < rect.top + rect.height / 2) {
+            index = Number(blocks[position].dataset.lineStart);
+            y = rect.top;
+            text = position === 0 ? `放到「${title}」正文开头` : `放在「${title}」第 ${position} 段之后`;
+            break;
+          }
+          y = rect.bottom;
+          if (position < blocks.length - 1) {
+            index = Number(blocks[position].dataset.lineEnd);
+            text = `放在「${title}」第 ${position + 1} 段之后`;
+          } else {
+            index = Number.MAX_SAFE_INTEGER;
+          }
+        }
+      }
+      // 正文超出卡片限高时，插入线停在可见范围之内。
+      if (area) y = Math.max(area.top, Math.min(y, area.bottom));
+      gesture.itemTarget = note.id;
+      gesture.itemIndex = index;
+      setItemHighlight(note.id);
+      if (label) label.textContent = `松开后${text}`;
+      if (guide && gesture.guideLabel) {
+        guide.hidden = false;
+        guide.classList.remove('is-invalid');
+        guide.style.left = `${bounds.left + 8}px`;
+        guide.style.width = `${Math.max(0, bounds.width - 16)}px`;
+        guide.style.top = `${y - 10}px`;
+        gesture.guideLabel.textContent = `${text}，松开移动`;
+      }
+    };
+
     /** 更新框选区域及与其相交的卡片。 */
     const updateFrame = (gesture: Gesture): void => {
       const list = opts().listRef.current;
@@ -438,9 +554,10 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
     /** 跟随指针更新反馈及落点。 */
     const paintGesture = (gesture: Gesture): void => {
       if (t.gesture !== gesture || !gesture.active) return;
-      if (gesture.kind === 'sort') {
+      if (gesture.kind === 'sort' || gesture.kind === 'item') {
         if (gesture.ghost) gesture.ghost.style.transform = `translate(${gesture.x + 12}px,${gesture.y + 12}px)`;
-        updateDropTarget(gesture);
+        if (gesture.kind === 'sort') updateDropTarget(gesture);
+        else updateItemTarget(gesture);
       } else {
         updateFrame(gesture);
       }
@@ -504,6 +621,39 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
       t.scrollFrame = window.requestAnimationFrame(scrollDuringGesture);
     };
 
+    /** 长按或移动超过 6 像素后开始拖动图片或引用。 */
+    const activateItem = (gesture: Gesture): void => {
+      if (t.gesture !== gesture || opts().blocked || gesture.active) return;
+      window.clearTimeout(gesture.timer);
+      gesture.active = true;
+      setPendingId(null);
+      window.getSelection()?.removeAllRanges();
+      const item = gesture.item;
+      const name =
+        gesture.itemKind === 'image'
+          ? (item?.querySelector('img')?.getAttribute('alt') ?? '') || '图片'
+          : (item?.textContent ?? '').trim() || item?.querySelector('img')?.getAttribute('alt') || '图片';
+      gesture.ghost = element('div', 'card-drag-ghost batch-drag-ghost item-drag-ghost');
+      gesture.ghost.setAttribute('aria-hidden', 'true');
+      const icon = gesture.itemKind === 'image' || item?.querySelector('img') ? '🖼' : '📄';
+      gesture.label = element('span', '', '拖到另一张卡片上');
+      gesture.ghost.append(element('strong', '', `${icon} ${name.slice(0, 40)}`), gesture.label);
+      gesture.guide = element('div', 'card-drop-guide');
+      gesture.guide.hidden = true;
+      gesture.guideLabel = element('span', 'card-drop-guide-label', '');
+      gesture.guide.append(element('span', 'card-drop-guide-line'), gesture.guideLabel);
+      document.body.append(gesture.ghost, gesture.guide);
+      document.body.classList.add('is-dragging-item');
+      item?.classList.add('is-drag-source');
+      try {
+        if (item && gesture.pointerId !== undefined) item.setPointerCapture(gesture.pointerId);
+      } catch {
+        // 指针已失效时由 pointercancel 清理。
+      }
+      paintGesture(gesture);
+      t.scrollFrame = window.requestAnimationFrame(scrollDuringGesture);
+    };
+
     /** 在空白处拖动超过 4 像素后开始框选。 */
     const activateFrame = (gesture: Gesture): void => {
       gesture.active = true;
@@ -530,8 +680,9 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
         t.lastDragAt = now();
       }
       try {
-        if (gesture.card && gesture.pointerId !== undefined && gesture.card.hasPointerCapture(gesture.pointerId)) {
-          gesture.card.releasePointerCapture(gesture.pointerId);
+        const captured = gesture.kind === 'item' ? gesture.item : gesture.card;
+        if (captured && gesture.pointerId !== undefined && captured.hasPointerCapture(gesture.pointerId)) {
+          captured.releasePointerCapture(gesture.pointerId);
         }
       } catch {
         // 系统可能已经释放指针捕获。
@@ -539,8 +690,10 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
       gesture.ghost?.remove();
       gesture.guide?.remove();
       gesture.overlay?.remove();
+      gesture.item?.classList.remove('is-drag-source');
+      setItemHighlight('');
       opts().trashRef.current?.classList.remove('is-target');
-      document.body.classList.remove('is-sorting-cards', 'is-framing-cards');
+      document.body.classList.remove('is-sorting-cards', 'is-framing-cards', 'is-dragging-item');
       setDropTarget(null);
       setPendingId(null);
       setSortingId(null);
@@ -559,14 +712,19 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
       if (event.button !== 0 || t.gesture || opts().blocked) return;
       const target = targetOf(event);
       const list = opts().listRef.current;
-      if (!target || !list || !list.contains(target) || target.closest(`${INTERACTIVE},.sidebar-composer`)) return;
+      if (!target || !list || !list.contains(target)) return;
+      // 卡片中的图片附件与文件引用：按住移动可拖到另一张卡片，单击仍是放大或打开。
+      const item = target.closest<HTMLElement>('[data-drag-item]');
+      const itemCard = item?.closest<HTMLElement>('.note-card[data-note-id]') ?? null;
+      const draggable = Boolean(item && itemCard && list.contains(itemCard) && !itemCard.classList.contains('is-editing'));
+      if (!draggable && target.closest(`${INTERACTIVE},.sidebar-composer`)) return;
       // 按在列表滚动条上时交给系统滚动。
       const listBounds = list.getBoundingClientRect();
       if (event.clientX >= listBounds.left + list.clientLeft + list.clientWidth) return;
-      const card = target.closest<HTMLElement>('.note-card');
+      const card = draggable ? itemCard : target.closest<HTMLElement>('.note-card');
       const pointer = event as PointerEvent;
       const gesture: Gesture = {
-        kind: card ? 'sort' : 'frame',
+        kind: draggable ? 'item' : card ? 'sort' : 'frame',
         eventKind: event.type === 'pointerdown' ? 'pointer' : 'mouse',
         pointerId: event.type === 'pointerdown' ? pointer.pointerId : undefined,
         pointerType: (event.type === 'pointerdown' && pointer.pointerType) || 'mouse',
@@ -593,10 +751,18 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
         guide: null,
         guideLabel: null,
         overlay: null,
+        item: draggable ? item : null,
+        itemKind: item?.dataset.dragItem === 'image' ? 'image' : 'text',
+        itemTarget: '',
+        itemIndex: 0,
       };
       t.gesture = gesture;
       setBusy(true);
-      if (card) {
+      if (gesture.kind === 'item') {
+        // 按住不动 300 毫秒或移动超过 6 像素开始拖动；不阻止默认行为，单击仍能放大或打开。
+        gesture.timer = window.setTimeout(() => activateItem(gesture), HOLD_DELAY);
+        if (gesture.pointerType === 'mouse') event.preventDefault();
+      } else if (card) {
         setPendingId(gesture.id);
         gesture.timer = window.setTimeout(() => activateSort(gesture), HOLD_DELAY);
         // 鼠标按住卡片时不开始选中文字；触摸保留默认行为以便滚动。
@@ -625,6 +791,7 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
       const distance = Math.hypot(gesture.x - gesture.startX, gesture.y - gesture.startY);
       if (!gesture.active) {
         if (gesture.kind === 'frame' && distance >= 4) activateFrame(gesture);
+        else if (gesture.kind === 'item' && distance >= 6) activateItem(gesture);
         else if (gesture.pointerType === 'touch' && distance > 30) {
           cancelGesture();
           return;
@@ -651,7 +818,20 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
         consume(event);
       }
       const { active, kind, targetId, after, ids, targetMode, targetDestination, originTab } = gesture;
+      const itemDrop: ItemDrop | null =
+        kind === 'item' && gesture.itemTarget
+          ? {
+              sourceId: gesture.id,
+              targetId: gesture.itemTarget,
+              kind: gesture.itemKind,
+              imageId: gesture.item?.dataset.imageId,
+              start: Number(gesture.item?.dataset.srcStart),
+              end: Number(gesture.item?.dataset.srcEnd),
+              index: gesture.itemIndex,
+            }
+          : null;
       cancelGesture();
+      if (active && itemDrop) opts().onMoveItem(itemDrop);
       if (!active || kind !== 'sort') return;
       const moveTo = (destination: TabKey | 'trash'): void => {
         void opts()
@@ -699,8 +879,13 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
       if (target?.closest('.note-card') && (hasSelection() || now() - t.lastDragAt < CLICK_GUARD)) consume(event);
     };
 
-    /** 多选模式下 Ctrl+A 全选当前列表。 */
+    /** 多选模式下 Ctrl+A 全选当前列表；拖动途中按 Esc 取消拖动。 */
     const keyboard = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape' && t.gesture?.active) {
+        consume(event);
+        cancelGesture();
+        return;
+      }
       const target = targetOf(event);
       if (
         hasSelection() &&
@@ -765,6 +950,7 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
     sorting,
     busy,
     hasSelection: mode || selected.size > 0,
+    itemTargetId,
     isBusy,
     isSelecting,
     clearSelection,

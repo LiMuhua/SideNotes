@@ -12,6 +12,12 @@ import { filePath } from './files';
 
 /* ==================== 行内节点 ==================== */
 
+/** 节点在解析输入中的范围 [start, end)，用于在原文中定位可拖动的图片与文件引用。 */
+export interface SourceSpan {
+  start: number;
+  end: number;
+}
+
 /** 行内节点。 */
 export type InlineNode =
   | { kind: 'text'; value: string }
@@ -20,8 +26,8 @@ export type InlineNode =
   | { kind: 'em'; children: InlineNode[] }
   | { kind: 'del'; children: InlineNode[] }
   | { kind: 'link'; href: string; children: InlineNode[] }
-  | { kind: 'image'; src: string; alt: string }
-  | { kind: 'file'; path: string; label: string };
+  | ({ kind: 'image'; src: string; alt: string } & SourceSpan)
+  | ({ kind: 'file'; path: string; label: string } & SourceSpan);
 
 /* ==================== 块级节点 ==================== */
 
@@ -33,15 +39,23 @@ export interface ListItem {
   checked?: boolean;
 }
 
+/** 块级节点所占的行 [line, lineEnd)，行号相对解析输入；卡片拖放按它计算插入位置。 */
+export interface LineSpan {
+  line: number;
+  lineEnd: number;
+}
+
 /** 块级节点。 */
-export type BlockNode =
-  | { kind: 'paragraph'; children: InlineNode[] }
-  | { kind: 'heading'; level: number; children: InlineNode[] }
-  | { kind: 'code'; value: string; language: string }
-  | { kind: 'quote'; children: BlockNode[] }
-  | { kind: 'list'; ordered: boolean; start: number; items: ListItem[] }
-  | { kind: 'rule' }
-  | { kind: 'file'; path: string };
+export type BlockNode = LineSpan &
+  (
+    | { kind: 'paragraph'; children: InlineNode[] }
+    | { kind: 'heading'; level: number; children: InlineNode[] }
+    | { kind: 'code'; value: string; language: string }
+    | { kind: 'quote'; children: BlockNode[] }
+    | { kind: 'list'; ordered: boolean; start: number; items: ListItem[] }
+    | { kind: 'rule' }
+    | ({ kind: 'file'; path: string } & SourceSpan)
+  );
 
 /** 校验允许打开的网络地址。 */
 export function safeLink(value: string): string | null {
@@ -108,8 +122,11 @@ function nextLabelEnd(text: string, start: number): number {
   return -1;
 }
 
-/** 解析行内 Markdown。`depth` 限制嵌套层数，避免恶意输入造成深递归。 */
-export function parseInline(text: string, depth = 0): InlineNode[] {
+/**
+ * 解析行内 Markdown。`depth` 限制嵌套层数，避免恶意输入造成深递归；
+ * `base` 为 `text` 在整段解析输入中的起点，用于记录图片与文件引用的位置。
+ */
+export function parseInline(text: string, depth = 0, base = 0): InlineNode[] {
   const nodes: InlineNode[] = [];
   if (depth > 8) {
     if (text) nodes.push({ kind: 'text', value: text });
@@ -193,7 +210,7 @@ export function parseInline(text: string, depth = 0): InlineNode[] {
             const address = safeImage(destination.target);
             if (address) {
               flush();
-              nodes.push({ kind: 'image', src: address, alt: label });
+              nodes.push({ kind: 'image', src: address, alt: label, start: base + position, end: base + destination.end });
               position = destination.end;
               continue;
             }
@@ -201,13 +218,19 @@ export function parseInline(text: string, depth = 0): InlineNode[] {
             const address = safeLink(destination.target);
             if (path) {
               flush();
-              nodes.push({ kind: 'file', path, label: label.replace(/\\([\\[\]])/g, '$1') });
+              nodes.push({
+                kind: 'file',
+                path,
+                label: label.replace(/\\([\\[\]])/g, '$1'),
+                start: base + position,
+                end: base + destination.end,
+              });
               position = destination.end;
               continue;
             }
             if (address) {
               flush();
-              nodes.push({ kind: 'link', href: address, children: parseInline(label, depth + 1) });
+              nodes.push({ kind: 'link', href: address, children: parseInline(label, depth + 1, base + labelStart) });
               position = destination.end;
               continue;
             }
@@ -227,7 +250,7 @@ export function parseInline(text: string, depth = 0): InlineNode[] {
         const end = closingMarker(marker, start);
         if (end < 0) continue;
         flush();
-        const children = parseInline(text.slice(start, end), depth + 1);
+        const children = parseInline(text.slice(start, end), depth + 1, base + start);
         if (marker === '~~') nodes.push({ kind: 'del', children });
         else if (marker.length === 2) nodes.push({ kind: 'strong', children });
         else nodes.push({ kind: 'em', children });
@@ -308,6 +331,8 @@ export function parseBlocks(text: string, options: ParseOptions = {}): BlockNode
       index += 1;
       continue;
     }
+    // 本块的第一行；各分支先移动 index 再加入块，使 lineEnd 为块后的第一行。
+    const first = index;
 
     const fence = line.match(/^\s{0,3}(`{3,}|~{3,})\s*([^\s`]*)/);
     if (fence) {
@@ -316,7 +341,7 @@ export function parseBlocks(text: string, options: ParseOptions = {}): BlockNode
       const close = new RegExp(`^\\s{0,3}${fence[1][0] === '`' ? '`' : '~'}{${fence[1].length},}\\s*$`);
       while (index < lines.length && !close.test(lines[index])) body.push(lines[index++]);
       if (index < lines.length) index += 1;
-      blocks.push({ kind: 'code', value: body.join('\n'), language: fence[2] || '' });
+      blocks.push({ kind: 'code', value: body.join('\n'), language: fence[2] || '', line: first, lineEnd: index });
       continue;
     }
 
@@ -325,20 +350,27 @@ export function parseBlocks(text: string, options: ParseOptions = {}): BlockNode
       while (index < lines.length && /^(?: {4}|\t)/.test(lines[index])) {
         body.push(lines[index++].replace(/^(?: {4}|\t)/, ''));
       }
-      blocks.push({ kind: 'code', value: body.join('\n'), language: '' });
+      blocks.push({ kind: 'code', value: body.join('\n'), language: '', line: first, lineEnd: index });
       continue;
     }
 
     const heading = line.match(/^\s{0,3}(#{1,6})\s+(.+?)(?:\s+#+)?\s*$/);
     if (heading) {
-      blocks.push({ kind: 'heading', level: heading[1].length, children: parseInline(heading[2]) });
+      const contentStart = (line.match(/^\s{0,3}#{1,6}\s+/) ?? [''])[0].length;
       index += 1;
+      blocks.push({
+        kind: 'heading',
+        level: heading[1].length,
+        children: parseInline(heading[2], 0, lineOffsets[first] + contentStart),
+        line: first,
+        lineEnd: index,
+      });
       continue;
     }
 
     if (/^\s{0,3}(?:(?:\*\s*){3,}|(?:-\s*){3,}|(?:_\s*){3,})$/.test(line)) {
-      blocks.push({ kind: 'rule' });
       index += 1;
+      blocks.push({ kind: 'rule', line: first, lineEnd: index });
       continue;
     }
 
@@ -351,7 +383,12 @@ export function parseBlocks(text: string, options: ParseOptions = {}): BlockNode
         body.push(stripped);
         index += 1;
       }
-      blocks.push({ kind: 'quote', children: parseBlocks(body.join('\n'), { sourceOffsets: offsets }) });
+      blocks.push({
+        kind: 'quote',
+        children: parseBlocks(body.join('\n'), { sourceOffsets: offsets }),
+        line: first,
+        lineEnd: index,
+      });
       continue;
     }
 
@@ -371,34 +408,42 @@ export function parseBlocks(text: string, options: ParseOptions = {}): BlockNode
           // 状态字符位于 "[" 之后一位。
           const taskOffset = lineOffsets[index] + lines[index].length - next[2].length + 1;
           items.push({
-            children: parseInline(task[2]),
+            children: parseInline(task[2], 0, lineOffsets[index] + lines[index].length - task[2].length),
             taskOffset,
             checked: task[1].toLowerCase() === 'x',
           });
         } else {
-          items.push({ children: parseInline(next[2]) });
+          items.push({ children: parseInline(next[2], 0, lineOffsets[index] + lines[index].length - next[2].length) });
         }
         index += 1;
       }
-      blocks.push({ kind: 'list', ordered, start, items });
+      blocks.push({ kind: 'list', ordered, start, items, line: first, lineEnd: index });
       continue;
     }
 
     const path = filePath(line);
     if (path) {
-      blocks.push({ kind: 'file', path });
       index += 1;
+      blocks.push({
+        kind: 'file',
+        path,
+        start: lineOffsets[first],
+        end: lineOffsets[first] + line.length,
+        line: first,
+        lineEnd: index,
+      });
       continue;
     }
 
     // 段落：连续的非块级行以软换行合并。
-    const children = parseInline(line);
+    const children = parseInline(line, 0, lineOffsets[first]);
     index += 1;
     while (index < lines.length && !startsBlock(lines[index])) {
       children.push({ kind: 'text', value: '\n' });
-      children.push(...parseInline(lines[index++]));
+      children.push(...parseInline(lines[index], 0, lineOffsets[index]));
+      index += 1;
     }
-    blocks.push({ kind: 'paragraph', children });
+    blocks.push({ kind: 'paragraph', children, line: first, lineEnd: index });
   }
 
   return blocks;

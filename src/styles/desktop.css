@@ -547,6 +547,23 @@ body[data-window='sidebar'] #note-list.has-editing > .composer-sticky-slot > #qu
   opacity: 0.92;
 }
 
+/* 拖动图片或文件引用：被拖的元素变淡，目标卡片使用原型的投放高亮（is-drop-target），全程显示抓取手势。 */
+body.is-dragging-item,
+body.is-dragging-item * {
+  cursor: grabbing !important;
+}
+
+.is-drag-source {
+  opacity: 0.35;
+}
+
+.item-drag-ghost strong {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* 打开菜单的卡片：与菜单对应，提示当前操作的是哪一条记录。 */
 body[data-window='sidebar'] #note-list .note-card.is-menu-open {
   border-color: color-mix(in srgb, var(--accent) 50%, var(--card));

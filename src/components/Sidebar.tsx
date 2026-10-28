@@ -21,10 +21,11 @@ import { ChangelogDialog } from "./ChangelogDialog";
 import { ConfirmDialog, ImagePreview, ToastRegion } from "./Modal";
 import { useStore } from "../hooks/useStore";
 import { useToast } from "../hooks/useToast";
-import { useCardInteractions } from "../hooks/useCardInteractions";
+import { useCardInteractions, type ItemDrop } from "../hooks/useCardInteractions";
 import * as store from "../core/store";
 import * as bridge from "../core/bridge";
 import { matchesQuery, shouldNudgeTidy, inTab, compareNoteOrder } from "../core/notes";
+import { moveImage, moveReference } from "../core/transfer";
 import { parse, removeTag, tagKey, canonicalize } from "../core/tags";
 import type { EditSession, Note, NoteImage, TabKey } from "../core/types";
 import type { MarkdownEditor } from "../core/editor";
@@ -595,6 +596,55 @@ export function Sidebar() {
     [toast],
   );
 
+  /** 把图片附件或正文引用移到另一张卡片，提示可撤销。 */
+  const moveItem = useCallback(
+    async (drop: ItemDrop) => {
+      const notes = store.getState().notes;
+      const source = notes.find((note) => note.id === drop.sourceId);
+      const target = notes.find((note) => note.id === drop.targetId);
+      if (!source || !target) return;
+      let changes: Array<{ id: string; text?: string; images?: NoteImage[] }> = [];
+      let what = "图片";
+      if (drop.kind === "image" && drop.imageId) {
+        const moved = moveImage(source, target, drop.imageId, drop.index);
+        if (moved) {
+          changes = [
+            { id: source.id, images: moved.sourceImages },
+            { id: target.id, images: moved.targetImages },
+          ];
+        }
+      } else if (drop.kind === "text" && Number.isFinite(drop.start) && Number.isFinite(drop.end)) {
+        const moved = moveReference(source, target, drop.start as number, drop.end as number, drop.index);
+        if (moved) {
+          changes = [
+            { id: source.id, text: moved.sourceText },
+            { id: target.id, text: moved.targetText },
+          ];
+          what = moved.reference.startsWith("!") ? "图片" : "文件引用";
+        }
+      }
+      if (!changes.length) {
+        toast("内容已变化，未能移动，请重试", null, true);
+        return;
+      }
+      const undo = await store.updateNotes(changes);
+      if (!undo) {
+        toast("移动未保存，原记录未改动", null, true);
+        return;
+      }
+      const title = (target.text.split(/\r?\n/).find((line) => line.trim()) ?? "图片记录").trim().slice(0, 18);
+      toast(`已把${what}移到「${title}」`, {
+        label: "撤销",
+        run: () => {
+          void store.restoreNotes(undo).then((ok) => {
+            if (!ok) toast(SAVE_FAILED_MESSAGE, null, true);
+          });
+        },
+      });
+    },
+    [toast],
+  );
+
   const interactions = useCardInteractions({
     listRef,
     trashRef,
@@ -606,6 +656,7 @@ export function Sidebar() {
     onSwitchTab: switchTab,
     onMove: moveDragged,
     onReorder: (ids, targetId, after) => void reorderDragged(ids, targetId, after),
+    onMoveItem: (drop) => void moveItem(drop),
   });
 
   // 与原型 keepVisible 一致：固定、弹层、菜单、拖动与多选期间不自动收起；
@@ -1184,6 +1235,7 @@ export function Sidebar() {
                 editing={editing}
                 selected={interactions.selected.has(note.id)}
                 menuOpen={contextMenu?.note.id === note.id}
+                itemTarget={interactions.itemTargetId === note.id}
                 tagsExpanded={tagsExpandedId === note.id}
                 sortPending={interactions.pendingId === note.id}
                 sorting={interactions.sortingId === note.id}
