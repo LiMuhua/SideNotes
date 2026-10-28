@@ -887,26 +887,6 @@ export function Sidebar() {
           />
         </div>
 
-        {/* Composer */}
-        <Composer
-          text={composerText}
-          images={state.draft.images}
-          busy={state.pendingAttachments > 0}
-          active={composerActive}
-          onChange={setComposerText}
-          onReady={(editor) => {
-            composerEditorRef.current = editor;
-          }}
-          onFocus={() => setComposerActive(true)}
-          onSave={() => void saveComposer(false)}
-          onClose={() => setComposerActive(false)}
-          onAttachImage={() => triggerFileInput("image", "composer")}
-          onAttachFile={() => triggerFileInput("file", "composer")}
-          onRemoveImage={(id) => store.removeDraftImage(id)}
-          onPreviewImage={(src, alt) => setImagePreview({ src, alt })}
-          maxHeight={Math.min(340, window.innerHeight * 0.42)}
-        />
-
         {/* 读库或保存失败提示：读库失败时已暂停保存，导出备份也没有意义。 */}
         {state.loadFailed || state.saveFailed ? (
           <div className="desktop-notice is-error">
@@ -915,7 +895,7 @@ export function Sidebar() {
           </div>
         ) : null}
 
-        {/* 记录列表 */}
+        {/* 记录列表：与原型一致，新建卡片作为粘性首项放在列表内，与记录卡片共用左右边距。 */}
         <div
           id="note-list"
           className="note-list"
@@ -923,6 +903,23 @@ export function Sidebar() {
           role="list"
           aria-label={`${TAB_LABELS[tab]}记录列表`}
         >
+          <Composer
+            text={composerText}
+            images={state.draft.images}
+            busy={state.pendingAttachments > 0}
+            onChange={setComposerText}
+            onReady={(editor) => {
+              composerEditorRef.current = editor;
+            }}
+            onFocus={() => setComposerActive(true)}
+            onSave={() => void saveComposer(false)}
+            onClose={() => setComposerActive(false)}
+            onAttachImage={() => triggerFileInput("image", "composer")}
+            onAttachFile={() => triggerFileInput("file", "composer")}
+            onRemoveImage={(id) => store.removeDraftImage(id)}
+            onPreviewImage={(src, alt) => setImagePreview({ src, alt })}
+            maxHeight={Math.min(340, window.innerHeight * 0.42)}
+          />
           {listNotes.length === 0 ? (
             <div className="empty-state">
               <h3>{query || selectedTag ? "没有匹配的记录" : "暂无记录"}</h3>

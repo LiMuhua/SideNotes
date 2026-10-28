@@ -338,18 +338,6 @@ body[data-window='capture'] .capture-body {
 
 /* ==================== 桌面端新增状态 ==================== */
 
-/* Composer 与下方卡片共用同一条左边缘：
- * 外层 slot 已提供 20px 内边距，内层 composer 不再重复加水平外边距，
- * 否则实际缩进会变成 41px，与卡片对不齐。 */
-body[data-window='sidebar'] .composer-sticky-slot {
-  padding: 0 20px;
-}
-
-body[data-window='sidebar'] .sidebar-composer {
-  margin-left: 0;
-  margin-right: 0;
-}
-
 /* 热键冲突与保存失败的提示沿用原型的警告条外观。 */
 .desktop-notice {
   display: flex;

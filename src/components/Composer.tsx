@@ -15,7 +15,6 @@ export interface ComposerProps {
   images: NoteImage[];
   /** 正在读取附件时禁用保存。 */
   busy: boolean;
-  active: boolean;
   onChange: (text: string) => void;
   onReady: (editor: MarkdownEditor) => void;
   onFocus: () => void;
@@ -34,9 +33,10 @@ export function Composer(props: ComposerProps) {
   const empty = !props.text.trim() && !props.images.length;
   return (
     <div className="composer-sticky-slot">
+      {/* 与原型一致：新建卡片始终处于激活外观（实线边框与工具栏），不随焦点切换成虚线占位。 */}
       <section
         id="quick-composer"
-        className={props.active ? 'sidebar-composer composer-placeholder is-active' : 'sidebar-composer composer-placeholder'}
+        className="sidebar-composer composer-placeholder is-active"
         aria-label="直接记录"
         onFocus={props.onFocus}
       >
