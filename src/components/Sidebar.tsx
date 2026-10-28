@@ -385,7 +385,10 @@ export function Sidebar() {
           void commitEdit();
           return;
         }
-        if (composerActive) {
+        // 与原型一致：按键发生在新建卡片内即保存。保存后焦点仍留在新建卡片里，
+        // 不会再触发 focus，不能只依赖「新建卡片激活」状态，否则接着按 Ctrl+Enter 没有反应。
+        const inComposer = event.target instanceof Element && Boolean(event.target.closest("#quick-composer"));
+        if (composerActive || inComposer) {
           void saveComposer(true);
         }
       }
