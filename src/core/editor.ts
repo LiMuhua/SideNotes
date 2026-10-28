@@ -11,9 +11,23 @@
  * - 可见标记的集合发生变化。
  *
  * 输入法组合期间不重建 DOM，组合结束后一次性吸收浏览器写入的内容。
+ * 快捷键、回车续写与智能粘贴见 markdown-commands。
  */
 
 import { filePath } from './files';
+import {
+  codeLanguage,
+  continueBlock,
+  indentLines,
+  setHeading,
+  smartPaste,
+  toggleInline,
+  toggleLink,
+  toggleList,
+  toggleQuote,
+  wrapCodeBlock,
+  type EditResult,
+} from './markdown-commands';
 
 /** 行模型，保留各行原始换行符与首尾空白。 */
 interface LineModel {
@@ -164,6 +178,8 @@ export class MarkdownEditor {
   /** 当前可见标记的组合，用于判断是否需要重建排版。 */
   private markerState = '';
   private composing = false;
+  /** Ctrl+Shift+V 按下期间的粘贴按纯文本处理，不做格式识别。 */
+  private plainPaste = false;
   /** 组合结束的吸收阶段不追加中间撤销快照。 */
   private compositionEnding = false;
   private destroyed = false;
@@ -276,6 +292,22 @@ export class MarkdownEditor {
     this.activeLine = this.lineAt(caret);
     this.render(this.selection);
     this.notify();
+  }
+
+  /**
+   * 应用编辑命令的结果：原文有变化时记入撤销历史，写回原文、恢复选区并通知变化。
+   * 返回是否已处理；结果为 null 表示命令不适用，由调用方按默认方式处理。
+   */
+  applyEdit(result: EditResult | null, before: SourceRange = this.readSelection()): boolean {
+    if (!result || this.destroyed) return false;
+    const changed = result.value !== this.value;
+    if (changed) this.remember(before);
+    this.value = result.value;
+    this.selection = { start: result.start, end: result.end, direction: 'none' };
+    this.activeLine = this.lineAt(result.end);
+    this.render(this.selection);
+    if (changed) this.notify();
+    return true;
   }
 
   /** 记录当前状态用于撤销。拖放等外部插入在修改前调用。 */
@@ -869,6 +901,9 @@ export class MarkdownEditor {
     }
     if (type === 'insertParagraph' || type === 'insertLineBreak') {
       event.preventDefault();
+      // 回车在列表、引用与代码块中续写；Shift+Enter 只换行。
+      const range = this.readSelection();
+      if (type === 'insertParagraph' && this.applyEdit(continueBlock(this.value, range.start, range.end), range)) return;
       this.replace((this.value.match(/\r\n|\r|\n/) ?? ['\n'])[0]);
       return;
     }
@@ -979,9 +1014,20 @@ export class MarkdownEditor {
       const clipboard = (event as ClipboardEvent).clipboardData;
       if (!clipboard) return;
       event.preventDefault();
-      // 文件由应用的附件流程处理，编辑器只接收纯文本。
+      // 文件由应用的附件流程处理，编辑器只接收文字。
       if (clipboard.files.length) return;
-      this.replace(clipboard.getData('text/plain'));
+      const text = clipboard.getData('text/plain');
+      const range = this.readSelection();
+      if (this.plainPaste) {
+        this.replace(text, range);
+        return;
+      }
+      const pasted = smartPaste(this.value, range.start, range.end, {
+        text,
+        html: clipboard.getData('text/html'),
+        codeLanguage: this.editorLanguage(clipboard.getData('vscode-editor-data')),
+      });
+      if (!this.applyEdit(pasted, range)) this.replace(text, range);
     });
 
     this.listen(this.element, 'copy', (event) => {
@@ -1001,10 +1047,15 @@ export class MarkdownEditor {
       this.replace('', range);
     });
 
+    this.listen(this.element, 'keyup', () => {
+      this.plainPaste = false;
+    });
+
     this.listen(this.element, 'keydown', (event) => {
       const key = event as KeyboardEvent;
       if (this.composing || key.isComposing) return;
       const modifier = key.ctrlKey || key.metaKey;
+      this.plainPaste = modifier && key.shiftKey && key.code === 'KeyV';
       if (modifier && !key.altKey && !key.shiftKey && key.key.toLowerCase() === 'a') {
         key.preventDefault();
         this.setSelectionRange(0, this.value.length, 'forward');
@@ -1012,9 +1063,58 @@ export class MarkdownEditor {
         key.preventDefault();
         this.history(key.key.toLowerCase() === 'y' || key.shiftKey);
       } else if (key.key === 'Tab' && !modifier && !key.altKey) {
+        // Tab 不移出编辑区：编辑中焦点离开卡片会保存并退出编辑。
         key.preventDefault();
-        this.replace('  ');
+        const range = this.readSelection();
+        if (!this.applyEdit(indentLines(this.value, range.start, range.end, key.shiftKey), range) && !key.shiftKey) {
+          this.replace('  ', range);
+        }
+      } else {
+        const command = this.shortcut(key);
+        if (!command) return;
+        key.preventDefault();
+        const range = this.readSelection();
+        this.applyEdit(command(this.value, range.start, range.end), range);
       }
     });
+  }
+
+  /**
+   * 格式快捷键，参照 Typora。按物理按键识别，不受输入法与键盘布局影响。
+   * 返回 null 表示不是格式快捷键。
+   */
+  private shortcut(key: KeyboardEvent): ((value: string, start: number, end: number) => EditResult) | null {
+    const control = key.ctrlKey || key.metaKey;
+    const { code, shiftKey: shift, altKey: alt } = key;
+    if (control && !alt && !shift) {
+      if (code === 'KeyB') return (value, start, end) => toggleInline(value, start, end, '**');
+      if (code === 'KeyI') return (value, start, end) => toggleInline(value, start, end, '*');
+      if (code === 'KeyK') return toggleLink;
+      const heading = code.match(/^Digit([0-6])$/);
+      if (heading) return (value, start, end) => setHeading(value, start, end, Number(heading[1]));
+    }
+    if (control && !alt && shift) {
+      if (code === 'Backquote') return (value, start, end) => toggleInline(value, start, end, '`');
+      if (code === 'KeyQ') return toggleQuote;
+      if (code === 'BracketLeft') return (value, start, end) => toggleList(value, start, end, true);
+      if (code === 'BracketRight') return (value, start, end) => toggleList(value, start, end, false);
+      if (code === 'KeyK') return wrapCodeBlock;
+    }
+    if (alt && !control) {
+      if (code === 'KeyC' && !shift) return (value, start, end) => toggleInline(value, start, end, '`');
+      if (code === 'Digit5' && shift) return (value, start, end) => toggleInline(value, start, end, '~~');
+    }
+    return null;
+  }
+
+  /** 读取 VS Code 写入剪贴板的语言信息；不是来自代码编辑器时返回 null。 */
+  private editorLanguage(raw: string): string | null {
+    if (!raw) return null;
+    try {
+      const data = JSON.parse(raw) as { mode?: unknown };
+      return typeof data.mode === 'string' ? codeLanguage(data.mode) : null;
+    } catch {
+      return null;
+    }
   }
 }
