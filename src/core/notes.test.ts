@@ -11,6 +11,7 @@ import {
   normalizeImage,
   normalizeNote,
   rankTags,
+  suggestTags,
 } from './notes';
 import type { Note } from './types';
 
@@ -186,6 +187,32 @@ describe('标签评分', () => {
     const ranked = rankTags(notes, 'workspace', {}, '', '');
     expect(ranked[0].count).toBe(2);
     expect(ranked[0].pinned).toBe(1);
+  });
+});
+
+describe('标签联想', () => {
+  const notes = [
+    note({ id: 'a', text: '甲 #worklog' }),
+    note({ id: 'b', text: '乙 #worklog' }),
+    note({ id: 'c', text: '丙 #Workflow' }),
+    note({ id: 'd', text: '丁 #webapp' }),
+    note({ id: 'e', text: '戊 #work-old', status: 'trash' }),
+  ];
+
+  it('按前缀匹配，忽略大小写，按评分排序，不含回收站中的标签', () => {
+    expect(suggestTags(notes, {}, 'wo')).toEqual(['worklog', 'Workflow']);
+    expect(suggestTags(notes, {}, 'WO')).toEqual(['worklog', 'Workflow']);
+  });
+
+  it('访问频率高的标签排在前面', () => {
+    const now = 1_800_000_000_000;
+    expect(suggestTags(notes, { workflow: { count: 9, last: now } }, 'wo', [], now)[0]).toBe('Workflow');
+  });
+
+  it('不提示与输入相同的标签和本条记录已有的标签', () => {
+    expect(suggestTags(notes, {}, 'worklog')).toEqual([]);
+    expect(suggestTags(notes, {}, 'wo', ['worklog'])).toEqual(['Workflow']);
+    expect(suggestTags(notes, {}, '')).toEqual([]);
   });
 });
 

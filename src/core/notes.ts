@@ -228,6 +228,37 @@ export interface RankedTag {
   selected: boolean;
 }
 
+/** 标签访问统计，键为 tagKey。 */
+type UsageMap = Record<string, { count: number; last: number }>;
+
+/** 按标签汇总记录：条数、置顶条数与最近修改时间。 */
+function groupTags(notes: Note[]): Map<string, { tag: string; count: number; pinned: number; updated: number }> {
+  const grouped = new Map<string, { tag: string; count: number; pinned: number; updated: number }>();
+  notes.forEach((note) => {
+    parse(note.text).tags.forEach((tag) => {
+      const key = tagKey(tag);
+      const item = grouped.get(key) ?? { tag, count: 0, pinned: 0, updated: 0 };
+      item.count += 1;
+      item.pinned += note.pinned ? 1 : 0;
+      item.updated = Math.max(item.updated, note.updatedAt);
+      grouped.set(key, item);
+    });
+  });
+  return grouped;
+}
+
+/** 标签评分，权重与原型一致：访问频率 40、近期访问 30、记录条数 4、置顶情况 3。 */
+function tagScore(item: { tag: string; count: number; pinned: number }, usage: UsageMap, now: number): number {
+  const record = usage[tagKey(item.tag)] ?? { count: 0, last: 0 };
+  const ageDays = (now - (Number(record.last) || 0)) / 86_400_000;
+  return (
+    40 * Math.log2(1 + (Number(record.count) || 0)) +
+    30 * Math.max(0, 1 - ageDays / 14) +
+    4 * Math.min(item.count, 10) +
+    3 * Math.min(item.pinned, 4)
+  );
+}
+
 /**
  * 汇总标签并按固定权重评分。
  *
@@ -241,19 +272,7 @@ export function rankTags(
   selectedTag: string,
   now = Date.now(),
 ): RankedTag[] {
-  const grouped = new Map<string, { tag: string; count: number; pinned: number; updated: number }>();
-  notes
-    .filter((note) => inTab(note, tab))
-    .forEach((note) => {
-      parse(note.text).tags.forEach((tag) => {
-        const key = tagKey(tag);
-        const item = grouped.get(key) ?? { tag, count: 0, pinned: 0, updated: 0 };
-        item.count += 1;
-        item.pinned += note.pinned ? 1 : 0;
-        item.updated = Math.max(item.updated, note.updatedAt);
-        grouped.set(key, item);
-      });
-    });
+  const grouped = groupTags(notes.filter((note) => inTab(note, tab)));
 
   const tagQueries = Array.from(query.matchAll(/(?:^|\s)#([\p{L}\p{N}_-]+)/gu));
   const tagMode = tagQueries.length > 0;
@@ -261,17 +280,10 @@ export function rankTags(
 
   return Array.from(grouped.values())
     .map<RankedTag>((item) => {
-      const record = usage[tagKey(item.tag)] ?? { count: 0, last: 0 };
-      const ageDays = (now - (Number(record.last) || 0)) / 86_400_000;
-      const score =
-        40 * Math.log2(1 + (Number(record.count) || 0)) +
-        30 * Math.max(0, 1 - ageDays / 14) +
-        4 * Math.min(item.count, 10) +
-        3 * Math.min(item.pinned, 4);
       const key = tagKey(item.tag);
       return {
         ...item,
-        score,
+        score: tagScore(item, usage, now),
         match: Boolean(keyword && (tagMode ? key.startsWith(keyword) : key.includes(keyword))),
         exact: Boolean(keyword && key === keyword),
         selected: Boolean(selectedTag && tagKey(selectedTag) === key),
@@ -286,6 +298,38 @@ export function rankTags(
         b.updated - a.updated ||
         a.tag.localeCompare(b.tag, 'zh-CN'),
     );
+}
+
+/**
+ * 输入标签时的联想候选，按标签菜单的评分排序。
+ *
+ * 取所有未删除记录中以 `prefix` 开头的标签（忽略大小写与全角差异），
+ * 排除与输入完全相同的标签和 `exclude` 中已用过的标签。
+ */
+export function suggestTags(
+  notes: Note[],
+  usage: UsageMap,
+  prefix: string,
+  exclude: Iterable<string> = [],
+  now = Date.now(),
+): string[] {
+  const key = tagKey(prefix);
+  if (!key) return [];
+  const used = new Set(Array.from(exclude, tagKey));
+  return Array.from(groupTags(notes.filter((note) => note.status !== 'trash')).values())
+    .filter((item) => {
+      const candidate = tagKey(item.tag);
+      // 候选的开头与输入逐字对应，补全时才能接在已输入的文字之后。
+      return (
+        candidate !== key &&
+        candidate.startsWith(key) &&
+        !used.has(candidate) &&
+        tagKey(item.tag.slice(0, prefix.length)) === key
+      );
+    })
+    .map((item) => ({ ...item, score: tagScore(item, usage, now) }))
+    .sort((a, b) => b.score - a.score || b.updated - a.updated || a.tag.localeCompare(b.tag, 'zh-CN'))
+    .map((item) => item.tag);
 }
 
 /** 判断记录是否需要显示「展开全文」。 */

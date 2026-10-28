@@ -12,12 +12,14 @@
  *
  * 输入法组合期间不重建 DOM，组合结束后一次性吸收浏览器写入的内容。
  * 快捷键、回车续写与智能粘贴见 markdown-commands。
+ * 输入 #标签 时在光标后以灰字提示已有标签，Tab 选用，上下键切换候选，Esc 关闭。
  */
 
 import { filePath } from './files';
 import {
   codeLanguage,
   continueBlock,
+  inCode,
   indentLines,
   setHeading,
   smartPaste,
@@ -55,7 +57,28 @@ export interface EditorOptions {
   onChange?: (value: string) => void;
   /** 需要应用层处理的图片预览请求。 */
   onPreviewImage?: (src: string, alt: string) => void;
+  /**
+   * 标签联想候选：`prefix` 为 # 之后已输入的部分，`text` 为去掉这个标签后的原文，
+   * 用于排除本条记录已有的标签。按优先顺序返回完整标签名。
+   */
+  tagSuggestions?: (prefix: string, text: string) => string[];
 }
+
+/** 正在显示的标签联想。 */
+interface TagSuggestion {
+  /** 标签位置与已输入内容，用于判断是否仍是同一个标签。 */
+  key: string;
+  /** # 所在位置。 */
+  start: number;
+  /** 光标位置，即已输入部分的末尾。 */
+  caret: number;
+  typed: string;
+  candidates: string[];
+  index: number;
+}
+
+/** 联想最多列出的候选数。 */
+const MAX_TAG_SUGGESTIONS = 9;
 
 /** 按行拆分，保留换行符种类。 */
 function splitLines(value: string): LineModel[] {
@@ -180,6 +203,10 @@ export class MarkdownEditor {
   private composing = false;
   /** Ctrl+Shift+V 按下期间的粘贴按纯文本处理，不做格式识别。 */
   private plainPaste = false;
+  /** 正在显示的标签联想。 */
+  private suggestion: TagSuggestion | null = null;
+  /** 按 Esc 关闭或刚选用过的标签（位置与内容）；内容不变时不再提示。 */
+  private dismissedTag = '';
   /** 组合结束的吸收阶段不追加中间撤销快照。 */
   private compositionEnding = false;
   private destroyed = false;
@@ -355,7 +382,7 @@ export class MarkdownEditor {
     this.element.style.maxHeight = `${value}px`;
   }
 
-  /** 选区变化时同步状态；仅在标记边界或所在行变化时重排。 */
+  /** 选区变化时同步状态；仅在标记边界或所在行变化时重排，否则只更新标签联想。 */
   selectionChanged(): void {
     if (this.destroyed || this.rendering || this.composing || !this.hasFocus()) return;
     this.selection = this.readSelection();
@@ -363,6 +390,7 @@ export class MarkdownEditor {
       this.selection.direction === 'backward' ? this.selection.start : this.selection.end,
     );
     if (this.markerKey() !== this.markerState) this.render(this.selection);
+    else this.refreshSuggestion();
   }
 
   /* ==================== 私有：选区与原文映射 ==================== */
@@ -821,6 +849,110 @@ export class MarkdownEditor {
     this.markerState = this.markerKey();
     this.rendering = false;
     if (saved) this.restoreSelection(saved);
+    // 重排会清掉灰字提示，聚焦时按新的光标位置重新计算。
+    if (this.hasFocus()) this.refreshSuggestion();
+    else this.suggestion = null;
+  }
+
+  /* ==================== 私有：标签联想 ==================== */
+
+  /** 光标停在 #标签 末尾时查找候选；不在标签末尾、在代码中或没有候选时返回 null。 */
+  private findSuggestion(): TagSuggestion | null {
+    const source = this.options.tagSuggestions;
+    if (!source || this.composing || !this.hasFocus()) return null;
+    const { start, end } = this.selection;
+    if (start !== end) return null;
+    const line = splitLines(this.value)[this.lineAt(start)];
+    const column = start - line.start;
+    if (/^[\p{L}\p{N}_-]/u.test(line.text.slice(column))) return null;
+    const match = line.text.slice(0, column).match(/(?:^|[\t ])#([\p{L}\p{N}_-]+)$/u);
+    if (!match) return null;
+    const typed = match[1];
+    const tagStart = start - typed.length - 1;
+    const key = `${tagStart}:${typed}`;
+    if (key === this.dismissedTag || inCode(this.value, start)) return null;
+    const candidates = source(typed, this.value.slice(0, tagStart) + this.value.slice(start)).slice(0, MAX_TAG_SUGGESTIONS);
+    if (!candidates.length) return null;
+    const index = this.suggestion?.key === key ? this.suggestion.index % candidates.length : 0;
+    return { key, start: tagStart, caret: start, typed, candidates, index };
+  }
+
+  /** 按当前光标重新计算并绘制联想；与正在显示的相同时不重绘，避免灰字闪动。 */
+  private refreshSuggestion(): void {
+    const next = this.findSuggestion();
+    const current = this.suggestion;
+    if (
+      next &&
+      current &&
+      next.key === current.key &&
+      next.index === current.index &&
+      next.candidates.join('\n') === current.candidates.join('\n') &&
+      this.element.querySelector('.md-tag-ghost')
+    ) {
+      return;
+    }
+    this.clearGhost();
+    this.suggestion = next;
+    if (next) this.paintGhost(next);
+  }
+
+  /** 移除灰字提示。 */
+  private clearGhost(): void {
+    this.element.querySelectorAll('.md-tag-ghost').forEach((node) => node.remove());
+  }
+
+  /** 在光标处插入灰字：当前候选中尚未输入的部分；候选不止一个时附上序号与切换提示。 */
+  private paintGhost(suggestion: TagSuggestion): void {
+    const tag = suggestion.candidates[suggestion.index];
+    const ghost = element('span', 'md-tag-ghost', tag.slice(suggestion.typed.length));
+    ghost.dataset.mdDecoration = '';
+    ghost.contentEditable = 'false';
+    ghost.setAttribute('aria-hidden', 'true');
+    const count = suggestion.candidates.length;
+    ghost.append(element('span', 'md-tag-ghost-hint', count > 1 ? `${suggestion.index + 1}/${count} ↑↓ · Tab` : 'Tab'));
+    const point = this.domPoint(suggestion.caret);
+    if (point.node.nodeType !== Node.TEXT_NODE) return;
+    const text = point.node as Text;
+    if (point.offset < text.length) text.splitText(point.offset);
+    text.after(ghost);
+    this.restoreSelection(this.selection);
+  }
+
+  /** 选用当前候选，补全标签；之后不再对这个标签提示更长的候选。 */
+  private acceptSuggestion(): void {
+    const suggestion = this.suggestion;
+    if (!suggestion) return;
+    const tag = suggestion.candidates[suggestion.index];
+    const caret = suggestion.start + 1 + tag.length;
+    this.dismissedTag = `${suggestion.start}:${tag}`;
+    this.applyEdit(
+      { value: this.value.slice(0, suggestion.start + 1) + tag + this.value.slice(suggestion.caret), start: caret, end: caret },
+      { start: suggestion.caret, end: suggestion.caret, direction: 'none' },
+    );
+  }
+
+  /**
+   * 联想显示时的按键：Tab 选用，上下键切换候选，Esc 关闭。返回是否已处理。
+   * 只有一个候选时上下键照常移动光标。
+   */
+  private suggestionKey(key: KeyboardEvent): boolean {
+    const suggestion = this.suggestion;
+    if (!suggestion || key.ctrlKey || key.metaKey || key.altKey) return false;
+    const count = suggestion.candidates.length;
+    if (key.key === 'Tab' && !key.shiftKey) {
+      this.acceptSuggestion();
+    } else if ((key.key === 'ArrowDown' || key.key === 'ArrowUp') && count > 1) {
+      suggestion.index = (suggestion.index + (key.key === 'ArrowDown' ? 1 : count - 1)) % count;
+      this.clearGhost();
+      this.paintGhost(suggestion);
+    } else if (key.key === 'Escape') {
+      this.dismissedTag = suggestion.key;
+      this.suggestion = null;
+      this.clearGhost();
+    } else {
+      return false;
+    }
+    return true;
   }
 
   /** 通知原文变化。 */
@@ -1001,6 +1133,9 @@ export class MarkdownEditor {
       this.selectionChanged();
       this.remember(this.readSelection());
       this.composing = true;
+      // 输入法组合期间 DOM 交给浏览器，先撤下灰字，组合结束重排后再提示。
+      this.suggestion = null;
+      this.clearGhost();
     });
 
     this.listen(this.element, 'compositionend', () => {
@@ -1050,6 +1185,20 @@ export class MarkdownEditor {
     this.listen(this.element, 'keyup', () => {
       this.plainPaste = false;
     });
+
+    // 标签联想的按键在窗口捕获阶段处理，先于侧栏「Esc 取消编辑」等全局快捷键。
+    this.listen(
+      window,
+      'keydown',
+      (event) => {
+        const key = event as KeyboardEvent;
+        if (key.target !== this.element || this.composing || key.isComposing) return;
+        if (!this.suggestionKey(key)) return;
+        key.preventDefault();
+        key.stopImmediatePropagation();
+      },
+      true,
+    );
 
     this.listen(this.element, 'keydown', (event) => {
       const key = event as KeyboardEvent;

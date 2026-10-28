@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { Icon } from './Icon';
 import { ConfirmDialog, Modal } from './Modal';
+import { TagInput } from './TagInput';
 import * as store from '../core/store';
 import { isValidTag } from '../core/tags';
 import { useToast } from '../hooks/useToast';
@@ -92,11 +93,12 @@ export function TagManageDialog({ tag, onClose, onRenamed, onRemoved }: TagManag
       }
     >
       <p className="modal-hint">只修改标签，保留记录内容。</p>
-      <input
+      <TagInput
         className="form-control tag-name-input"
         aria-label="标签名称"
         value={name}
-        onChange={(event) => setName(event.target.value)}
+        exclude={[tag]}
+        onValueChange={setName}
         onKeyDown={(event) => {
           if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
           event.preventDefault();

@@ -9,6 +9,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
 import { LiveEditor } from './LiveEditor';
+import { TagInput } from './TagInput';
 import { Markdown, MarkdownInline } from './Markdown';
 import { formatTime, likelyLong, noteTitle } from '../core/notes';
 import { parse } from '../core/tags';
@@ -124,6 +125,9 @@ function TagRow({
   const [renaming, setRenaming] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const input = useRef<HTMLInputElement>(null);
+  // 与原型一致：单击标签延迟筛选，留出双击改名的判断时间。立即筛选会让列表重排，第二下点到别处。
+  const filterTimer = useRef(0);
+  useEffect(() => () => window.clearTimeout(filterTimer.current), []);
 
   useEffect(() => {
     if (renaming) {
@@ -144,16 +148,18 @@ function TagRow({
     <div className={expanded ? 'note-tags tags-expanded' : 'note-tags'}>
       {tags.map((tag) =>
         renaming === tag ? (
-          <input
+          <TagInput
             key={tag}
             ref={input}
             className="tag-rename-input"
             type="text"
             maxLength={40}
             value={draft}
+            exclude={tags.filter((item) => item !== tag)}
+            grow
             aria-label="修改此记录的标签"
-            title="Enter 确认，Esc 取消"
-            onChange={(event) => setDraft(event.target.value)}
+            title="Enter 确认，Esc 取消；输入时 Tab 选用联想的标签"
+            onValueChange={setDraft}
             onClick={(event) => event.stopPropagation()}
             onBlur={commit}
             onKeyDown={(event) => {
@@ -176,11 +182,13 @@ function TagRow({
               className="tag-chip"
               onClick={(event) => {
                 event.stopPropagation();
-                if (!expanded) onFilter(tag);
+                window.clearTimeout(filterTimer.current);
+                if (!expanded) filterTimer.current = window.setTimeout(() => onFilter(tag), 550);
               }}
               onDoubleClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
+                window.clearTimeout(filterTimer.current);
                 setDraft(tag);
                 setRenaming(tag);
               }}

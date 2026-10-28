@@ -11,7 +11,7 @@
 import * as bridge from './bridge';
 import type { StoreChange } from './bridge';
 import { canonicalize, compose, hasTag, parse, removeTag, tagKey } from './tags';
-import { compareNoteOrder, createId, createNote, ensureEmoji, MAX_IMAGES_PER_NOTE } from './notes';
+import { compareNoteOrder, createId, createNote, ensureEmoji, MAX_IMAGES_PER_NOTE, suggestTags } from './notes';
 import { DEFAULT_SETTINGS, normalizeSettings } from './settings';
 import { createSampleNotes, shouldLoadSampleData } from '../debug/sample-notes';
 import type { Draft, Note, NoteImage, NoteStatus, Settings, Snapshot, TabKey, TagUsage } from './types';
@@ -59,6 +59,14 @@ export function subscribe(listener: () => void): () => void {
 }
 
 /** 读取当前状态快照。 */
+/**
+ * 编辑器输入标签时的联想候选：读取当前全部记录与访问统计，
+ * 排除 `text`（本条记录除正在输入的标签之外的原文）中已有的标签。
+ */
+export function tagSuggestions(prefix: string, text: string): string[] {
+  return suggestTags(state.notes, state.tagUsage, prefix, parse(text).tags);
+}
+
 export function getState(): StoreState {
   return state;
 }

@@ -156,6 +156,15 @@ function insideInlineCode(text: string, column: number): boolean {
   return Boolean(open);
 }
 
+/** 位置是否处于代码之中（围栏或缩进代码块、行内代码），标签联想等在此处不生效。 */
+export function inCode(value: string, offset: number): boolean {
+  const lines = splitLines(value);
+  const index = lineIndexAt(lines, offset);
+  const line = lines[index];
+  if (fenceRole(lines, index) || /^(?: {4}|\t)/.test(line.text)) return true;
+  return insideInlineCode(line.text, offset - line.start);
+}
+
 /* ==================== 行内格式 ==================== */
 
 /** 从某位置起向一个方向数连续的同一字符。 */

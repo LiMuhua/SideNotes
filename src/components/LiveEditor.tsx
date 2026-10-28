@@ -7,6 +7,7 @@
 
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { MarkdownEditor } from '../core/editor';
+import * as store from '../core/store';
 
 export interface LiveEditorProps {
   value: string;
@@ -20,6 +21,8 @@ export interface LiveEditorProps {
   onBlur?: () => void;
   /** 实例就绪回调，供外部插入附件或移动光标。 */
   onReady?: (editor: MarkdownEditor) => void;
+  /** 标签联想候选，默认取全部记录中的标签；传 null 关闭联想。 */
+  tagSuggestions?: ((prefix: string, text: string) => string[]) | null;
 }
 
 /** 可编辑的实时 Markdown 面板。 */
@@ -34,14 +37,15 @@ export function LiveEditor({
   onPreviewImage,
   onBlur,
   onReady,
+  tagSuggestions = store.tagSuggestions,
 }: LiveEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const editor = useRef<MarkdownEditor | null>(null);
   // 回调放在 ref 中，使编辑器实例不随回调身份变化而重建。
-  const callbacks = useRef({ onChange, onPreviewImage, onBlur, onReady });
+  const callbacks = useRef({ onChange, onPreviewImage, onBlur, onReady, tagSuggestions });
   // 在 layout effect 中同步回调，避免在渲染阶段直接写 ref。
   useLayoutEffect(() => {
-    callbacks.current = { onChange, onPreviewImage, onBlur, onReady };
+    callbacks.current = { onChange, onPreviewImage, onBlur, onReady, tagSuggestions };
   });
 
   useEffect(() => {
@@ -55,6 +59,7 @@ export function LiveEditor({
       maxHeight,
       onChange: (next) => callbacks.current.onChange(next),
       onPreviewImage: (src, alt) => callbacks.current.onPreviewImage?.(src, alt),
+      tagSuggestions: (prefix, text) => callbacks.current.tagSuggestions?.(prefix, text) ?? [],
     });
     editor.current = instance;
     callbacks.current.onReady?.(instance);
