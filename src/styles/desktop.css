@@ -553,3 +553,35 @@ body[data-window='settings'] .settings-modal .sidebar-settings-primary {
     minmax(max-content, 0.94fr)
     minmax(max-content, 1.04fr);
 }
+
+/* ==================== 版本与更新 ====================
+ * 桌面端只列出当前版本的更新要点：弹窗收窄，内容高度远小于窗口，不出现滚动条。 */
+
+.changelog-modal.modal {
+  width: min(340px, calc(100vw - 32px));
+}
+
+.changelog-modal .version-summary {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.changelog-modal .changelog-entry h3 {
+  margin: 12px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.changelog-modal .changelog-list {
+  margin: 6px 0 0;
+}
+
+.changelog-modal .changelog-list li {
+  margin: 3px 0;
+}
+
+.changelog-modal .update-actions {
+  margin-top: 14px;
+  padding-top: 14px;
+}
