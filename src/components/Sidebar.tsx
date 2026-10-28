@@ -20,6 +20,7 @@ import { TagManageDialog } from "./TagManageDialog";
 import { ConfirmDialog, ImagePreview, ToastRegion } from "./Modal";
 import { useStore } from "../hooks/useStore";
 import { useToast } from "../hooks/useToast";
+import { useCardInteractions } from "../hooks/useCardInteractions";
 import * as store from "../core/store";
 import * as bridge from "../core/bridge";
 import { matchesQuery, shouldNudgeTidy, inTab, compareNoteOrder } from "../core/notes";
@@ -65,12 +66,17 @@ export function Sidebar() {
   const [tagMenuOpen, setTagMenuOpen] = useState(false);
   const [managingTag, setManagingTag] = useState<string | null>(null);
 
-  /* ==================== 拖排序多选（占位：下一步迭代实现） ==================== */
-  const sortPendingId: string | null = null;
-  const sortingIds = new Set<string>();
-  const selectedIds = new Set<string>();
-  const dropHints: Record<string, "before" | "after"> = {};
-  const dragTarget: string | null = null;
+  /* ==================== 单击编辑（对应原型 editCard 的延迟编辑） ==================== */
+  // 单击后延迟开始编辑，留出双击复制与长按拖动的判断时间；任何手势都会让计时失效。
+  const clickTimer = useRef(0);
+  const clickEpoch = useRef(0);
+  const invalidateCardClick = useCallback(() => {
+    window.clearTimeout(clickTimer.current);
+    clickTimer.current = 0;
+    clickEpoch.current += 1;
+  }, []);
+  const listRef = useRef<HTMLDivElement>(null);
+  const trashRef = useRef<HTMLDivElement>(null);
 
   /* ==================== 鼠标移出收起 ==================== */
   const hideTimer = useRef<number>(0);
@@ -91,12 +97,8 @@ export function Sidebar() {
   const dialogOpen = Boolean(trashTarget || managingTag || imagePreview || emojiTarget);
   // 卡片菜单与对话框渲染在侧栏元素之外，鼠标移上去就会触发侧栏的 mouseleave。
   // 与原型的 keepVisible 一致：打开期间不安排收起，计时结束时再按最新状态判断一次，
-  // 避免先移出侧栏、随后才打开对话框时仍被收起。
-  const keepVisible = Boolean(pinned || editing || composerActive || dialogOpen || contextMenu);
-  const keepVisibleRef = useRef(keepVisible);
-  useEffect(() => {
-    keepVisibleRef.current = keepVisible;
-  }, [keepVisible]);
+  // 避免先移出侧栏、随后才打开对话框时仍被收起。实际值在卡片手势之后计算（见下方）。
+  const keepVisibleRef = useRef(false);
 
   const scheduleHide = useCallback(() => {
     if (keepVisibleRef.current) return;
@@ -438,6 +440,146 @@ export function Sidebar() {
     [toast],
   );
 
+  /* ==================== 卡片长按排序与多选（对应原型 interactions.js） ==================== */
+
+  /** 切换页签：清空搜索与标签筛选，页签按钮与拖动停留共用。 */
+  const switchTab = useCallback((next: TabKey) => {
+    setTab(next);
+    setQuery("");
+    setSearchOpen(false);
+    setSelectedTag("");
+    setTagMenuOpen(false);
+  }, []);
+
+  /** 把拖动的记录移到页签或回收站，提示可撤销，对应原型 moveRecords。 */
+  const moveDragged = useCallback(
+    async (ids: string[], destination: TabKey | "trash") => {
+      const undo = await store.moveNotes(ids, destination);
+      if (!undo) {
+        toast("移动未保存，请重试", null, true);
+        return false;
+      }
+      const message =
+        destination === "trash"
+          ? "已移入回收站"
+          : destination === "archive"
+            ? "已移到归档"
+            : destination === "pinned"
+              ? "已移到置顶"
+              : "已移到工作区";
+      toast(`${message} ${ids.length} 条记录`, {
+        label: "撤销",
+        run: () => {
+          void store.restoreNotes(undo);
+        },
+      });
+      return true;
+    },
+    [toast],
+  );
+
+  /** 把拖动的记录插入目标之前或之后，提示可撤销，对应原型 reorder。 */
+  const reorderDragged = useCallback(
+    async (ids: Set<string>, targetId: string, after: boolean) => {
+      const count = store.getState().notes.filter((note) => ids.has(note.id) && note.status !== "trash").length;
+      const undo = await store.reorderNotes(ids, targetId, after);
+      if (!undo) {
+        toast("排序未保存，原顺序保持不变", null, true);
+        return;
+      }
+      toast(`已移动 ${count} 条记录`, {
+        label: "撤销",
+        run: () => {
+          void store.restoreNotes(undo);
+        },
+      });
+    },
+    [toast],
+  );
+
+  const interactions = useCardInteractions({
+    listRef,
+    trashRef,
+    visibleNotes: listNotes,
+    notes: state.notes,
+    tab,
+    viewKey: `${tab}\u0000${query}\u0000${selectedTag}`,
+    blocked: Boolean(editing) || dialogOpen || tagsExpandedId !== null,
+    onSwitchTab: switchTab,
+    onMove: moveDragged,
+    onReorder: (ids, targetId, after) => void reorderDragged(ids, targetId, after),
+    onInvalidateClick: invalidateCardClick,
+  });
+
+  // 与原型 keepVisible 一致：编辑、弹层、菜单、拖动与多选期间都不自动收起。
+  const keepVisible = Boolean(
+    pinned ||
+      editing ||
+      composerActive ||
+      dialogOpen ||
+      contextMenu ||
+      interactions.busy ||
+      interactions.hasSelection,
+  );
+  useEffect(() => {
+    keepVisibleRef.current = keepVisible;
+  }, [keepVisible]);
+
+  // 计时回调里使用最新的 beginEdit，避免沿用旧的编辑会话。
+  const beginEditRef = useRef(beginEdit);
+  useEffect(() => {
+    beginEditRef.current = beginEdit;
+  }, [beginEdit]);
+
+  /** 单击卡片：延迟开始编辑，期间的双击、长按或多选会让它失效。 */
+  const handleListClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (event.defaultPrevented || interactions.isBusy() || interactions.isSelecting() || tagsExpandedId) return;
+      const target = event.target as HTMLElement;
+      if (target.closest('button,a,input,textarea,select,[contenteditable="true"]')) return;
+      const card = target.closest<HTMLElement>(".note-card");
+      if (!card || card.classList.contains("is-editing")) return;
+      const id = card.dataset.noteId;
+      window.clearTimeout(clickTimer.current);
+      const epoch = clickEpoch.current;
+      clickTimer.current = window.setTimeout(() => {
+        if (epoch !== clickEpoch.current || interactions.isBusy()) return;
+        const note = store.getState().notes.find((item) => item.id === id);
+        if (note) beginEditRef.current(note);
+      }, 550);
+    },
+    [interactions, tagsExpandedId],
+  );
+
+  /** 双击卡片复制内容，对应原型 copyCard。 */
+  const handleListDoubleClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (event.defaultPrevented || interactions.isBusy() || interactions.isSelecting()) return;
+      const target = event.target as HTMLElement;
+      if (target.closest('button,a,input,textarea,select,[contenteditable="true"]')) return;
+      const card = target.closest<HTMLElement>(".note-card");
+      if (!card || card.classList.contains("is-editing")) return;
+      invalidateCardClick();
+      event.preventDefault();
+      const note = store.getState().notes.find((item) => item.id === card.dataset.noteId);
+      if (note) void handleCopyNote(note);
+    },
+    [interactions, invalidateCardClick, handleCopyNote],
+  );
+
+  /** 键盘焦点在卡片上时 Enter 或空格开始编辑。 */
+  const handleListKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const target = event.target as HTMLElement;
+      if (!target.matches(".note-card")) return;
+      event.preventDefault();
+      const note = store.getState().notes.find((item) => item.id === target.dataset.noteId);
+      if (note) beginEdit(note);
+    },
+    [beginEdit],
+  );
+
   const handleMenuCommand = useCallback(
     async (note: Note, command: MenuCommand) => {
       setContextMenu(null);
@@ -720,16 +862,10 @@ export function Sidebar() {
             <button
               type="button"
               role="tab"
-              className={tab === "workspace" ? "tab active" : "tab"}
+              className={`tab${tab === "workspace" ? " active" : ""}${interactions.dragTab === "workspace" ? " is-drag-target" : ""}`}
               data-tab="workspace"
               aria-selected={tab === "workspace"}
-              onClick={() => {
-                setTab("workspace");
-                setQuery("");
-                setSearchOpen(false);
-                setSelectedTag("");
-                setTagMenuOpen(false);
-              }}
+              onClick={() => switchTab("workspace")}
             >
               工作区
               <span data-count="workspace">{tabCounts.workspace}</span>
@@ -737,16 +873,10 @@ export function Sidebar() {
             <button
               type="button"
               role="tab"
-              className={tab === "pinned" ? "tab active" : "tab"}
+              className={`tab${tab === "pinned" ? " active" : ""}${interactions.dragTab === "pinned" ? " is-drag-target" : ""}`}
               data-tab="pinned"
               aria-selected={tab === "pinned"}
-              onClick={() => {
-                setTab("pinned");
-                setQuery("");
-                setSearchOpen(false);
-                setSelectedTag("");
-                setTagMenuOpen(false);
-              }}
+              onClick={() => switchTab("pinned")}
             >
               <Icon name="pin" /> 置顶
               <span data-count="pinned">{tabCounts.pinned}</span>
@@ -754,16 +884,10 @@ export function Sidebar() {
             <button
               type="button"
               role="tab"
-              className={tab === "archive" ? "tab active" : "tab"}
+              className={`tab${tab === "archive" ? " active" : ""}${interactions.dragTab === "archive" ? " is-drag-target" : ""}`}
               data-tab="archive"
               aria-selected={tab === "archive"}
-              onClick={() => {
-                setTab("archive");
-                setQuery("");
-                setSearchOpen(false);
-                setSelectedTag("");
-                setTagMenuOpen(false);
-              }}
+              onClick={() => switchTab("archive")}
             >
               <Icon name="archive" /> 归档
               <span data-count="archive">{tabCounts.archive}</span>
@@ -897,11 +1021,15 @@ export function Sidebar() {
 
         {/* 记录列表：与原型一致，新建卡片作为粘性首项放在列表内，与记录卡片共用左右边距。 */}
         <div
+          ref={listRef}
           id="note-list"
           className="note-list"
           tabIndex={-1}
           role="list"
           aria-label={`${TAB_LABELS[tab]}记录列表`}
+          onClick={handleListClick}
+          onDoubleClick={handleListDoubleClick}
+          onKeyDown={handleListKeyDown}
         >
           <Composer
             text={composerText}
@@ -943,12 +1071,14 @@ export function Sidebar() {
                 key={note.id}
                 note={note}
                 editing={editing}
-                selected={selectedIds.has(note.id)}
+                selected={interactions.selected.has(note.id)}
                 tagsExpanded={tagsExpandedId === note.id}
-                sortPending={sortPendingId === note.id}
-                sorting={sortingIds.has(note.id)}
-                dropHint={dropHints[note.id] ?? null}
-                dropTarget={dragTarget === note.id}
+                sortPending={interactions.pendingId === note.id}
+                sorting={interactions.sortingId === note.id}
+                sortingMember={interactions.memberIds.has(note.id)}
+                dropHint={
+                  interactions.drop?.id === note.id ? (interactions.drop.after ? "after" : "before") : null
+                }
                 onEditChange={(text) => setEditing((prev) => (prev ? { ...prev, text } : prev))}
                 onEditReady={(editor) => {
                   editorRef.current = editor;
@@ -1031,6 +1161,19 @@ export function Sidebar() {
             </button>
           </span>
         </footer>
+
+        {/* 拖动时出现的回收站投放区，对应原型 mountDragTargets。 */}
+        <div
+          ref={trashRef}
+          id="drag-trash-zone"
+          className="drag-trash-zone"
+          role="status"
+          aria-label="拖放到这里移入回收站"
+          aria-hidden={!interactions.sorting}
+        >
+          <Icon name="trash" />
+          <span className="drag-trash-label">移入回收站</span>
+        </div>
 
         <ToastRegion />
       </aside>

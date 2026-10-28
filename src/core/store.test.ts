@@ -197,6 +197,25 @@ describe('状态仓库', () => {
     expect(await reorderNotes(new Set(['note-1']), 'note-1', false)).toBeNull();
   });
 
+  it('按列表显示顺序计算落点，与存储顺序无关', async () => {
+    // 存储顺序与显示顺序相反：显示为 a（最新）、b、c。
+    resetForTest({
+      notes: [
+        note({ id: 'c', createdAt: 1000 }),
+        note({ id: 'b', createdAt: 2000 }),
+        note({ id: 'a', createdAt: 3000 }),
+        note({ id: 'x', createdAt: 500 }),
+      ],
+      ready: true,
+    });
+    await reorderNotes(new Set(['x']), 'b', true);
+    const shown = getState()
+      .notes.slice()
+      .sort((left, right) => (left.order ?? 0) - (right.order ?? 0))
+      .map((item) => item.id);
+    expect(shown).toEqual(['a', 'b', 'x', 'c']);
+  });
+
   it('跨组落位继承目标组的置顶状态', async () => {
     resetForTest({
       notes: [note({ id: 'pinned-note', pinned: true }), note({ id: 'plain-note', pinned: false })],

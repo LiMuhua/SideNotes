@@ -25,12 +25,12 @@ export interface NoteCardProps {
   tagsExpanded: boolean;
   /** 长按待启动排序的视觉反馈。 */
   sortPending: boolean;
-  /** 正在被拖动。 */
+  /** 被按住拖动的卡片。 */
   sorting: boolean;
+  /** 随本次拖动一起移动的卡片。 */
+  sortingMember: boolean;
   /** 拖动落点提示。 */
   dropHint: 'before' | 'after' | null;
-  /** 拖入内容的高亮。 */
-  dropTarget: boolean;
 
   onEditChange: (text: string) => void;
   onEditReady: (editor: MarkdownEditor) => void;
@@ -256,7 +256,7 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
     props.selected ? 'is-selected' : '',
     props.sortPending ? 'is-sort-pending' : '',
     props.sorting ? 'is-sorting' : '',
-    props.dropTarget ? 'is-drop-target' : '',
+    props.sortingMember ? 'is-sorting-member' : '',
     props.dropHint === 'before' ? 'drop-before' : '',
     props.dropHint === 'after' ? 'drop-after' : '',
     truncated && !note.collapsed ? 'is-truncated' : '',

@@ -11,7 +11,7 @@
 import * as bridge from './bridge';
 import type { StoreChange } from './bridge';
 import { canonicalize, compose, hasTag, parse, removeTag, tagKey } from './tags';
-import { createId, createNote, ensureEmoji, MAX_IMAGES_PER_NOTE } from './notes';
+import { compareNoteOrder, createId, createNote, ensureEmoji, MAX_IMAGES_PER_NOTE } from './notes';
 import { DEFAULT_SETTINGS, normalizeSettings } from './settings';
 import { createSampleNotes, shouldLoadSampleData } from '../debug/sample-notes';
 import type { Draft, Note, NoteImage, NoteStatus, Settings, Snapshot, TabKey, TagUsage } from './types';
@@ -336,14 +336,15 @@ export async function reorderNotes(
   const target = state.notes.find((note) => note.id === targetId);
   if (!target || ids.has(targetId)) return null;
 
+  // 与原型 reorder 一致：按显示顺序计算落点，否则数组中的存储顺序与列表顺序不同时会放错位置。
   const moving = state.notes
     .filter((note) => ids.has(note.id) && note.status !== 'trash')
-    .sort((a, b) => (a.pinned === b.pinned ? 0 : a.pinned ? -1 : 1));
+    .sort((a, b) => (a.pinned === b.pinned ? 0 : a.pinned ? -1 : 1) || compareNoteOrder(a, b));
   if (!moving.length) return null;
 
-  const group = state.notes.filter(
-    (note) => note.status === target.status && note.pinned === target.pinned && !ids.has(note.id),
-  );
+  const group = state.notes
+    .filter((note) => note.status === target.status && note.pinned === target.pinned && !ids.has(note.id))
+    .sort(compareNoteOrder);
   const index = group.findIndex((note) => note.id === targetId);
   if (index < 0) return null;
   group.splice(index + (after ? 1 : 0), 0, ...moving);
