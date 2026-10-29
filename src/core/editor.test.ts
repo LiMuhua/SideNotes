@@ -185,3 +185,98 @@ describe('实时 Markdown 编辑器', () => {
     expect(editor.element.classList.contains('is-empty')).toBe(false);
   });
 });
+
+/** 派发一次输入前事件，模拟删除或输入。 */
+function input(editor: MarkdownEditor, inputType: string, data: string | null = null): void {
+  editor.element.dispatchEvent(new InputEvent('beforeinput', { inputType, data, bubbles: true, cancelable: true }));
+}
+
+/** 派发复制或剪切事件，返回写入剪贴板的文字。 */
+function clip(editor: MarkdownEditor, type: 'copy' | 'cut'): string {
+  let written = '';
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'clipboardData', {
+    value: {
+      setData: (_format: string, value: string) => {
+        written = value;
+      },
+    },
+  });
+  editor.element.dispatchEvent(event);
+  return written;
+}
+
+/** 当前隐藏的格式标记数。 */
+function hiddenMarkers(editor: MarkdownEditor): number {
+  return editor.element.querySelectorAll('.md-syntax.is-hidden[data-md-group-start]').length;
+}
+
+describe('选区与链接原文', () => {
+  // 0:看 1:空格 2:[ 3:文 4:档 5:] 6:( 7–25:地址 26:) 27:空格 28:结 29:束
+  const linked = '看 [文档](https://example.com) 结束';
+
+  beforeEach(() => {
+    document.body.replaceChildren();
+  });
+
+  it('在展开的链接原文里扩选或选词时，标记保持展开', () => {
+    const { editor } = mount(linked);
+    caretAt(editor, 12);
+    expect(hiddenMarkers(editor)).toBe(0);
+    editor.setSelectionRange(12, 20, 'forward');
+    expect(hiddenMarkers(editor)).toBe(0);
+    editor.setSelectionRange(8, 12, 'backward');
+    expect(hiddenMarkers(editor)).toBe(0);
+  });
+
+  it('从链接之外开始的选区与全选保持渲染效果', () => {
+    const { editor } = mount(linked);
+    editor.element.focus();
+    editor.setSelectionRange(0, 4, 'forward');
+    expect(hiddenMarkers(editor)).toBe(2);
+    editor.setSelectionRange(0, linked.length, 'forward');
+    expect(hiddenMarkers(editor)).toBe(2);
+  });
+
+  it('选中整个链接（含渲染出的文字）删除时，链接原文一起删除', () => {
+    const { editor } = mount(linked);
+    editor.element.focus();
+    editor.setSelectionRange(1, 5, 'forward');
+    input(editor, 'deleteContentBackward');
+    expect(editor.getValue()).toBe('看 结束');
+  });
+
+  it('只选中链接的一部分时保留隐藏的标记，只删除看得见的文字', () => {
+    const { editor } = mount(linked);
+    editor.element.focus();
+    editor.setSelectionRange(4, 28, 'backward');
+    input(editor, 'deleteContentForward');
+    expect(editor.getValue()).toBe('看 [文](https://example.com)结束');
+  });
+
+  it('选区拆开隐藏标记时输入只替换看得见的文字', () => {
+    const { editor } = mount(linked);
+    editor.element.focus();
+    editor.setSelectionRange(4, 28, 'backward');
+    input(editor, 'insertText', '本');
+    expect(editor.getValue()).toBe('看 [文本](https://example.com)结束');
+  });
+
+  it('复制与剪切按所见内容：完整选中的链接保留原文，部分选中时不带隐藏标记', () => {
+    const { editor } = mount(linked);
+    editor.element.focus();
+    editor.setSelectionRange(1, 5, 'forward');
+    expect(clip(editor, 'copy')).toBe(' [文档](https://example.com)');
+    editor.setSelectionRange(4, 28, 'backward');
+    expect(clip(editor, 'cut')).toBe('档 ');
+    expect(editor.getValue()).toBe('看 [文](https://example.com)结束');
+  });
+
+  it('展开的标记按原文删除', () => {
+    const { editor } = mount(linked);
+    caretAt(editor, 12);
+    editor.setSelectionRange(7, 26, 'backward');
+    input(editor, 'deleteContentBackward');
+    expect(editor.getValue()).toBe('看 [文档]() 结束');
+  });
+});

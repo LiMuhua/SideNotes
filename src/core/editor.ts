@@ -3,7 +3,9 @@
  *
  * 原文是唯一数据源：可编辑 DOM 只是原文的一种呈现，所有修改都先作用于原文，
  * 再重新排版并恢复选区。光标进入被标记包裹的内容时显示完整原始标记，
- * 其余内容保持渲染效果。
+ * 其余内容保持渲染效果；选中文字时按选区的起点（锚点）判断，在展开的原文里拖动或按 Shift 扩选，
+ * 标记保持展开。删除或改写选中的文字时按所见内容处理：完整选中一段格式的文字即连同隐藏标记一起删除，
+ * 只选中一部分时保留隐藏的标记，不留下半截语法。
  *
  * 排版只在以下时机重建，避免正文内移动光标造成闪烁：
  * - 原文变化；
@@ -62,6 +64,15 @@ export interface EditorOptions {
    * 用于排除本条记录已有的标签。按优先顺序返回完整标签名。
    */
   tagSuggestions?: (prefix: string, text: string) => string[];
+}
+
+/** 一段隐藏的成对标记（行内代码、强调、链接）：分组范围、内容范围与各个标记的位置。 */
+interface HiddenGroup {
+  start: number;
+  end: number;
+  contentStart: number;
+  contentEnd: number;
+  markers: Array<[number, number]>;
 }
 
 /** 正在显示的标签联想。 */
@@ -491,52 +502,108 @@ export class MarkdownEditor {
     }
   }
 
-  /**
-   * 把完整选中的格式内容扩展为成对原文。
-   *
-   * 浏览器复制可见文本时会省略隐藏的开闭标记；此处按分组范围补齐，
-   * 使「完整复制链接保留左方括号」等情形与原型一致。
-   */
-  private clipboardRange(range: SourceRange = this.readSelection()): SourceRange {
-    const result = { ...range };
-    if (result.start === result.end) return result;
-    const groups = new Map<
-      string,
-      { start: number; end: number; contentStart: number; contentEnd: number }
-    >();
-    for (const node of Array.from(this.element.querySelectorAll<HTMLElement>('[data-md-group-start]'))) {
+  /** 当前隐藏的成对标记，按分组从内到外排列：完整选中链接中的加粗文字时，两层标记一并处理。 */
+  private hiddenGroups(): HiddenGroup[] {
+    const groups = new Map<string, HiddenGroup>();
+    for (const node of Array.from(
+      this.element.querySelectorAll<HTMLElement>('.md-syntax.is-hidden[data-md-group-start]'),
+    )) {
       const start = Number(node.dataset.mdGroupStart);
       const end = Number(node.dataset.mdGroupEnd);
+      const markerStart = Number(node.dataset.mdStart);
+      const markerEnd = Number(node.dataset.mdEnd);
       const key = `${start}:${end}`;
-      const group = groups.get(key) ?? { start, end, contentStart: start, contentEnd: end };
-      if (Number(node.dataset.mdStart) === start) group.contentStart = Number(node.dataset.mdEnd);
-      if (Number(node.dataset.mdEnd) === end) group.contentEnd = Number(node.dataset.mdStart);
+      const group = groups.get(key) ?? { start, end, contentStart: start, contentEnd: end, markers: [] };
+      if (markerStart === start) group.contentStart = markerEnd;
+      if (markerEnd === end) group.contentEnd = markerStart;
+      group.markers.push([markerStart, markerEnd]);
       groups.set(key, group);
     }
-    // 从内到外处理：完整选中链接中的加粗文字时，一并保留两层标记。
-    const ordered = Array.from(groups.values()).sort(
-      (left, right) => left.end - left.start - (right.end - right.start),
-    );
-    for (const group of ordered) {
-      if (
-        group.contentStart < group.contentEnd &&
-        result.start <= group.contentStart &&
-        result.end >= group.contentEnd &&
-        result.start < group.end &&
-        result.end > group.start
-      ) {
-        result.start = Math.min(result.start, group.start);
-        result.end = Math.max(result.end, group.end);
+    return Array.from(groups.values()).sort((left, right) => left.end - left.start - (right.end - right.start));
+  }
+
+  /**
+   * 按所见内容换算选区：返回实际处理的原文范围，以及其中必须保留的隐藏标记。
+   *
+   * 隐藏的标记看不见，删除或改写选中的文字时不能只删掉其中一半，否则会留下 `](地址)` 这样的残缺语法：
+   * - `expand` 为真（删除、剪切、复制）时，完整选中一段格式的文字即视为选中整段，连同标记一起处理，
+   *   使「选中整个链接删除」删掉全部原文、「完整复制链接」保留方括号，与原型一致；
+   * - 选区只覆盖一段格式的一部分时，保留落在选区里的隐藏标记，只处理可见的文字。
+   * 已展开的标记用户看得见，照常按原文处理。
+   */
+  private visibleSpan(range: SourceRange, expand: boolean): { start: number; end: number; kept: Array<[number, number]> } {
+    let { start, end } = range;
+    if (start === end) return { start, end, kept: [] };
+    const groups = this.hiddenGroups();
+    if (expand) {
+      for (const group of groups) {
+        if (
+          group.contentStart < group.contentEnd &&
+          start <= group.contentStart &&
+          end >= group.contentEnd &&
+          start < group.end &&
+          end > group.start
+        ) {
+          start = Math.min(start, group.start);
+          end = Math.max(end, group.end);
+        }
       }
     }
-    return result;
+    const kept: Array<[number, number]> = [];
+    for (const group of groups) {
+      // 整段格式都在范围内时，标记随内容一起处理。
+      if (group.start >= start && group.end <= end) continue;
+      for (const [markerStart, markerEnd] of group.markers) {
+        const from = Math.max(markerStart, start);
+        const to = Math.min(markerEnd, end);
+        if (from < to) kept.push([from, to]);
+      }
+    }
+    kept.sort((left, right) => left[0] - right[0]);
+    return { start, end, kept };
+  }
+
+  /** 选区中用户看得见的原文：去掉需要保留的隐藏标记，用于复制与剪切。 */
+  private visibleText(range: SourceRange): string {
+    const span = this.visibleSpan(range, true);
+    let text = '';
+    let cursor = span.start;
+    for (const [from, to] of span.kept) {
+      text += this.value.slice(cursor, from);
+      cursor = to;
+    }
+    return text + this.value.slice(cursor, span.end);
+  }
+
+  /**
+   * 用文字替换选区，保留不能拆开的隐藏标记，光标落在插入的文字之后。
+   * `expand` 见 visibleSpan：删除时完整选中的格式整段删除，输入或粘贴时只替换其中的文字。
+   */
+  private replaceVisible(text: string, range: SourceRange, expand: boolean): EditResult {
+    const span = this.visibleSpan(range, expand);
+    const kept = span.kept.map(([from, to]) => this.value.slice(from, to)).join('');
+    const caret = span.start + text.length;
+    return {
+      value: this.value.slice(0, span.start) + text + kept + this.value.slice(span.end),
+      start: caret,
+      end: caret,
+    };
   }
 
   /* ==================== 私有：排版 ==================== */
 
-  /** 需要展开标记的插入位置；选中正文时保持渲染效果。 */
+  /**
+   * 决定标记是否展开的位置：插入光标所在处；选中文字时取选区的起点（锚点）。
+   * 在已展开的原文里拖动、双击选词或按 Shift 扩选时，锚点仍在这段标记中，标记保持展开，便于修改；
+   * 从渲染后的文字开始选择时，经过的标记保持隐藏，删除时按所见内容处理（见 visibleSpan）。
+   * 全选时保持渲染效果。
+   */
   private markerCaret(): number | null {
-    return this.hasFocus() && this.selection.start === this.selection.end ? this.selection.end : null;
+    if (!this.hasFocus()) return null;
+    const { start, end, direction } = this.selection;
+    if (start === end) return start;
+    if (start === 0 && end === this.value.length) return null;
+    return direction === 'backward' ? end : start;
   }
 
   /** 计算当前行与可见标记的标识。 */
@@ -1042,7 +1109,10 @@ export class MarkdownEditor {
     }
     if (/^delete/.test(type)) {
       event.preventDefault();
-      this.replace('', this.deletionRange(this.readSelection(), type));
+      const range = this.readSelection();
+      // 选中了文字时按所见内容删除：完整选中的格式连同隐藏标记一起删掉，部分选中时保留标记。
+      if (range.start !== range.end) this.applyEdit(this.replaceVisible('', range, true), range);
+      else this.replace('', this.deletionRange(range, type));
       return;
     }
     if (type === 'insertParagraph' || type === 'insertLineBreak') {
@@ -1050,18 +1120,24 @@ export class MarkdownEditor {
       // 回车在列表、引用与代码块中续写；Shift+Enter 只换行。
       const range = this.readSelection();
       if (type === 'insertParagraph' && this.applyEdit(continueBlock(this.value, range.start, range.end), range)) return;
-      this.replace((this.value.match(/\r\n|\r|\n/) ?? ['\n'])[0]);
+      this.insertText((this.value.match(/\r\n|\r|\n/) ?? ['\n'])[0], range);
       return;
     }
     if (type === 'insertText' || type === 'insertReplacementText' || type === 'insertFromDrop') {
       event.preventDefault();
       const text =
         event.data !== null ? event.data : (event.dataTransfer?.getData('text/plain') ?? '');
-      this.replace(text || '');
+      this.insertText(text || '', this.readSelection());
       return;
     }
     // 富文本格式化命令一律拒绝，原文由 Markdown 标记表达。
     if (/^format/.test(type)) event.preventDefault();
+  }
+
+  /** 在选区处输入文字：选中了文字时只替换看得见的部分，保留不能拆开的隐藏标记。 */
+  private insertText(text: string, range: SourceRange): void {
+    if (range.start === range.end) this.replace(text, range);
+    else this.applyEdit(this.replaceVisible(text, range, false), range);
   }
 
   /** 吸收输入法或浏览器原生写入，保留原有换行与空白。 */
@@ -1167,8 +1243,9 @@ export class MarkdownEditor {
       if (clipboard.files.length) return;
       const text = clipboard.getData('text/plain');
       const range = this.readSelection();
-      if (this.plainPaste) {
-        this.replace(text, range);
+      // 纯文本粘贴，或选区拆开了隐藏的标记时，只替换看得见的文字，不做格式识别，避免把半截语法包进链接或代码块。
+      if (this.plainPaste || this.visibleSpan(range, false).kept.length) {
+        this.insertText(text, range);
         return;
       }
       const pasted = smartPaste(this.value, range.start, range.end, {
@@ -1176,24 +1253,24 @@ export class MarkdownEditor {
         html: clipboard.getData('text/html'),
         codeLanguage: this.editorLanguage(clipboard.getData('vscode-editor-data')),
       });
-      if (!this.applyEdit(pasted, range)) this.replace(text, range);
+      if (!this.applyEdit(pasted, range)) this.insertText(text, range);
     });
 
     this.listen(this.element, 'copy', (event) => {
       const clipboard = (event as ClipboardEvent).clipboardData;
-      const range = this.clipboardRange();
+      const range = this.readSelection();
       if (range.start === range.end || !clipboard) return;
       event.preventDefault();
-      clipboard.setData('text/plain', this.value.slice(range.start, range.end));
+      clipboard.setData('text/plain', this.visibleText(range));
     });
 
     this.listen(this.element, 'cut', (event) => {
       const clipboard = (event as ClipboardEvent).clipboardData;
-      const range = this.clipboardRange();
+      const range = this.readSelection();
       if (range.start === range.end || !clipboard) return;
       event.preventDefault();
-      clipboard.setData('text/plain', this.value.slice(range.start, range.end));
-      this.replace('', range);
+      clipboard.setData('text/plain', this.visibleText(range));
+      this.applyEdit(this.replaceVisible('', range, true), range);
     });
 
     this.listen(this.element, 'keyup', () => {
