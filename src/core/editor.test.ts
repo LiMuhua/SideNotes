@@ -138,6 +138,21 @@ describe('实时 Markdown 编辑器', () => {
     expect(editor.getValue()).toBe('  ');
   });
 
+  it('格式快捷键按物理按键识别，缺少按键位置时按虚拟键码识别', () => {
+    const { editor } = mount('重点');
+    editor.element.focus();
+    editor.setSelectionRange(0, 2);
+    editor.element.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'b', code: 'KeyB', ctrlKey: true, bubbles: true, cancelable: true }),
+    );
+    expect(editor.getValue()).toBe('**重点**');
+    // 自动化工具与部分远程输入不带扫描码：code 为空，只有虚拟键码。
+    editor.element.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'b', keyCode: 66, ctrlKey: true, bubbles: true, cancelable: true }),
+    );
+    expect(editor.getValue()).toBe('重点');
+  });
+
   it('保留 CRLF 换行', () => {
     const { editor } = mount('甲\r\n乙');
     expect(editor.getValue()).toBe('甲\r\n乙');

@@ -163,6 +163,20 @@ function markerVisible(caret: number | null, start: number, length: number): boo
   return caret !== null && caret >= start && caret <= start + length;
 }
 
+/**
+ * 按键的物理位置（KeyboardEvent.code），不受输入法与键盘布局影响。
+ *
+ * 部分输入来源（自动化工具、远程桌面、按键映射软件）不带扫描码，code 为空，
+ * 这时按虚拟键码换算字母、数字与常用符号键。
+ */
+function physicalKey(event: KeyboardEvent): string {
+  if (event.code) return event.code;
+  const vk = event.keyCode;
+  if (vk >= 65 && vk <= 90) return `Key${String.fromCharCode(vk)}`;
+  if (vk >= 48 && vk <= 57) return `Digit${vk - 48}`;
+  return { 192: 'Backquote', 219: 'BracketLeft', 221: 'BracketRight' }[vk] ?? '';
+}
+
 /** 当前聚焦的实例，供全局 selectionchange 复用。 */
 let focusedEditor: MarkdownEditor | null = null;
 let selectionFrame = 0;
@@ -1204,7 +1218,7 @@ export class MarkdownEditor {
       const key = event as KeyboardEvent;
       if (this.composing || key.isComposing) return;
       const modifier = key.ctrlKey || key.metaKey;
-      this.plainPaste = modifier && key.shiftKey && key.code === 'KeyV';
+      this.plainPaste = modifier && key.shiftKey && physicalKey(key) === 'KeyV';
       if (modifier && !key.altKey && !key.shiftKey && key.key.toLowerCase() === 'a') {
         key.preventDefault();
         this.setSelectionRange(0, this.value.length, 'forward');
@@ -1234,7 +1248,8 @@ export class MarkdownEditor {
    */
   private shortcut(key: KeyboardEvent): ((value: string, start: number, end: number) => EditResult) | null {
     const control = key.ctrlKey || key.metaKey;
-    const { code, shiftKey: shift, altKey: alt } = key;
+    const { shiftKey: shift, altKey: alt } = key;
+    const code = physicalKey(key);
     if (control && !alt && !shift) {
       if (code === 'KeyB') return (value, start, end) => toggleInline(value, start, end, '**');
       if (code === 'KeyI') return (value, start, end) => toggleInline(value, start, end, '*');
