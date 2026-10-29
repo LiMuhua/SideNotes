@@ -4,8 +4,9 @@
  * 快捷键、回车续写与智能粘贴都只作用于原文和选区：输入原文与选区，返回新的原文与选区，
  * 由编辑器统一写回、重新排版并记入撤销历史。命令只增删必要的标记，其余原文（包括换行符种类）保持不变。
  *
- * 快捷键参照 Typora：Ctrl+B 加粗、Ctrl+I 斜体、Ctrl+K 链接（剪贴板中是网址时直接用作地址）、
- * Ctrl+Shift+` 或 Alt+C 行内代码、Alt+Shift+5 删除线、Ctrl+1–6 标题、Ctrl+0 正文、Ctrl+Shift+Q 引用、
+ * 快捷键参照 Typora：Ctrl+B 加粗、Ctrl+I 斜体、Ctrl+U 下划线（写作 `<u>…</u>`）、
+ * Ctrl+K 链接（剪贴板中是网址时直接用作地址）、Ctrl+Shift+` 或 Alt+C 行内代码、
+ * Alt+S 或 Alt+Shift+5 删除线、Ctrl+1–6 标题、Ctrl+0 正文、Ctrl+Shift+Q 引用、
  * Ctrl+Shift+[ 有序列表、Ctrl+Shift+] 无序列表、Ctrl+Shift+K 代码块；列表与引用中回车自动续写，空项回车结束。
  */
 
@@ -255,6 +256,72 @@ export function toggleInline(value: string, start: number, end: number, marker: 
     if (!value.slice(from, to).trim()) continue;
     const before = result.length;
     result = toggleLineSpan(result, from, to, marker).value;
+    selectionEnd += result.length - before;
+  }
+  return { value: result, start, end: selectionEnd };
+}
+
+/** 给单行文字加上或去掉一对 HTML 标签，标签紧贴文字，不包住首尾空白。 */
+function toggleTagSpan(value: string, start: number, end: number, open: string, close: string): EditResult {
+  const text = value.slice(start, end);
+  const lead = (text.match(/^\s*/) ?? [''])[0].length;
+  const trail = text.trim() ? (text.match(/\s*$/) ?? [''])[0].length : 0;
+  const from = start + lead;
+  const to = end - trail;
+  if (from >= to) return { value, start, end };
+  const is = (at: number, tag: string): boolean => value.slice(at, at + tag.length).toLowerCase() === tag;
+  // 选中的文字本身带着标签：去掉。
+  if (to - from >= open.length + close.length && is(from, open) && is(to - close.length, close)) {
+    const inner = value.slice(from + open.length, to - close.length);
+    return { value: value.slice(0, from) + inner + value.slice(to), start: from, end: from + inner.length };
+  }
+  // 标签在选区两侧：去掉两侧的标签。
+  if (is(from - open.length, open) && is(to, close)) {
+    const inner = value.slice(from, to);
+    const at = from - open.length;
+    return { value: value.slice(0, at) + inner + value.slice(to + close.length), start: at, end: at + inner.length };
+  }
+  return {
+    value: value.slice(0, from) + open + value.slice(from, to) + close + value.slice(to),
+    start: from + open.length,
+    end: to + open.length,
+  };
+}
+
+/**
+ * 切换 HTML 标签表示的格式，用于 Typora 写法的下划线 `<u>…</u>`。
+ *
+ * 行为与 toggleInline 一致：没有选中文字时插入一对标签并把光标放在中间，空标签中再按一次撤掉，
+ * 光标紧挨闭合标签时跳到标签之后；选中的文字已被标签包住（标签在选区内或紧贴两侧）时去掉标签。
+ * 选中多行时逐行处理。
+ */
+export function toggleTag(value: string, start: number, end: number, tag: string): EditResult {
+  const open = `<${tag}>`;
+  const close = `</${tag}>`;
+  const lines = splitLines(value);
+  if (start === end) {
+    if (value.slice(start - open.length, start) === open && value.slice(start, start + close.length) === close) {
+      const at = start - open.length;
+      return { value: value.slice(0, at) + value.slice(start + close.length), start: at, end: at };
+    }
+    const line = lines[lineIndexAt(lines, start)];
+    if (value.slice(start, start + close.length) === close && value.slice(line.start, start).includes(open)) {
+      return { value, start: start + close.length, end: start + close.length };
+    }
+    return replaceRange(value, start, end, open + close, open.length);
+  }
+  const indexes = touchedLines(lines, start, end);
+  if (indexes.length === 1) return toggleTagSpan(value, start, end, open, close);
+  // 多行：从后往前逐行处理，前面各行的位置不受影响。
+  let result = value;
+  let selectionEnd = end;
+  for (const index of [...indexes].reverse()) {
+    const line = lines[index];
+    const from = Math.max(start, line.start);
+    const to = Math.min(end, line.end);
+    if (!value.slice(from, to).trim()) continue;
+    const before = result.length;
+    result = toggleTagSpan(result, from, to, open, close).value;
     selectionEnd += result.length - before;
   }
   return { value: result, start, end: selectionEnd };

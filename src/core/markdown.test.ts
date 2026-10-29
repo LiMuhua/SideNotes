@@ -29,6 +29,15 @@ describe('行内 Markdown', () => {
     expect(nodes.map((node) => node.kind)).toContain('del');
   });
 
+  it('只识别 <u> 下划线标签，其余 HTML 与未闭合的标签保留为文字', () => {
+    const nodes = parseInline('前<u>下**划**线</u>后');
+    const underline = nodes.find((node) => node.kind === 'underline');
+    expect(underline && underline.kind === 'underline' && flatten(underline.children)).toBe('下划线');
+    expect(flatten(nodes)).toBe('前下划线后');
+    expect(flatten(parseInline('<b>粗</b> <u>未闭合'))).toBe('<b>粗</b> <u>未闭合');
+    expect(parseInline('<u></u>').map((node) => node.kind)).toEqual(['text']);
+  });
+
   it('解析行内代码并保留内容', () => {
     const nodes = parseInline('执行 `npm run dev` 启动');
     const code = nodes.find((node) => node.kind === 'code');

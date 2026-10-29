@@ -261,6 +261,17 @@ body[data-window='capture'] .capture-body {
   color: var(--accent);
 }
 
+/* Typora 写法的下划线 <u>…</u>。 */
+.markdown-body u,
+.live-markdown-editor u {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.live-markdown-editor u {
+  white-space: pre-wrap;
+}
+
 /* 列表行使用悬挂缩进：项头（圆点、序号、待办框或光标进入时显示的原始标记）占据左侧固定宽度，
  * 正文与折行都从同一位置开始，项头不再与正文贴在一起。缩进的列表项整体右移。
  * 选择器带上编辑器类名，以覆盖原型 v3 中同名规则的 padding-left: 4px。 */

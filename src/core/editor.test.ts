@@ -291,6 +291,22 @@ describe('格式快捷键', () => {
     document.body.replaceChildren();
   });
 
+  it('Ctrl+U 下划线，Alt+S 与 Alt+Shift+5 删除线', () => {
+    const { editor } = mount('重点');
+    editor.element.focus();
+    editor.setSelectionRange(0, 2);
+    press(editor, { key: 'u', code: 'KeyU', ctrlKey: true });
+    expect(editor.getValue()).toBe('<u>重点</u>');
+    expect(editor.element.querySelector('u')?.textContent).toBe('重点');
+    editor.setValue('重点');
+    editor.setSelectionRange(0, 2);
+    press(editor, { key: 's', code: 'KeyS', altKey: true });
+    expect(editor.getValue()).toBe('~~重点~~');
+    editor.setSelectionRange(2, 4);
+    press(editor, { key: '%', code: 'Digit5', altKey: true, shiftKey: true });
+    expect(editor.getValue()).toBe('重点');
+  });
+
   it('Ctrl+K 读取剪贴板中的网址生成链接，剪贴板不是网址时插入空地址', async () => {
     const host = document.createElement('div');
     document.body.append(host);

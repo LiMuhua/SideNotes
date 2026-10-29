@@ -208,6 +208,7 @@ export function noteTitle(note: Note): string {
   return (
     line
       .replace(/^#{1,6}\s+|^[-*+]\s+|^\d+\.\s+/, '')
+      .replace(/<\/?u>/gi, '')
       .replace(/[*`~]/g, '')
       .slice(0, 120) || '记录'
   );

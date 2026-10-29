@@ -15,6 +15,7 @@ import {
   toggleLink,
   toggleList,
   toggleQuote,
+  toggleTag,
   wrapCodeBlock,
   type EditResult,
 } from './markdown-commands';
@@ -108,6 +109,29 @@ describe('链接', () => {
     expect(run(fromClipboard('https://example.com'), '«[官网](https://a.com)»')).toBeNull();
     expect(run(fromClipboard('https://example.com'), '«https://b.com»')).toBeNull();
     expect(run(fromClipboard('https://example.com'), '«第一行\n第二行»')).toBeNull();
+  });
+});
+
+describe('下划线', () => {
+  const underline: Command = (value, start, end) => toggleTag(value, start, end, 'u');
+
+  it('选中文字包上 <u> 标签，标签紧贴文字', () => {
+    expect(run(underline, '说«重点 »内容')).toBe('说<u>«重点»</u> 内容');
+  });
+
+  it('再按一次去掉标签：选中带标签的文字或只选中文字都可以', () => {
+    expect(run(underline, '«<u>重点</u>»')).toBe('«重点»');
+    expect(run(underline, '<u>«重点»</u>')).toBe('«重点»');
+  });
+
+  it('没有选中时插入一对标签；空标签中再按撤掉，紧挨闭合标签时跳出', () => {
+    expect(run(underline, '开始|')).toBe('开始<u>|</u>');
+    expect(run(underline, '开始<u>|</u>')).toBe('开始|');
+    expect(run(underline, '<u>下划线|</u>后文')).toBe('<u>下划线</u>|后文');
+  });
+
+  it('选中多行时逐行处理', () => {
+    expect(run(underline, '«甲\n乙»')).toBe('«<u>甲</u>\n<u>乙</u>»');
   });
 });
 

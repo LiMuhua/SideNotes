@@ -6,6 +6,7 @@
  *
  * 安全约定沿用原型：原生 HTML 一律保留为文字，链接只允许 http/https/mailto，
  * 图片只允许 data:image 与 https，其他地址降级为普通文本。
+ * 例外是 Typora 写法的下划线 `<u>…</u>`：只识别这一对不带属性的标签。
  */
 
 import { filePath } from './files';
@@ -25,6 +26,7 @@ export type InlineNode =
   | { kind: 'strong'; children: InlineNode[] }
   | { kind: 'em'; children: InlineNode[] }
   | { kind: 'del'; children: InlineNode[] }
+  | { kind: 'underline'; children: InlineNode[] }
   | { kind: 'link'; href: string; children: InlineNode[] }
   | ({ kind: 'image'; src: string; alt: string } & SourceSpan)
   | ({ kind: 'file'; path: string; label: string } & SourceSpan);
@@ -134,8 +136,9 @@ export function parseInline(text: string, depth = 0, base = 0): InlineNode[] {
   }
 
   const plain: string[] = [];
-  const candidates = /[\\`*_~[!]|https?:\/\/|mailto:/gi;
+  const candidates = /[\\`*_~[!<]|https?:\/\/|mailto:/gi;
   const automaticLink = /(?:https?:\/\/|mailto:)[^\s<>]+/iy;
+  const underlineClose = /<\/u>/gi;
   const failedClosers = new Map<string, number>();
   let position = 0;
 
@@ -195,6 +198,20 @@ export function parseInline(text: string, depth = 0, base = 0): InlineNode[] {
       plain.push(marker);
       position = openingEnd;
       continue;
+    }
+
+    if (character === '<' && text.slice(position, position + 3).toLowerCase() === '<u>') {
+      underlineClose.lastIndex = position + 3;
+      const close = underlineClose.exec(text);
+      if (close && close.index > position + 3) {
+        flush();
+        nodes.push({
+          kind: 'underline',
+          children: parseInline(text.slice(position + 3, close.index), depth + 1, base + position + 3),
+        });
+        position = close.index + close[0].length;
+        continue;
+      }
     }
 
     const isImage = character === '!' && text[position + 1] === '[';

@@ -30,6 +30,7 @@ import {
   toggleLink,
   toggleList,
   toggleQuote,
+  toggleTag,
   wrapCodeBlock,
   type EditResult,
 } from './markdown-commands';
@@ -69,7 +70,7 @@ export interface EditorOptions {
   readClipboard?: () => Promise<string>;
 }
 
-/** 一段隐藏的成对标记（行内代码、强调、链接）：分组范围、内容范围与各个标记的位置。 */
+/** 一段隐藏的成对标记（行内代码、强调、下划线、链接）：分组范围、内容范围与各个标记的位置。 */
 interface HiddenGroup {
   start: number;
   end: number;
@@ -712,6 +713,22 @@ export class MarkdownEditor {
           parent.append(element('code', 'md-inline-code', text.slice(index + marker.length, end)));
           this.syntax(parent, marker, caret, start + end, group);
           index = end + marker.length;
+          continue;
+        }
+      }
+
+      // Typora 写法的下划线 <u>…</u>：只识别这一对标签，其余 HTML 仍按文字显示。
+      if (character === '<' && text.slice(index, index + 3).toLowerCase() === '<u>') {
+        const close = text.toLowerCase().indexOf('</u>', index + 3);
+        if (close > index + 3) {
+          flush();
+          const group = { start: start + index, end: start + close + 4 };
+          this.syntax(parent, text.slice(index, index + 3), caret, start + index, group);
+          const underline = element('u');
+          this.renderInline(text.slice(index + 3, close), underline, caret, start + index + 3, depth + 1);
+          parent.append(underline);
+          this.syntax(parent, text.slice(close, close + 4), caret, start + close, group);
+          index = close + 4;
           continue;
         }
       }
@@ -1359,6 +1376,7 @@ export class MarkdownEditor {
     if (control && !alt && !shift) {
       if (code === 'KeyB') return (value, start, end) => toggleInline(value, start, end, '**');
       if (code === 'KeyI') return (value, start, end) => toggleInline(value, start, end, '*');
+      if (code === 'KeyU') return (value, start, end) => toggleTag(value, start, end, 'u');
       const heading = code.match(/^Digit([0-6])$/);
       if (heading) return (value, start, end) => setHeading(value, start, end, Number(heading[1]));
     }
@@ -1371,7 +1389,9 @@ export class MarkdownEditor {
     }
     if (alt && !control) {
       if (code === 'KeyC' && !shift) return (value, start, end) => toggleInline(value, start, end, '`');
-      if (code === 'Digit5' && shift) return (value, start, end) => toggleInline(value, start, end, '~~');
+      if ((code === 'KeyS' && !shift) || (code === 'Digit5' && shift)) {
+        return (value, start, end) => toggleInline(value, start, end, '~~');
+      }
     }
     return null;
   }

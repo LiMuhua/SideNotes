@@ -43,6 +43,8 @@ function renderInline(nodes: InlineNode[], handlers: MarkdownHandlers, keyPrefix
         return <em key={key}>{renderInline(node.children, handlers, `${key}-`, map)}</em>;
       case 'del':
         return <del key={key}>{renderInline(node.children, handlers, `${key}-`, map)}</del>;
+      case 'underline':
+        return <u key={key}>{renderInline(node.children, handlers, `${key}-`, map)}</u>;
       case 'link':
         return (
           <a key={key} className="markdown-link" href={node.href} target="_blank" rel="noopener noreferrer">
