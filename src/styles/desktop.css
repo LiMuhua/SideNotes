@@ -261,6 +261,14 @@ body[data-window='capture'] .capture-body {
   color: var(--accent);
 }
 
+/* 加粗使用 700 字重，颜色比正文深一档，与普通文字拉开差距；
+ * 原型的 600 在多数字体上只是半粗，和正文区别不大。 */
+.markdown-body strong,
+.live-markdown-editor strong {
+  font-weight: 700;
+  color: var(--ink);
+}
+
 /* Typora 写法的下划线 <u>…</u>。 */
 .markdown-body u,
 .live-markdown-editor u {
