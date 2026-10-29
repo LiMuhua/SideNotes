@@ -417,7 +417,19 @@ pub fn show_settings(app: &AppHandle, text_scale: f64) -> AppResult<()> {
         };
         let placed = SETTINGS_PLACED.swap(true, Ordering::SeqCst);
         let geometry = place_settings(work_area(&monitor), text_scale, if placed { current } else { None });
-        settings.set_min_size(Some(LogicalSize::new(geometry.min_width, geometry.min_height)))?;
+        // Windows 上带阴影的无边框窗口保留了不可见的边框，系统按整个窗口限制最小尺寸；
+        // 加上边框与内容区的尺寸差，内容区才不小于设定的最小尺寸。
+        let frame = match (settings.outer_size(), settings.inner_size(), settings.scale_factor()) {
+            (Ok(outer), Ok(inner), Ok(scale)) if scale > 0.0 => (
+                f64::from(outer.width.saturating_sub(inner.width)) / scale,
+                f64::from(outer.height.saturating_sub(inner.height)) / scale,
+            ),
+            _ => (0.0, 0.0),
+        };
+        settings.set_min_size(Some(LogicalSize::new(
+            geometry.min_width + frame.0,
+            geometry.min_height + frame.1,
+        )))?;
         settings.set_size(LogicalSize::new(geometry.width, geometry.height))?;
         settings.set_position(LogicalPosition::new(geometry.x, geometry.y))?;
     }
