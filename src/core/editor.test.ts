@@ -280,3 +280,32 @@ describe('选区与链接原文', () => {
     expect(editor.getValue()).toBe('看 [文档]() 结束');
   });
 });
+
+/** 在编辑器上按下快捷键。 */
+function press(editor: MarkdownEditor, init: KeyboardEventInit): void {
+  editor.element.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
+}
+
+describe('格式快捷键', () => {
+  beforeEach(() => {
+    document.body.replaceChildren();
+  });
+
+  it('Ctrl+K 读取剪贴板中的网址生成链接，剪贴板不是网址时插入空地址', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    let clipboard = 'https://example.com';
+    const editor = new MarkdownEditor(host, { value: '官网', readClipboard: async () => clipboard });
+    editor.element.focus();
+    editor.setSelectionRange(0, 2);
+    press(editor, { key: 'k', code: 'KeyK', ctrlKey: true });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(editor.getValue()).toBe('[官网](https://example.com)');
+    clipboard = '一段文字';
+    editor.setValue('官网');
+    editor.setSelectionRange(0, 2);
+    press(editor, { key: 'k', code: 'KeyK', ctrlKey: true });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(editor.getValue()).toBe('[官网]()');
+  });
+});

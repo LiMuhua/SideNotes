@@ -23,6 +23,7 @@ import {
   continueBlock,
   inCode,
   indentLines,
+  linkWithAddress,
   setHeading,
   smartPaste,
   toggleInline,
@@ -64,6 +65,8 @@ export interface EditorOptions {
    * 用于排除本条记录已有的标签。按优先顺序返回完整标签名。
    */
   tagSuggestions?: (prefix: string, text: string) => string[];
+  /** 读取剪贴板文字，Ctrl+K 用剪贴板中的网址生成链接；未提供时按普通链接处理。 */
+  readClipboard?: () => Promise<string>;
 }
 
 /** 一段隐藏的成对标记（行内代码、强调、链接）：分组范围、内容范围与各个标记的位置。 */
@@ -1140,6 +1143,29 @@ export class MarkdownEditor {
     else this.applyEdit(this.replaceVisible(text, range, false), range);
   }
 
+  /**
+   * Ctrl+K：剪贴板中是网址时直接用它生成链接，否则插入或去掉链接（见 linkWithAddress、toggleLink）。
+   * 读取剪贴板是异步的，期间原文若已变化（继续输入等）就放弃，避免按过时的位置改写。
+   */
+  private insertLink(range: SourceRange): void {
+    const before = this.value;
+    const apply = (clipboard: string): void => {
+      if (this.destroyed || this.value !== before) return;
+      this.applyEdit(
+        linkWithAddress(before, range.start, range.end, clipboard) ?? toggleLink(before, range.start, range.end),
+        range,
+      );
+    };
+    const read = this.options.readClipboard;
+    if (!read) {
+      apply('');
+      return;
+    }
+    void read()
+      .catch(() => '')
+      .then((clipboard) => apply(String(clipboard ?? '')));
+  }
+
   /** 吸收输入法或浏览器原生写入，保留原有换行与空白。 */
   private absorbDOM(finish = false): void {
     const next = this.readDOM();
@@ -1309,6 +1335,9 @@ export class MarkdownEditor {
         if (!this.applyEdit(indentLines(this.value, range.start, range.end, key.shiftKey), range) && !key.shiftKey) {
           this.replace('  ', range);
         }
+      } else if (modifier && !key.altKey && !key.shiftKey && physicalKey(key) === 'KeyK') {
+        key.preventDefault();
+        this.insertLink(this.readSelection());
       } else {
         const command = this.shortcut(key);
         if (!command) return;
@@ -1321,7 +1350,7 @@ export class MarkdownEditor {
 
   /**
    * 格式快捷键，参照 Typora。按物理按键识别，不受输入法与键盘布局影响。
-   * 返回 null 表示不是格式快捷键。
+   * 返回 null 表示不是格式快捷键；Ctrl+K 需要先读剪贴板，单独处理（见 insertLink）。
    */
   private shortcut(key: KeyboardEvent): ((value: string, start: number, end: number) => EditResult) | null {
     const control = key.ctrlKey || key.metaKey;
@@ -1330,7 +1359,6 @@ export class MarkdownEditor {
     if (control && !alt && !shift) {
       if (code === 'KeyB') return (value, start, end) => toggleInline(value, start, end, '**');
       if (code === 'KeyI') return (value, start, end) => toggleInline(value, start, end, '*');
-      if (code === 'KeyK') return toggleLink;
       const heading = code.match(/^Digit([0-6])$/);
       if (heading) return (value, start, end) => setHeading(value, start, end, Number(heading[1]));
     }

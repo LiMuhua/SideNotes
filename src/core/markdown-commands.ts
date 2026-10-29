@@ -4,9 +4,9 @@
  * 快捷键、回车续写与智能粘贴都只作用于原文和选区：输入原文与选区，返回新的原文与选区，
  * 由编辑器统一写回、重新排版并记入撤销历史。命令只增删必要的标记，其余原文（包括换行符种类）保持不变。
  *
- * 快捷键参照 Typora：Ctrl+B 加粗、Ctrl+I 斜体、Ctrl+K 链接、Ctrl+Shift+` 或 Alt+C 行内代码、
- * Alt+Shift+5 删除线、Ctrl+1–6 标题、Ctrl+0 正文、Ctrl+Shift+Q 引用、Ctrl+Shift+[ 有序列表、
- * Ctrl+Shift+] 无序列表、Ctrl+Shift+K 代码块；列表与引用中回车自动续写，空项回车结束。
+ * 快捷键参照 Typora：Ctrl+B 加粗、Ctrl+I 斜体、Ctrl+K 链接（剪贴板中是网址时直接用作地址）、
+ * Ctrl+Shift+` 或 Alt+C 行内代码、Alt+Shift+5 删除线、Ctrl+1–6 标题、Ctrl+0 正文、Ctrl+Shift+Q 引用、
+ * Ctrl+Shift+[ 有序列表、Ctrl+Shift+] 无序列表、Ctrl+Shift+K 代码块；列表与引用中回车自动续写，空项回车结束。
  */
 
 import { escapeLabel, filePath } from './files';
@@ -260,6 +260,9 @@ export function toggleInline(value: string, start: number, end: number, marker: 
   return { value: result, start, end: selectionEnd };
 }
 
+/** 一个完整的 Markdown 链接。 */
+const LINK = /^\[((?:\\.|[^\]\\])*)\]\(([^)]*)\)$/;
+
 /**
  * 插入或去掉链接。
  *
@@ -268,7 +271,7 @@ export function toggleInline(value: string, start: number, end: number, marker: 
  */
 export function toggleLink(value: string, start: number, end: number): EditResult {
   const text = value.slice(start, end);
-  const link = text.match(/^\[((?:\\.|[^\]\\])*)\]\(([^)]*)\)$/);
+  const link = text.match(LINK);
   if (link) {
     const label = link[1].replace(/\\([\\[\]])/g, '$1');
     return replaceRange(value, start, end, label, 0, label.length);
@@ -280,6 +283,25 @@ export function toggleLink(value: string, start: number, end: number): EditResul
   }
   const label = escapeLabel(text);
   return replaceRange(value, start, end, `[${label}]()`, label.length + 3);
+}
+
+/**
+ * Ctrl+K 时剪贴板中是网址：直接用它生成链接，参照 Typora。
+ *
+ * 选中文字时包成 `[文字](网址)`，首尾空白留在链接之外，光标移到链接之后；
+ * 没有选中时插入 `[](网址)` 并把光标放进链接文字。剪贴板不是网址、选中的文字跨行，
+ * 或选中的本身就是链接、网址或文件路径时返回 null，交给 toggleLink 处理。
+ */
+export function linkWithAddress(value: string, start: number, end: number, clipboard: string): EditResult | null {
+  const address = String(clipboard ?? '').trim();
+  if (!URL_PATTERN.test(address)) return null;
+  const text = value.slice(start, end);
+  const target = text.trim();
+  if (/[\r\n]/.test(text) || LINK.test(target) || URL_PATTERN.test(target) || filePath(target)) return null;
+  if (!target) return replaceRange(value, start, end, `[](${address})`, 1);
+  const lead = (text.match(/^\s*/) ?? [''])[0];
+  const trail = (text.match(/\s*$/) ?? [''])[0];
+  return replaceRange(value, start, end, `${lead}[${escapeLabel(target)}](${address})${trail}`);
 }
 
 /* ==================== 块级格式 ==================== */

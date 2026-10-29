@@ -8,6 +8,7 @@ import {
   codeLanguage,
   continueBlock,
   indentLines,
+  linkWithAddress,
   setHeading,
   smartPaste,
   toggleInline,
@@ -91,6 +92,22 @@ describe('链接', () => {
 
   it('选中整个链接时去掉链接只留文字', () => {
     expect(run(toggleLink, '«[官网](https://example.com)»')).toBe('«官网»');
+  });
+
+  it('剪贴板中是网址时直接生成链接，首尾空白留在链接之外', () => {
+    const fromClipboard = (clip: string): Command => (value, start, end) => linkWithAddress(value, start, end, clip);
+    expect(run(fromClipboard('https://example.com/a?b=1\n'), '看«官网»吧')).toBe('看[官网](https://example.com/a?b=1)|吧');
+    expect(run(fromClipboard('https://example.com'), '«官网 »')).toBe('[官网](https://example.com) |');
+    expect(run(fromClipboard('https://example.com'), '见|')).toBe('见[|](https://example.com)');
+    expect(run(fromClipboard('https://example.com'), '«a[b]»')).toBe('[a\\[b\\]](https://example.com)|');
+  });
+
+  it('剪贴板不是网址，或选中的已是链接、网址或跨行时交给普通链接处理', () => {
+    const fromClipboard = (clip: string): Command => (value, start, end) => linkWithAddress(value, start, end, clip);
+    expect(run(fromClipboard('普通文字'), '«官网»')).toBeNull();
+    expect(run(fromClipboard('https://example.com'), '«[官网](https://a.com)»')).toBeNull();
+    expect(run(fromClipboard('https://example.com'), '«https://b.com»')).toBeNull();
+    expect(run(fromClipboard('https://example.com'), '«第一行\n第二行»')).toBeNull();
   });
 });
 

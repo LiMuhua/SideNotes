@@ -7,6 +7,7 @@
 
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { MarkdownEditor } from '../core/editor';
+import * as bridge from '../core/bridge';
 import * as store from '../core/store';
 
 export interface LiveEditorProps {
@@ -60,6 +61,7 @@ export function LiveEditor({
       onChange: (next) => callbacks.current.onChange(next),
       onPreviewImage: (src, alt) => callbacks.current.onPreviewImage?.(src, alt),
       tagSuggestions: (prefix, text) => callbacks.current.tagSuggestions?.(prefix, text) ?? [],
+      readClipboard: bridge.readClipboardText,
     });
     editor.current = instance;
     callbacks.current.onReady?.(instance);

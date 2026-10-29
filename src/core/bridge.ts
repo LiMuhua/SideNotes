@@ -8,6 +8,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow, Window } from '@tauri-apps/api/window';
+import { readText } from '@tauri-apps/plugin-clipboard-manager';
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import { isPermissionGranted, requestPermission } from '@tauri-apps/plugin-notification';
@@ -265,6 +266,19 @@ export function quitApp(): Promise<void> {
 }
 
 /* ==================== 文件与剪贴板 ==================== */
+
+/**
+ * 读取剪贴板中的文字，供 Ctrl+K 用剪贴板里的网址生成链接。
+ * 桌面端经剪贴板插件读取，不弹出网页的剪贴板授权；没有文字或读取失败时返回空串。
+ */
+export async function readClipboardText(): Promise<string> {
+  try {
+    if (isDesktop()) return (await readText()) ?? '';
+    return await navigator.clipboard.readText();
+  } catch {
+    return '';
+  }
+}
 
 /** 校验文件引用是否仍然可用。 */
 export function inspectFile(path: string): Promise<FileStatus> {
