@@ -1,8 +1,8 @@
 /**
  * 新建记录入口。
  *
- * 粘性固定在记录列表顶部：滚动正文不会带走输入入口，
- * 圆角外侧由不透明底板遮挡，不会透出下方滚动的卡片。
+ * 固定在记录列表之上，独占顶部的一块区域：列表滚动时卡片从它下方的边界移出，
+ * 不会和它叠在一起；它自身没有矩形底板，圆角外侧直接露出侧栏背景。
  */
 
 import { Icon } from './Icon';
@@ -32,7 +32,7 @@ export interface ComposerProps {
 export function Composer(props: ComposerProps) {
   const empty = !props.text.trim() && !props.images.length;
   return (
-    <div className="composer-sticky-slot">
+    <div className="composer-dock">
       {/* 与原型一致：新建卡片始终处于激活外观（实线边框与工具栏），不随焦点切换成虚线占位。 */}
       <section
         id="quick-composer"

@@ -111,11 +111,33 @@ body[data-window='sidebar'] .sidebar-resizer:focus-visible {
   background: color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
-/* 修正原型的层级缺陷：列表顶栏（z-index 6）低于粘性输入卡片（z-index 12），
- * 展开的标签菜单会被输入卡片遮住上半部分。顶栏只有菜单会越出自身范围，
- * 提到输入卡片之上不影响其它布局。 */
+/* 修正原型的层级缺陷：列表顶栏（z-index 6）低于新建卡片（z-index 12），
+ * 展开的标签菜单会被新建卡片遮住上半部分。顶栏只有菜单会越出自身范围，
+ * 提到新建卡片之上不影响其它布局。 */
 body[data-window='sidebar'] .list-topline {
   z-index: 13;
+}
+
+/* 新建卡片固定在列表之上，独占一块区域，不随列表滚动，也就不会和滚上来的卡片叠在一起。
+ * 外层不铺背景，圆角之外直接露出侧栏底色，不再有矩形底板的方角。
+ * 右侧让出列表滚动条的宽度（由脚本实测写入 --note-list-gutter），与记录卡片左右对齐。 */
+body[data-window='sidebar'] .composer-dock {
+  position: relative;
+  z-index: 12;
+  flex-shrink: 0;
+  padding: 0 calc(16px + var(--note-list-gutter, 0px)) 0 16px;
+}
+
+body[data-window='sidebar'] .composer-dock > #quick-composer.sidebar-composer {
+  margin: 3px 0 4px;
+}
+
+/* 列表顶部留出 6px 并渐隐：卡片滚到新建卡片下方的边界时淡出，而不是被一刀切断。
+ * 未滚动时首张卡片从渐隐区之下开始，完整显示。 */
+body[data-window='sidebar'] .sidebar .note-list {
+  padding-top: 6px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 6px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 6px);
 }
 
 /* 提示条在窗口内居中，不再按演示页面的侧栏偏移计算。
@@ -531,8 +553,9 @@ body[data-window='settings'] .settings-modal > .modal-header {
  * - 编辑中的卡片使用强调色边框、外圈与投影，其余卡片与新建卡片退后，悬停时恢复。
  * - 卡片菜单比卡片高一层：边框更深、投影更重，所属卡片同时高亮，便于区分。 */
 
-body[data-window='sidebar'] #note-list > .composer-sticky-slot > #quick-composer.sidebar-composer {
+body[data-window='sidebar'] .composer-dock > #quick-composer.sidebar-composer {
   border-color: color-mix(in srgb, var(--accent) 26%, var(--line));
+  background: var(--card);
   box-shadow: 0 1px 3px #283e2108;
   transition:
     border-color 0.16s,
@@ -540,7 +563,7 @@ body[data-window='sidebar'] #note-list > .composer-sticky-slot > #quick-composer
     opacity 0.16s;
 }
 
-body[data-window='sidebar'] #note-list > .composer-sticky-slot > #quick-composer.sidebar-composer:focus-within,
+body[data-window='sidebar'] .composer-dock > #quick-composer.sidebar-composer:focus-within,
 body[data-window='sidebar'] #note-list .note-card.is-editing {
   border-color: color-mix(in srgb, var(--accent) 62%, var(--card));
   box-shadow:
@@ -556,13 +579,13 @@ body[data-window='sidebar'] #note-list .note-card {
     opacity 0.16s;
 }
 
-body[data-window='sidebar'] #note-list.has-editing > .note-card:not(.is-editing),
-body[data-window='sidebar'] #note-list.has-editing > .composer-sticky-slot > #quick-composer.sidebar-composer:not(:focus-within) {
+body[data-window='sidebar'] .sidebar.has-editing #note-list > .note-card:not(.is-editing),
+body[data-window='sidebar'] .sidebar.has-editing .composer-dock > #quick-composer.sidebar-composer:not(:focus-within) {
   opacity: 0.56;
 }
 
-body[data-window='sidebar'] #note-list.has-editing > .note-card:not(.is-editing):hover,
-body[data-window='sidebar'] #note-list.has-editing > .composer-sticky-slot > #quick-composer.sidebar-composer:hover {
+body[data-window='sidebar'] .sidebar.has-editing #note-list > .note-card:not(.is-editing):hover,
+body[data-window='sidebar'] .sidebar.has-editing .composer-dock > #quick-composer.sidebar-composer:hover {
   opacity: 0.92;
 }
 
@@ -621,7 +644,7 @@ body[data-theme='dark'] .note-context-menu {
     0 6px 14px -4px #00000066;
 }
 
-body[data-theme='dark'] #note-list > .composer-sticky-slot > #quick-composer.sidebar-composer:focus-within,
+body[data-theme='dark'] .composer-dock > #quick-composer.sidebar-composer:focus-within,
 body[data-theme='dark'] #note-list .note-card.is-editing {
   box-shadow:
     0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent),

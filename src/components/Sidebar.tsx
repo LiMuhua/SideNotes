@@ -1,14 +1,15 @@
 /**
  * 侧栏主组件。
  *
- * 组合页签、搜索框、记录列表、Composer 与所有交互逻辑；
+ * 组合页签、搜索框、新建卡片、记录列表与所有交互逻辑；
  * 拖排序、多选、卡片编辑、设置入口都统一在此层处理，不再分散到各子组件。
+ * 新建卡片固定在列表之上，不随列表滚动。
  *
  * 侧栏内的「鼠标移出收起」逻辑：桌面端通过窗口隐藏而非 CSS 平移，
  * 所以原型的 slideOut 动画对应的是 `bridge.hideSidebar()` 调用。
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { Icon, IconSprite } from "./Icon";
 import { Composer } from "./Composer";
@@ -928,6 +929,22 @@ export function Sidebar() {
   }, []);
 
   /* ==================== 渲染 ==================== */
+
+  // 新建卡片在列表之外，右侧要让出列表滚动条的宽度才能与记录卡片对齐。
+  // 滚动条宽度随系统与缩放变化，这里实测后写入 CSS 变量。
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    const aside = asideRef.current;
+    if (!list || !aside) return;
+    const measure = (): void => {
+      aside.style.setProperty("--note-list-gutter", `${Math.max(0, list.offsetWidth - list.clientWidth)}px`);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, []);
+
   const tabCounts: Record<TabKey, number> = useMemo(
     () => ({
       workspace: state.notes.filter((note) => note.status === "active").length,
@@ -946,7 +963,7 @@ export function Sidebar() {
       <IconSprite />
       <aside
         ref={asideRef}
-        className="sidebar open"
+        className={editing ? "sidebar open has-editing" : "sidebar open"}
         data-edge={state.settings.edge}
         onMouseEnter={cancelHide}
         onMouseLeave={scheduleHide}
@@ -1180,7 +1197,26 @@ export function Sidebar() {
           </div>
         ) : null}
 
-        {/* 记录列表：与原型一致，新建卡片作为粘性首项放在列表内，与记录卡片共用左右边距。 */}
+        {/* 新建卡片固定在列表之上，独占顶部区域，不随列表滚动；左右边距与记录卡片对齐。 */}
+        <Composer
+          text={composerText}
+          images={state.draft.images}
+          busy={state.pendingAttachments > 0}
+          onChange={setComposerText}
+          onReady={(editor) => {
+            composerEditorRef.current = editor;
+          }}
+          onFocus={() => setComposerActive(true)}
+          onSave={() => void saveComposer(false)}
+          onClose={() => setComposerActive(false)}
+          onAttachImage={() => triggerFileInput("image", "composer")}
+          onAttachFile={() => triggerFileInput("file", "composer")}
+          onRemoveImage={(id) => store.removeDraftImage(id)}
+          onPreviewImage={(src, alt) => setImagePreview({ src, alt })}
+          maxHeight={Math.min(340, window.innerHeight * 0.42)}
+        />
+
+        {/* 记录列表 */}
         <div
           ref={listRef}
           id="note-list"
@@ -1193,23 +1229,6 @@ export function Sidebar() {
           onContextMenu={handleListContextMenu}
           onKeyDown={handleListKeyDown}
         >
-          <Composer
-            text={composerText}
-            images={state.draft.images}
-            busy={state.pendingAttachments > 0}
-            onChange={setComposerText}
-            onReady={(editor) => {
-              composerEditorRef.current = editor;
-            }}
-            onFocus={() => setComposerActive(true)}
-            onSave={() => void saveComposer(false)}
-            onClose={() => setComposerActive(false)}
-            onAttachImage={() => triggerFileInput("image", "composer")}
-            onAttachFile={() => triggerFileInput("file", "composer")}
-            onRemoveImage={(id) => store.removeDraftImage(id)}
-            onPreviewImage={(src, alt) => setImagePreview({ src, alt })}
-            maxHeight={Math.min(340, window.innerHeight * 0.42)}
-          />
           {listNotes.length === 0 ? (
             <div className="empty-state">
               <h3>{query || selectedTag ? "没有匹配的记录" : "暂无记录"}</h3>
