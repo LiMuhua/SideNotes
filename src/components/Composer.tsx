@@ -83,7 +83,7 @@ export function Composer(props: ComposerProps) {
               type="button"
               className="icon-button"
               aria-label="添加图片"
-              title="添加图片，也可粘贴或拖入"
+              title="添加图片附件；截图也可直接粘贴到光标处"
               onClick={props.onAttachImage}
             >
               <Icon name="image" />
@@ -92,7 +92,7 @@ export function Composer(props: ComposerProps) {
               type="button"
               className="icon-button"
               aria-label="引用文件"
-              title="引用文件，也可直接拖入"
+              title="引用文件（复制一份保存）；也可粘贴复制的文件"
               onClick={props.onAttachFile}
             >
               <Icon name="file" />

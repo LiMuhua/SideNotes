@@ -183,8 +183,8 @@ export function Capture() {
             <button
               type="button"
               className="icon-button"
-              aria-label="添加图片，也可粘贴或拖入"
-              title="添加图片，也可粘贴或拖入"
+              aria-label="添加图片附件；截图也可直接粘贴到光标处"
+              title="添加图片附件；截图也可直接粘贴到光标处"
               onClick={() => fileInput.current?.click()}
             >
               <Icon name="image" />
@@ -192,8 +192,8 @@ export function Capture() {
             <button
               type="button"
               className="icon-button"
-              aria-label="引用文件，也可直接拖入"
-              title="引用文件，也可直接拖入"
+              aria-label="引用文件（复制一份保存）；也可粘贴复制的文件"
+              title="引用文件（复制一份保存）；也可粘贴复制的文件"
               onClick={async () => {
                 // 文件引用：复制到应用数据目录中维护，在光标处插入引用（图片为内嵌图片）。
                 try {
