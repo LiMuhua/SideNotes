@@ -16,6 +16,7 @@ import { Composer } from "./Composer";
 import { NoteCard } from "./NoteCard";
 import { NoteMenu, type MenuAnchor, type MenuCommand } from "./NoteMenu";
 import { SidebarMenu, type SidebarCommand } from "./SidebarMenu";
+import { TagInput } from "./TagInput";
 import { EmojiPicker } from "./EmojiPicker";
 import { TagFilter } from "./TagFilter";
 import { TagManageDialog } from "./TagManageDialog";
@@ -1287,17 +1288,15 @@ export function Sidebar() {
               <label htmlFor="search-input" className="sr-only">
                 搜索记录与标签
               </label>
-              <input
+              {/* 输入 #标签 时以灰字联想已有标签，Tab 选用；不再展开标签菜单。 */}
+              <TagInput
                 id="search-input"
                 type="search"
                 placeholder="搜索记录、#标签…"
                 autoComplete="off"
+                search
                 value={query}
-                onChange={(event) => {
-                  setQuery(event.target.value);
-                  // 与原型一致：输入 # 时展开标签菜单，匹配的标签排在前面。
-                  if (event.target.value.includes("#")) setTagMenuOpen(true);
-                }}
+                onValueChange={setQuery}
                 onBlur={(event) => {
                   // 失焦时若未输入内容则自动收起搜索面板。
                   if (

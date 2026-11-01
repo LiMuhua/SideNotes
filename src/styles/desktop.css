@@ -131,6 +131,15 @@ body[data-window='sidebar'] .sidebar .note-list {
   mask-image: linear-gradient(to bottom, transparent 0, #000 6px);
 }
 
+/* 侧栏搜索框换成带标签联想的输入框：外层占满输入区，灰字覆盖在输入框上。 */
+.header-search-field .tag-input-shell {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+  height: 100%;
+}
+
 /* 提示条在窗口内居中，不再按演示页面的侧栏偏移计算。
  * 固定定位元素在 left: 50% 时，自适应宽度最多只有视口的一半，稍长的提示就会折行；
  * 这里按内容取宽度、以窗口宽度减 28px 为上限，仍用平移居中，与原型的定位方式和渲染一致。 */

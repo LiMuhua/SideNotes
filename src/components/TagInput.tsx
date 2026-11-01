@@ -3,7 +3,7 @@
  *
  * 与编辑器中的标签联想一致：输入时在文字之后以灰字提示已有标签的剩余部分，
  * Tab 选用，上下键切换候选，Esc 只关闭提示。灰字是覆盖在输入框上的装饰，不进入输入值。
- * 用于卡片上就地修改标签与「管理标签」对话框。
+ * 用于卡片上就地修改标签、「管理标签」对话框与侧栏搜索框；搜索框只联想末尾正在输入的 #标签。
  */
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type InputHTMLAttributes, type Ref } from 'react';
@@ -17,6 +17,11 @@ export interface TagInputProps extends Omit<InputHTMLAttributes<HTMLInputElement
   exclude?: readonly string[];
   /** 输入框随内容变宽时（field-sizing: content）为灰字留出宽度。 */
   grow?: boolean;
+  /**
+   * 搜索框：输入值是任意查询，只在末尾正在输入 `#标签` 时联想，选用时补全这个标签，其余内容保留；
+   * 查询中已有的其它标签不再提示。
+   */
+  search?: boolean;
   ref?: Ref<HTMLInputElement>;
 }
 
@@ -30,21 +35,28 @@ function textWidth(text: string, font: string): number {
   return measureContext.measureText(text).width;
 }
 
-export function TagInput({ value, onValueChange, exclude, grow, ref, className, ...rest }: TagInputProps) {
+/** 搜索查询末尾正在输入的标签（# 之后的部分）；末尾不是标签时返回空串。 */
+function trailingTag(query: string): string {
+  return query.match(/(?:^|\s)#([\p{L}\p{N}_-]+)$/u)?.[1] ?? '';
+}
+
+export function TagInput({ value, onValueChange, exclude, grow, search, ref, className, ...rest }: TagInputProps) {
   const input = useRef<HTMLInputElement | null>(null);
   const ghost = useRef<HTMLSpanElement>(null);
   const [index, setIndex] = useState(0);
   const [dismissed, setDismissed] = useState('');
 
   // 输入值可以带 #，联想按 # 之后的部分匹配；以空白结尾时不再提示。
-  const typed = value.trim().replace(/^#/, '');
-  const candidates = useMemo(
-    () =>
-      typed && !/\s$/.test(value) && /^[\p{L}\p{N}_-]+$/u.test(typed) && tagKey(typed) !== dismissed
-        ? store.tagSuggestions(typed, (exclude ?? []).map((tag) => `#${tag}`).join(' '))
-        : [],
-    [typed, value, dismissed, exclude],
-  );
+  const typed = search ? trailingTag(value) : value.trim().replace(/^#/, '');
+  const candidates = useMemo(() => {
+    if (!typed || tagKey(typed) === dismissed) return [];
+    if (!search && (/\s$/.test(value) || !/^[\p{L}\p{N}_-]+$/u.test(typed))) return [];
+    // 搜索框排除查询里已有的其它标签，标签输入框排除调用方给出的标签。
+    const used = search
+      ? Array.from(value.slice(0, value.length - typed.length - 1).matchAll(/(?:^|\s)#([\p{L}\p{N}_-]+)/gu), (match) => match[1])
+      : (exclude ?? []);
+    return store.tagSuggestions(typed, used.map((tag) => `#${tag}`).join(' '));
+  }, [typed, value, dismissed, exclude, search]);
   const current = candidates.length ? candidates[index % candidates.length] : '';
   const remainder = current.slice(typed.length);
 
@@ -71,10 +83,14 @@ export function TagInput({ value, onValueChange, exclude, grow, ref, className, 
     if (!remainder) return;
     const handle = (event: KeyboardEvent): void => {
       const state = latest.current;
-      if (event.target !== input.current || event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return;
+      const node = input.current;
+      if (event.target !== node || !node || event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return;
+      // 搜索框中光标不在末尾时，Tab 与上下键照常处理。
+      if (search && node.selectionStart !== node.value.length) return;
       const count = state.candidates.length;
       if (event.key === 'Tab' && !event.shiftKey) {
-        onValueChange(state.value.trim().startsWith('#') ? `#${state.current}` : state.current);
+        if (search) onValueChange(state.value.slice(0, state.value.length - state.typed.length) + state.current);
+        else onValueChange(state.value.trim().startsWith('#') ? `#${state.current}` : state.current);
         setDismissed(tagKey(state.current));
       } else if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && count > 1) {
         setIndex((state.index + (event.key === 'ArrowDown' ? 1 : count - 1)) % count);
@@ -88,7 +104,7 @@ export function TagInput({ value, onValueChange, exclude, grow, ref, className, 
     };
     window.addEventListener('keydown', handle, true);
     return () => window.removeEventListener('keydown', handle, true);
-  }, [remainder, onValueChange]);
+  }, [remainder, onValueChange, search]);
 
   return (
     <span className="tag-input-shell">
