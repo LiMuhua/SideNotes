@@ -4,7 +4,7 @@
  * 由 `main.tsx` 根据当前窗口标签决定渲染侧栏、速记浮窗还是设置窗口；
  * 三个窗口各自是独立的 WebView，共享同一套状态仓库代码，经跨窗口同步保持一致。
  * 根组件还负责把后端事件（边缘唤出、全局热键、托盘菜单）转成界面动作，
- * 并把主题、字体与材质应用到页面根节点，供 CSS 切换外观。
+ * 并把主题、字体与材质应用到页面根节点，供 CSS 切换外观；字号按全局的界面缩放应用到各窗口。
  */
 
 import { useEffect } from 'react';
@@ -16,7 +16,7 @@ import { ToastProvider } from './hooks/useToast';
 import { useStoreSlice } from './hooks/useStore';
 import * as store from './core/store';
 import * as bridge from './core/bridge';
-import { resolveTheme, resolveFontFamily } from './core/settings';
+import { resolveTheme, resolveFontFamily, uiZoom } from './core/settings';
 import type { WindowRole } from './main';
 
 export interface AppProps {
@@ -40,6 +40,7 @@ export function App({ role }: AppProps) {
 
   /* ==================== 主题、字体与材质 ==================== */
   // 原型同时在 html 与 body 上标记主题和材质，部分样式按 :root 匹配。
+  // 字体应用到全部界面文字（desktop.css 中 :root 使用同一变量），正文保持 13px 的设计字号。
   useEffect(() => {
     const theme = resolveTheme(settings.theme);
     const root = document.documentElement;
@@ -49,9 +50,16 @@ export function App({ role }: AppProps) {
     }
     document.body.dataset.edge = settings.edge;
     root.style.setProperty('--note-font-family', resolveFontFamily(settings.fontFamily));
-    root.style.setProperty('--note-font-size', `${settings.fontSize}px`);
     root.style.setProperty('--sidebar-width', `${settings.width}px`);
   }, [settings]);
+
+  /* ==================== 字号：全局的界面缩放 ==================== */
+  // 字号不只改正文：各窗口的 WebView 整页缩放到「字号 ÷ 13」倍，正文显示为所选字号，
+  // 按钮、标签与设置窗口的文字随之等比放大，布局与原型保持同样的比例。
+  const { fontSize } = settings;
+  useEffect(() => {
+    void bridge.setUiZoom(uiZoom(fontSize));
+  }, [fontSize]);
 
   /* ==================== 侧栏窗口布局 ==================== */
   // 只在宽度、贴边或边缘唤出变化时通知后端，避免任意状态变化都重设窗口位置，

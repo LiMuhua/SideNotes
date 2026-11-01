@@ -10,7 +10,12 @@ import type { CloudSettings, Settings } from './types';
 /** 侧栏宽度范围。 */
 export const WIDTH_RANGE = { min: 360, max: 720, step: 4 } as const;
 /** 字号范围。 */
-export const FONT_SIZE_RANGE = { min: 12, max: 18, step: 1 } as const;
+export const FONT_SIZE_RANGE = { min: 12, max: 20, step: 1 } as const;
+/**
+ * 界面的设计字号：原型按正文 13px 设计各处的字号与间距。
+ * 字号设置是全局的界面缩放，整页缩放到「字号 ÷ 13」倍后，正文正好显示为所选字号。
+ */
+export const BASE_FONT_SIZE = 13;
 /** 每批加载条数范围。 */
 export const PAGE_SIZE_RANGE = { min: 5, max: 100 } as const;
 /** 回收站保留天数范围。 */
@@ -100,6 +105,11 @@ export function parseDelay(raw: string): number | null {
   const amount = Number(match[1]);
   const unit = (match[2] ?? '').toLowerCase();
   return Math.round(unit === 's' || unit === '秒' ? amount * 1000 : amount);
+}
+
+/** 字号对应的界面缩放倍数。 */
+export function uiZoom(fontSize: number): number {
+  return fontSize / BASE_FONT_SIZE;
 }
 
 /** 解析出实际生效的明暗模式。 */

@@ -16,6 +16,17 @@ body {
   background: transparent;
 }
 
+/* 全局字体：设置中的字体应用到三个窗口的全部界面文字，代码、Emoji 与路径仍用各自的字体。
+ * 字号由 WebView 整页缩放实现（见 App.tsx），各处的设计字号保持原型的数值。 */
+:root {
+  font-family: var(--note-font-family);
+}
+
+/* 原型给设置中「侧栏」分组的标签强制指定了字体，改为跟随全局字体。 */
+body[data-window='settings'] .settings-modal .sidebar-settings-layout .settings-row-label {
+  font-family: inherit !important;
+}
+
 /* 原型演示元素在桌面端不渲染，这里兜底隐藏以防样式残留。 */
 .demo-canvas,
 .demo-brand,

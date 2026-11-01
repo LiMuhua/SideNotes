@@ -103,6 +103,7 @@ pub fn run() {
             commands::toggle_capture,
             commands::show_settings,
             commands::hide_settings,
+            commands::set_ui_zoom,
             commands::open_devtools,
             commands::system_fonts,
             commands::inspect_file,

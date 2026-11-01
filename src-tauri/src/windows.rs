@@ -5,9 +5,11 @@
 //! - 速记浮窗居中显示，与侧栏共享同一数据库中的草稿。
 //! - 设置窗口即原型的设置对话框，按原型尺寸在鼠标所在屏幕居中，可调整大小，始终置顶；
 //!   显示状态变化时通知各窗口，侧栏据此在固定按钮上提示「设置打开期间保持展开」。
+//! - 字号设置是全局的界面缩放：各窗口的 WebView 整页缩放，设置窗口同时按比例调整尺寸。
 //! - 显示前重新读取显示器工作区，适配多屏与 DPI 变化。
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Monitor, WebviewWindow};
@@ -29,6 +31,10 @@ const SETTINGS_MIN_SIZE: (f64, f64) = (720.0, 560.0);
 const SETTINGS_MARGIN: (f64, f64) = (36.0, 48.0);
 /// 设置窗口是否已按默认尺寸摆放过；此后再打开保留用户调整后的大小。
 static SETTINGS_PLACED: AtomicBool = AtomicBool::new(false);
+/// 设置窗口最近一次设定的最小尺寸（内容区的逻辑像素），界面缩放变化时按比例调整。
+static SETTINGS_MIN: Mutex<(f64, f64)> = Mutex::new((0.0, 0.0));
+/// 设置窗口当前的界面缩放（f64 的位表示），初始为 1。
+static SETTINGS_ZOOM: AtomicU64 = AtomicU64::new(0x3FF0_0000_0000_0000);
 /// 最近一次通知出去的设置窗口显示状态，只在变化时再通知。
 static SETTINGS_SHOWING: AtomicBool = AtomicBool::new(false);
 /// 设置窗口显示状态变化的事件，载荷为是否正在显示（可见且未最小化）。
@@ -422,21 +428,7 @@ pub fn show_settings(app: &AppHandle, text_scale: f64) -> AppResult<()> {
         };
         let placed = SETTINGS_PLACED.swap(true, Ordering::SeqCst);
         let geometry = place_settings(work_area(&monitor), text_scale, if placed { current } else { None });
-        // Windows 上带阴影的无边框窗口保留了不可见的边框，系统按整个窗口限制最小尺寸；
-        // 加上边框与内容区的尺寸差，内容区才不小于设定的最小尺寸。
-        let frame = match (settings.outer_size(), settings.inner_size(), settings.scale_factor()) {
-            (Ok(outer), Ok(inner), Ok(scale)) if scale > 0.0 => (
-                f64::from(outer.width.saturating_sub(inner.width)) / scale,
-                f64::from(outer.height.saturating_sub(inner.height)) / scale,
-            ),
-            _ => (0.0, 0.0),
-        };
-        settings.set_min_size(Some(LogicalSize::new(
-            geometry.min_width + frame.0,
-            geometry.min_height + frame.1,
-        )))?;
-        settings.set_size(LogicalSize::new(geometry.width, geometry.height))?;
-        settings.set_position(LogicalPosition::new(geometry.x, geometry.y))?;
+        apply_settings_geometry(&settings, &geometry)?;
     }
     if settings.is_minimized().unwrap_or(false) {
         settings.unminimize()?;
@@ -445,6 +437,88 @@ pub fn show_settings(app: &AppHandle, text_scale: f64) -> AppResult<()> {
     settings.set_focus()?;
     notify_settings_visibility(app);
     Ok(())
+}
+
+/// 按计算好的几何摆放设置窗口，并记下最小尺寸供界面缩放变化时调整。
+///
+/// Windows 上带阴影的无边框窗口保留了不可见的边框，系统按整个窗口限制最小尺寸；
+/// 加上边框与内容区的尺寸差，内容区才不小于设定的最小尺寸。先设最小尺寸再改大小，缩小时不被旧的下限挡住。
+fn apply_settings_geometry(settings: &WebviewWindow, geometry: &SettingsGeometry) -> AppResult<()> {
+    let frame = match (settings.outer_size(), settings.inner_size(), settings.scale_factor()) {
+        (Ok(outer), Ok(inner), Ok(scale)) if scale > 0.0 => (
+            f64::from(outer.width.saturating_sub(inner.width)) / scale,
+            f64::from(outer.height.saturating_sub(inner.height)) / scale,
+        ),
+        _ => (0.0, 0.0),
+    };
+    *SETTINGS_MIN.lock().unwrap_or_else(|error| error.into_inner()) = (geometry.min_width, geometry.min_height);
+    settings.set_min_size(Some(LogicalSize::new(
+        geometry.min_width + frame.0,
+        geometry.min_height + frame.1,
+    )))?;
+    settings.set_size(LogicalSize::new(geometry.width, geometry.height))?;
+    settings.set_position(LogicalPosition::new(geometry.x, geometry.y))?;
+    Ok(())
+}
+
+/// 界面缩放变化后设置窗口的新摆放：内容区与最小尺寸都乘以 `ratio`，保持原来的中心，再限制在工作区之内。
+///
+/// `current` 为窗口当前的位置与内容区尺寸 (x, y, 宽, 高)，`min` 为当前的最小尺寸。
+/// 这样缩放前后内容所占的网页尺寸不变，放大字号时设置项不会被挤压，缩小时也不会留出大片空白。
+fn rescale_settings(
+    area: (f64, f64, f64, f64),
+    current: (f64, f64, f64, f64),
+    min: (f64, f64),
+    ratio: f64,
+) -> SettingsGeometry {
+    let (area_x, area_y, area_width, area_height) = area;
+    let (x, y, width, height) = current;
+    let max_width = (area_width - SETTINGS_MARGIN.0).max(320.0);
+    let max_height = (area_height - SETTINGS_MARGIN.1).max(320.0);
+    let min_width = (min.0 * ratio).min(max_width);
+    let min_height = (min.1 * ratio).min(max_height);
+    let new_width = (width * ratio).clamp(min_width, max_width);
+    let new_height = (height * ratio).clamp(min_height, max_height);
+    let max_x = (area_x + area_width - new_width).max(area_x);
+    let max_y = (area_y + area_height - new_height).max(area_y);
+    SettingsGeometry {
+        x: (x + (width - new_width) / 2.0).clamp(area_x, max_x),
+        y: (y + (height - new_height) / 2.0).clamp(area_y, max_y),
+        width: new_width,
+        height: new_height,
+        min_width,
+        min_height,
+    }
+}
+
+/// 应用界面缩放（字号设置）：当前窗口的 WebView 整页缩放到 `zoom` 倍。
+///
+/// 设置窗口正在显示时，窗口与最小尺寸同时按缩放比例调整（见 rescale_settings）；
+/// 隐藏时只记下缩放，下次打开时由前端传入包含缩放的文本缩放比例重新摆放。
+pub fn set_ui_zoom(window: &WebviewWindow, zoom: f64) -> AppResult<()> {
+    let zoom = if zoom.is_finite() { zoom.clamp(0.5, 3.0) } else { 1.0 };
+    window.set_zoom(zoom)?;
+    if window.label() != SETTINGS_LABEL {
+        return Ok(());
+    }
+    let previous = f64::from_bits(SETTINGS_ZOOM.swap(zoom.to_bits(), Ordering::SeqCst));
+    let showing = window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false);
+    let min = *SETTINGS_MIN.lock().unwrap_or_else(|error| error.into_inner());
+    if (zoom - previous).abs() < 1e-6 || !showing || min.0 <= 0.0 {
+        return Ok(());
+    }
+    let scale = window.scale_factor()?;
+    let position = window.outer_position()?;
+    let size = window.inner_size()?;
+    let current = (
+        f64::from(position.x) / scale,
+        f64::from(position.y) / scale,
+        f64::from(size.width) / scale,
+        f64::from(size.height) / scale,
+    );
+    let monitor = pick_monitor(window, false)?;
+    let geometry = rescale_settings(work_area(&monitor), current, min, zoom / previous);
+    apply_settings_geometry(window, &geometry)
 }
 
 /// 隐藏设置窗口。
@@ -532,6 +606,24 @@ mod tests {
         let large = place_settings((0.0, 0.0, 1280.0, 680.0), 1.25, None);
         assert!(close(large.width, 1100.0) && close(large.height, 632.0));
         assert!(close(large.min_width, 900.0) && close(large.min_height, 632.0));
+    }
+
+    #[test]
+    fn settings_rescale_keeps_center_and_scales_limits() {
+        // 1100×900 的窗口居中摆放，字号从 13 调到 16：尺寸与最小尺寸乘以 16/13，中心不变。
+        let ratio = 16.0 / 13.0;
+        let geometry = rescale_settings(AREA, (730.0, 270.0, 1100.0, 900.0), (900.0, 700.0), ratio);
+        assert!(close(geometry.width, 1100.0 * ratio));
+        assert!(close(geometry.height, 900.0 * ratio));
+        assert!(close(geometry.min_width, 900.0 * ratio));
+        assert!(close(geometry.x + geometry.width / 2.0, 730.0 + 550.0));
+        // 超出工作区时收回到留边之内，并保持在屏幕内。
+        let large = rescale_settings((0.0, 0.0, 1280.0, 680.0), (100.0, 20.0, 1100.0, 632.0), (900.0, 632.0), 1.5);
+        assert!(close(large.width, 1244.0) && close(large.height, 632.0));
+        assert!(large.x >= 0.0 && large.x + large.width <= 1280.0);
+        // 缩小字号时尺寸随之缩小，但不小于新的最小尺寸。
+        let small = rescale_settings(AREA, (730.0, 270.0, 900.0, 700.0), (900.0, 700.0), 13.0 / 16.0);
+        assert!(close(small.width, 900.0 * 13.0 / 16.0) && close(small.min_width, small.width));
     }
 
     #[test]

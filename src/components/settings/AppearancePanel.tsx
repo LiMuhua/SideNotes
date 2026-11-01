@@ -216,10 +216,10 @@ export function AppearancePanel({ settings, save }: PanelProps) {
 
       <Group title="文字" className="settings-wide">
         <div className="settings-field-grid settings-typography">
-          <Row title="字体">
+          <Row title="字体" description="应用到侧栏、速记浮窗与设置窗口的全部文字；代码仍使用等宽字体。">
             <FontPicker value={settings.fontFamily} onChoose={(fontFamily) => save({ fontFamily })} />
           </Row>
-          <Row title="字号">
+          <Row title="字号" description="正文显示为所选字号，按钮、标签等界面文字随之等比缩放，三个窗口同时生效。">
             <RangeField
               label="字体大小"
               settingKey="fontSize"

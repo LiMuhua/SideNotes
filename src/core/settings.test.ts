@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { boundedNumber, DEFAULT_SETTINGS, normalizeSettings, parseDelay, resolveFontFamily } from './settings';
+import { boundedNumber, DEFAULT_SETTINGS, normalizeSettings, parseDelay, resolveFontFamily, uiZoom } from './settings';
 import { filePath, fileLabel, isLegacyToken, toMarkdownReference } from './files';
 
 describe('设置校验', () => {
@@ -20,7 +20,7 @@ describe('设置校验', () => {
     expect(normalizeSettings({ width: 100 }).width).toBe(360);
     expect(normalizeSettings({ width: 9999 }).width).toBe(720);
     expect(normalizeSettings({ fontSize: 2 }).fontSize).toBe(12);
-    expect(normalizeSettings({ fontSize: 99 }).fontSize).toBe(18);
+    expect(normalizeSettings({ fontSize: 99 }).fontSize).toBe(20);
     expect(normalizeSettings({ pageSize: 1 }).pageSize).toBe(5);
     expect(normalizeSettings({ pageSize: 500 }).pageSize).toBe(100);
     expect(normalizeSettings({ trashDays: 0 }).trashDays).toBe(1);
@@ -85,6 +85,11 @@ describe('设置校验', () => {
 
   it('默认设置是规范化的结果', () => {
     expect(normalizeSettings(DEFAULT_SETTINGS)).toEqual(DEFAULT_SETTINGS);
+  });
+
+  it('字号按 13px 的设计字号换算为界面缩放', () => {
+    expect(uiZoom(13)).toBe(1);
+    expect(uiZoom(16)).toBeCloseTo(1.2308, 4);
   });
 
   it('字体族过滤引号与反斜杠', () => {

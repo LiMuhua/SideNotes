@@ -205,10 +205,21 @@ async function textScale(): Promise<number> {
   }
 }
 
-/** 显示设置窗口；带上文本缩放比例，使设置内容按原型尺寸完整显示。 */
+/**
+ * 显示设置窗口；带上文本缩放比例，使设置内容按原型尺寸完整显示。
+ * 比例按调用方窗口测得，已包含字号对应的界面缩放（各窗口的缩放相同）。
+ */
 export async function showSettings(): Promise<void> {
   if (!isDesktop()) return;
   await invoke('show_settings', { textScale: await textScale() });
+}
+
+/**
+ * 应用界面缩放（字号设置）：当前窗口的 WebView 整页缩放，设置窗口同时按比例调整尺寸。
+ * 浏览器预览不缩放。
+ */
+export function setUiZoom(zoom: number): Promise<void> {
+  return call<void>('set_ui_zoom', { zoom }, undefined as unknown as void);
 }
 
 /** 隐藏设置窗口。 */

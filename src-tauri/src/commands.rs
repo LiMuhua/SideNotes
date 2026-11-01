@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, State, WebviewWindow};
 
 use crate::edge::EdgeWatcher;
 use crate::error::{AppError, AppResult};
@@ -132,6 +132,12 @@ pub fn show_settings(app: AppHandle, text_scale: Option<f64>) -> AppResult<()> {
 #[tauri::command]
 pub fn hide_settings(app: AppHandle) -> AppResult<()> {
     windows::hide_settings(&app)
+}
+
+/// 应用界面缩放（字号设置）：调用方窗口的 WebView 整页缩放，设置窗口同时按比例调整尺寸。
+#[tauri::command]
+pub fn set_ui_zoom(window: WebviewWindow, zoom: f64) -> AppResult<()> {
+    windows::set_ui_zoom(&window, zoom)
 }
 
 /// 打开指定窗口的开发者工具，供设置页「关于 › 调试」排查界面问题。
