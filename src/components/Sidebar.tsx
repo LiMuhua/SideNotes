@@ -116,6 +116,8 @@ export function Sidebar() {
   const hideTimer = useRef<number>(0);
   /** 正在拖动边框调整宽度；拖动期间指针可能移出窗口，不能因此收起。 */
   const resizing = useRef(false);
+  /** 正在用系统对话框选择附件：对话框打开期间侧栏失焦，不算点到了侧栏之外。 */
+  const choosingFiles = useRef(false);
   /** 每次安排或取消收起都会递增；异步查询返回时据此判断这次收起是否已被取消。 */
   const hideToken = useRef(0);
   /**
@@ -139,15 +141,19 @@ export function Sidebar() {
   const dialogOpen = Boolean(trashTarget || managingTag || imagePreview || emojiTarget || changelogOpen);
   // 卡片菜单与对话框渲染在侧栏元素之外，鼠标移上去就会触发侧栏的 mouseleave。
   // 与原型的 keepVisible 一致：到点时按最新状态再判断一次，避免先移出侧栏、随后才打开对话框时仍被收起。
-  // 实际值在卡片手势之后计算（见下方）。
-  const keepVisibleRef = useRef(false);
+  // 实际值在卡片手势之后计算（见下方）：holdRef 为任何情况下都保持展开的条件；
+  // holdFocusedRef 为编辑、多选等只在侧栏仍有焦点时（鼠标移出）才保持展开的条件，点到侧栏之外照常收起。
+  const holdRef = useRef(false);
+  const holdFocusedRef = useRef(false);
 
   const scheduleHide = useCallback(() => {
     window.clearTimeout(hideTimer.current);
     hidePending.current = true;
     const token = ++hideToken.current;
+    const mustStay = (): boolean =>
+      holdRef.current || choosingFiles.current || (holdFocusedRef.current && document.hasFocus());
     const attempt = (): void => {
-      if (token !== hideToken.current || keepVisibleRef.current || resizing.current) return;
+      if (token !== hideToken.current || mustStay() || resizing.current) return;
       // 与原型一致：鼠标仍在侧栏上时不收起。
       if (asideRef.current?.matches(":hover")) {
         hidePending.current = false;
@@ -157,7 +163,7 @@ export function Sidebar() {
       // 鼠标也可能移到设置窗口上，所以到点时先查询设置窗口是否正在显示；
       // 显示时稍后复查，设置窗口关闭（含最小化）后再收起，不需要鼠标重新移入移出。
       void bridge.isSettingsVisible().then((settingsOpen) => {
-        if (token !== hideToken.current || keepVisibleRef.current) return;
+        if (token !== hideToken.current || mustStay()) return;
         if (settingsOpen) {
           hideTimer.current = window.setTimeout(attempt, SETTINGS_POLL_INTERVAL);
           return;
@@ -408,11 +414,27 @@ export function Sidebar() {
   /* ==================== 窗口失焦自动收起 ==================== */
   // 点到侧栏窗口之外与鼠标移出同样触发收起；是否保持展开由到点时的状态决定，
   // 不在这里提前返回，否则菜单随失焦关闭后就再没有机会收起。
+  // 整个侧栏失去焦点时，正在编辑的卡片先保存并回到预览，与在侧栏内点到别处一致；
+  // 选择附件的对话框打开期间、附件还在读取时不算离开。
+  // 重新获得焦点（选完附件、很快又点回侧栏）时取消尚未执行的收起。
   useEffect(() => {
-    const handleBlur = (): void => scheduleHide();
+    const handleBlur = (): void => {
+      if (editingRef.current && !choosingFiles.current && store.getState().pendingAttachments === 0) {
+        void commitEdit();
+      }
+      scheduleHide();
+    };
+    const handleFocus = (): void => {
+      choosingFiles.current = false;
+      if (hidePending.current) cancelHide();
+    };
     window.addEventListener("blur", handleBlur);
-    return () => window.removeEventListener("blur", handleBlur);
-  }, [scheduleHide]);
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [scheduleHide, cancelHide, commitEdit]);
 
   /* ==================== 托盘与系统事件 ==================== */
   useEffect(() => {
@@ -598,23 +620,23 @@ export function Sidebar() {
     onMoveItem: (drop) => void moveItem(drop),
   });
 
-  // 与原型 keepVisible 一致：固定、弹层、菜单、拖动与多选期间不自动收起；
-  // 「编辑时保持展开」开启时，编辑记录、整理标签，或新建卡片有未保存内容时也不收起。
-  const draftPending = Boolean(state.draft.text.trim() || state.draft.images.length || state.pendingAttachments);
-  const keepVisible = Boolean(
-    pinned ||
-      dialogOpen ||
-      contextMenu ||
-      sidebarMenu ||
-      interactions.busy ||
-      interactions.hasSelection ||
+  // 与原型 keepVisible 一致：固定、弹层、菜单、拖动与读取附件期间不自动收起；
+  // 多选，以及「编辑时保持展开」开启时的编辑记录、整理标签与新建卡片的未保存内容，
+  // 只在鼠标移出时保持展开：点到侧栏之外（整个侧栏失去焦点）照常收起，编辑中的卡片已在失焦时保存。
+  const draftPending = Boolean(state.draft.text.trim() || state.draft.images.length);
+  const hold = Boolean(
+    pinned || dialogOpen || contextMenu || sidebarMenu || interactions.busy || state.pendingAttachments > 0,
+  );
+  const holdWhileFocused = Boolean(
+    interactions.hasSelection ||
       (state.settings.protectEditing && (editing || tagsExpandedId || (composerActive && draftPending))),
   );
   useEffect(() => {
-    keepVisibleRef.current = keepVisible;
+    holdRef.current = hold;
+    holdFocusedRef.current = holdWhileFocused;
     // 保持展开的条件解除时，若之前已触发过收起（鼠标早已移出或窗口已失焦），补一次收起。
-    if (!keepVisible && hidePending.current) scheduleHide();
-  }, [keepVisible, scheduleHide]);
+    if (hidePending.current && !hold && (!holdWhileFocused || !document.hasFocus())) scheduleHide();
+  }, [hold, holdWhileFocused, scheduleHide]);
 
   /**
    * Ctrl+C 复制：多选时复制选中的全部记录；否则复制高亮的卡片，
@@ -986,12 +1008,15 @@ export function Sidebar() {
     fileTarget.current = target;
     if (fileInputRef.current) {
       fileInputRef.current.accept = mode === "image" ? "image/*" : "*/*";
+      // 系统对话框打开期间侧栏失焦，不保存编辑也不收起；对话框关闭、窗口重新获得焦点后复位。
+      choosingFiles.current = true;
       fileInputRef.current.click();
     }
   }, []);
 
   const handleFileSelected = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
+      choosingFiles.current = false;
       const files = Array.from(event.target.files ?? []);
       event.target.value = "";
       if (!files.length) return;
