@@ -9,11 +9,23 @@ describe('设置校验', () => {
     expect(settings.surface).toBe('standard');
     expect(settings.edge).toBe('right');
     expect(settings.width).toBe(416);
-    expect(settings.fontFamily).toBe('Segoe UI');
+    expect(settings.fontFamily).toBe('Maple Mono NF CN');
+    expect(settings.fontSize).toBe(16);
+    expect(settings.settingsVersion).toBe(2);
     expect(settings.pageSize).toBe(10);
     expect(settings.trashDays).toBe(30);
     expect(settings.protectEditing).toBe(true);
     expect(settings.cloud.enabled).toBe(false);
+  });
+
+  it('旧版本仍是默认的 Segoe UI 13px 时换成新的默认字体，改过的字体保留', () => {
+    const legacy = normalizeSettings({ fontFamily: 'Segoe UI', fontSize: 13 });
+    expect([legacy.fontFamily, legacy.fontSize]).toEqual(['Maple Mono NF CN', 16]);
+    expect(normalizeSettings({ fontFamily: 'Segoe UI', fontSize: 14 }).fontFamily).toBe('Segoe UI');
+    expect(normalizeSettings({ fontFamily: '', fontSize: 13 }).fontFamily).toBe('');
+    // 新版本中再选回 Segoe UI 13px 不会被改掉。
+    const chosen = normalizeSettings({ settingsVersion: 2, fontFamily: 'Segoe UI', fontSize: 13 });
+    expect([chosen.fontFamily, chosen.fontSize]).toEqual(['Segoe UI', 13]);
   });
 
   it('越界数值就近校正', () => {

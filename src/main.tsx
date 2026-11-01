@@ -11,6 +11,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 
 import { App } from './App';
 import { isDesktop } from './core/bridge';
+import './styles/fonts.css';
 import './styles/prototype.css';
 import './styles/desktop.css';
 

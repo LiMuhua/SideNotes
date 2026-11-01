@@ -13,13 +13,14 @@ import { useToast } from '../../hooks/useToast';
 import { Icon } from '../Icon';
 import { ActionButton, Group } from './controls';
 
-/** 开源致谢，与原型列表一致。 */
+/** 开源致谢：原型列表，加上随应用打包的字体。 */
 const CREDITS: ReadonlyArray<readonly [string, string, string, string]> = [
   ['Tauri', 'https://tauri.app/', '◈', '桌面与跨平台运行时'],
   ['React', 'https://react.dev/', '⚛', '界面方案参考'],
   ['Vite', 'https://vite.dev/', 'ϟ', '开发与构建工具'],
   ['SQLite', 'https://sqlite.org/', '▱', '本地数据方案参考'],
   ['Filee', 'https://github.com/KnifeLemon/Filee', '▣', '桌面外观与交互参考'],
+  ['Maple Mono', 'https://github.com/subframe7536/maple-font', 'Aa', '内置默认字体 Maple Mono NF CN，SIL Open Font License 1.1'],
 ];
 
 /** 可打开开发者工具的窗口。 */

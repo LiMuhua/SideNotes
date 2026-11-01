@@ -1,0 +1,29 @@
+/* ==================== 内置字体 ====================
+ *
+ * 默认字体 Maple Mono NF CN 随应用一起打包（常规与粗体两个字重，WOFF2），
+ * 分发到没有安装这款字体的电脑上也能显示。系统里已经安装时优先使用本机字体，不必加载内置文件。
+ * 其它字重按 CSS 规则就近取用这两个字重；斜体由浏览器合成。
+ * 字体以 SIL Open Font License 1.1 授权，许可文本见同目录的 OFL.txt。
+ */
+
+@font-face {
+  font-family: 'Maple Mono NF CN';
+  src:
+    local('Maple Mono NF CN Regular'),
+    local('MapleMono-NF-CN-Regular'),
+    url('../assets/fonts/MapleMono-NF-CN-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Maple Mono NF CN';
+  src:
+    local('Maple Mono NF CN Bold'),
+    local('MapleMono-NF-CN-Bold'),
+    url('../assets/fonts/MapleMono-NF-CN-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}

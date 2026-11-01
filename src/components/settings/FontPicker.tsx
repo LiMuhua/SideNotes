@@ -10,9 +10,10 @@ import { useEffect, useState } from 'react';
 import * as bridge from '../../core/bridge';
 import { Combobox, type ComboOption } from './Combobox';
 
-/** 常见字体，与原型列表一致。 */
+/** 常见字体：随应用打包的默认字体在前，其余与原型列表一致。 */
 const FONTS = [
   '系统默认',
+  'Maple Mono NF CN',
   'Microsoft YaHei UI',
   'Microsoft YaHei',
   'Segoe UI',

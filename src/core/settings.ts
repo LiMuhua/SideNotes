@@ -27,6 +27,16 @@ export const HIDE_DELAY_RANGE = { min: 100, max: 10_000 } as const;
 /** 侧栏出入动画时长范围（毫秒），0 表示关闭动画。 */
 export const ANIM_DURATION_RANGE = { min: 0, max: 600, step: 20 } as const;
 
+/**
+ * 设置的结构版本。
+ * 2：默认字体由 Segoe UI 13px 改为随应用打包的 Maple Mono NF CN 16px。
+ */
+export const SETTINGS_VERSION = 2;
+/** 默认字体，随应用一起打包（见 styles/fonts.css）。 */
+export const DEFAULT_FONT_FAMILY = 'Maple Mono NF CN';
+/** 默认字号。 */
+export const DEFAULT_FONT_SIZE = 16;
+
 /** 把数值限制到范围内并取整。 */
 function clampInt(value: unknown, min: number, max: number, fallback: number): number {
   const number = Math.round(Number(value));
@@ -54,16 +64,24 @@ function normalizeCloud(value: unknown): CloudSettings {
 /** 校验并补全设置。缺失项使用默认值，越界项就近校正。 */
 export function normalizeSettings(value: unknown = {}): Settings {
   const input = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+  // 空字符串表示用户选择了「系统默认」。
+  let fontFamily = typeof input.fontFamily === 'string' ? input.fontFamily.slice(0, 120) : DEFAULT_FONT_FAMILY;
+  let fontSize = clampInt(input.fontSize, FONT_SIZE_RANGE.min, FONT_SIZE_RANGE.max, DEFAULT_FONT_SIZE);
+  // 版本 1 的默认字体是 Segoe UI 13px：仍是这组值时视为没有改过，换成新的默认字体与字号。
+  if ((Number(input.settingsVersion) || 1) < 2 && fontFamily === 'Segoe UI' && fontSize === 13) {
+    fontFamily = DEFAULT_FONT_FAMILY;
+    fontSize = DEFAULT_FONT_SIZE;
+  }
   return {
+    settingsVersion: SETTINGS_VERSION,
     theme: ['light', 'dark', 'system'].includes(input.theme as string)
       ? (input.theme as Settings['theme'])
       : 'light',
     surface: ['standard', 'paper', 'glass', 'win11'].includes(input.surface as string)
       ? (input.surface as Settings['surface'])
       : 'standard',
-    // 默认字体与宽度取原型的默认值；空字符串表示用户选择了「系统默认」。
-    fontFamily: typeof input.fontFamily === 'string' ? input.fontFamily.slice(0, 120) : 'Segoe UI',
-    fontSize: clampInt(input.fontSize, FONT_SIZE_RANGE.min, FONT_SIZE_RANGE.max, 13),
+    fontFamily,
+    fontSize,
     edge: input.edge === 'left' ? 'left' : 'right',
     width: clampInt(input.width, WIDTH_RANGE.min, WIDTH_RANGE.max, 416),
     hideDelay: clampInt(input.hideDelay, HIDE_DELAY_RANGE.min, HIDE_DELAY_RANGE.max, 600),

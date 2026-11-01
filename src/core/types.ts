@@ -83,6 +83,8 @@ export interface CloudSettings {
 
 /** 应用设置。 */
 export interface Settings {
+  /** 设置的结构版本，用于升级时迁移旧的默认值。 */
+  settingsVersion: number;
   theme: ThemeMode;
   surface: SurfaceMode;
   fontFamily: string;
