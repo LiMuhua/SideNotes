@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { boundedNumber, DEFAULT_SETTINGS, normalizeSettings, resolveFontFamily } from './settings';
+import { boundedNumber, DEFAULT_SETTINGS, normalizeSettings, parseDelay, resolveFontFamily } from './settings';
 import { filePath, fileLabel, isLegacyToken, toMarkdownReference } from './files';
 
 describe('设置校验', () => {
@@ -25,12 +25,26 @@ describe('设置校验', () => {
     expect(normalizeSettings({ pageSize: 500 }).pageSize).toBe(100);
     expect(normalizeSettings({ trashDays: 0 }).trashDays).toBe(1);
     expect(normalizeSettings({ trashDays: 1000 }).trashDays).toBe(365);
+    expect(normalizeSettings({ hideDelay: 77 }).hideDelay).toBe(100);
+    expect(normalizeSettings({ hideDelay: 99_999 }).hideDelay).toBe(10_000);
+    expect(normalizeSettings({ hideDelay: 850 }).hideDelay).toBe(850);
+    expect(normalizeSettings({ hideDelay: 'abc' }).hideDelay).toBe(600);
+  });
+
+  it('移出后收起的输入可带毫秒或秒的单位', () => {
+    expect(parseDelay('800')).toBe(800);
+    expect(parseDelay(' 800 ms ')).toBe(800);
+    expect(parseDelay('600 毫秒')).toBe(600);
+    expect(parseDelay('1.5s')).toBe(1500);
+    expect(parseDelay('1 秒')).toBe(1000);
+    expect(parseDelay('')).toBeNull();
+    expect(parseDelay('-5')).toBeNull();
+    expect(parseDelay('一秒')).toBeNull();
   });
 
   it('未知枚举值回落到默认', () => {
     expect(normalizeSettings({ theme: 'neon' }).theme).toBe('light');
     expect(normalizeSettings({ surface: 'unknown' }).surface).toBe('standard');
-    expect(normalizeSettings({ hideDelay: 77 }).hideDelay).toBe(600);
     expect(normalizeSettings({ storageLocation: 'cloud' }).storageLocation).toBe('appdata');
     expect(normalizeSettings({ cloud: { provider: 'dropbox' } }).cloud.provider).toBe('synology');
   });

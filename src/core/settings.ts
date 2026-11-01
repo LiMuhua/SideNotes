@@ -15,8 +15,10 @@ export const FONT_SIZE_RANGE = { min: 12, max: 18, step: 1 } as const;
 export const PAGE_SIZE_RANGE = { min: 5, max: 100 } as const;
 /** 回收站保留天数范围。 */
 export const TRASH_DAYS_RANGE = { min: 1, max: 365 } as const;
-/** 移出后收起的可选延迟。 */
+/** 移出后收起的常用延迟，作为下拉框的候选。 */
 export const HIDE_DELAYS = [300, 600, 1000] as const;
+/** 移出后收起允许输入的范围（毫秒）：太短时指针稍一移出就收起，太长则失去自动收起的意义。 */
+export const HIDE_DELAY_RANGE = { min: 100, max: 10_000 } as const;
 /** 侧栏出入动画时长范围（毫秒），0 表示关闭动画。 */
 export const ANIM_DURATION_RANGE = { min: 0, max: 600, step: 20 } as const;
 
@@ -59,9 +61,7 @@ export function normalizeSettings(value: unknown = {}): Settings {
     fontSize: clampInt(input.fontSize, FONT_SIZE_RANGE.min, FONT_SIZE_RANGE.max, 13),
     edge: input.edge === 'left' ? 'left' : 'right',
     width: clampInt(input.width, WIDTH_RANGE.min, WIDTH_RANGE.max, 416),
-    hideDelay: HIDE_DELAYS.includes(Number(input.hideDelay) as (typeof HIDE_DELAYS)[number])
-      ? Number(input.hideDelay)
-      : 600,
+    hideDelay: clampInt(input.hideDelay, HIDE_DELAY_RANGE.min, HIDE_DELAY_RANGE.max, 600),
     animDuration: clampInt(input.animDuration, ANIM_DURATION_RANGE.min, ANIM_DURATION_RANGE.max, 260),
     protectEditing: input.protectEditing !== false,
     edgeTrigger: input.edgeTrigger !== false,
@@ -88,6 +88,18 @@ export function boundedNumber(raw: string | number, min: number, max: number, st
   if (!Number.isFinite(number)) return null;
   const snapped = min + Math.round((number - min) / step) * step;
   return Math.max(min, Math.min(max, Number(snapped.toFixed(6))));
+}
+
+/**
+ * 解析「移出后收起」的输入：数字默认为毫秒，也可以带 ms、毫秒、s、秒，例如「800」「1.5 秒」。
+ * 无法识别时返回 null；范围由调用方校正。
+ */
+export function parseDelay(raw: string): number | null {
+  const match = String(raw ?? '').trim().match(/^(\d+(?:\.\d+)?)\s*(ms|毫秒|s|秒)?$/i);
+  if (!match) return null;
+  const amount = Number(match[1]);
+  const unit = (match[2] ?? '').toLowerCase();
+  return Math.round(unit === 's' || unit === '秒' ? amount * 1000 : amount);
 }
 
 /** 解析出实际生效的明暗模式。 */
