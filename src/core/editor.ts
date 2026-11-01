@@ -13,11 +13,12 @@
  * - 可见标记的集合发生变化。
  *
  * 输入法组合期间不重建 DOM，组合结束后一次性吸收浏览器写入的内容。
- * 快捷键、回车续写与智能粘贴见 markdown-commands。
+ * 快捷键、回车续写与智能粘贴见 markdown-commands；粘贴截图或文件时交给应用保存副本，
+ * 再把返回的图片或文件引用插在粘贴时的光标处。
  * 输入 #标签 时在光标后以灰字提示已有标签，Tab 选用，上下键切换候选，Esc 关闭。
  */
 
-import { filePath } from './files';
+import { filePath, isImageName, isLegacyToken } from './files';
 import {
   codeLanguage,
   continueBlock,
@@ -68,6 +69,13 @@ export interface EditorOptions {
   tagSuggestions?: (prefix: string, text: string) => string[];
   /** 读取剪贴板文字，Ctrl+K 用剪贴板中的网址生成链接；未提供时按普通链接处理。 */
   readClipboard?: () => Promise<string>;
+  /**
+   * 粘贴截图或文件：由应用保存副本并返回要插入的 Markdown（图片或文件引用），
+   * 编辑器把它插在粘贴时的光标处；返回 null 表示不插入。未提供时忽略粘贴的文件。
+   */
+  pasteFiles?: (files: File[]) => Promise<string | null>;
+  /** 把本机图片路径换算为可显示的地址；未提供时本机图片只显示原文。 */
+  resolveImage?: (path: string) => string;
 }
 
 /** 一段隐藏的成对标记（行内代码、强调、下划线、链接）：分组范围、内容范围与各个标记的位置。 */
@@ -109,9 +117,11 @@ function splitLines(value: string): LineModel[] {
   return result;
 }
 
-/** 取得允许在编辑器内预览的图片地址。 */
-function imageAddress(value: string): string | null {
+/** 取得允许在编辑器内预览的图片地址；本机图片文件经 `resolve` 换算为可显示的地址。 */
+function imageAddress(value: string, resolve?: (path: string) => string): string | null {
   if (/^data:image\/(?:png|jpe?g|gif|webp|avif|bmp)(?:;[^,]*)?,/i.test(value)) return value;
+  const path = filePath(value);
+  if (path && !isLegacyToken(path)) return resolve && isImageName(path) ? resolve(path) : null;
   try {
     const url = new URL(value);
     return /^https?:$/.test(url.protocol) ? url.href : null;
@@ -770,6 +780,12 @@ export class MarkdownEditor {
         if (labelEnd >= 0) {
           let end = labelEnd + 2;
           let level = 1;
+          // 尖括号包住的地址（路径含空白或括号时的写法）到「>)」为止，中间的括号与反斜杠按原样保留。
+          const angled = text[end] === '<' ? text.indexOf('>)', end + 1) : -1;
+          if (angled >= 0) {
+            end = angled + 2;
+            level = 0;
+          }
           while (end < text.length && level > 0) {
             if (text[end] === '\\') {
               end += 2;
@@ -787,7 +803,7 @@ export class MarkdownEditor {
               .replace(/^<|>$/g, '');
             if (isImage) {
               // 图片的源文本参与光标映射，图片本身只是不可编辑的预览。
-              const address = imageAddress(target);
+              const address = imageAddress(target, this.options.resolveImage);
               if (address) {
                 flush();
                 this.syntax(parent, text.slice(index, end), caret, start + index);
@@ -1183,6 +1199,22 @@ export class MarkdownEditor {
       .then((clipboard) => apply(String(clipboard ?? '')));
   }
 
+  /**
+   * 粘贴截图或文件：应用保存副本后返回引用，插在粘贴时的光标处。
+   * 保存期间原文若已变化（继续输入等），改为插在当前光标处，避免按过时的位置改写。
+   */
+  private pasteFiles(files: File[], range: SourceRange): void {
+    const handler = this.options.pasteFiles;
+    if (!handler) return;
+    const before = this.value;
+    void handler(files)
+      .catch(() => null)
+      .then((markdown) => {
+        if (!markdown || this.destroyed) return;
+        this.replace(markdown, this.value === before ? range : this.selection);
+      });
+  }
+
   /** 吸收输入法或浏览器原生写入，保留原有换行与空白。 */
   private absorbDOM(finish = false): void {
     const next = this.readDOM();
@@ -1282,8 +1314,11 @@ export class MarkdownEditor {
       const clipboard = (event as ClipboardEvent).clipboardData;
       if (!clipboard) return;
       event.preventDefault();
-      // 文件由应用的附件流程处理，编辑器只接收文字。
-      if (clipboard.files.length) return;
+      // 截图与文件交给应用保存副本，再插入引用；只能在粘贴事件中读取剪贴板的文件，先取出来。
+      if (clipboard.files.length) {
+        this.pasteFiles(Array.from(clipboard.files), this.readSelection());
+        return;
+      }
       const text = clipboard.getData('text/plain');
       const range = this.readSelection();
       // 纯文本粘贴，或选区拆开了隐藏的标记时，只替换看得见的文字，不做格式识别，避免把半截语法包进链接或代码块。

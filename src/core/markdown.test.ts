@@ -172,6 +172,16 @@ describe('块级 Markdown', () => {
   });
 });
 
+describe('本机图片', () => {
+  it('本机图片文件识别为内嵌图片，其它文件仍是文件引用', () => {
+    const image = parseInline('![截图](C:\\Data\\attachments\\1-0\\截图.png)')[0];
+    expect(image.kind).toBe('image');
+    expect(image.kind === 'image' && image.src).toBe('C:\\Data\\attachments\\1-0\\截图.png');
+    expect(parseInline('![文档](C:\\a.pdf)').map((node) => node.kind)).not.toContain('image');
+    expect(parseInline('[文档](<C:\\a b\\(1).pdf>)')[0].kind).toBe('file');
+  });
+});
+
 describe('地址校验', () => {
   it('只允许 http、https 与 mailto', () => {
     expect(safeLink('https://example.com')).toBeTruthy();

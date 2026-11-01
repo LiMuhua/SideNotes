@@ -4,12 +4,13 @@
  * 由 `core/markdown` 解析出的 AST 渲染为 React 元素：不使用
  * `dangerouslySetInnerHTML`，原生 HTML 一律作为文字输出。
  * 打开 `sourceMap` 时为顶层块标出所占的行、为图片与文件引用标出原文位置，
- * 供卡片之间拖动引用时定位落点与来源。
+ * 供卡片之间拖动引用时定位落点与来源。本机图片（应用数据目录中的附件副本）经本地文件协议显示。
  */
 
 import { Fragment, type CSSProperties, type ReactNode } from 'react';
 import { parseBlocks, type BlockNode, type InlineNode, type SourceSpan } from '../core/markdown';
-import { fileLabel } from '../core/files';
+import { fileLabel, filePath } from '../core/files';
+import { localFileUrl } from '../core/bridge';
 import { Icon } from './Icon';
 
 /** 渲染回调。 */
@@ -20,6 +21,11 @@ export interface MarkdownHandlers {
   onPreviewImage?: (src: string, alt: string) => void;
   /** 点击文件引用。 */
   onOpenFile?: (path: string) => void;
+}
+
+/** 图片的显示地址：本机图片换成本地文件协议的地址，其余原样使用。 */
+function imageSource(src: string): string {
+  return filePath(src) ? localFileUrl(src) : src;
 }
 
 /** 可拖动引用的位置标记；未开启 sourceMap 时不输出。 */
@@ -61,10 +67,10 @@ function renderInline(nodes: InlineNode[], handlers: MarkdownHandlers, keyPrefix
             {...spanAttributes(node, map)}
             onClick={(event) => {
               event.stopPropagation();
-              handlers.onPreviewImage?.(node.src, node.alt);
+              handlers.onPreviewImage?.(imageSource(node.src), node.alt);
             }}
           >
-            <img className="markdown-image" src={node.src} alt={node.alt} loading="lazy" draggable={false} />
+            <img className="markdown-image" src={imageSource(node.src)} alt={node.alt} loading="lazy" draggable={false} />
           </button>
         );
       case 'file':

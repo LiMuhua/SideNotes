@@ -60,8 +60,27 @@ export function escapeLabel(value: string): string {
     .replace(/([\\[\]])/g, '\\$1');
 }
 
+/** 可以内嵌显示的图片扩展名。 */
+const IMAGE_EXTENSION = /\.(?:png|jpe?g|gif|webp|bmp|avif|svg)$/i;
+
+/** 文件名或路径是否为图片。 */
+export function isImageName(value: string): boolean {
+  return IMAGE_EXTENSION.test(String(value ?? '').trim());
+}
+
+/** 链接地址：路径含空白或括号时用尖括号包住，避免括号提前结束链接。 */
+function linkAddress(path: string): string {
+  return /[\s()]/.test(path) ? `<${path}>` : path;
+}
+
 /** 把绝对路径包装成 Markdown 链接。 */
 export function toMarkdownReference(path: string, name?: string): string {
   const label = escapeLabel(name || fileLabel(path));
-  return `[${label}](${path})`;
+  return `[${label}](${linkAddress(path)})`;
+}
+
+/** 把图片路径包装成 Markdown 内嵌图片。 */
+export function toMarkdownImage(path: string, name?: string): string {
+  const label = escapeLabel(name || fileLabel(path)).replace(/\.[^.]+$/, '');
+  return `![${label}](${linkAddress(path)})`;
 }

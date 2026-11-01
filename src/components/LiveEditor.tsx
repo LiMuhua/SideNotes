@@ -3,12 +3,15 @@
  *
  * 编辑器实例由 `core/editor` 管理 DOM，组件只负责挂载、同步外部原文与销毁；
  * 原文变化通过 `onChange` 上报，避免受控输入在每次按键时重建 DOM。
+ * 粘贴的截图与文件在这里保存为应用数据目录中的副本，编辑器把返回的引用插在光标处。
  */
 
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { MarkdownEditor } from '../core/editor';
+import { importPastedFiles } from '../core/attachments';
 import * as bridge from '../core/bridge';
 import * as store from '../core/store';
+import { useToast } from '../hooks/useToast';
 
 export interface LiveEditorProps {
   value: string;
@@ -42,11 +45,12 @@ export function LiveEditor({
 }: LiveEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const editor = useRef<MarkdownEditor | null>(null);
+  const toast = useToast();
   // 回调放在 ref 中，使编辑器实例不随回调身份变化而重建。
-  const callbacks = useRef({ onChange, onPreviewImage, onBlur, onReady, tagSuggestions });
+  const callbacks = useRef({ onChange, onPreviewImage, onBlur, onReady, tagSuggestions, toast });
   // 在 layout effect 中同步回调，避免在渲染阶段直接写 ref。
   useLayoutEffect(() => {
-    callbacks.current = { onChange, onPreviewImage, onBlur, onReady, tagSuggestions };
+    callbacks.current = { onChange, onPreviewImage, onBlur, onReady, tagSuggestions, toast };
   });
 
   useEffect(() => {
@@ -62,6 +66,16 @@ export function LiveEditor({
       onPreviewImage: (src, alt) => callbacks.current.onPreviewImage?.(src, alt),
       tagSuggestions: (prefix, text) => callbacks.current.tagSuggestions?.(prefix, text) ?? [],
       readClipboard: bridge.readClipboardText,
+      resolveImage: bridge.localFileUrl,
+      pasteFiles: async (files) => {
+        try {
+          return await importPastedFiles(files);
+        } catch (error) {
+          const reason = error instanceof Error && error.message ? error.message : '请稍后重试';
+          callbacks.current.toast(`粘贴的内容未能保存：${reason}`, null, true);
+          return null;
+        }
+      },
     });
     editor.current = instance;
     callbacks.current.onReady?.(instance);

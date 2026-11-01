@@ -14,6 +14,7 @@ import { useStore } from '../hooks/useStore';
 import { useToast } from '../hooks/useToast';
 import * as store from '../core/store';
 import * as bridge from '../core/bridge';
+import { chooseAndImportFiles } from '../core/attachments';
 import type { NoteImage } from '../core/types';
 import type { MarkdownEditor } from '../core/editor';
 
@@ -193,10 +194,21 @@ export function Capture() {
               className="icon-button"
               aria-label="引用文件，也可直接拖入"
               title="引用文件，也可直接拖入"
-              onClick={() => {
-                // 文件引用：在草稿中插入路径占位符
-                const path = '[文件名](路径)';
-                setLocalText((prev) => prev + (prev ? '\n' : '') + path);
+              onClick={async () => {
+                // 文件引用：复制到应用数据目录中维护，在光标处插入引用（图片为内嵌图片）。
+                try {
+                  const markdown = await chooseAndImportFiles();
+                  if (!markdown) return;
+                  if (editorRef.current) {
+                    editorRef.current.focus({ preventScroll: true });
+                    editorRef.current.replace(markdown);
+                  } else {
+                    setLocalText((prev) => prev + (prev ? '\n' : '') + markdown);
+                  }
+                } catch (error) {
+                  const reason = error instanceof Error && error.message ? error.message : '请稍后重试';
+                  toast(`文件未能引用：${reason}`, null, true);
+                }
               }}
             >
               <Icon name="file" />

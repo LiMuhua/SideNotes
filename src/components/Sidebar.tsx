@@ -29,6 +29,7 @@ import * as store from "../core/store";
 import * as bridge from "../core/bridge";
 import { matchesQuery, shouldNudgeTidy, inTab, compareNoteOrder } from "../core/notes";
 import { moveImage, moveReference } from "../core/transfer";
+import { chooseAndImportFiles } from "../core/attachments";
 import { parse, removeTag, tagKey, canonicalize } from "../core/tags";
 import type { EditSession, Note, NoteImage, TabKey } from "../core/types";
 import type { MarkdownEditor } from "../core/editor";
@@ -1027,16 +1028,54 @@ export function Sidebar() {
   const fileMode = useRef<"image" | "file">("image");
   const fileTarget = useRef<"composer" | string>("composer");
 
-  const triggerFileInput = useCallback((mode: "image" | "file", target: "composer" | string) => {
-    fileMode.current = mode;
-    fileTarget.current = target;
-    if (fileInputRef.current) {
-      fileInputRef.current.accept = mode === "image" ? "image/*" : "*/*";
+  /**
+   * 引用文件：用系统对话框选择文件，复制到应用数据目录中维护，在光标处插入引用（图片为内嵌图片）。
+   * 记录只引用副本，原始文件移动或删除后引用仍然有效。
+   */
+  const referenceFiles = useCallback(
+    async (target: "composer" | string) => {
       // 系统对话框打开期间侧栏失焦，不保存编辑也不收起；对话框关闭、窗口重新获得焦点后复位。
       choosingFiles.current = true;
-      fileInputRef.current.click();
-    }
-  }, []);
+      let markdown: string | null;
+      try {
+        markdown = await chooseAndImportFiles();
+      } catch (error) {
+        const reason = error instanceof Error && error.message ? error.message : "请稍后重试";
+        toast(`文件未能引用：${reason}`, null, true);
+        return;
+      } finally {
+        choosingFiles.current = false;
+      }
+      if (!markdown) return;
+      const editor = target === "composer" ? composerEditorRef.current : editorRef.current;
+      if (target !== "composer" && editingRef.current?.id !== target) return;
+      if (editor) {
+        editor.focus({ preventScroll: true });
+        editor.replace(markdown);
+      } else if (target === "composer") {
+        setComposerText((current) => current + (current ? "\n" : "") + markdown);
+      }
+    },
+    [toast],
+  );
+
+  const triggerFileInput = useCallback(
+    (mode: "image" | "file", target: "composer" | string) => {
+      if (mode === "file") {
+        void referenceFiles(target);
+        return;
+      }
+      fileMode.current = mode;
+      fileTarget.current = target;
+      if (fileInputRef.current) {
+        fileInputRef.current.accept = "image/*";
+        // 系统对话框打开期间侧栏失焦，不保存编辑也不收起；对话框关闭、窗口重新获得焦点后复位。
+        choosingFiles.current = true;
+        fileInputRef.current.click();
+      }
+    },
+    [referenceFiles],
+  );
 
   const handleFileSelected = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1082,13 +1121,6 @@ export function Sidebar() {
         if (fileTarget.current === "composer") store.addDraftImages(images);
         else if (editing?.id === fileTarget.current) {
           setEditing((prev) => (prev ? { ...prev, images: [...prev.images, ...images] } : prev));
-        }
-      } else {
-        const refs = files.map((file) => `[${file.name}](${file.name})`).join("\n");
-        if (fileTarget.current === "composer") {
-          setComposerText((current) => current + (current ? "\n" : "") + refs);
-        } else if (editorRef.current) {
-          editorRef.current.replace(refs);
         }
       }
     },

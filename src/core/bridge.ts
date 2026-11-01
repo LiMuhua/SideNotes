@@ -5,7 +5,7 @@
  * 既便于在 jsdom 环境下测试，也让非 Tauri 环境（如纯浏览器预览）可以降级运行。
  */
 
-import { invoke } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow, Window } from '@tauri-apps/api/window';
 import { readText } from '@tauri-apps/plugin-clipboard-manager';
@@ -296,6 +296,40 @@ export async function readClipboardText(): Promise<string> {
   } catch {
     return '';
   }
+}
+
+/** 导入后的附件：显示名称与应用数据目录中副本的完整路径。 */
+export interface ImportedFile {
+  name: string;
+  path: string;
+}
+
+/**
+ * 把一段内容（粘贴的截图或文件）写成应用数据目录中的附件副本。
+ * 内容以原始字节传给后端，文件名放在请求头中。浏览器预览不支持。
+ */
+export async function importAttachment(content: Blob, name: string): Promise<ImportedFile> {
+  if (!isDesktop()) throw new Error('浏览器预览不支持保存附件');
+  const bytes = new Uint8Array(await content.arrayBuffer());
+  return invoke<ImportedFile>('import_attachment', bytes, { headers: { 'X-File-Name': encodeURIComponent(name) } });
+}
+
+/** 把用户选择的文件复制为附件副本，按选择顺序返回。 */
+export function importFiles(paths: string[]): Promise<ImportedFile[]> {
+  return call<ImportedFile[]>('import_files', { paths });
+}
+
+/** 用系统对话框选择要引用的文件（可多选）；取消时返回 null，浏览器预览不支持。 */
+export async function chooseFiles(): Promise<string[] | null> {
+  if (!isDesktop()) throw new Error('浏览器预览不支持引用文件');
+  const picked = await openDialog({ multiple: true, directory: false });
+  if (!picked) return null;
+  return Array.isArray(picked) ? picked : [picked];
+}
+
+/** 本机文件的显示地址（应用的本地文件协议，只能读到应用数据目录中的附件副本）；浏览器预览原样返回。 */
+export function localFileUrl(path: string): string {
+  return isDesktop() ? convertFileSrc(path) : path;
 }
 
 /** 校验文件引用是否仍然可用。 */

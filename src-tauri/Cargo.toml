@@ -16,7 +16,8 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 # devtools：正式版也能从设置页打开开发者工具，便于排查问题。
-tauri = { version = "2", features = ["tray-icon", "image-png", "devtools"] }
+# protocol-asset：卡片中显示应用数据目录里的图片副本（见 tauri.conf.json 的 assetProtocol）。
+tauri = { version = "2", features = ["tray-icon", "image-png", "devtools", "protocol-asset"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-opener = "2"

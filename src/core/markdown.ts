@@ -5,11 +5,12 @@
  * 避免把 DOM 操作混进组件，也便于单元测试解析规则本身。
  *
  * 安全约定沿用原型：原生 HTML 一律保留为文字，链接只允许 http/https/mailto，
- * 图片只允许 data:image 与 https，其他地址降级为普通文本。
+ * 图片只允许 data:image、https 与本机图片文件（显示时经应用的本地文件协议读取，
+ * 只能读到应用数据目录中的附件副本），其他地址降级为普通文本。
  * 例外是 Typora 写法的下划线 `<u>…</u>`：只识别这一对不带属性的标签。
  */
 
-import { filePath } from './files';
+import { filePath, isImageName, isLegacyToken } from './files';
 
 /* ==================== 行内节点 ==================== */
 
@@ -69,10 +70,12 @@ export function safeLink(value: string): string | null {
   }
 }
 
-/** 校验图片来源。 */
+/** 校验图片来源；本机图片文件返回其路径，由渲染方换算为可显示的地址。 */
 export function safeImage(value: string): string | null {
   const source = String(value ?? '').trim();
   if (/^data:image\/(?:png|jpe?g|gif|webp|avif|bmp|svg\+xml)(?:;[^,]*)?,/i.test(source)) return source;
+  const path = filePath(source);
+  if (path && !isLegacyToken(path)) return isImageName(path) ? path : null;
   const link = safeLink(source);
   return link && /^https?:/i.test(link) ? link : null;
 }
@@ -80,13 +83,20 @@ export function safeImage(value: string): string | null {
 /** 解析链接括号并提取地址，支持路径空格与 URL 内嵌括号。 */
 function linkTarget(text: string, start: number): { target: string; end: number } | null {
   if (text[start] !== '(') return null;
+  // 尖括号包住的地址（路径含空白或括号时的写法）到「>)」为止，中间的括号与反斜杠按原样保留。
+  if (text[start + 1] === '<') {
+    const close = text.indexOf('>)', start + 2);
+    if (close >= 0 && !/[\r\n]/.test(text.slice(start + 2, close))) {
+      return { target: text.slice(start + 2, close), end: close + 2 };
+    }
+  }
   let depth = 1;
   let quote = '';
   let end = start + 1;
   for (; end < text.length; end += 1) {
     const character = text[end];
-    // Windows 路径中的反斜杠不是转义符。
-    if (character === '\\' && !/^[a-z]:[\\/]/i.test(text.slice(start + 1))) {
+    // Windows 路径（盘符或 UNC 共享）中的反斜杠不是转义符。
+    if (character === '\\' && !/^(?:[a-z]:[\\/]|\\\\)/i.test(text.slice(start + 1))) {
       end += 1;
       continue;
     }

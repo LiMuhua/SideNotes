@@ -325,3 +325,44 @@ describe('格式快捷键', () => {
     expect(editor.getValue()).toBe('[官网]()');
   });
 });
+
+describe('粘贴截图与本机图片', () => {
+  beforeEach(() => {
+    document.body.replaceChildren();
+  });
+
+  it('粘贴文件时交给应用保存，返回的引用插在粘贴时的光标处', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const received: string[] = [];
+    const editor = new MarkdownEditor(host, {
+      value: '前后',
+      pasteFiles: async (files) => {
+        received.push(...files.map((file) => file.name));
+        return '![截图](C:/Data/attachments/1-0/截图.png)';
+      },
+    });
+    editor.element.focus();
+    editor.setSelectionRange(1, 1);
+    const event = new Event('paste', { bubbles: true, cancelable: true });
+    const file = new File(['png'], 'image.png', { type: 'image/png' });
+    Object.defineProperty(event, 'clipboardData', { value: { files: [file], getData: () => '' } });
+    editor.element.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(received).toEqual(['image.png']);
+    expect(editor.getValue()).toBe('前![截图](C:/Data/attachments/1-0/截图.png)后');
+  });
+
+  it('本机图片经换算后的地址预览，没有换算方法时只显示原文', () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const editor = new MarkdownEditor(host, {
+      value: '![图](C:/a/图.png)',
+      resolveImage: (path) => `asset://${path}`,
+    });
+    expect(editor.element.querySelector('img')?.getAttribute('src')).toBe('asset://C:/a/图.png');
+    const plain = mount('![图](C:/a/图.png)').editor;
+    expect(plain.element.querySelector('img')).toBeNull();
+  });
+});

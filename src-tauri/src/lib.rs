@@ -1,5 +1,6 @@
 //! SideNotes 桌面端入口。
 
+mod attachments;
 mod commands;
 mod edge;
 mod error;
@@ -107,6 +108,8 @@ pub fn run() {
             commands::open_devtools,
             commands::system_fonts,
             commands::inspect_file,
+            commands::import_attachment,
+            commands::import_files,
             commands::copy_file_paths,
             commands::set_sidebar_pinned,
             commands::quit_app,

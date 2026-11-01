@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use tauri::{AppHandle, Manager, State, WebviewWindow};
 
+use crate::attachments::{self, ImportedFile};
 use crate::edge::EdgeWatcher;
 use crate::error::{AppError, AppResult};
 use crate::models::{Draft, Note, Snapshot, StorageInfo, TagUsage};
@@ -154,6 +155,30 @@ pub fn open_devtools(app: AppHandle, label: String) -> AppResult<()> {
 #[tauri::command]
 pub async fn system_fonts() -> Vec<String> {
     crate::fonts::system_families()
+}
+
+/// 把粘贴的内容（截图或文件）写成附件副本，返回名称与副本路径。
+///
+/// 内容以原始字节作为请求体传入，避免把大文件编码成 JSON 数组；文件名经 `x-file-name` 请求头
+/// 以 `encodeURIComponent` 编码传入。
+#[tauri::command]
+pub async fn import_attachment(app: AppHandle, request: tauri::ipc::Request<'_>) -> AppResult<ImportedFile> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err(AppError::Other("附件内容格式不正确".into()));
+    };
+    let name = request
+        .headers()
+        .get("x-file-name")
+        .and_then(|value| value.to_str().ok())
+        .map(attachments::percent_decode)
+        .unwrap_or_default();
+    attachments::import_bytes(&app.path().app_data_dir()?, &name, bytes)
+}
+
+/// 把用户选择的文件复制为附件副本，按选择顺序返回名称与副本路径。
+#[tauri::command]
+pub async fn import_files(app: AppHandle, paths: Vec<String>) -> AppResult<Vec<ImportedFile>> {
+    attachments::import_paths(&app.path().app_data_dir()?, &paths)
 }
 
 /// 读取指定路径的文件是否存在及其大小，供文件引用校验。
