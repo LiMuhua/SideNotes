@@ -78,6 +78,12 @@ body[data-window='sidebar'][data-edge='left'] .sidebar.is-hiding {
 /* 侧栏贴在屏幕边缘、位置由应用管理，标题栏不作为窗口拖动区域：
  * 拖动区域会被系统当作标题栏，右键弹出「还原、移动、关闭」等系统菜单，这里换成侧栏自己的菜单。 */
 
+/* 设置窗口打开期间侧栏随之保持展开：固定按钮显示为按下，再加一圈虚线，表示这是随设置窗口的临时固定。 */
+body[data-window='sidebar'] .window-actions .icon-button.is-linked {
+  outline: 1px dashed color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: -3px;
+}
+
 /* 宽度拖拽手柄贴在窗口内侧边缘。 */
 body[data-window='sidebar'] .sidebar-resizer {
   position: absolute;

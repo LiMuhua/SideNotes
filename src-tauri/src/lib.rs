@@ -69,10 +69,20 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // 关闭按钮只隐藏窗口；退出统一走托盘菜单，避免误关导致后台驻留消失。
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
+            match event {
+                // 关闭按钮只隐藏窗口；退出统一走托盘菜单，避免误关导致后台驻留消失。
+                WindowEvent::CloseRequested { api, .. } => {
+                    api.prevent_close();
+                    let _ = window.hide();
+                    if window.label() == windows::SETTINGS_LABEL {
+                        windows::notify_settings_visibility(window.app_handle());
+                    }
+                }
+                // 最小化与还原都会改变窗口尺寸（最小化时为 0），据此通知设置窗口的显示状态。
+                WindowEvent::Resized(_) if window.label() == windows::SETTINGS_LABEL => {
+                    windows::notify_settings_visibility(window.app_handle());
+                }
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![

@@ -63,6 +63,8 @@ export function Sidebar() {
   const [selectedTag, setSelectedTag] = useState("");
   const [composerActive, setComposerActive] = useState(false);
   const [pinned, setPinned] = useState(false);
+  /** 设置窗口正在显示：侧栏随之保持展开，固定按钮显示为按下以作提示。 */
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   /* ==================== 编辑事务 ==================== */
   const [editing, setEditing] = useState<EditSession | null>(null);
@@ -436,6 +438,27 @@ export function Sidebar() {
       window.removeEventListener("focus", handleFocus);
     };
   }, [scheduleHide, cancelHide, commitEdit]);
+
+  /* ==================== 设置窗口联动 ==================== */
+  // 设置窗口打开期间侧栏保持展开（见 scheduleHide）。切到别的窗口时侧栏看起来像卡住不收，
+  // 所以跟随设置窗口的显示状态把固定按钮显示为按下，关闭或最小化设置后恢复。
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    void bridge.isSettingsVisible().then((showing) => {
+      if (!disposed) setSettingsOpen(showing);
+    });
+    void bridge
+      .onSettingsVisibility((showing) => setSettingsOpen(showing))
+      .then((dispose) => {
+        if (disposed) dispose();
+        else unlisten = dispose;
+      });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
 
   /* ==================== 托盘与系统事件 ==================== */
   useEffect(() => {
@@ -1199,13 +1222,19 @@ export function Sidebar() {
           <div className="window-actions">
             <button
               type="button"
-              className={`icon-button${pinned ? " is-pinned" : ""}`}
-              aria-pressed={pinned}
+              className={`icon-button${pinned ? " is-pinned" : ""}${settingsOpen && !pinned ? " is-linked" : ""}`}
+              aria-pressed={pinned || settingsOpen}
               aria-label={pinned ? "取消固定侧栏" : "固定侧栏保持展开"}
-              title={pinned ? "取消固定侧栏" : "固定侧栏保持展开"}
+              title={
+                pinned
+                  ? "取消固定侧栏"
+                  : settingsOpen
+                    ? "设置窗口打开期间侧栏保持展开，关闭设置后恢复自动收起；点击可一直固定"
+                    : "固定侧栏保持展开"
+              }
               onClick={togglePinned}
             >
-              <Icon name={pinned ? "pin" : "pin-off"} />
+              <Icon name={pinned || settingsOpen ? "pin" : "pin-off"} />
             </button>
             <button
               type="button"

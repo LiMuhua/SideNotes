@@ -43,6 +43,8 @@ export const APP_EVENTS = {
   trayQuit: 'sidenotes://tray-quit',
   /** 任一窗口写入数据库后广播，其它窗口据此刷新内存状态。 */
   storeChanged: 'sidenotes://store-changed',
+  /** 设置窗口打开、关闭、最小化或还原，载荷为是否正在显示。 */
+  settingsVisibility: 'sidenotes://settings-visibility',
 } as const;
 
 /**
@@ -390,4 +392,10 @@ export async function emitStoreChange(change: StoreChange): Promise<void> {
 export async function onStoreChange(handler: (change: StoreChange) => void): Promise<UnlistenFn> {
   if (!isDesktop()) return () => {};
   return listen<StoreChange>(APP_EVENTS.storeChanged, (event) => handler(event.payload));
+}
+
+/** 订阅设置窗口的显示状态（可见且未最小化）变化。 */
+export async function onSettingsVisibility(handler: (showing: boolean) => void): Promise<UnlistenFn> {
+  if (!isDesktop()) return () => {};
+  return listen<boolean>(APP_EVENTS.settingsVisibility, (event) => handler(Boolean(event.payload)));
 }

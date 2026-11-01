@@ -3,13 +3,14 @@
 //! 原型在网页内用 CSS transform 模拟侧栏滑入；桌面端改为真实窗口：
 //! - 侧栏窗口贴附屏幕边缘，按设置的宽度与边缘定位，出入时平移真实窗口，隐藏后完全消失。
 //! - 速记浮窗居中显示，与侧栏共享同一数据库中的草稿。
-//! - 设置窗口即原型的设置对话框，按原型尺寸在鼠标所在屏幕居中，可调整大小。
+//! - 设置窗口即原型的设置对话框，按原型尺寸在鼠标所在屏幕居中，可调整大小，始终置顶；
+//!   显示状态变化时通知各窗口，侧栏据此在固定按钮上提示「设置打开期间保持展开」。
 //! - 显示前重新读取显示器工作区，适配多屏与 DPI 变化。
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, Monitor, WebviewWindow};
+use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Monitor, WebviewWindow};
 
 use crate::error::{AppError, AppResult};
 
@@ -28,6 +29,10 @@ const SETTINGS_MIN_SIZE: (f64, f64) = (720.0, 560.0);
 const SETTINGS_MARGIN: (f64, f64) = (36.0, 48.0);
 /// 设置窗口是否已按默认尺寸摆放过；此后再打开保留用户调整后的大小。
 static SETTINGS_PLACED: AtomicBool = AtomicBool::new(false);
+/// 最近一次通知出去的设置窗口显示状态，只在变化时再通知。
+static SETTINGS_SHOWING: AtomicBool = AtomicBool::new(false);
+/// 设置窗口显示状态变化的事件，载荷为是否正在显示（可见且未最小化）。
+pub const SETTINGS_VISIBILITY_EVENT: &str = "sidenotes://settings-visibility";
 
 /// 侧栏动画代次：每次显示或隐藏都会递增，旧的动画线程据此提前结束，
 /// 避免快速移入移出时两段动画互相拉扯。
@@ -438,6 +443,7 @@ pub fn show_settings(app: &AppHandle, text_scale: f64) -> AppResult<()> {
     }
     settings.show()?;
     settings.set_focus()?;
+    notify_settings_visibility(app);
     Ok(())
 }
 
@@ -445,7 +451,26 @@ pub fn show_settings(app: &AppHandle, text_scale: f64) -> AppResult<()> {
 pub fn hide_settings(app: &AppHandle) -> AppResult<()> {
     let settings = window(app, SETTINGS_LABEL)?;
     settings.hide()?;
+    notify_settings_visibility(app);
     Ok(())
+}
+
+/// 设置窗口是否正在显示：可见且未最小化。
+fn settings_showing(app: &AppHandle) -> bool {
+    app.get_webview_window(SETTINGS_LABEL)
+        .map(|settings| settings.is_visible().unwrap_or(false) && !settings.is_minimized().unwrap_or(false))
+        .unwrap_or(false)
+}
+
+/// 设置窗口打开、关闭、最小化或还原后通知各窗口。
+///
+/// 设置窗口显示期间侧栏保持展开；侧栏据此把固定按钮显示为按下，提示这是随设置窗口的临时固定，
+/// 避免切到别的窗口时侧栏看起来像卡住不收。拖动调整大小会连续触发尺寸变化，只在状态改变时通知。
+pub fn notify_settings_visibility(app: &AppHandle) {
+    let showing = settings_showing(app);
+    if SETTINGS_SHOWING.swap(showing, Ordering::SeqCst) != showing {
+        let _ = app.emit(SETTINGS_VISIBILITY_EVENT, showing);
+    }
 }
 
 #[cfg(test)]
