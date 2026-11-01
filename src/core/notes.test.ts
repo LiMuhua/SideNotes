@@ -231,6 +231,12 @@ describe('展示辅助', () => {
     expect(noteTitle(note({ text: '**加粗标题**\n\n正文' }))).toBe('加粗标题');
   });
 
+  it('首行是图片或链接时只取说明文字', () => {
+    expect(noteTitle(note({ text: '![截图-20261102](C:/Data/attachments/1-0/截图.png)\n\n说明' }))).toBe('截图-20261102');
+    expect(noteTitle(note({ text: '![](C:/a.png)' }))).toBe('图片');
+    expect(noteTitle(note({ text: '见 [方案 (终版).pdf](<C:/a b/(1).pdf>) 第二页' }))).toBe('见 方案 (终版).pdf 第二页');
+  });
+
   it('纯图片记录使用占位标题', () => {
     const target = note({
       text: '',

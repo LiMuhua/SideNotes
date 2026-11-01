@@ -200,7 +200,7 @@ export function formatFullTime(timestamp: number): string {
   )}:${pad(date.getMinutes())}`;
 }
 
-/** 取卡片标题：首个非空行，去掉 Markdown 标记。 */
+/** 取卡片标题：首个非空行，去掉 Markdown 标记；图片与链接只留说明文字。 */
 export function noteTitle(note: Note): string {
   const body = parse(note.text).body;
   const line = body.split('\n').find((item) => item.trim());
@@ -208,6 +208,8 @@ export function noteTitle(note: Note): string {
   return (
     line
       .replace(/^#{1,6}\s+|^[-*+]\s+|^\d+\.\s+/, '')
+      .replace(/!\[([^\]]*)\]\((?:<[^>]*>|[^)]*)\)/g, (_match, alt: string) => alt || '图片')
+      .replace(/\[([^\]]*)\]\((?:<[^>]*>|[^)]*)\)/g, '$1')
       .replace(/<\/?u>/gi, '')
       .replace(/[*`~]/g, '')
       .slice(0, 120) || '记录'
