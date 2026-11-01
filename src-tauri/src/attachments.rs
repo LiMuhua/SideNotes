@@ -117,6 +117,14 @@ pub fn import_paths(root: &Path, paths: &[String]) -> AppResult<Vec<ImportedFile
     Ok(imported)
 }
 
+/// 路径是否位于附件文件夹之内。按实际路径比较（解析链接与 `..`），文件或文件夹不存在时视为不在其中。
+pub fn is_inside(root: &Path, path: &Path) -> bool {
+    match (std::fs::canonicalize(root), std::fs::canonicalize(path)) {
+        (Ok(root), Ok(path)) => path.starts_with(&root) && path != root,
+        _ => false,
+    }
+}
+
 /// 解码 `encodeURIComponent` 编码的文字（附件名经请求头传入，请求头只能是 ASCII）。
 pub fn percent_decode(value: &str) -> String {
     fn hex(byte: u8) -> Option<u8> {
@@ -164,6 +172,20 @@ mod tests {
         let cleaned = sanitize_name(&long);
         assert_eq!(cleaned.chars().count(), 120);
         assert!(cleaned.ends_with(".txt"));
+    }
+
+    #[test]
+    fn only_paths_inside_the_folder_are_attachments() {
+        let root = temp_root("inside");
+        let imported = import_bytes(&root, "a.txt", b"a").expect("写入附件");
+        let folder = root.join(ATTACHMENTS_DIR);
+        assert!(is_inside(&folder, Path::new(&imported.path)));
+        // 借助 .. 跳出附件文件夹、文件夹本身与不存在的文件都不算附件。
+        std::fs::write(root.join("outside.txt"), b"x").unwrap();
+        assert!(!is_inside(&folder, &folder.join("..").join("outside.txt")));
+        assert!(!is_inside(&folder, &folder));
+        assert!(!is_inside(&folder, &folder.join("missing.txt")));
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

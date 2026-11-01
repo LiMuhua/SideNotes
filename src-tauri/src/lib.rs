@@ -40,6 +40,13 @@ pub fn run() {
             std::fs::create_dir_all(&data_dir)?;
             let store = Store::open(&data_dir.join(DATABASE_FILE))?;
 
+            // 附件文件夹在这里建好，再按实际路径开放给本地文件协议。配置中的范围在窗口创建前解析，
+            // 那时文件夹可能还不存在；用户目录经过链接或被虚拟化时，按配置换算出的路径与文件的
+            // 实际路径对不上，图片会被拒绝加载。
+            let attachments_dir = data_dir.join(attachments::ATTACHMENTS_DIR);
+            std::fs::create_dir_all(&attachments_dir)?;
+            app.asset_protocol_scope().allow_directory(&attachments_dir, true)?;
+
             let watcher = Arc::new(EdgeWatcher::new());
 
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -110,6 +117,7 @@ pub fn run() {
             commands::inspect_file,
             commands::import_attachment,
             commands::import_files,
+            commands::open_attachment,
             commands::copy_file_paths,
             commands::set_sidebar_pinned,
             commands::quit_app,

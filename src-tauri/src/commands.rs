@@ -181,6 +181,22 @@ pub async fn import_files(app: AppHandle, paths: Vec<String>) -> AppResult<Vec<I
     attachments::import_paths(&app.path().app_data_dir()?, &paths)
 }
 
+/// 用系统默认程序打开附件文件夹中的文件。
+///
+/// 只打开附件副本：记录中的路径可能来自导入的备份，直接打开任意路径可能运行不明程序。
+/// 由后端按实际路径校验，不受用户目录链接或文件系统虚拟化影响。
+#[tauri::command]
+pub fn open_attachment(app: AppHandle, path: String) -> AppResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    let root = app.path().app_data_dir()?.join(attachments::ATTACHMENTS_DIR);
+    if !attachments::is_inside(&root, std::path::Path::new(&path)) {
+        return Err(AppError::Other("只能打开附件文件夹中的文件".into()));
+    }
+    app.opener()
+        .open_path(&path, None::<&str>)
+        .map_err(|error| AppError::Other(format!("无法打开文件：{error}")))
+}
+
 /// 读取指定路径的文件是否存在及其大小，供文件引用校验。
 #[tauri::command]
 pub fn inspect_file(path: String) -> AppResult<FileStatus> {
