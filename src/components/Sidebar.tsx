@@ -77,6 +77,11 @@ export function Sidebar() {
   // key 每次打开递增：在另一张卡片上右键时重新挂载菜单，焦点回到首项。
   const [contextMenu, setContextMenu] = useState<{ note: Note; anchor: MenuAnchor; key: number } | null>(null);
   const menuSerial = useRef(0);
+  /**
+   * 单击选中的卡片：与指针悬停的卡片使用同一种边框高亮，指针移到另一张卡片上时只高亮那一张。
+   * Ctrl+C 复制高亮的卡片：悬停的优先，其次是单击选中的。
+   */
+  const [currentId, setCurrentId] = useState<string | null>(null);
   const [emojiTarget, setEmojiTarget] = useState<Note | null>(null);
   const [imagePreview, setImagePreview] = useState<{ src: string; alt: string } | null>(null);
   const [nudgeDismissed, setNudgeDismissed] = useState(false);
@@ -354,19 +359,21 @@ export function Sidebar() {
     store.changeDraft(composerText);
   }, [composerText]);
 
-  /** 复制整条记录：菜单首项、卡片上的复制按钮与选中卡片后的 Ctrl+C 共用。 */
-  const handleCopyNote = useCallback(
-    async (note: Note) => {
+  /** 复制记录：菜单首项、卡片上的复制按钮与 Ctrl+C 共用；多条记录之间空一行。 */
+  const handleCopyNotes = useCallback(
+    async (notes: Note[]) => {
       try {
-        const plain = `${note.emoji || "📝"} ${note.text}`;
+        const plain = notes.map((note) => `${note.emoji || "📝"} ${note.text}`).join("\n\n");
         await navigator.clipboard.writeText(plain);
-        toast("已复制");
+        toast(notes.length > 1 ? `已复制 ${notes.length} 条记录` : "已复制");
       } catch {
         toast("剪贴板不可用", null, true);
       }
     },
     [toast],
   );
+
+  const handleCopyNote = useCallback((note: Note) => handleCopyNotes([note]), [handleCopyNotes]);
 
   /* ==================== 窗口失焦自动收起 ==================== */
   // 点到侧栏窗口之外与鼠标移出同样触发收起；是否保持展开由到点时的状态决定，
@@ -376,107 +383,6 @@ export function Sidebar() {
     window.addEventListener("blur", handleBlur);
     return () => window.removeEventListener("blur", handleBlur);
   }, [scheduleHide]);
-
-  /* ==================== 键盘快捷键 ==================== */
-  useEffect(() => {
-    const handler = (event: KeyboardEvent): void => {
-      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        if (editing) {
-          void commitEdit();
-          return;
-        }
-        // 与原型一致：按键发生在新建卡片内即保存。保存后焦点仍留在新建卡片里，
-        // 不会再触发 focus，不能只依赖「新建卡片激活」状态，否则接着按 Ctrl+Enter 没有反应。
-        const inComposer = event.target instanceof Element && Boolean(event.target.closest("#quick-composer"));
-        if (composerActive || inComposer) {
-          void saveComposer(true);
-        }
-      }
-      if (event.key === "Escape") {
-        if (contextMenu) {
-          setContextMenu(null);
-          return;
-        }
-        if (emojiTarget) {
-          setEmojiTarget(null);
-          return;
-        }
-        if (imagePreview) {
-          setImagePreview(null);
-          return;
-        }
-        if (managingTag) {
-          setManagingTag(null);
-          return;
-        }
-        if (changelogOpen) {
-          setChangelogOpen(false);
-          return;
-        }
-        if (trashTarget) {
-          setTrashTarget(null);
-          return;
-        }
-        if (tagMenuOpen) {
-          setTagMenuOpen(false);
-          return;
-        }
-        if (editing) {
-          cancelEdit();
-          return;
-        }
-        if (composerActive) {
-          setComposerActive(false);
-          return;
-        }
-        // 搜索面板开着时 Esc 收起搜索并清空查询；标签筛选独立保留。
-        if (searchOpen) {
-          setSearchOpen(false);
-          setQuery("");
-          return;
-        }
-        // 都没有，收起侧栏。
-        setTagMenuOpen(false);
-        void bridge.hideSidebar(currentLayout());
-      }
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
-        event.preventDefault();
-        if (!searchOpen) {
-          setSearchOpen(true);
-          setTimeout(() => document.getElementById("search-input")?.focus(), 50);
-        } else {
-          document.getElementById("search-input")?.focus();
-        }
-      }
-      // Ctrl+N：与原型「新建记录」一致，先提交正在进行的编辑，再聚焦顶部输入卡片。
-      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "n") {
-        event.preventDefault();
-        if (editing) void commitEdit();
-        window.dispatchEvent(new CustomEvent("sidenotes:focus-composer"));
-      }
-      // Ctrl+C：焦点在卡片上（单击选中）且没有选中文字时，复制整条记录。
-      if (
-        (event.ctrlKey || event.metaKey) &&
-        !event.shiftKey &&
-        !event.altKey &&
-        event.key.toLowerCase() === "c" &&
-        !window.getSelection()?.toString()
-      ) {
-        const active = document.activeElement;
-        if (active instanceof HTMLElement && active.matches(".note-card:not(.is-editing)")) {
-          const note = store.getState().notes.find((item) => item.id === active.dataset.noteId);
-          if (note) {
-            event.preventDefault();
-            void handleCopyNote(note);
-          }
-        }
-      }
-    };
-    document.addEventListener("keydown", handler, true);
-    return () => document.removeEventListener("keydown", handler, true);
-  });
 
   /* ==================== 托盘与系统事件 ==================== */
   useEffect(() => {
@@ -509,6 +415,7 @@ export function Sidebar() {
         // 先提交当前编辑再开新的
         void commitEdit();
       }
+      setCurrentId(note.id);
       setEditing({
         id: note.id,
         text: note.text,
@@ -542,13 +449,14 @@ export function Sidebar() {
 
   /* ==================== 卡片长按排序与多选（对应原型 interactions.js） ==================== */
 
-  /** 切换页签：清空搜索与标签筛选，页签按钮与拖动停留共用。 */
+  /** 切换页签：清空搜索、标签筛选与单击选中，页签按钮与拖动停留共用。 */
   const switchTab = useCallback((next: TabKey) => {
     setTab(next);
     setQuery("");
     setSearchOpen(false);
     setSelectedTag("");
     setTagMenuOpen(false);
+    setCurrentId(null);
   }, []);
 
   /** 把拖动的记录移到页签或回收站，提示可撤销，对应原型 moveRecords。 */
@@ -677,19 +585,147 @@ export function Sidebar() {
     if (!keepVisible && hidePending.current) scheduleHide();
   }, [keepVisible, scheduleHide]);
 
-  /** 单击卡片只选中（获得焦点），供 Enter 编辑、Ctrl+C 复制；编辑改为双击。 */
+  /**
+   * Ctrl+C 复制：多选时复制选中的全部记录；否则复制高亮的卡片，
+   * 指针所在的卡片优先，其次是单击选中的卡片。没有可复制的卡片时提示。
+   */
+  const copyHighlighted = useCallback(async () => {
+    let targets = listNotes.filter((note) => interactions.selected.has(note.id));
+    if (!targets.length) {
+      const hovered = listRef.current?.querySelector<HTMLElement>(".note-card:hover")?.dataset.noteId;
+      const note = listNotes.find((item) => item.id === (hovered ?? currentId));
+      if (note) targets = [note];
+    }
+    if (!targets.length) {
+      toast("没有选中内容");
+      return;
+    }
+    await handleCopyNotes(targets);
+  }, [listNotes, interactions.selected, currentId, toast, handleCopyNotes]);
+
+  /* ==================== 键盘快捷键 ==================== */
+  useEffect(() => {
+    const handler = (event: KeyboardEvent): void => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (editing) {
+          void commitEdit();
+          return;
+        }
+        // 与原型一致：按键发生在新建卡片内即保存。保存后焦点仍留在新建卡片里，
+        // 不会再触发 focus，不能只依赖「新建卡片激活」状态，否则接着按 Ctrl+Enter 没有反应。
+        const inComposer = event.target instanceof Element && Boolean(event.target.closest("#quick-composer"));
+        if (composerActive || inComposer) {
+          void saveComposer(true);
+        }
+      }
+      if (event.key === "Escape") {
+        if (contextMenu) {
+          setContextMenu(null);
+          return;
+        }
+        if (emojiTarget) {
+          setEmojiTarget(null);
+          return;
+        }
+        if (imagePreview) {
+          setImagePreview(null);
+          return;
+        }
+        if (managingTag) {
+          setManagingTag(null);
+          return;
+        }
+        if (changelogOpen) {
+          setChangelogOpen(false);
+          return;
+        }
+        if (trashTarget) {
+          setTrashTarget(null);
+          return;
+        }
+        if (tagMenuOpen) {
+          setTagMenuOpen(false);
+          return;
+        }
+        if (editing) {
+          cancelEdit();
+          return;
+        }
+        if (composerActive) {
+          setComposerActive(false);
+          return;
+        }
+        // 搜索面板开着时 Esc 收起搜索并清空查询；标签筛选独立保留。
+        if (searchOpen) {
+          setSearchOpen(false);
+          setQuery("");
+          return;
+        }
+        // 都没有，收起侧栏。
+        setTagMenuOpen(false);
+        void bridge.hideSidebar(currentLayout());
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        if (!searchOpen) {
+          setSearchOpen(true);
+          setTimeout(() => document.getElementById("search-input")?.focus(), 50);
+        } else {
+          document.getElementById("search-input")?.focus();
+        }
+      }
+      // Ctrl+N：与原型「新建记录」一致，先提交正在进行的编辑，再聚焦顶部输入卡片。
+      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "n") {
+        event.preventDefault();
+        if (editing) void commitEdit();
+        window.dispatchEvent(new CustomEvent("sidenotes:focus-composer"));
+      }
+      // Ctrl+C：不在输入框或编辑区中、页面上也没有选中文字时复制卡片，见 copyHighlighted。
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        !event.shiftKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === "c" &&
+        !window.getSelection()?.toString()
+      ) {
+        const target = event.target instanceof Element ? event.target : null;
+        const typing = target?.closest('input, textarea, select, [contenteditable="true"]');
+        if (!typing && !dialogOpen && !contextMenu) {
+          event.preventDefault();
+          void copyHighlighted();
+        }
+      }
+    };
+    document.addEventListener("keydown", handler, true);
+    return () => document.removeEventListener("keydown", handler, true);
+  });
+
+  /** 单击卡片选中（获得焦点并高亮），供 Enter 编辑、Ctrl+C 复制；编辑改为双击。单击空白处取消选中。 */
   const handleListClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
       if (event.defaultPrevented || interactions.isBusy() || interactions.isSelecting() || tagsExpandedId) return;
       const target = event.target as HTMLElement;
-      if (target.closest('button,a,input,textarea,select,[contenteditable="true"]')) return;
       const card = target.closest<HTMLElement>(".note-card");
-      if (!card || card.classList.contains("is-editing")) return;
+      if (!card) {
+        setCurrentId(null);
+        return;
+      }
+      setCurrentId(card.dataset.noteId ?? null);
+      if (target.closest('button,a,input,textarea,select,[contenteditable="true"]')) return;
+      if (card.classList.contains("is-editing")) return;
       // 按下时为避免选中文字阻止了默认行为，焦点不会自动移到卡片上。
       card.focus({ preventScroll: true });
     },
     [interactions, tagsExpandedId],
   );
+
+  /** 键盘把焦点移到卡片上时同样选中这张卡片。 */
+  const handleListFocus = useCallback((event: React.FocusEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.matches(".note-card")) setCurrentId(target.dataset.noteId ?? null);
+  }, []);
 
   /** 双击卡片开始编辑；多选与拖动之后的双击已由卡片手势拦下。 */
   const handleListDoubleClick = useCallback(
@@ -719,6 +755,7 @@ export function Sidebar() {
       if (dialogOpen || tagsExpandedId) return;
       // 与原型一致：打开菜单前先保存正在进行的编辑。
       if (editingRef.current) void commitEdit();
+      setCurrentId(note.id);
       openNoteMenu(note, { x: event.clientX, y: event.clientY });
     },
     [dialogOpen, tagsExpandedId, commitEdit, openNoteMenu],
@@ -1225,6 +1262,7 @@ export function Sidebar() {
           role="list"
           aria-label={`${TAB_LABELS[tab]}记录列表`}
           onClick={handleListClick}
+          onFocus={handleListFocus}
           onDoubleClick={handleListDoubleClick}
           onContextMenu={handleListContextMenu}
           onKeyDown={handleListKeyDown}
@@ -1252,6 +1290,7 @@ export function Sidebar() {
                 key={note.id}
                 note={note}
                 editing={editing}
+                current={currentId === note.id}
                 selected={interactions.selected.has(note.id)}
                 menuOpen={contextMenu?.note.id === note.id}
                 itemTarget={interactions.itemTargetId === note.id}

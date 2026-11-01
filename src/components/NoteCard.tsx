@@ -21,6 +21,8 @@ export interface NoteCardProps {
   note: Note;
   /** 当前编辑事务，仅当 id 匹配时进入编辑态。 */
   editing: EditSession | null;
+  /** 单击选中的卡片：与悬停使用同一种边框高亮，Ctrl+C 复制它。 */
+  current: boolean;
   /** 是否处于多选状态。 */
   selected: boolean;
   /** 记录菜单正为这张卡片打开。 */
@@ -266,6 +268,7 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
     note.pinned ? 'is-pinned' : '',
     isEditing ? 'is-editing' : '',
     note.collapsed ? 'is-collapsed' : '',
+    props.current ? 'is-current' : '',
     props.selected ? 'is-selected' : '',
     props.menuOpen ? 'is-menu-open' : '',
     props.itemTarget ? 'is-drop-target' : '',
@@ -290,7 +293,7 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
       tabIndex={0}
       aria-label={title}
       aria-selected={props.selected}
-      title={isEditing ? undefined : '双击编辑，右键查看更多操作，长按拖动排序'}
+      title={isEditing ? undefined : '单击选中后按 Ctrl+C 复制，双击编辑，右键查看更多操作，长按拖动排序'}
       // 编辑中焦点离开整张卡片（而不只是编辑面）才算失焦，卡片内的工具按钮不打断编辑。
       onBlur={isEditing ? props.onEditBlur : undefined}
     >

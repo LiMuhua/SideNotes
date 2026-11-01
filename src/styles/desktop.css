@@ -587,6 +587,17 @@ body[data-window='sidebar'] #note-list .note-card {
     opacity 0.16s;
 }
 
+/* 选中的卡片：单击选中与指针悬停使用同一种边框高亮，悬停优先。
+ * 指针停在另一张卡片上时，只有那一张高亮；指针离开所有卡片后，高亮回到单击选中的卡片。
+ * 高亮的卡片就是 Ctrl+C 复制的对象。 */
+body[data-window='sidebar'] #note-list > .note-card:not(.is-editing):hover,
+body[data-window='sidebar'] #note-list:not(:has(> .note-card:hover)) > .note-card.is-current:not(.is-editing) {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--card));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent),
+    0 4px 16px #3d58250b;
+}
+
 body[data-window='sidebar'] .sidebar.has-editing #note-list > .note-card:not(.is-editing),
 body[data-window='sidebar'] .sidebar.has-editing .composer-dock > #quick-composer.sidebar-composer:not(:focus-within) {
   opacity: 0.56;
