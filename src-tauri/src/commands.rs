@@ -144,6 +144,12 @@ pub fn open_devtools(app: AppHandle, label: String) -> AppResult<()> {
     Ok(())
 }
 
+/// 列出系统已安装的字体族名称，供设置页的字体下拉框联想；在后台线程读取，不阻塞窗口。
+#[tauri::command]
+pub async fn system_fonts() -> Vec<String> {
+    crate::fonts::system_families()
+}
+
 /// 读取指定路径的文件是否存在及其大小，供文件引用校验。
 #[tauri::command]
 pub fn inspect_file(path: String) -> AppResult<FileStatus> {

@@ -3,6 +3,7 @@
 mod commands;
 mod edge;
 mod error;
+mod fonts;
 mod models;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod shortcuts;
@@ -103,6 +104,7 @@ pub fn run() {
             commands::show_settings,
             commands::hide_settings,
             commands::open_devtools,
+            commands::system_fonts,
             commands::inspect_file,
             commands::copy_file_paths,
             commands::set_sidebar_pinned,

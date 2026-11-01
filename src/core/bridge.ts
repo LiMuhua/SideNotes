@@ -148,6 +148,11 @@ export function storageInfo(): Promise<StorageInfo> {
   });
 }
 
+/** 列出系统已安装的字体族名称；浏览器预览读不到系统字体，返回空列表。 */
+export function systemFonts(): Promise<string[]> {
+  return call<string[]>('system_fonts', undefined, []);
+}
+
 /** 读取启动时注册失败的全局热键。 */
 export function shortcutConflicts(): Promise<string[]> {
   return call<string[]>('shortcut_conflicts', undefined, []);

@@ -50,7 +50,10 @@ export function Combobox({ text, options, selected, label, placeholder, commitOn
   });
   const choices = options(draft);
 
-  // 键盘切换候选时让当前项保持可见。
+  // 展开时让已选中的一项可见，键盘切换候选时让当前项保持可见。
+  useEffect(() => {
+    if (open) list.current?.querySelector('.is-selected')?.scrollIntoView({ block: 'nearest' });
+  }, [open]);
   useEffect(() => {
     if (active < 0) return;
     list.current?.querySelector('.is-active')?.scrollIntoView({ block: 'nearest' });
