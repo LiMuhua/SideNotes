@@ -29,6 +29,8 @@ const SETTINGS_SIZE: (f64, f64) = (880.0, 720.0);
 const SETTINGS_MIN_SIZE: (f64, f64) = (720.0, 560.0);
 /// 屏幕较小时保留的外边距，对应原型的 calc(100vw - 36px) 与 calc(100dvh - 48px)。
 const SETTINGS_MARGIN: (f64, f64) = (36.0, 48.0);
+/// 速记浮窗的设计尺寸（逻辑像素），与 tauri.conf.json 一致；界面缩放时按比例放大。
+const CAPTURE_SIZE: (f64, f64) = (560.0, 420.0);
 /// 设置窗口是否已按默认尺寸摆放过；此后再打开保留用户调整后的大小。
 static SETTINGS_PLACED: AtomicBool = AtomicBool::new(false);
 /// 设置窗口最近一次设定的最小尺寸（内容区的逻辑像素），界面缩放变化时按比例调整。
@@ -491,13 +493,31 @@ fn rescale_settings(
     }
 }
 
+/// 速记浮窗按设计尺寸乘以界面缩放，再限制在工作区之内；显示中时重新居中。
+fn resize_capture(capture: &WebviewWindow, zoom: f64) -> AppResult<()> {
+    let monitor = pick_monitor(capture, false)?;
+    let (_, _, area_width, area_height) = work_area(&monitor);
+    let width = (CAPTURE_SIZE.0 * zoom).min((area_width - SETTINGS_MARGIN.0).max(320.0));
+    let height = (CAPTURE_SIZE.1 * zoom).min((area_height - SETTINGS_MARGIN.1).max(240.0));
+    capture.set_size(LogicalSize::new(width, height))?;
+    if capture.is_visible().unwrap_or(false) {
+        capture.center()?;
+    }
+    Ok(())
+}
+
 /// 应用界面缩放（字号设置）：当前窗口的 WebView 整页缩放到 `zoom` 倍。
 ///
+/// 速记浮窗与设置窗口是尺寸固定的对话式窗口，同时按缩放比例调整尺寸，内容所占的网页尺寸不变；
+/// 侧栏的宽度由用户设置，不随缩放改变。
 /// 设置窗口正在显示时，窗口与最小尺寸同时按缩放比例调整（见 rescale_settings）；
 /// 隐藏时只记下缩放，下次打开时由前端传入包含缩放的文本缩放比例重新摆放。
 pub fn set_ui_zoom(window: &WebviewWindow, zoom: f64) -> AppResult<()> {
     let zoom = if zoom.is_finite() { zoom.clamp(0.5, 3.0) } else { 1.0 };
     window.set_zoom(zoom)?;
+    if window.label() == CAPTURE_LABEL {
+        return resize_capture(window, zoom);
+    }
     if window.label() != SETTINGS_LABEL {
         return Ok(());
     }
