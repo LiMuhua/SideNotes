@@ -15,6 +15,7 @@ import { Icon, IconSprite } from "./Icon";
 import { Composer } from "./Composer";
 import { NoteCard } from "./NoteCard";
 import { NoteMenu, type MenuAnchor, type MenuCommand } from "./NoteMenu";
+import { SidebarMenu, type SidebarCommand } from "./SidebarMenu";
 import { EmojiPicker } from "./EmojiPicker";
 import { TagFilter } from "./TagFilter";
 import { TagManageDialog } from "./TagManageDialog";
@@ -76,6 +77,8 @@ export function Sidebar() {
   const [trashTarget, setTrashTarget] = useState<Note | null>(null);
   // key 每次打开递增：在另一张卡片上右键时重新挂载菜单，焦点回到首项。
   const [contextMenu, setContextMenu] = useState<{ note: Note; anchor: MenuAnchor; key: number } | null>(null);
+  /** 空白处的右键菜单。 */
+  const [sidebarMenu, setSidebarMenu] = useState<{ anchor: MenuAnchor; key: number } | null>(null);
   const menuSerial = useRef(0);
   /**
    * 单击选中的卡片：与指针悬停的卡片使用同一种边框高亮，指针移到另一张卡片上时只高亮那一张。
@@ -97,7 +100,15 @@ export function Sidebar() {
   /** 打开记录菜单：右下角「…」按钮传入按钮元素，右键传入鼠标位置。 */
   const openNoteMenu = useCallback((note: Note, anchor: MenuAnchor) => {
     menuSerial.current += 1;
+    setSidebarMenu(null);
     setContextMenu({ note, anchor, key: menuSerial.current });
+  }, []);
+
+  /** 打开空白处的侧栏菜单。 */
+  const openSidebarMenu = useCallback((anchor: MenuAnchor) => {
+    menuSerial.current += 1;
+    setContextMenu(null);
+    setSidebarMenu({ anchor, key: menuSerial.current });
   }, []);
 
   /* ==================== 鼠标移出收起 ==================== */
@@ -375,6 +386,25 @@ export function Sidebar() {
 
   const handleCopyNote = useCallback((note: Note) => handleCopyNotes([note]), [handleCopyNotes]);
 
+  /** 打开搜索并聚焦输入框：Ctrl+F 与空白处菜单共用。 */
+  const openSearch = useCallback(() => {
+    setSearchOpen(true);
+    window.setTimeout(() => document.getElementById("search-input")?.focus(), 50);
+  }, []);
+
+  /** 新建记录：先提交正在进行的编辑，再聚焦新建卡片。Ctrl+N 与空白处菜单共用。 */
+  const startNewNote = useCallback(() => {
+    if (editingRef.current) void commitEdit();
+    window.dispatchEvent(new CustomEvent("sidenotes:focus-composer"));
+  }, [commitEdit]);
+
+  /** 固定或取消固定侧栏：标题栏按钮与空白处菜单共用。 */
+  const togglePinned = useCallback(() => {
+    const next = !pinned;
+    setPinned(next);
+    void bridge.setSidebarPinned(next);
+  }, [pinned]);
+
   /* ==================== 窗口失焦自动收起 ==================== */
   // 点到侧栏窗口之外与鼠标移出同样触发收起；是否保持展开由到点时的状态决定，
   // 不在这里提前返回，否则菜单随失焦关闭后就再没有机会收起。
@@ -575,6 +605,7 @@ export function Sidebar() {
     pinned ||
       dialogOpen ||
       contextMenu ||
+      sidebarMenu ||
       interactions.busy ||
       interactions.hasSelection ||
       (state.settings.protectEditing && (editing || tagsExpandedId || (composerActive && draftPending))),
@@ -625,6 +656,10 @@ export function Sidebar() {
           setContextMenu(null);
           return;
         }
+        if (sidebarMenu) {
+          setSidebarMenu(null);
+          return;
+        }
         if (emojiTarget) {
           setEmojiTarget(null);
           return;
@@ -669,18 +704,12 @@ export function Sidebar() {
       }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
         event.preventDefault();
-        if (!searchOpen) {
-          setSearchOpen(true);
-          setTimeout(() => document.getElementById("search-input")?.focus(), 50);
-        } else {
-          document.getElementById("search-input")?.focus();
-        }
+        openSearch();
       }
       // Ctrl+N：与原型「新建记录」一致，先提交正在进行的编辑，再聚焦顶部输入卡片。
       if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "n") {
         event.preventDefault();
-        if (editing) void commitEdit();
-        window.dispatchEvent(new CustomEvent("sidenotes:focus-composer"));
+        startNewNote();
       }
       // Ctrl+C：不在输入框或编辑区中、页面上也没有选中文字时复制卡片，见 copyHighlighted。
       if (
@@ -692,7 +721,7 @@ export function Sidebar() {
       ) {
         const target = event.target instanceof Element ? event.target : null;
         const typing = target?.closest('input, textarea, select, [contenteditable="true"]');
-        if (!typing && !dialogOpen && !contextMenu) {
+        if (!typing && !dialogOpen && !contextMenu && !sidebarMenu) {
           event.preventDefault();
           void copyHighlighted();
         }
@@ -761,6 +790,61 @@ export function Sidebar() {
     [dialogOpen, tagsExpandedId, commitEdit, openNoteMenu],
   );
 
+  /* ==================== 空白处：右键菜单与双击收起展开 ==================== */
+
+  /** 收起或展开当前列表中的全部卡片：有展开的就全部收起，否则全部展开；提示条提供撤销。 */
+  const toggleCollapseAll = useCallback(
+    async (collapse = listNotes.some((note) => !note.collapsed)) => {
+      const ids = listNotes.filter((note) => note.collapsed !== collapse).map((note) => note.id);
+      if (!ids.length) return;
+      const undo = await store.setCollapsed(ids, collapse);
+      if (!undo) {
+        toast("操作未保存", null, true);
+        return;
+      }
+      toast(`已${collapse ? "收起" : "展开"} ${ids.length} 张卡片`, {
+        label: "撤销",
+        run: () => {
+          void store.restoreNotes(undo);
+        },
+      });
+    },
+    [listNotes, toast],
+  );
+
+  /** 卡片、输入控件、按钮与浮层之外的位置算作空白处。 */
+  const isBlank = useCallback(
+    (target: EventTarget | null): boolean =>
+      target instanceof Element &&
+      !target.closest(
+        '.note-card,button,a,input,textarea,select,[contenteditable="true"],[role="separator"],.sidebar-composer,.tag-dropdown,.workspace-nudge,.desktop-notice,.toast-region,.drag-trash-zone',
+      ),
+    [],
+  );
+
+  /** 侧栏空白处右键：打开侧栏菜单，替代系统窗口菜单与浏览器菜单；输入框与编辑区保留系统菜单。 */
+  const handleSidebarContextMenu = useCallback(
+    (event: React.MouseEvent<HTMLElement>) => {
+      if (event.defaultPrevented) return;
+      const target = event.target as HTMLElement;
+      if (target.closest('input,textarea,[contenteditable="true"],.note-card')) return;
+      event.preventDefault();
+      if (dialogOpen) return;
+      openSidebarMenu({ x: event.clientX, y: event.clientY });
+    },
+    [dialogOpen, openSidebarMenu],
+  );
+
+  /** 双击空白处切换当前列表全部卡片的收起与展开。 */
+  const handleSidebarDoubleClick = useCallback(
+    (event: React.MouseEvent<HTMLElement>) => {
+      if (event.defaultPrevented || !isBlank(event.target) || interactions.isBusy() || dialogOpen) return;
+      window.getSelection()?.removeAllRanges();
+      void toggleCollapseAll();
+    },
+    [isBlank, interactions, dialogOpen, toggleCollapseAll],
+  );
+
   /** 键盘焦点在卡片上时 Enter 或空格开始编辑。 */
   const handleListKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -785,7 +869,7 @@ export function Sidebar() {
           beginEdit(note);
           break;
         case "collapse":
-          await store.updateNote(note.id, { collapsed: !note.collapsed });
+          await store.setCollapsed([note.id], !note.collapsed);
           break;
         case "pin":
           await store.updateNote(note.id, { pinned: !note.pinned });
@@ -818,6 +902,44 @@ export function Sidebar() {
       }
     },
     [tab, beginEdit, handleCopyNote, handleArchiveNote, toast],
+  );
+
+  /** 空白处菜单的命令。 */
+  const handleSidebarCommand = useCallback(
+    (command: SidebarCommand) => {
+      setSidebarMenu(null);
+      switch (command) {
+        case "new":
+          startNewNote();
+          break;
+        case "search":
+          openSearch();
+          break;
+        case "collapse-all":
+          void toggleCollapseAll(true);
+          break;
+        case "expand-all":
+          void toggleCollapseAll(false);
+          break;
+        case "select-all":
+          interactions.selectAll();
+          break;
+        case "pin":
+          togglePinned();
+          break;
+        case "edge":
+          void store.updateSettings({ edge: state.settings.edge === "left" ? "right" : "left" });
+          break;
+        case "settings":
+          window.dispatchEvent(new CustomEvent("sidenotes:open-settings"));
+          break;
+        case "hide":
+          setTagMenuOpen(false);
+          void bridge.hideSidebar(currentLayout());
+          break;
+      }
+    },
+    [startNewNote, openSearch, toggleCollapseAll, interactions, togglePinned, state.settings.edge, currentLayout],
   );
 
   /**
@@ -1004,6 +1126,12 @@ export function Sidebar() {
         data-edge={state.settings.edge}
         onMouseEnter={cancelHide}
         onMouseLeave={scheduleHide}
+        onContextMenu={handleSidebarContextMenu}
+        onDoubleClick={handleSidebarDoubleClick}
+        onMouseDown={(event) => {
+          // 双击空白处用于收起展开全部卡片，不选中其中的文字。
+          if (event.detail > 1 && isBlank(event.target)) event.preventDefault();
+        }}
       >
         {/* 拖动宽度手柄 */}
         <div
@@ -1049,11 +1177,7 @@ export function Sidebar() {
               aria-pressed={pinned}
               aria-label={pinned ? "取消固定侧栏" : "固定侧栏保持展开"}
               title={pinned ? "取消固定侧栏" : "固定侧栏保持展开"}
-              onClick={() => {
-                const next = !pinned;
-                setPinned(next);
-                void bridge.setSidebarPinned(next);
-              }}
+              onClick={togglePinned}
             >
               <Icon name={pinned ? "pin" : "pin-off"} />
             </button>
@@ -1318,10 +1442,8 @@ export function Sidebar() {
                 onAttachEditImage={() => triggerFileInput("image", note.id)}
                 onAttachEditFile={() => triggerFileInput("file", note.id)}
                 onChooseEmoji={() => setEmojiTarget(note)}
-                onToggleCollapse={() =>
-                  void store.updateNote(note.id, { collapsed: !note.collapsed })
-                }
-                onExpand={() => void store.updateNote(note.id, { collapsed: false })}
+                onToggleCollapse={() => void store.setCollapsed([note.id], !note.collapsed)}
+                onExpand={() => void store.setCollapsed([note.id], false)}
                 onCopy={() => void handleCopyNote(note)}
                 onTogglePin={() => void store.updateNote(note.id, { pinned: !note.pinned })}
                 onArchive={() => void handleArchiveNote(note)}
@@ -1418,6 +1540,20 @@ export function Sidebar() {
           anchor={contextMenu.anchor}
           onCommand={(command) => void handleMenuCommand(contextMenu.note, command)}
           onClose={() => setContextMenu(null)}
+        />
+      ) : null}
+
+      {/* 空白处的侧栏菜单 */}
+      {sidebarMenu ? (
+        <SidebarMenu
+          key={sidebarMenu.key}
+          anchor={sidebarMenu.anchor}
+          count={listNotes.length}
+          hasExpanded={listNotes.some((note) => !note.collapsed)}
+          pinned={pinned}
+          edge={state.settings.edge}
+          onCommand={handleSidebarCommand}
+          onClose={() => setSidebarMenu(null)}
         />
       ) : null}
 

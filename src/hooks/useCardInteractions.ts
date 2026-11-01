@@ -98,6 +98,8 @@ export interface CardInteractions {
   isBusy: () => boolean;
   isSelecting: () => boolean;
   clearSelection: () => void;
+  /** 选中当前列表中的全部记录并进入多选，对应空白处菜单的「选择全部记录」。 */
+  selectAll: () => void;
 }
 
 /** 一次按压或拖动手势。 */
@@ -212,6 +214,13 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
     t.selected.clear();
     t.mode = false;
     t.anchor = '';
+    commitSelection();
+  }, [commitSelection]);
+
+  const selectAll = useCallback(() => {
+    const t = tools.current;
+    optionsRef.current.visibleNotes.forEach((note) => t.selected.add(note.id));
+    t.mode = true;
     commitSelection();
   }, [commitSelection]);
 
@@ -954,5 +963,6 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
     isBusy,
     isSelecting,
     clearSelection,
+    selectAll,
   };
 }

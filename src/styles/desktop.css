@@ -75,17 +75,8 @@ body[data-window='sidebar'][data-edge='left'] .sidebar.is-hiding {
   transform: translateX(calc(var(--sidebar-hide-offset, 18px) * -1));
 }
 
-/* 标题栏可拖动窗口；其中的按钮保持可点击。 */
-body[data-window='sidebar'] .sidebar-header {
-  -webkit-app-region: drag;
-  app-region: drag;
-}
-
-body[data-window='sidebar'] .sidebar-header button,
-body[data-window='sidebar'] .sidebar-header .version-button {
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
-}
+/* 侧栏贴在屏幕边缘、位置由应用管理，标题栏不作为窗口拖动区域：
+ * 拖动区域会被系统当作标题栏，右键弹出「还原、移动、关闭」等系统菜单，这里换成侧栏自己的菜单。 */
 
 /* 宽度拖拽手柄贴在窗口内侧边缘。 */
 body[data-window='sidebar'] .sidebar-resizer {

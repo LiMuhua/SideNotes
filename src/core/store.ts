@@ -322,7 +322,6 @@ export async function moveNotes(
   return saved ? { previous } : null;
 }
 
-/** 按撤销信息还原批量修改。 */
 /**
  * 一次修改多条记录的正文或附件（如把图片从一张卡片移到另一张），返回撤销所需的原值；
  * 写入失败返回 null，记录保持原样。
@@ -348,12 +347,29 @@ export async function updateNotes(
   return (await persist({ notes })) ? { previous } : null;
 }
 
+/** 按撤销信息还原批量修改；原值中带有修改时间时一并还原，否则记为现在修改。 */
 export async function restoreNotes(undo: BatchUndo): Promise<boolean> {
   const notes = state.notes.map((note) => {
     const previous = undo.previous.get(note.id);
-    return previous ? { ...note, ...previous, updatedAt: Date.now() } : note;
+    return previous ? { ...note, updatedAt: Date.now(), ...previous } : note;
   });
   return persist({ notes });
+}
+
+/**
+ * 收起或展开一批记录的正文，返回撤销所需的原值；写入失败返回 null。
+ * 折叠只是显示状态，不改动修改时间。
+ */
+export async function setCollapsed(ids: Iterable<string>, collapsed: boolean): Promise<BatchUndo | null> {
+  const targets = new Set(ids);
+  const previous = new Map<string, Partial<Note>>();
+  const notes = state.notes.map((note) => {
+    if (!targets.has(note.id) || note.collapsed === collapsed) return note;
+    previous.set(note.id, { collapsed: note.collapsed, updatedAt: note.updatedAt });
+    return { ...note, collapsed };
+  });
+  if (!previous.size) return { previous };
+  return (await persist({ notes })) ? { previous } : null;
 }
 
 /**

@@ -29,6 +29,7 @@ import {
   restoreNotes,
   retryStorage,
   saveDraftAsNote,
+  setCollapsed,
   trackTagUsage,
   updateNote,
   updateSettings,
@@ -133,6 +134,18 @@ describe('状态仓库', () => {
     if (!undo) return;
     await restoreNotes(undo);
     expect(getState().notes.every((item) => item.status === 'active')).toBe(true);
+  });
+
+  it('批量收起与展开正文不改动修改时间，撤销后原样还原', async () => {
+    resetForTest({ notes: [note(), note({ id: 'note-2', collapsed: true })], ready: true });
+    const undo = await setCollapsed(['note-1', 'note-2'], true);
+    expect(undo?.previous.size).toBe(1);
+    expect(getState().notes.every((item) => item.collapsed)).toBe(true);
+    expect(getState().notes[0].updatedAt).toBe(1_700_000_000_000);
+    if (!undo) return;
+    await restoreNotes(undo);
+    expect(getState().notes.map((item) => item.collapsed)).toEqual([false, true]);
+    expect(getState().notes[0].updatedAt).toBe(1_700_000_000_000);
   });
 
   it('移入回收站记住删除前位置，撤销后完整还原', async () => {
