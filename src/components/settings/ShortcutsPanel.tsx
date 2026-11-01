@@ -65,7 +65,7 @@ export function ShortcutsPanel({ conflicts }: { conflicts: string[] }) {
           <ShortcutGrid items={FORMATTING} />
           <p className="setting-description shortcut-format-note">
             列表与引用中回车自动续写，空项回车结束；粘贴网址、链接与代码时自动转换为 Markdown；
-            剪贴板中是网址时按 Ctrl + K 直接生成链接；删除线也可按 Alt + Shift + 5，下划线写作 &lt;u&gt;…&lt;/u&gt;，与 Typora 一致。
+            剪贴板中是网址时按 Ctrl+K 直接生成链接；删除线也可按 Alt+Shift+5，下划线写作 &lt;u&gt;…&lt;/u&gt;，与 Typora 一致。
           </p>
         </Group>
       </div>

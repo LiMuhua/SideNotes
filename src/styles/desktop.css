@@ -747,3 +747,9 @@ body[data-window='settings'] .settings-modal .sidebar-settings-primary {
 .settings-modal .shortcuts-dashboard .shortcut-format-note {
   margin: 10px 0 0;
 }
+
+/* 「文字」分组的标签列在原型中固定为 34px，换成全局字体（如等宽的 Maple Mono）并带上说明问号后放不下，
+ * 标签会竖排折行；改为按内容取宽度。 */
+body[data-window='settings'] .settings-modal .appearance-dashboard .settings-typography .settings-row {
+  grid-template-columns: max-content minmax(0, 1fr);
+}
