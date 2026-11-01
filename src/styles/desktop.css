@@ -304,18 +304,26 @@ body[data-window='capture'] .capture-body {
 
 /* 列表行使用悬挂缩进：项头（圆点、序号、待办框或光标进入时显示的原始标记）占据左侧固定宽度，
  * 正文与折行都从同一位置开始，项头不再与正文贴在一起。缩进的列表项整体右移。
+ * 项头宽度不小于三个字符（如「1. 」），等宽字体下序号也放得下。
  * 选择器带上编辑器类名，以覆盖原型 v3 中同名规则的 padding-left: 4px。 */
 .live-markdown-editor .md-list-item {
-  padding-left: calc(1.6em + var(--md-list-indent, 0) * 0.5em);
-  text-indent: -1.6em;
+  --md-list-hang: max(1.6em, 3ch);
+  padding-left: calc(var(--md-list-hang) + var(--md-list-indent, 0) * 0.5em);
+  text-indent: calc(var(--md-list-hang) * -1);
 }
 
 .live-markdown-editor .md-list-bullet,
 .live-markdown-editor .md-list-marker.is-revealed {
   display: inline-block;
-  min-width: 1.6em;
+  min-width: var(--md-list-hang);
   text-indent: 0;
   white-space: pre;
+}
+
+/* 卡片预览中有序列表的序号画在内容左侧，按最大序号的位数（--md-ol-digits）加上「.」与空格留出缩进；
+ * 原型固定 20px，等宽或较大的字体下序号会被卡片裁掉。 */
+.markdown-body ol {
+  padding-left: calc((var(--md-ol-digits, 1) + 2) * 1ch + 0.2em);
 }
 
 .live-markdown-editor .md-list-bullet {

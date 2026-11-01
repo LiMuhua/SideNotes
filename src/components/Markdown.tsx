@@ -7,7 +7,7 @@
  * 供卡片之间拖动引用时定位落点与来源。
  */
 
-import { Fragment, type ReactNode } from 'react';
+import { Fragment, type CSSProperties, type ReactNode } from 'react';
 import { parseBlocks, type BlockNode, type InlineNode, type SourceSpan } from '../core/markdown';
 import { fileLabel } from '../core/files';
 import { Icon } from './Icon';
@@ -172,8 +172,10 @@ function renderBlocks(
             {renderInline(item.children, handlers, `${key}-${itemIndex}-`, map)}
           </li>
         ));
+        // 有序列表的序号在内容左侧，按最大序号的位数留出缩进，等宽或较大的字体下序号也不会被卡片裁掉。
+        const digits = String(Math.max(1, block.start + block.items.length - 1)).length;
         return block.ordered ? (
-          <ol key={key} start={block.start} {...lines}>
+          <ol key={key} start={block.start} style={{ '--md-ol-digits': digits } as CSSProperties} {...lines}>
             {items}
           </ol>
         ) : (
