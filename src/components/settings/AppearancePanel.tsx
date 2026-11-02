@@ -39,8 +39,8 @@ const EDGES: ReadonlyArray<readonly [EdgeSide, string]> = [
   ['left', '屏幕左侧'],
 ];
 
-const DELAY_LABELS: Record<number, string> = { 300: '300 毫秒', 600: '600 毫秒', 1000: '1 秒' };
-const DELAY_OPTIONS = HIDE_DELAYS.map((delay) => ({ value: String(delay), label: DELAY_LABELS[delay] }));
+/** 常用延迟只写数字，单位 ms 固定显示在输入框之后。 */
+const DELAY_OPTIONS = HIDE_DELAYS.map((delay) => ({ value: String(delay), label: String(delay) }));
 
 interface PanelProps {
   settings: Settings;
@@ -99,33 +99,38 @@ function DisplayGroup({ settings, save }: PanelProps) {
 }
 
 /**
- * 移出后收起：保留常用值的下拉选项，也可以直接输入毫秒数（或带「秒」）。
- * 失焦或回车时提交，超出范围时就近校正并提示，无法识别时恢复原值。
+ * 移出后收起：保留常用值的下拉选项，也可以直接输入毫秒数；输入框与选项只显示数字，单位 ms 固定在后面。
+ * 失焦或回车时提交，超出范围时就近校正并提示，无法识别时恢复原值。输入时带上「秒」等单位也能识别。
  */
 function HideDelayField({ value, save }: { value: number; save: SaveSettings }) {
   const toast = useToast();
   const { min, max } = HIDE_DELAY_RANGE;
   return (
-    <Combobox
-      className="settings-delay-combobox"
-      text={DELAY_LABELS[value] ?? `${value} 毫秒`}
-      selected={String(value)}
-      label="移出后收起"
-      placeholder="选择或输入毫秒数"
-      commitOnBlur
-      options={() => DELAY_OPTIONS}
-      onCommit={async (raw) => {
-        const parsed = parseDelay(raw);
-        if (parsed === null) {
-          toast(`请输入 ${min} 至 ${max} 毫秒`, null, true);
-          return false;
-        }
-        const next = Math.max(min, Math.min(max, parsed));
-        const saved = next === value || (await save({ hideDelay: next }));
-        if (saved && next !== parsed) toast(`已调整为 ${next} 毫秒（${min}–${max}）`);
-        return saved;
-      }}
-    />
+    <span className="settings-delay-field">
+      <Combobox
+        className="settings-delay-combobox"
+        text={String(value)}
+        selected={String(value)}
+        label="移出后收起（毫秒）"
+        placeholder={`${min}–${max}`}
+        commitOnBlur
+        options={() => DELAY_OPTIONS}
+        onCommit={async (raw) => {
+          const parsed = parseDelay(raw);
+          if (parsed === null) {
+            toast(`请输入 ${min} 至 ${max} 毫秒`, null, true);
+            return false;
+          }
+          const next = Math.max(min, Math.min(max, parsed));
+          const saved = next === value || (await save({ hideDelay: next }));
+          if (saved && next !== parsed) toast(`已调整为 ${next} 毫秒（${min}–${max}）`);
+          return saved;
+        }}
+      />
+      <span className="settings-runtime-suffix" aria-hidden="true">
+        ms
+      </span>
+    </span>
   );
 }
 
@@ -248,7 +253,7 @@ export function AppearancePanel({ settings, save }: PanelProps) {
             </Row>
             <Row
               title="移出后收起"
-              description="鼠标移出侧栏或点到其它窗口后，等待这段时间再自动收起。可从列表选择，也可输入 100 至 10000 毫秒（如 800 或 1.5 秒）。固定侧栏、打开菜单或对话框期间不收起。"
+              description="鼠标移出侧栏或点到其它窗口后，等待这段时间再自动收起。可从列表选择，也可直接输入 100 至 10000 毫秒。固定侧栏、打开菜单或对话框期间不收起。"
             >
               <HideDelayField value={settings.hideDelay} save={save} />
             </Row>
