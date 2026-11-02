@@ -350,6 +350,12 @@ export interface ImportedFile {
   path: string;
 }
 
+/** 取出错误说明：后端的错误是字符串，脚本错误是 Error。 */
+export function errorText(error: unknown, fallback = '请稍后重试'): string {
+  if (typeof error === 'string' && error) return error;
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
 /**
  * 把一段内容（粘贴的截图或文件）写成应用数据目录中的附件副本。
  * 内容以原始字节传给后端，文件名放在请求头中。浏览器预览不支持。

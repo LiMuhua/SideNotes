@@ -206,7 +206,7 @@ export function Capture() {
                     setLocalText((prev) => prev + (prev ? '\n' : '') + markdown);
                   }
                 } catch (error) {
-                  const reason = error instanceof Error && error.message ? error.message : '请稍后重试';
+                  const reason = bridge.errorText(error, '请稍后重试');
                   toast(`文件未能引用：${reason}`, null, true);
                 }
               }}

@@ -71,7 +71,7 @@ export function LiveEditor({
         try {
           return await importPastedFiles(files);
         } catch (error) {
-          const reason = error instanceof Error && error.message ? error.message : '请稍后重试';
+          const reason = bridge.errorText(error, '请稍后重试');
           callbacks.current.toast(`粘贴的内容未能保存：${reason}`, null, true);
           return null;
         }
