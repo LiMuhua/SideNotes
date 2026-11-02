@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { MarkdownEditor } from './editor';
+import { MarkdownEditor, type EditorOptions } from './editor';
 
 /** 建立挂载点，每个用例独立 DOM。 */
 function mount(value = ''): { editor: MarkdownEditor; host: HTMLElement } {
@@ -364,5 +364,82 @@ describe('粘贴截图与本机图片', () => {
     expect(editor.element.querySelector('img')?.getAttribute('src')).toBe('asset://C:/a/图.png');
     const plain = mount('![图](C:/a/图.png)').editor;
     expect(plain.element.querySelector('img')).toBeNull();
+  });
+});
+
+describe('附件整块显示', () => {
+  const image = '![图](C:/Data/attachments/1-0/图.png)';
+  const file = '[报告.pdf](<C:/Data/attachments/2-0/报 告.pdf>)';
+  const value = `看${image}和${file}完`;
+  const imageStart = value.indexOf(image);
+  const imageEnd = imageStart + image.length;
+  const fileStart = value.indexOf(file);
+  const fileEnd = fileStart + file.length;
+
+  /** 挂载带图片换算与附件回调的编辑器。 */
+  function mountWithAttachments(onAttachment?: EditorOptions['onAttachment']): MarkdownEditor {
+    const host = document.createElement('div');
+    document.body.append(host);
+    return new MarkdownEditor(host, { value, resolveImage: (path) => `asset://${path}`, onAttachment });
+  }
+
+  beforeEach(() => {
+    document.body.replaceChildren();
+  });
+
+  it('原文始终隐藏，显示为图片块与文件块，光标靠近也不展开', () => {
+    const editor = mountWithAttachments();
+    const sources = (): HTMLElement[] => Array.from(editor.element.querySelectorAll<HTMLElement>('.md-attachment-source'));
+    expect(sources().map((node) => node.textContent)).toEqual([image, file]);
+    expect(sources().every((node) => node.hidden)).toBe(true);
+    const chips = Array.from(editor.element.querySelectorAll<HTMLElement>('[data-md-attachment]'));
+    expect(chips.map((chip) => chip.dataset.mdAttachment)).toEqual(['image', 'file']);
+    expect(chips[0].querySelector('img')?.getAttribute('src')).toBe('asset://C:/Data/attachments/1-0/图.png');
+    expect(chips[1].textContent).toBe('报告.pdf');
+    caretAt(editor, imageEnd);
+    expect(sources().every((node) => node.hidden)).toBe(true);
+    caretAt(editor, fileStart);
+    expect(sources().every((node) => node.hidden)).toBe(true);
+    expect(editor.getValue()).toBe(value);
+  });
+
+  it('退格、删除与选中删除都按整个引用处理', () => {
+    const editor = mountWithAttachments();
+    caretAt(editor, imageEnd);
+    input(editor, 'deleteContentBackward');
+    expect(editor.getValue()).toBe(`看和${file}完`);
+    caretAt(editor, 2);
+    input(editor, 'deleteContentForward');
+    expect(editor.getValue()).toBe('看和完');
+    editor.setValue(value);
+    editor.element.focus();
+    // 选区一端落在引用之中：整个引用连同选中的文字一起删除。
+    editor.setSelectionRange(0, imageStart + 4, 'forward');
+    input(editor, 'deleteContentBackward');
+    expect(editor.getValue()).toBe(`和${file}完`);
+  });
+
+  it('复制含附件的选区时带上完整原文', () => {
+    const editor = mountWithAttachments();
+    editor.element.focus();
+    editor.setSelectionRange(0, imageEnd + 1, 'forward');
+    expect(clip(editor, 'copy')).toBe(`看${image}和`);
+  });
+
+  it('点击附件交给应用，带上原文范围与地址', () => {
+    const received: Array<{ kind: string; start: number; end: number; source: string; target: string; label: string }> = [];
+    const editor = mountWithAttachments((attachment) => received.push(attachment));
+    editor.element.querySelectorAll<HTMLElement>('[data-md-attachment]').forEach((chip) => chip.click());
+    expect(received).toEqual([
+      { kind: 'image', start: imageStart, end: imageEnd, source: image, target: 'C:/Data/attachments/1-0/图.png', label: '图' },
+      { kind: 'file', start: fileStart, end: fileEnd, source: file, target: 'C:/Data/attachments/2-0/报 告.pdf', label: '报告.pdf' },
+    ]);
+  });
+
+  it('网页链接照常在光标进入时展开原文', () => {
+    const { editor } = mount('[官网](https://example.com)');
+    expect(editor.element.querySelector('[data-md-attachment]')).toBeNull();
+    caretAt(editor, 3);
+    expect(Array.from(editor.element.querySelectorAll<HTMLElement>('.md-syntax')).some((node) => !node.hidden)).toBe(true);
   });
 });

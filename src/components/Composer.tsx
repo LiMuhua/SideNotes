@@ -7,7 +7,7 @@
 
 import { Icon } from './Icon';
 import { LiveEditor } from './LiveEditor';
-import type { MarkdownEditor } from '../core/editor';
+import type { EditorAttachment, MarkdownEditor } from '../core/editor';
 import type { NoteImage } from '../core/types';
 
 export interface ComposerProps {
@@ -23,7 +23,10 @@ export interface ComposerProps {
   onAttachImage: () => void;
   onAttachFile: () => void;
   onRemoveImage: (id: string) => void;
-  onPreviewImage: (src: string, alt: string) => void;
+  /** 点击编辑面中的附件（图片、文件引用）。 */
+  onAttachment: (attachment: EditorAttachment, event: MouseEvent) => void;
+  /** 点击以 data URL 保存的图片附件。 */
+  onEmbeddedImage: (image: NoteImage) => void;
   /** 编辑面高度上限，随窗口尺寸变化。 */
   maxHeight: number;
 }
@@ -48,7 +51,7 @@ export function Composer(props: ComposerProps) {
           maxHeight={props.maxHeight}
           onChange={props.onChange}
           onReady={props.onReady}
-          onPreviewImage={props.onPreviewImage}
+          onAttachment={props.onAttachment}
         />
 
         {props.images.length ? (
@@ -58,8 +61,9 @@ export function Composer(props: ComposerProps) {
                 <button
                   type="button"
                   className="attachment-preview"
-                  aria-label={`预览图片：${image.name}`}
-                  onClick={() => props.onPreviewImage(image.data, image.name)}
+                  aria-label={`图片：${image.name}`}
+                  title="点击查看详情"
+                  onClick={() => props.onEmbeddedImage(image)}
                 >
                   <img src={image.data} alt={image.name} />
                 </button>

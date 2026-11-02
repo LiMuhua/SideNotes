@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useLayoutEffect, useRef } from 'react';
-import { MarkdownEditor } from '../core/editor';
+import { MarkdownEditor, type EditorAttachment } from '../core/editor';
 import { importPastedFiles } from '../core/attachments';
 import * as bridge from '../core/bridge';
 import * as store from '../core/store';
@@ -22,6 +22,8 @@ export interface LiveEditorProps {
   autoFocus?: boolean;
   onChange: (value: string) => void;
   onPreviewImage?: (src: string, alt: string) => void;
+  /** 点击编辑面中的附件（图片、文件引用），见 EditorOptions.onAttachment。 */
+  onAttachment?: (attachment: EditorAttachment, event: MouseEvent) => void;
   onBlur?: () => void;
   /** 实例就绪回调，供外部插入附件或移动光标。 */
   onReady?: (editor: MarkdownEditor) => void;
@@ -39,6 +41,7 @@ export function LiveEditor({
   autoFocus,
   onChange,
   onPreviewImage,
+  onAttachment,
   onBlur,
   onReady,
   tagSuggestions = store.tagSuggestions,
@@ -47,10 +50,10 @@ export function LiveEditor({
   const editor = useRef<MarkdownEditor | null>(null);
   const toast = useToast();
   // 回调放在 ref 中，使编辑器实例不随回调身份变化而重建。
-  const callbacks = useRef({ onChange, onPreviewImage, onBlur, onReady, tagSuggestions, toast });
+  const callbacks = useRef({ onChange, onPreviewImage, onAttachment, onBlur, onReady, tagSuggestions, toast });
   // 在 layout effect 中同步回调，避免在渲染阶段直接写 ref。
   useLayoutEffect(() => {
-    callbacks.current = { onChange, onPreviewImage, onBlur, onReady, tagSuggestions, toast };
+    callbacks.current = { onChange, onPreviewImage, onAttachment, onBlur, onReady, tagSuggestions, toast };
   });
 
   useEffect(() => {
@@ -64,6 +67,8 @@ export function LiveEditor({
       maxHeight,
       onChange: (next) => callbacks.current.onChange(next),
       onPreviewImage: (src, alt) => callbacks.current.onPreviewImage?.(src, alt),
+      // 没有提供附件回调时交给编辑器回落到图片预览。
+      onAttachment: onAttachment ? (attachment, event) => callbacks.current.onAttachment?.(attachment, event) : undefined,
       tagSuggestions: (prefix, text) => callbacks.current.tagSuggestions?.(prefix, text) ?? [],
       readClipboard: bridge.readClipboardText,
       resolveImage: bridge.localFileUrl,

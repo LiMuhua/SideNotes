@@ -15,10 +15,12 @@
  * 输入法组合期间不重建 DOM，组合结束后一次性吸收浏览器写入的内容。
  * 快捷键、回车续写与智能粘贴见 markdown-commands；粘贴截图或文件时交给应用保存副本，
  * 再把返回的图片或文件引用插在粘贴时的光标处。
+ * 附件（内嵌图片与本机文件引用）与预览一样整块显示，光标靠近时也不展开原文：原文很长（附件副本的完整路径），
+ * 展开后编辑很不方便。退格、删除与选中删除都按整个引用处理，查看与修改原文交给应用的附件弹窗（onAttachment）。
  * 输入 #标签 时在光标后以灰字提示已有标签，Tab 选用，上下键切换候选，Esc 关闭。
  */
 
-import { filePath, isImageName, isLegacyToken } from './files';
+import { fileLabel, filePath, isImageName, isLegacyToken } from './files';
 import {
   codeLanguage,
   continueBlock,
@@ -51,6 +53,20 @@ export interface SourceRange {
   direction: 'forward' | 'backward' | 'none';
 }
 
+/** 编辑器中的附件：内嵌图片或本机文件的引用。 */
+export interface EditorAttachment {
+  kind: 'image' | 'file';
+  /** 引用在原文中的范围 [start, end)。 */
+  start: number;
+  end: number;
+  /** 引用的原文，如 `![截图](C:\…\a.png)`。 */
+  source: string;
+  /** 地址：本机文件的路径或图片网址，按原文的写法（去掉尖括号）。 */
+  target: string;
+  /** 图片的说明文字或文件引用的显示名称。 */
+  label: string;
+}
+
 /** 创建选项。 */
 export interface EditorOptions {
   value?: string;
@@ -60,8 +76,13 @@ export interface EditorOptions {
   maxHeight?: number;
   /** 原文变化时回调。 */
   onChange?: (value: string) => void;
-  /** 需要应用层处理的图片预览请求。 */
+  /** 需要应用层处理的图片预览请求；提供了 onAttachment 时不再使用。 */
   onPreviewImage?: (src: string, alt: string) => void;
+  /**
+   * 点击附件（内嵌图片或本机文件引用）。附件在编辑面中与预览一样整块显示、不展开原文，
+   * 查看与修改原文、更换或打开文件都交给应用的附件弹窗；`event` 用于判断是否按住了 Ctrl。
+   */
+  onAttachment?: (attachment: EditorAttachment, event: MouseEvent) => void;
   /**
    * 标签联想候选：`prefix` 为 # 之后已输入的部分，`text` 为去掉这个标签后的原文，
    * 用于排除本条记录已有的标签。按优先顺序返回完整标签名。
@@ -335,17 +356,24 @@ export class MarkdownEditor {
     this.restoreSelection(this.selection);
   }
 
-  /** 读取当前原文选区。 */
+  /** 读取当前原文选区。落在附件原文中间的端点移到引用之后（附件原文始终隐藏，光标不应停在里面）。 */
   readSelection(): SourceRange {
     const selection = window.getSelection();
     if (!selection || !selection.rangeCount) return this.selection;
     const anchor = this.sourceOffset(selection.anchorNode, selection.anchorOffset);
     const focus = this.sourceOffset(selection.focusNode, selection.focusOffset);
     if (anchor === null || focus === null) return this.selection;
+    const snap = (offset: number): number => {
+      for (const [from, to] of this.atomicRanges()) {
+        if (offset > from && offset < to) return to;
+      }
+      return offset;
+    };
+    const [from, to] = [snap(anchor), snap(focus)];
     return {
-      start: Math.min(anchor, focus),
-      end: Math.max(anchor, focus),
-      direction: anchor > focus ? 'backward' : anchor < focus ? 'forward' : 'none',
+      start: Math.min(from, to),
+      end: Math.max(from, to),
+      direction: from > to ? 'backward' : from < to ? 'forward' : 'none',
     };
   }
 
@@ -469,7 +497,11 @@ export class MarkdownEditor {
     return (this.value.match(/\r\n|\r|\n/) ?? ['\n'])[0];
   }
 
-  /** 找到原文偏移对应的可编辑文本节点。 */
+  /**
+   * 找到原文偏移对应的可编辑位置。
+   * 附件的原文始终隐藏，位置落在引用开头时放在原文节点之前，落在引用之中或末尾时放在附件块之后，
+   * 不把光标放进看不见的节点。
+   */
   private domPoint(offset: number): { node: Node; offset: number } {
     const index = this.lineAt(offset);
     const line = this.element.children[index];
@@ -481,15 +513,28 @@ export class MarkdownEditor {
           ? NodeFilter.FILTER_REJECT
           : NodeFilter.FILTER_ACCEPT,
     });
+    const childPoint = (child: Node, after: boolean): { node: Node; offset: number } => {
+      const parent = child.parentNode as Node;
+      return { node: parent, offset: Array.prototype.indexOf.call(parent.childNodes, child) + (after ? 1 : 0) };
+    };
     let node: Node | null;
-    let last: Text | null = null;
+    let last: { node: Node; offset: number } | null = null;
     while ((node = walker.nextNode())) {
       const text = node as Text;
-      last = text;
+      const atomic = text.parentElement?.closest<HTMLElement>('.md-attachment-source');
+      if (atomic) {
+        if (remaining <= 0) return childPoint(atomic, false);
+        const chip = atomic.nextElementSibling?.matches('[data-md-attachment]') ? atomic.nextElementSibling : atomic;
+        if (remaining <= text.length) return childPoint(chip, true);
+        remaining -= text.length;
+        last = childPoint(chip, true);
+        continue;
+      }
       if (remaining <= text.length) return { node: text, offset: remaining };
       remaining -= text.length;
+      last = { node: text, offset: text.length };
     }
-    return last ? { node: last, offset: last.length } : { node: line, offset: 0 };
+    return last ?? { node: line, offset: 0 };
   }
 
   /** 排版后恢复原文选区，保留反向选择。 */
@@ -546,8 +591,9 @@ export class MarkdownEditor {
    * 已展开的标记用户看得见，照常按原文处理。
    */
   private visibleSpan(range: SourceRange, expand: boolean): { start: number; end: number; kept: Array<[number, number]> } {
-    let { start, end } = range;
-    if (start === end) return { start, end, kept: [] };
+    if (range.start === range.end) return { start: range.start, end: range.end, kept: [] };
+    // 附件整块显示，选区碰到它就按整个引用处理。
+    let { start, end } = this.atomicRange(range);
     const groups = this.hiddenGroups();
     if (expand) {
       for (const group of groups) {
@@ -666,6 +712,90 @@ export class MarkdownEditor {
     node.contentEditable = 'false';
     node.setAttribute('aria-hidden', 'true');
     parent.append(node);
+  }
+
+  /**
+   * 附件整块显示：原文放在始终隐藏的节点中参与光标映射，后面跟一个不可编辑的图片或文件块，
+   * 与卡片预览的样式一致。`address` 为图片的显示地址，文件引用传 null。
+   */
+  private attachment(parent: HTMLElement, attachment: Omit<EditorAttachment, 'end'>, address: string | null): void {
+    const end = attachment.start + attachment.source.length;
+    const source = element('span', 'md-attachment-source', attachment.source);
+    source.hidden = true;
+    source.setAttribute('aria-hidden', 'true');
+    source.dataset.mdStart = String(attachment.start);
+    source.dataset.mdEnd = String(end);
+    parent.append(source);
+
+    const isImage = attachment.kind === 'image';
+    const chip = element(isImage ? 'button' : 'span', isImage ? 'md-editor-image md-attachment' : 'md-editor-file md-attachment');
+    if (chip instanceof HTMLButtonElement) chip.type = 'button';
+    chip.tabIndex = -1;
+    chip.contentEditable = 'false';
+    chip.dataset.mdDecoration = '';
+    chip.dataset.mdAttachment = attachment.kind;
+    chip.dataset.mdStart = String(attachment.start);
+    chip.dataset.mdEnd = String(end);
+    chip.dataset.mdTarget = attachment.target;
+    chip.dataset.mdLabel = attachment.label;
+    chip.title = `${attachment.label || attachment.target}\n点击查看详情，按住 Ctrl 点击直接打开`;
+    if (isImage && address) {
+      chip.dataset.mdPreview = address;
+      chip.setAttribute('aria-label', `图片：${attachment.label || '图片'}`);
+      const picture = element('img', 'markdown-image');
+      picture.src = address;
+      picture.alt = attachment.label;
+      picture.loading = 'lazy';
+      picture.draggable = false;
+      chip.append(picture);
+    } else {
+      chip.setAttribute('role', 'button');
+      chip.setAttribute('aria-label', `文件：${attachment.label}`);
+      // 文件图标取页面中的图标定义（侧栏与速记浮窗都挂载了 IconSprite）。
+      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      icon.setAttribute('class', 'icon');
+      icon.setAttribute('aria-hidden', 'true');
+      const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+      use.setAttribute('href', '#i-file');
+      icon.append(use);
+      chip.append(icon, element('span', 'md-editor-file-name', attachment.label));
+    }
+    parent.append(chip);
+  }
+
+  /** 当前渲染出的附件在原文中的范围。 */
+  private atomicRanges(): Array<[number, number]> {
+    return Array.from(this.element.querySelectorAll<HTMLElement>('.md-attachment-source')).map((node) => [
+      Number(node.dataset.mdStart),
+      Number(node.dataset.mdEnd),
+    ]);
+  }
+
+  /** 范围碰到附件的原文时扩展到整个引用，删除或替换时不留下半截语法。 */
+  private atomicRange(range: SourceRange): SourceRange {
+    let { start, end } = range;
+    for (const [from, to] of this.atomicRanges()) {
+      if (from < end && start < to) {
+        start = Math.min(start, from);
+        end = Math.max(end, to);
+      }
+    }
+    return { ...range, start, end };
+  }
+
+  /** 读取附件块上记下的信息；原文已变化（位置对不上）时返回 null。 */
+  private attachmentInfo(chip: HTMLElement): EditorAttachment | null {
+    const start = Number(chip.dataset.mdStart);
+    const end = Number(chip.dataset.mdEnd);
+    if (!Number.isInteger(start) || !Number.isInteger(end) || end <= start || end > this.value.length) return null;
+    return {
+      kind: chip.dataset.mdAttachment === 'image' ? 'image' : 'file',
+      start,
+      end,
+      source: this.value.slice(start, end),
+      target: chip.dataset.mdTarget ?? '',
+      label: chip.dataset.mdLabel ?? '',
+    };
   }
 
   /** 查找行内定界符，忽略转义与反引号歧义。 */
@@ -801,36 +931,28 @@ export class MarkdownEditor {
               .slice(labelEnd + 2, end - 1)
               .trim()
               .replace(/^<|>$/g, '');
+            const shown = label.replace(/\\([\\[\]])/g, '$1');
             if (isImage) {
-              // 图片的源文本参与光标映射，图片本身只是不可编辑的预览。
+              // 图片整块显示（见 attachment），原文只参与光标映射。
               const address = imageAddress(target, this.options.resolveImage);
               if (address) {
                 flush();
-                this.syntax(parent, text.slice(index, end), caret, start + index);
-                const preview = element('button', 'md-editor-image');
-                preview.type = 'button';
-                preview.tabIndex = -1;
-                preview.contentEditable = 'false';
-                preview.dataset.mdDecoration = '';
-                preview.dataset.mdPreview = address;
-                preview.dataset.mdAlt = label;
-                preview.setAttribute('aria-label', `放大图片：${label || '图片'}`);
-                const picture = element('img', 'markdown-image');
-                picture.src = address;
-                picture.alt = label;
-                picture.loading = 'lazy';
-                picture.draggable = false;
-                preview.append(picture);
-                parent.append(preview);
+                this.attachment(parent, { kind: 'image', start: start + index, source: text.slice(index, end), target, label: shown }, address);
                 index = end;
                 continue;
               }
+            } else if (filePath(target)) {
+              // 本机文件的引用同样整块显示，不展开很长的副本路径。
+              flush();
+              const name = shown || fileLabel(target);
+              this.attachment(parent, { kind: 'file', start: start + index, source: text.slice(index, end), target, label: name }, null);
+              index = end;
+              continue;
             } else {
               flush();
               const group = { start: start + index, end: start + end };
               this.syntax(parent, '[', caret, start + index, group);
-              const isFile = Boolean(filePath(target));
-              const link = element('span', `markdown-link md-editor-link${isFile ? ' is-file' : ''}`);
+              const link = element('span', 'markdown-link md-editor-link');
               this.renderInline(label, link, caret, start + labelStart, depth + 1);
               parent.append(link);
               this.syntax(parent, text.slice(labelEnd, end), caret, start + labelEnd, group);
@@ -1147,8 +1269,9 @@ export class MarkdownEditor {
       event.preventDefault();
       const range = this.readSelection();
       // 选中了文字时按所见内容删除：完整选中的格式连同隐藏标记一起删掉，部分选中时保留标记。
+      // 退格或删除碰到附件时整个引用一起删除。
       if (range.start !== range.end) this.applyEdit(this.replaceVisible('', range, true), range);
-      else this.replace('', this.deletionRange(range, type));
+      else this.replace('', this.atomicRange(this.deletionRange(range, type)));
       return;
     }
     if (type === 'insertParagraph' || type === 'insertLineBreak') {
@@ -1263,10 +1386,10 @@ export class MarkdownEditor {
     });
 
     this.listen(this.element, 'mousedown', (event) => {
-      // 操作待办或图片时保留正文选区，避免光标被装饰节点夺走。
+      // 操作待办或附件时保留正文选区，避免光标被装饰节点夺走。
       const mouse = event as MouseEvent;
       const target = mouse.target as HTMLElement | null;
-      if (target?.closest('[data-md-task],[data-md-preview]') && (mouse.button === undefined || mouse.button === 0)) {
+      if (target?.closest('[data-md-task],[data-md-attachment]') && (mouse.button === undefined || mouse.button === 0)) {
         mouse.preventDefault();
       }
     });
@@ -1280,11 +1403,14 @@ export class MarkdownEditor {
         this.toggleTask(checkbox);
         return;
       }
-      const preview = target?.closest<HTMLElement>('[data-md-preview]');
-      if (preview && this.element.contains(preview)) {
+      const chip = target?.closest<HTMLElement>('[data-md-attachment]');
+      if (chip && this.element.contains(chip)) {
         event.preventDefault();
         event.stopPropagation();
-        this.options.onPreviewImage?.(preview.dataset.mdPreview ?? '', preview.dataset.mdAlt ?? '');
+        const info = this.attachmentInfo(chip);
+        if (!info) return;
+        if (this.options.onAttachment) this.options.onAttachment(info, event as MouseEvent);
+        else if (chip.dataset.mdPreview) this.options.onPreviewImage?.(chip.dataset.mdPreview, info.label);
       }
     });
 

@@ -9,22 +9,67 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon, IconSprite } from './Icon';
 import { LiveEditor } from './LiveEditor';
 import { ToastRegion } from './Modal';
-import { ImagePreview } from './Modal';
+import { AttachmentDialog, type AttachmentSubject } from './AttachmentDialog';
 import { useStore } from '../hooks/useStore';
 import { useToast } from '../hooks/useToast';
 import * as store from '../core/store';
 import * as bridge from '../core/bridge';
-import { chooseAndImportFiles } from '../core/attachments';
+import { chooseAndImportFiles, openAttachment, replaceReference } from '../core/attachments';
 import type { NoteImage } from '../core/types';
-import type { MarkdownEditor } from '../core/editor';
+import type { EditorAttachment, MarkdownEditor } from '../core/editor';
 
 export function Capture() {
   const state = useStore();
   const toast = useToast();
   const editorRef = useRef<MarkdownEditor | null>(null);
   const [localText, setLocalText] = useState(state.draft.text);
-  const [imagePreview, setImagePreview] = useState<{ src: string; alt: string } | null>(null);
+  /** 附件弹窗：与侧栏相同，修改写回编辑器或草稿中的图片附件。 */
+  const [attachmentDialog, setAttachmentDialog] = useState<{
+    subject: AttachmentSubject;
+    replaceSource?: (source: string) => boolean;
+    replaceImage?: (image: NoteImage | null) => boolean;
+  } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+
+  /** 点击编辑面中的附件：按住 Ctrl 直接打开，否则打开附件弹窗，修改写回编辑器。 */
+  const handleAttachment = useCallback(
+    (reference: EditorAttachment, event: MouseEvent) => {
+      if (event.ctrlKey || event.metaKey) {
+        void openAttachment(reference.target).catch((error: unknown) =>
+          toast(bridge.errorText(error, '无法打开文件'), null, true),
+        );
+        return;
+      }
+      setAttachmentDialog({
+        subject: { kind: reference.kind, source: reference.source, target: reference.target, label: reference.label },
+        replaceSource: (next) => {
+          const editor = editorRef.current;
+          const result = editor ? replaceReference(editor.getValue(), reference, next) : null;
+          if (!editor || !result) {
+            toast('内容已变化，未能修改附件', null, true);
+            return false;
+          }
+          return editor.applyEdit(
+            { value: result.text, start: result.end, end: result.end },
+            { start: reference.start, end: reference.end, direction: 'none' },
+          );
+        },
+      });
+    },
+    [toast],
+  );
+
+  /** 点击草稿中的图片附件（data URL）。 */
+  const handleEmbeddedImage = useCallback((image: NoteImage) => {
+    setAttachmentDialog({
+      subject: { kind: 'embedded', image },
+      replaceImage: (next) => {
+        if (next) store.replaceDraftImage(image.id, next);
+        else store.removeDraftImage(image.id);
+        return true;
+      },
+    });
+  }, []);
 
   // 同步到共享草稿（防抖写盘由外层 persistDraft 处理）。
   useEffect(() => {
@@ -140,7 +185,7 @@ export function Capture() {
             autoFocus
             onChange={setLocalText}
             onReady={(editor) => { editorRef.current = editor; }}
-            onPreviewImage={(src, alt) => setImagePreview({ src, alt })}
+            onAttachment={handleAttachment}
             maxHeight={Math.min(280, Math.max(100, window.innerHeight * 0.4))}
           />
 
@@ -151,8 +196,9 @@ export function Capture() {
                   <button
                     type="button"
                     className="attachment-preview"
-                    aria-label={`预览 ${image.name}`}
-                    onClick={() => setImagePreview({ src: image.data, alt: image.name })}
+                    aria-label={`图片：${image.name}`}
+                    title="点击查看详情"
+                    onClick={() => handleEmbeddedImage(image)}
                   >
                     <img src={image.data} alt={image.name} />
                   </button>
@@ -242,8 +288,13 @@ export function Capture() {
 
       <input ref={fileInput} type="file" hidden multiple accept="image/*" onChange={handleFileSelected} />
 
-      {imagePreview ? (
-        <ImagePreview src={imagePreview.src} name={imagePreview.alt} onClose={() => setImagePreview(null)} />
+      {attachmentDialog ? (
+        <AttachmentDialog
+          subject={attachmentDialog.subject}
+          onReplaceSource={attachmentDialog.replaceSource}
+          onReplaceImage={attachmentDialog.replaceImage}
+          onClose={() => setAttachmentDialog(null)}
+        />
       ) : null}
     </>
   );

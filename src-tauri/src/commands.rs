@@ -236,6 +236,19 @@ pub fn open_attachment(app: AppHandle, state: State<'_, AppState>, path: String)
         .map_err(|error| AppError::Other(format!("无法打开文件：{error}")))
 }
 
+/// 把附件副本另存到用户在系统对话框中选择的位置。
+///
+/// 只导出附件文件夹中的文件，与打开附件同样按实际路径校验；目标路径来自保存对话框。
+#[tauri::command]
+pub async fn export_attachment(state: State<'_, AppState>, path: String, destination: String) -> AppResult<()> {
+    let root = state.store.directory().join(attachments::ATTACHMENTS_DIR);
+    if !attachments::is_inside(&root, std::path::Path::new(&path)) {
+        return Err(AppError::Other("只能另存附件文件夹中的文件".into()));
+    }
+    std::fs::copy(&path, &destination)?;
+    Ok(())
+}
+
 /// 清理没有被任何记录引用的附件副本。
 ///
 /// 引用以数据库中的全部记录（含回收站）与草稿为准，`extra` 补上调用方窗口里尚未保存的编辑内容。

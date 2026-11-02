@@ -22,6 +22,7 @@ const SECTIONS: ReadonlyArray<{ title: string; tips: readonly string[] }> = [
     tips: [
       'Ctrl+Enter 保存，Esc 取消。新建卡片保存后侧栏保持展开，可以接着记下一条。',
       '支持 Markdown 快捷键与 #标签；粘贴截图或文件会保存一份副本，插入到光标处。',
+      '点击图片或文件查看详情，可以修改引用、更换文件或另存为；按住 Ctrl 点击直接打开。',
     ],
   },
   {

@@ -13,15 +13,29 @@ import { fileLabel, filePath } from '../core/files';
 import { localFileUrl } from '../core/bridge';
 import { Icon } from './Icon';
 
+/** 预览中被点击的附件：图片或文件引用在解析输入中的范围、地址与显示文字。 */
+export interface PreviewAttachment {
+  kind: 'image' | 'file';
+  start: number;
+  end: number;
+  target: string;
+  label: string;
+}
+
 /** 渲染回调。 */
 export interface MarkdownHandlers {
   /** 点击待办：传入状态字符在原文中的偏移与新状态。返回 false 表示撤销。 */
   onTaskToggle?: (offset: number, checked: boolean) => boolean | void | Promise<boolean | void>;
-  /** 点击图片预览。 */
+  /** 点击图片预览；提供了 onAttachment 时不再使用。 */
   onPreviewImage?: (src: string, alt: string) => void;
-  /** 点击文件引用。 */
+  /** 点击文件引用；提供了 onAttachment 时不再使用。 */
   onOpenFile?: (path: string) => void;
+  /** 点击图片或文件引用：打开附件弹窗，按住 Ctrl 时直接打开（由调用方按 event 判断）。 */
+  onAttachment?: (attachment: PreviewAttachment, event: React.MouseEvent) => void;
 }
+
+/** 附件的悬停提示。 */
+const ATTACHMENT_HINT = '点击查看详情，按住 Ctrl 点击直接打开';
 
 /** 图片的显示地址：本机图片换成本地文件协议的地址，其余原样使用。 */
 function imageSource(src: string): string {
@@ -63,11 +77,16 @@ function renderInline(nodes: InlineNode[], handlers: MarkdownHandlers, keyPrefix
             key={key}
             type="button"
             className="markdown-image-button"
-            aria-label={`放大图片：${node.alt || '图片'}`}
+            aria-label={`图片：${node.alt || '图片'}`}
+            title={handlers.onAttachment ? ATTACHMENT_HINT : undefined}
             {...spanAttributes(node, map)}
             onClick={(event) => {
               event.stopPropagation();
-              handlers.onPreviewImage?.(imageSource(node.src), node.alt);
+              if (handlers.onAttachment) {
+                handlers.onAttachment({ kind: 'image', start: node.start, end: node.end, target: node.src, label: node.alt }, event);
+              } else {
+                handlers.onPreviewImage?.(imageSource(node.src), node.alt);
+              }
             }}
           >
             <img className="markdown-image" src={imageSource(node.src)} alt={node.alt} loading="lazy" draggable={false} />
@@ -79,11 +98,16 @@ function renderInline(nodes: InlineNode[], handlers: MarkdownHandlers, keyPrefix
             key={key}
             type="button"
             className="file-reference"
-            title={`${node.path}\n点击校验并打开文件`}
+            title={`${node.path}\n${handlers.onAttachment ? ATTACHMENT_HINT : '点击校验并打开文件'}`}
             {...spanAttributes(node, map)}
             onClick={(event) => {
               event.stopPropagation();
-              handlers.onOpenFile?.(node.path);
+              const label = node.label || fileLabel(node.path);
+              if (handlers.onAttachment) {
+                handlers.onAttachment({ kind: 'file', start: node.start, end: node.end, target: node.path, label }, event);
+              } else {
+                handlers.onOpenFile?.(node.path);
+              }
             }}
           >
             <Icon name="file" />
@@ -142,11 +166,16 @@ function renderBlocks(
             <button
               type="button"
               className="file-reference"
-              title={`${block.path}\n点击校验并打开文件`}
+              title={`${block.path}\n${handlers.onAttachment ? ATTACHMENT_HINT : '点击校验并打开文件'}`}
               {...spanAttributes(block, map)}
               onClick={(event) => {
                 event.stopPropagation();
-                handlers.onOpenFile?.(block.path);
+                if (handlers.onAttachment) {
+                  const attachment = { start: block.start, end: block.end, target: block.path, label: fileLabel(block.path) };
+                  handlers.onAttachment({ kind: 'file', ...attachment }, event);
+                } else {
+                  handlers.onOpenFile?.(block.path);
+                }
               }}
             >
               <Icon name="file" />
@@ -217,13 +246,13 @@ export function Markdown({
   );
 }
 
-/** 只渲染一行行内 Markdown，用于卡片标题。 */
-export function MarkdownInline({ text }: { text: string }) {
+/** 只渲染一行行内 Markdown，用于卡片标题；`handlers` 让标题中的图片与文件引用同样可以点击。 */
+export function MarkdownInline({ text, handlers = {} }: { text: string; handlers?: MarkdownHandlers }) {
   const blocks = parseBlocks(text);
   const first = blocks[0];
   if (!first) return null;
   if (first.kind === 'paragraph' || first.kind === 'heading') {
-    return <>{renderInline(first.children, {})}</>;
+    return <>{renderInline(first.children, handlers)}</>;
   }
   return <>{text}</>;
 }

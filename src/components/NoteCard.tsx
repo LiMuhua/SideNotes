@@ -15,6 +15,7 @@ import { Markdown, MarkdownInline } from './Markdown';
 import { formatTime, likelyLong, noteTitle } from '../core/notes';
 import { parse } from '../core/tags';
 import { noteDisplay, sourceOffset } from '../core/display';
+import type { AttachmentReference } from '../core/attachments';
 import type { EditSession, Note, NoteImage } from '../core/types';
 import type { MarkdownEditor } from '../core/editor';
 
@@ -60,19 +61,24 @@ export interface NoteCardProps {
   onRemoveTag: (tag: string) => void;
   onRenameTag: (tag: string, next: string) => void;
   onToggleTagsExpanded: () => void;
-  onPreviewImage: (src: string, alt: string) => void;
-  onOpenFile: (path: string) => void;
+  /**
+   * 点击正文中的附件（图片、文件引用）：预览时范围已换算为记录原文中的位置，
+   * 编辑时为编辑器原文中的位置。按住 Ctrl 点击直接打开，由调用方按 event 判断。
+   */
+  onAttachment: (reference: AttachmentReference, event: { ctrlKey: boolean; metaKey: boolean }) => void;
+  /** 点击以 data URL 保存在记录里的图片附件。 */
+  onEmbeddedImage: (image: NoteImage) => void;
   onTaskToggle: (offset: number, checked: boolean) => void;
 }
 
 /** 卡片内的图片附件列表。 */
 function Attachments({
   images,
-  onPreview,
+  onOpen,
   onRemove,
 }: {
   images: NoteImage[];
-  onPreview: (image: NoteImage) => void;
+  onOpen: (image: NoteImage) => void;
   onRemove?: (id: string) => void;
 }) {
   if (!images.length) return null;
@@ -83,10 +89,11 @@ function Attachments({
           <button
             type="button"
             className="attachment-preview note-image-button"
-            aria-label={`预览 ${image.name}`}
+            aria-label={`图片：${image.name}`}
+            title="点击查看详情"
             onClick={(event) => {
               event.stopPropagation();
-              onPreview(image);
+              onOpen(image);
             }}
           >
             <img src={image.data} alt={image.name} />
@@ -285,6 +292,9 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
   const title = noteTitle(note);
   // 首行若是结构化内容（代码、列表、引用、图片等），标题不复用该行文本，正文从头显示。
   const display = noteDisplay(note.text);
+  // 标题行去掉标题标记后渲染；标题中的附件同样可以点击，位置加上标题文字在原文中的起点换算回原文。
+  const titleText = display.firstLine.replace(/^#{1,6}\s+/, '');
+  const titleOffset = note.text.indexOf(display.firstLine) + display.firstLine.length - titleText.length;
 
   return (
     <article
@@ -310,7 +320,20 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
           {note.emoji || '📝'}
         </button>
         <h3 className="note-title">
-          {display.structured ? title : <MarkdownInline text={display.firstLine.replace(/^#{1,6}\s+/, '')} />}
+          {display.structured ? (
+            title
+          ) : (
+            <MarkdownInline
+              text={titleText}
+              handlers={{
+                onAttachment: (attachment, event) => {
+                  const start = titleOffset + attachment.start;
+                  const end = titleOffset + attachment.end;
+                  props.onAttachment({ ...attachment, start, end, source: note.text.slice(start, end) }, event);
+                },
+              }}
+            />
+          )}
         </h3>
         <button
           type="button"
@@ -339,11 +362,11 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
             autoFocus
             onChange={props.onEditChange}
             onReady={props.onEditReady}
-            onPreviewImage={props.onPreviewImage}
+            onAttachment={props.onAttachment}
           />
           <Attachments
             images={editing.images}
-            onPreview={(image) => props.onPreviewImage(image.data, image.name)}
+            onOpen={props.onEmbeddedImage}
             onRemove={props.onRemoveEditImage}
           />
           <div className="note-edit-actions">
@@ -400,10 +423,13 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
               text={display.body}
               sourceMap
               handlers={{
-                onPreviewImage: props.onPreviewImage,
-                onOpenFile: props.onOpenFile,
-                // 解析位置相对显示正文（去掉了标题行），换算回原文再切换待办。
+                // 解析位置相对显示正文（去掉了标题行），换算回原文再切换待办或打开附件弹窗。
                 onTaskToggle: (offset, checked) => props.onTaskToggle(sourceOffset(note.text, display, offset), checked),
+                onAttachment: (attachment, event) => {
+                  const start = sourceOffset(note.text, display, attachment.start);
+                  const end = sourceOffset(note.text, display, attachment.end);
+                  props.onAttachment({ ...attachment, start, end, source: note.text.slice(start, end) }, event);
+                },
               }}
             />
             {note.images.map((image) => (
@@ -411,13 +437,13 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
                 key={image.id}
                 type="button"
                 className="note-image-button"
-                aria-label={`预览图片：${image.name}`}
-                title="点击放大，按住拖到另一张卡片"
+                aria-label={`图片：${image.name}`}
+                title="点击查看详情，按住拖到另一张卡片"
                 data-drag-item="image"
                 data-image-id={image.id}
                 onClick={(event) => {
                   event.stopPropagation();
-                  props.onPreviewImage(image.data, image.name);
+                  props.onEmbeddedImage(image);
                 }}
               >
                 <img className="note-image" src={image.data} alt={image.name} loading="lazy" draggable={false} />

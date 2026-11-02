@@ -22,7 +22,8 @@ import { TagFilter } from "./TagFilter";
 import { TagManageDialog } from "./TagManageDialog";
 import { ChangelogDialog } from "./ChangelogDialog";
 import { UsageGuide } from "./UsageGuide";
-import { ConfirmDialog, ImagePreview, ToastRegion } from "./Modal";
+import { ConfirmDialog, ToastRegion } from "./Modal";
+import { AttachmentDialog, type AttachmentSubject } from "./AttachmentDialog";
 import { useStore } from "../hooks/useStore";
 import { useToast } from "../hooks/useToast";
 import { useCardInteractions, type ItemDrop } from "../hooks/useCardInteractions";
@@ -30,11 +31,17 @@ import * as store from "../core/store";
 import * as bridge from "../core/bridge";
 import { matchesQuery, shouldNudgeTidy, inTab, compareNoteOrder, noteTitle } from "../core/notes";
 import { moveImage, moveReference } from "../core/transfer";
-import { chooseAndImportFiles } from "../core/attachments";
+import {
+  chooseAndImportFiles,
+  openAttachment,
+  replaceReference,
+  type AttachmentReference,
+  type ReferenceSpan,
+} from "../core/attachments";
 import { parse, removeTag, tagKey, canonicalize } from "../core/tags";
 import { sidebarWindowWidth, uiZoom } from "../core/settings";
 import type { EditSession, Note, NoteImage, TabKey } from "../core/types";
-import type { MarkdownEditor } from "../core/editor";
+import type { EditorAttachment, MarkdownEditor } from "../core/editor";
 
 const TAB_LABELS: Record<TabKey, string> = {
   workspace: "工作区",
@@ -90,7 +97,15 @@ export function Sidebar() {
    */
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [emojiTarget, setEmojiTarget] = useState<Note | null>(null);
-  const [imagePreview, setImagePreview] = useState<{ src: string; alt: string } | null>(null);
+  /**
+   * 附件弹窗：附件本身，以及修改后写回到哪里（编辑器、记录，或新建卡片与编辑中的图片附件）。
+   * 写回函数在打开时按点击的位置确定，见 handleNoteAttachment 等。
+   */
+  const [attachmentDialog, setAttachmentDialog] = useState<{
+    subject: AttachmentSubject;
+    replaceSource?: (source: string) => boolean | Promise<boolean>;
+    replaceImage?: (image: NoteImage | null) => boolean | Promise<boolean>;
+  } | null>(null);
   const [nudgeDismissed, setNudgeDismissed] = useState(false);
   /* 标签筛选菜单与标签管理对话框。 */
   const [tagMenuOpen, setTagMenuOpen] = useState(false);
@@ -152,7 +167,7 @@ export function Sidebar() {
 
   // 对话框打开期间鼠标移出侧栏不收起，否则对话框会随侧栏一起消失。
   const dialogOpen = Boolean(
-    trashTarget || managingTag || imagePreview || emojiTarget || changelogOpen || guideVisible,
+    trashTarget || managingTag || attachmentDialog || emojiTarget || changelogOpen || guideVisible,
   );
   // 卡片菜单与对话框渲染在侧栏元素之外，鼠标移上去就会触发侧栏的 mouseleave。
   // 与原型的 keepVisible 一致：到点时按最新状态再判断一次，避免先移出侧栏、随后才打开对话框时仍被收起。
@@ -379,6 +394,7 @@ export function Sidebar() {
    * 编辑卡片失去焦点后保存并回到预览，对应原型 scheduleEditBlur。
    *
    * 等焦点交接完成再判断：焦点仍在编辑卡片内（工具按钮、附件预览）时不提交；
+   * 打开了对话框（附件弹窗等）时焦点进入对话框，编辑保持不变，关闭后焦点回到编辑区；
    * 切换到其它窗口时页面焦点仍留在卡片里，编辑保持不变，回来后可以继续；
    * 附件还在读取时也先不提交，避免丢失刚选的图片。
    */
@@ -390,6 +406,7 @@ export function Sidebar() {
       if (!session || editingRef.current?.id !== session.id) return;
       const card = listRef.current?.querySelector(".note-card.is-editing");
       if (card?.contains(document.activeElement)) return;
+      if (document.querySelector(".modal-backdrop")) return;
       if (store.getState().pendingAttachments > 0) return;
       void commitEdit();
     }, 0);
@@ -473,11 +490,16 @@ export function Sidebar() {
   // 点到侧栏窗口之外与鼠标移出同样触发收起；是否保持展开由到点时的状态决定，
   // 不在这里提前返回，否则菜单随失焦关闭后就再没有机会收起。
   // 整个侧栏失去焦点时，正在编辑的卡片先保存并回到预览，与在侧栏内点到别处一致；
-  // 选择附件的对话框打开期间、附件还在读取时不算离开。
+  // 选择附件的对话框打开期间、附件还在读取时、附件弹窗等对话框开着时不算离开。
   // 重新获得焦点（选完附件、很快又点回侧栏）时取消尚未执行的收起。
   useEffect(() => {
     const handleBlur = (): void => {
-      if (editingRef.current && !choosingFiles.current && store.getState().pendingAttachments === 0) {
+      if (
+        editingRef.current &&
+        !choosingFiles.current &&
+        store.getState().pendingAttachments === 0 &&
+        !document.querySelector(".modal-backdrop")
+      ) {
         void commitEdit();
       }
       scheduleHide();
@@ -763,10 +785,6 @@ export function Sidebar() {
         }
         if (emojiTarget) {
           setEmojiTarget(null);
-          return;
-        }
-        if (imagePreview) {
-          setImagePreview(null);
           return;
         }
         if (managingTag) {
@@ -1153,6 +1171,126 @@ export function Sidebar() {
     [referenceFiles],
   );
 
+  /* ==================== 附件弹窗 ==================== */
+
+  /** 包住附件弹窗里的系统对话框（选择文件、另存为）：打开期间侧栏失焦，不当作离开。 */
+  const withSystemDialog = useCallback(async <T,>(run: () => Promise<T>): Promise<T> => {
+    choosingFiles.current = true;
+    try {
+      return await run();
+    } finally {
+      choosingFiles.current = false;
+    }
+  }, []);
+
+  /** 按住 Ctrl 点击附件：本机文件用系统程序打开，网络图片在浏览器中打开。 */
+  const openAttachmentDirectly = useCallback(
+    (target: string): Promise<void> =>
+      openAttachment(target).catch((error: unknown) =>
+        toast(bridge.errorText(error, "无法打开文件"), null, true),
+      ),
+    [toast],
+  );
+
+  /** 附件弹窗的修改写回编辑器（编辑中的卡片或新建卡片），记入编辑器的撤销历史。 */
+  const editorReplacer = useCallback(
+    (editor: MarkdownEditor | null, reference: ReferenceSpan) =>
+      (next: string): boolean => {
+        const result = editor ? replaceReference(editor.getValue(), reference, next) : null;
+        if (!editor || !result) {
+          toast("内容已变化，未能修改附件", null, true);
+          return false;
+        }
+        return editor.applyEdit(
+          { value: result.text, start: result.end, end: result.end },
+          { start: reference.start, end: reference.end, direction: "none" },
+        );
+      },
+    [toast],
+  );
+
+  /** 附件弹窗的修改直接写回记录（卡片预览），提示条提供撤销。 */
+  const noteReplacer = useCallback(
+    (noteId: string, reference: ReferenceSpan) =>
+      async (next: string): Promise<boolean> => {
+        const note = store.getState().notes.find((item) => item.id === noteId);
+        const result = note ? replaceReference(note.text, reference, next) : null;
+        if (!result) {
+          toast("内容已变化，未能修改附件", null, true);
+          return false;
+        }
+        const undo = await store.updateNotes([{ id: noteId, text: result.text }]);
+        if (!undo) {
+          toast(SAVE_FAILED_MESSAGE, null, true);
+          return false;
+        }
+        toast(next ? "已修改附件" : "已删除附件", { label: "撤销", run: () => void store.restoreNotes(undo) });
+        return true;
+      },
+    [toast],
+  );
+
+  /** 点击卡片正文中的附件：编辑中写回编辑器，预览时写回记录；按住 Ctrl 直接打开。 */
+  const handleNoteAttachment = useCallback(
+    (note: Note, reference: AttachmentReference, event: { ctrlKey: boolean; metaKey: boolean }) => {
+      if (event.ctrlKey || event.metaKey) {
+        void openAttachmentDirectly(reference.target);
+        return;
+      }
+      const inEditor = editingRef.current?.id === note.id;
+      setAttachmentDialog({
+        subject: { kind: reference.kind, source: reference.source, target: reference.target, label: reference.label },
+        replaceSource: inEditor ? editorReplacer(editorRef.current, reference) : noteReplacer(note.id, reference),
+      });
+    },
+    [openAttachmentDirectly, editorReplacer, noteReplacer],
+  );
+
+  /** 点击新建卡片中的附件。 */
+  const handleComposerAttachment = useCallback(
+    (reference: EditorAttachment, event: MouseEvent) => {
+      if (event.ctrlKey || event.metaKey) {
+        void openAttachmentDirectly(reference.target);
+        return;
+      }
+      setAttachmentDialog({
+        subject: { kind: reference.kind, source: reference.source, target: reference.target, label: reference.label },
+        replaceSource: editorReplacer(composerEditorRef.current, reference),
+      });
+    },
+    [openAttachmentDirectly, editorReplacer],
+  );
+
+  /** 点击以 data URL 保存的图片附件：编辑中改动编辑事务，预览时直接写回记录（可撤销），新建卡片改动草稿。 */
+  const handleEmbeddedImage = useCallback(
+    (owner: Note | null, image: NoteImage) => {
+      const replaceImage = async (next: NoteImage | null): Promise<boolean> => {
+        const swap = (images: NoteImage[]): NoteImage[] =>
+          next ? images.map((item) => (item.id === image.id ? next : item)) : images.filter((item) => item.id !== image.id);
+        if (!owner) {
+          if (next) store.replaceDraftImage(image.id, next);
+          else store.removeDraftImage(image.id);
+          return true;
+        }
+        if (editingRef.current?.id === owner.id) {
+          setEditing((prev) => (prev ? { ...prev, images: swap(prev.images) } : prev));
+          return true;
+        }
+        const current = store.getState().notes.find((item) => item.id === owner.id);
+        if (!current) return false;
+        const undo = await store.updateNotes([{ id: owner.id, images: swap(current.images) }]);
+        if (!undo) {
+          toast(SAVE_FAILED_MESSAGE, null, true);
+          return false;
+        }
+        toast(next ? "已更换图片" : "已删除图片", { label: "撤销", run: () => void store.restoreNotes(undo) });
+        return true;
+      };
+      setAttachmentDialog({ subject: { kind: "embedded", image }, replaceImage });
+    },
+    [toast],
+  );
+
   const handleFileSelected = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       choosingFiles.current = false;
@@ -1534,7 +1672,8 @@ export function Sidebar() {
           onAttachImage={() => triggerFileInput("image", "composer")}
           onAttachFile={() => triggerFileInput("file", "composer")}
           onRemoveImage={(id) => store.removeDraftImage(id)}
-          onPreviewImage={(src, alt) => setImagePreview({ src, alt })}
+          onAttachment={handleComposerAttachment}
+          onEmbeddedImage={(image) => handleEmbeddedImage(null, image)}
           maxHeight={Math.min(340, window.innerHeight * 0.42)}
         />
 
@@ -1626,15 +1765,8 @@ export function Sidebar() {
                 onToggleTagsExpanded={() =>
                   setTagsExpandedId((prev) => (prev === note.id ? null : note.id))
                 }
-                onPreviewImage={(src, alt) => setImagePreview({ src, alt })}
-                onOpenFile={async (path) => {
-                  const status = await bridge.inspectFile(path);
-                  if (!status.exists) {
-                    toast("文件不存在或已移动", null, true);
-                    return;
-                  }
-                  void bridge.openFile(path).catch(() => toast("无法打开文件", null, true));
-                }}
+                onAttachment={(reference, event) => handleNoteAttachment(note, reference, event)}
+                onEmbeddedImage={(image) => handleEmbeddedImage(note, image)}
                 onTaskToggle={(offset, checked) => void handleTaskToggle(note.id, offset, checked)}
               />
             ))
@@ -1689,11 +1821,14 @@ export function Sidebar() {
       <input ref={fileInputRef} type="file" hidden multiple onChange={handleFileSelected} />
 
       {/* 图片预览 */}
-      {imagePreview ? (
-        <ImagePreview
-          src={imagePreview.src}
-          name={imagePreview.alt || "图片"}
-          onClose={() => setImagePreview(null)}
+      {/* 附件弹窗：查看与修改引用、更换、打开、另存为或删除 */}
+      {attachmentDialog ? (
+        <AttachmentDialog
+          subject={attachmentDialog.subject}
+          onReplaceSource={attachmentDialog.replaceSource}
+          onReplaceImage={attachmentDialog.replaceImage}
+          withSystemDialog={withSystemDialog}
+          onClose={() => setAttachmentDialog(null)}
         />
       ) : null}
 

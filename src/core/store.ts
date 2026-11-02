@@ -454,6 +454,18 @@ export function removeDraftImage(id: string): void {
   });
 }
 
+/** 更换草稿中的一张图片（附件弹窗的「更换」），位置不变。 */
+export function replaceDraftImage(id: string, next: NoteImage): void {
+  setState({
+    draft: {
+      ...state.draft,
+      images: state.draft.images.map((image) => (image.id === id ? next : image)),
+      updatedAt: Date.now(),
+    },
+    draftDirty: true,
+  });
+}
+
 /** 落盘当前草稿。 */
 export function persistDraft(): Promise<boolean> {
   return persist({});

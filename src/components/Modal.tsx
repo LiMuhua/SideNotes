@@ -156,35 +156,6 @@ export function ConfirmDialog({ title, description, confirmLabel = '确认', onC
   );
 }
 
-/** 图片预览。 */
-export function ImagePreview({
-  name,
-  src,
-  onClose,
-}: {
-  name: string;
-  src: string;
-  onClose: () => void;
-}) {
-  return (
-    <Modal
-      title={name}
-      className="image-modal"
-      onClose={onClose}
-      footer={
-        <>
-          <span className="modal-hint">Esc 关闭预览</span>
-          <a className="button secondary" href={src} download={name}>
-            保存图片
-          </a>
-        </>
-      }
-    >
-      <img className="full-image" src={src} alt={name} />
-    </Modal>
-  );
-}
-
 /** 提示条区域。 */
 export function ToastRegion() {
   const { items, dismiss } = useToastContext();

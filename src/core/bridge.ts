@@ -10,7 +10,7 @@ import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow, Window } from '@tauri-apps/api/window';
 import { readText } from '@tauri-apps/plugin-clipboard-manager';
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
-import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
+import { readFile, readTextFile, writeFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import { isPermissionGranted, requestPermission } from '@tauri-apps/plugin-notification';
 import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener';
 import type {
@@ -371,12 +371,48 @@ export function importFiles(paths: string[]): Promise<ImportedFile[]> {
   return call<ImportedFile[]>('import_files', { paths });
 }
 
-/** 用系统对话框选择要引用的文件（可多选）；取消时返回 null，浏览器预览不支持。 */
-export async function chooseFiles(): Promise<string[] | null> {
+/** 用系统对话框选择要引用的文件（默认可多选，`images` 时只列出图片）；取消时返回 null，浏览器预览不支持。 */
+export async function chooseFiles(options: { multiple?: boolean; images?: boolean } = {}): Promise<string[] | null> {
   if (!isDesktop()) throw new Error('浏览器预览不支持引用文件');
-  const picked = await openDialog({ multiple: true, directory: false });
+  const picked = await openDialog({
+    multiple: options.multiple ?? true,
+    directory: false,
+    filters: options.images
+      ? [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'avif', 'svg'] }]
+      : undefined,
+  });
   if (!picked) return null;
   return Array.isArray(picked) ? picked : [picked];
+}
+
+/**
+ * 把附件副本另存到用户选择的位置；只能另存附件文件夹中的文件，由后端校验。
+ * 返回 false 表示用户取消，浏览器预览不支持。
+ */
+export async function saveAttachmentAs(path: string, name: string): Promise<boolean> {
+  if (!isDesktop()) throw new Error('浏览器预览不支持另存文件');
+  const destination = await saveDialog({ defaultPath: name });
+  if (!destination) return false;
+  await invoke('export_attachment', { path, destination });
+  return true;
+}
+
+/**
+ * 把一段内容（以 data URL 保存在记录里的图片附件）另存到用户选择的位置。
+ * 路径来自系统对话框，对话框插件会把它加入文件系统作用域。返回 false 表示用户取消。
+ */
+export async function saveBytesAs(bytes: Uint8Array, name: string): Promise<boolean> {
+  if (!isDesktop()) throw new Error('浏览器预览不支持另存文件');
+  const destination = await saveDialog({ defaultPath: name });
+  if (!destination) return false;
+  await writeFile(destination, bytes);
+  return true;
+}
+
+/** 读取用户在系统对话框中选择的文件（对话框插件已把它加入文件系统作用域）。 */
+export function readChosenFile(path: string): Promise<Uint8Array> {
+  if (!isDesktop()) return Promise.reject(new Error('浏览器预览不支持读取本地文件'));
+  return readFile(path);
 }
 
 /** 本机文件的显示地址（应用的本地文件协议，只能读到应用数据目录中的附件副本）；浏览器预览原样返回。 */
