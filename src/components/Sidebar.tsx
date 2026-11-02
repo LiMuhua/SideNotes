@@ -194,12 +194,19 @@ export function Sidebar() {
   const startWidth = useRef(0);
   const latestWidth = useRef(0);
   const resizeFrame = useRef(0);
-  /** 页面像素换算为窗口逻辑像素的比例；Windows 文本缩放会让两者不一致。 */
-  const logicalPerCss = useRef(1);
+  /** 指针屏幕坐标的位移换算为设置中宽度的比例；浏览器预览没有窗口与界面缩放，保持 1。 */
+  const widthPerScreen = useRef(1);
 
+  // 屏幕坐标（screenX、outerWidth）的单位既不同于页面像素（受界面缩放影响），
+  // 也不同于窗口逻辑像素（受 Windows 文本缩放影响）。用同一窗口在两种单位下的宽度求比例，
+  // 不依赖浏览器对页面缩放和文本缩放的具体处理。
   const refreshPixelRatio = useCallback(() => {
+    if (!bridge.isDesktop()) return;
     void bridge.windowScaleFactor().then((scale) => {
-      if (scale > 0) logicalPerCss.current = window.devicePixelRatio / scale;
+      if (scale <= 0 || window.outerWidth <= 0) return;
+      // 页面宽度乘页面像素比得到物理宽度，再除以窗口缩放比例得到逻辑宽度。
+      const logicalWidth = (window.innerWidth * window.devicePixelRatio) / scale;
+      widthPerScreen.current = logicalWidth / window.outerWidth;
     });
   }, []);
 
@@ -234,7 +241,7 @@ export function Sidebar() {
   const handleResizePointerMove = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       if (!resizing.current) return;
-      const delta = (event.screenX - startScreenX.current) * logicalPerCss.current;
+      const delta = (event.screenX - startScreenX.current) * widthPerScreen.current;
       // 右侧边：往左拖增大宽度；左侧边：往右拖增大宽度。
       const adjusted = state.settings.edge === "left" ? delta : -delta;
       const raw = startWidth.current + adjusted;
