@@ -785,3 +785,10 @@ body[data-window='settings'] .settings-delay-field > .settings-runtime-suffix {
   font-size: 11px;
   line-height: 1;
 }
+
+/* 字体候选末尾固定的「系统默认」与上方的字体分开。 */
+.font-combobox-option.font-default-option {
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 5px 5px;
+}
