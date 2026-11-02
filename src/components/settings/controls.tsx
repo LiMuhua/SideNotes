@@ -180,16 +180,18 @@ export function SelectField({
   label,
   options,
   value,
+  className,
   onChange,
 }: {
   label: string;
   options: ReadonlyArray<readonly [string | number, string]>;
   value: string | number;
+  className?: string;
   onChange: (next: string) => void;
 }) {
   return (
     <select
-      className="form-control"
+      className={classes('form-control', className)}
       aria-label={label}
       value={String(value)}
       onChange={(event) => onChange(event.target.value)}

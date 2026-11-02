@@ -820,12 +820,26 @@ body[data-theme='dark'] #note-list .note-card.is-editing {
 }
 
 /* 设置窗口可以调整大小：「侧栏」分组首行的三列在窗口变窄时不再按比例挤到内容之下，
- * 标签与下拉框始终完整显示。默认尺寸下各列都宽于内容，宽度与原型一致。 */
+ * 标签与下拉框始终完整显示。默认尺寸下各列都宽于内容，宽度与原型一致。
+ * 三项之间的间距比原型的 10px 宽一些，各项更容易分清。 */
 body[data-window='settings'] .settings-modal .sidebar-settings-primary {
   grid-template-columns:
     minmax(max-content, 1.06fr)
     minmax(max-content, 0.94fr)
     minmax(max-content, 1.04fr);
+  column-gap: 24px;
+}
+
+/* 「其它」一行中的通知位置：下拉框与左侧两个输入框同高，宽度只放得下选项文字。 */
+body[data-window='settings'] .settings-modal .settings-runtime-controls > select.settings-runtime-select {
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  height: 28px;
+  min-height: 28px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 10px;
 }
 
 /* ==================== 版本与更新 ====================
@@ -880,18 +894,18 @@ body[data-window='settings'] .settings-modal .appearance-dashboard .settings-typ
   grid-template-columns: max-content minmax(0, 1fr);
 }
 
-/* 「移出后收起」：输入框与选项只写数字，单位 ms 固定在输入框之后。 */
+/* 「移出后收起」：输入框只放得下 5 位数字（最长 10000），单位 ms 固定在输入框之后。 */
 body[data-window='settings'] .settings-delay-field {
   display: flex;
   align-items: center;
   gap: 6px;
-  width: 100%;
   min-width: 0;
 }
 
 body[data-window='settings'] .settings-delay-field > .font-combobox {
-  flex: 1;
-  min-width: 0;
+  flex: none;
+  /* 5 个数字，加上输入框左内边距 10px、右侧展开按钮所占的 32px 与两侧边框。 */
+  width: calc(5ch + 44px);
 }
 
 body[data-window='settings'] .settings-delay-field > .settings-runtime-suffix {

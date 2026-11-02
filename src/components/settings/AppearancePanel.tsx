@@ -217,15 +217,24 @@ function RuntimeGroup({ settings, save }: PanelProps) {
             </label>
           </div>
         </div>
+        <div className="settings-runtime-field">
+          <div
+            className="settings-runtime-name"
+            title="「已保存」「已移入回收站」等操作提示在窗口中弹出的位置，三个窗口同时生效。"
+          >
+            通知位置
+          </div>
+          <div className="settings-runtime-controls">
+            <SelectField
+              label="通知弹出位置"
+              className="settings-runtime-select"
+              options={TOAST_POSITION_LABELS}
+              value={settings.toastPosition}
+              onChange={(position) => void save({ toastPosition: position as ToastPosition })}
+            />
+          </div>
+        </div>
       </div>
-      <Row title="通知位置" description="「已保存」「已移入回收站」等操作提示在窗口中弹出的位置，三个窗口同时生效。">
-        <SelectField
-          label="通知弹出位置"
-          options={TOAST_POSITION_LABELS}
-          value={settings.toastPosition}
-          onChange={(position) => void save({ toastPosition: position as ToastPosition })}
-        />
-      </Row>
     </Group>
   );
 }
