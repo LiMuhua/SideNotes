@@ -259,7 +259,12 @@ export function TextField({
   );
 }
 
-/** 滑块与直接输入共享边界的数值控件。 */
+/**
+ * 滑块与直接输入共享边界的数值控件。
+ *
+ * `commitOnRelease` 为真时拖动滑块只更新显示的数值，松开鼠标或按键后才保存：
+ * 字号等设置每次变化都会让所有窗口重新排版，拖动途中逐值保存会让界面不停闪动。
+ */
 export function RangeField({
   label,
   settingKey,
@@ -268,6 +273,7 @@ export function RangeField({
   max,
   step,
   unit,
+  commitOnRelease = false,
   onSave,
 }: {
   label: string;
@@ -278,12 +284,24 @@ export function RangeField({
   step: number;
   /** 带前导空格的单位，例如 " px"，提示文案与原型一致。 */
   unit: string;
+  /** 松开滑块后才保存（见上）。 */
+  commitOnRelease?: boolean;
   onSave: (next: number) => Promise<boolean>;
 }) {
   const toast = useToast();
   const [draft, setDraft] = useState<string | null>(null);
   // 回车或 Esc 已处理时，随后的失焦不再重复提交。
   const skipBlur = useRef(false);
+  // 拖动中尚未保存的滑块值；松开时的事件可能早于这次状态更新的重新渲染，同时记在 ref 中读取。
+  const [sliding, setSliding] = useState<number | null>(null);
+  const slidingRef = useRef<number | null>(null);
+
+  const release = (): void => {
+    const next = slidingRef.current;
+    slidingRef.current = null;
+    setSliding(null);
+    if (next !== null && next !== value) void onSave(next);
+  };
 
   const commit = async (): Promise<void> => {
     if (draft === null) return;
@@ -306,12 +324,22 @@ export function RangeField({
         min={min}
         max={max}
         step={step}
-        value={value}
+        value={sliding ?? value}
         aria-label={label}
         onChange={(event) => {
           const next = boundedNumber(event.target.value, min, max, step);
-          if (next !== null && next !== value) void onSave(next);
+          if (next === null) return;
+          if (commitOnRelease) {
+            slidingRef.current = next;
+            setSliding(next);
+          } else if (next !== value) {
+            void onSave(next);
+          }
         }}
+        onPointerUp={commitOnRelease ? release : undefined}
+        onPointerCancel={commitOnRelease ? release : undefined}
+        onKeyUp={commitOnRelease ? release : undefined}
+        onBlur={commitOnRelease ? release : undefined}
       />
       <span className="settings-range-number">
         <input
@@ -320,7 +348,7 @@ export function RangeField({
           min={min}
           max={max}
           step={step}
-          value={draft ?? String(value)}
+          value={draft ?? String(sliding ?? value)}
           data-setting-key={settingKey}
           aria-label={`${label}数值`}
           title={`输入 ${min}–${max}，步进 ${step}`}
