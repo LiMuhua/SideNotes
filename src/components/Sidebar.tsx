@@ -52,8 +52,6 @@ function sameImages(left: NoteImage[], right: NoteImage[]): boolean {
   return left.length === right.length && left.every((image, index) => image.id === right[index].id);
 }
 
-// 快捷键描述：Ctrl+Enter 触发保存并收起侧栏。
-
 export function Sidebar() {
   const state = useStore();
   const toast = useToast();
@@ -364,8 +362,12 @@ export function Sidebar() {
   const [composerText, setComposerText] = useState("");
   const composerEditorRef = useRef<MarkdownEditor | null>(null);
 
+  /**
+   * 保存新建卡片：保存按钮与 Ctrl+Enter 共用。侧栏保持展开，焦点留在新建卡片里，可以接着记下一条；
+   * 独立的速记浮窗仍是保存即收起（见 Capture）。
+   */
   const saveComposer = useCallback(
-    async (hideSidebar: boolean) => {
+    async () => {
       // 与原型一致：草稿为空时不保存也不提示。
       const { draft } = store.getState();
       if (!draft.text.trim() && !draft.images.length) return;
@@ -381,11 +383,9 @@ export function Sidebar() {
         return;
       }
       setComposerText("");
-      setComposerActive(false);
       toast("记录已保存");
-      if (hideSidebar) void bridge.hideSidebar(currentLayout());
     },
-    [tab, toast, currentLayout],
+    [tab, toast],
   );
 
   useEffect(() => {
@@ -707,7 +707,7 @@ export function Sidebar() {
         // 不会再触发 focus，不能只依赖「新建卡片激活」状态，否则接着按 Ctrl+Enter 没有反应。
         const inComposer = event.target instanceof Element && Boolean(event.target.closest("#quick-composer"));
         if (composerActive || inComposer) {
-          void saveComposer(true);
+          void saveComposer();
         }
       }
       if (event.key === "Escape") {
@@ -1465,7 +1465,7 @@ export function Sidebar() {
             composerEditorRef.current = editor;
           }}
           onFocus={() => setComposerActive(true)}
-          onSave={() => void saveComposer(false)}
+          onSave={() => void saveComposer()}
           onClose={() => setComposerActive(false)}
           onAttachImage={() => triggerFileInput("image", "composer")}
           onAttachFile={() => triggerFileInput("file", "composer")}

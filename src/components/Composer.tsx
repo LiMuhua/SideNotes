@@ -42,8 +42,8 @@ export function Composer(props: ComposerProps) {
       >
         <LiveEditor
           value={props.text}
-          placeholder={'记一条… 支持 Markdown、#标签\nCtrl+Enter 保存并收起侧栏'}
-          ariaLabel="直接输入新记录，Ctrl+Enter 保存并收起侧栏"
+          placeholder={'记一条… 支持 Markdown、#标签\nCtrl+Enter 保存，侧栏保持展开'}
+          ariaLabel="直接输入新记录，Ctrl+Enter 保存"
           minHeight={76}
           maxHeight={props.maxHeight}
           onChange={props.onChange}
