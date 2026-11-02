@@ -94,11 +94,11 @@ export function App({ role }: AppProps) {
     // 统一的布局参数：带上动画时长，否则窗口会瞬间跳转而不平移。
     const layout = () => bridge.sidebarLayout(store.getState().settings);
 
-    // 鼠标进入屏幕边缘：编辑中或正在输入时不自动展开，避免打断。
+    // 鼠标进入屏幕边缘：后端只在侧栏隐藏时发出，直接展开。
+    // 不能再按「焦点在编辑区」跳过：侧栏收起后页面焦点仍留在原处，例如新建卡片保存后焦点留在编辑区，
+    // 以前据此判断为「正在输入」而忽略唤出，侧栏就再也呼不出来，直到焦点移走。
     void bridge
       .onAppEvent(bridge.APP_EVENTS.edgeEnter, () => {
-        const active = document.activeElement;
-        if (active && active.closest('.live-markdown-editor')) return;
         void bridge.showSidebar(layout());
       })
       .then((unlisten) => cleanups.push(unlisten));
