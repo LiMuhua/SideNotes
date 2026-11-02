@@ -122,6 +122,7 @@ pub fn run() {
             commands::import_attachment,
             commands::import_files,
             commands::open_attachment,
+            commands::cleanup_attachments,
             commands::migrate_storage,
             commands::copy_file_paths,
             commands::set_sidebar_pinned,

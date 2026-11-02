@@ -3,8 +3,12 @@
 //! 粘贴的截图与引用的文件都复制一份到应用数据目录的 attachments 文件夹中维护，
 //! 记录只引用这份副本：原始文件移动、改名或删除后，引用仍然有效。
 //! 每次导入放在独立的子文件夹里，文件保留原名，同名文件互不覆盖。
+//!
+//! 记录不再引用的副本由 [`cleanup`] 清理：删除记录、清空回收站或更换附件后，
+//! 旧副本不再被任何记录引用，按子文件夹整体删除，避免数据目录无谓膨胀。
 
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 
 use serde::Serialize;
 
@@ -14,6 +18,9 @@ use crate::error::{AppError, AppResult};
 pub const ATTACHMENTS_DIR: &str = "attachments";
 /// 单个附件的大小上限：附件随数据目录一起备份与迁移，过大的文件应保留在原处。
 const MAX_ATTACHMENT_BYTES: u64 = 100 * 1024 * 1024;
+/// 新导入的附件在这段时间内不清理：粘贴后尚未保存的编辑、速记浮窗里尚未保存的草稿都可能引用它们，
+/// 而这些内容只在各窗口的内存中，数据库里还查不到。
+pub const CLEANUP_GRACE: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// 导入后的附件：显示名称与副本的完整路径。
 #[derive(Debug, Clone, Serialize)]
@@ -125,6 +132,18 @@ pub fn is_inside(root: &Path, path: &Path) -> bool {
     }
 }
 
+/// 清理结果。
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CleanupReport {
+    /// 删除的附件（子文件夹）数。
+    pub removed: usize,
+    /// 释放的字节数。
+    pub freed: u64,
+    /// 没有被引用、但仍在保护期内而暂未删除的附件数。
+    pub pending: usize,
+}
+
 /// 附件文件夹的规模，供设置页显示。
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -162,6 +181,59 @@ pub fn usage(root: &Path) -> AttachmentUsage {
             count: total.count + 1,
             size: total.size + folder_size(&entry.path()),
         })
+}
+
+/// 记录原文中是否引用了某个附件子文件夹。
+///
+/// 导入时每个附件独占一个以毫秒时间戳加序号命名的子文件夹（见 `new_folder`），名称足够独特，
+/// 只要原文中出现「分隔符 + 子文件夹名 + 分隔符」即视为引用；不要求整条路径逐字相同，
+/// 用户改写过路径的大小写或斜杠方向、写成 file 网址时仍然识别，宁可多留也不误删。
+fn referenced(texts: &str, folder: &str) -> bool {
+    let folder = folder.to_lowercase();
+    ["\\", "/"]
+        .iter()
+        .any(|separator| texts.contains(&format!("{separator}{folder}{separator}")))
+}
+
+/// 删除没有被任何记录引用的附件子文件夹，返回删除数量与释放的空间。
+///
+/// `root` 为数据目录；`texts` 为全部记录（含回收站，回收站中的记录还能恢复）与草稿的原文，
+/// 以及调用方窗口中尚未保存的编辑内容。修改时间距 `now` 不足 `grace` 的子文件夹即使没有引用也保留，
+/// 见 [`CLEANUP_GRACE`]。附件文件夹之外的文件一律不动。
+pub fn cleanup(root: &Path, texts: &[String], grace: Duration, now: SystemTime) -> AppResult<CleanupReport> {
+    let base = root.join(ATTACHMENTS_DIR);
+    let entries = match std::fs::read_dir(&base) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(CleanupReport::default()),
+        Err(error) => return Err(error.into()),
+    };
+    let haystack = texts.join("\n").to_lowercase();
+    let mut report = CleanupReport::default();
+    for entry in entries.flatten() {
+        let Ok(kind) = entry.file_type() else { continue };
+        if !kind.is_dir() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if referenced(&haystack, &name) {
+            continue;
+        }
+        // 取创建与修改时间中较晚的一个；读不到时间时按刚导入处理，留给下一次。
+        let meta = entry.metadata()?;
+        let stamp = [meta.created().ok(), meta.modified().ok()].into_iter().flatten().max();
+        let fresh = stamp.map_or(true, |time| now.duration_since(time).map(|age| age < grace).unwrap_or(true));
+        if fresh {
+            report.pending += 1;
+            continue;
+        }
+        let path = entry.path();
+        let size = folder_size(&path);
+        if std::fs::remove_dir_all(&path).is_ok() {
+            report.removed += 1;
+            report.freed += size;
+        }
+    }
+    Ok(report)
 }
 
 /// 解码 `encodeURIComponent` 编码的文字（附件名经请求头传入，请求头只能是 ASCII）。
@@ -225,6 +297,45 @@ mod tests {
         assert!(!is_inside(&folder, &folder));
         assert!(!is_inside(&folder, &folder.join("missing.txt")));
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn cleanup_removes_only_unreferenced_folders_past_grace() {
+        let root = temp_root("cleanup");
+        let kept = import_bytes(&root, "kept.png", b"keep").expect("写入附件");
+        let upper = import_bytes(&root, "upper.png", b"upper").expect("写入附件");
+        let orphan = import_bytes(&root, "orphan.txt", b"orphan-data").expect("写入附件");
+        let unsaved = import_bytes(&root, "unsaved.txt", b"new").expect("写入附件");
+        // 附件文件夹里的零散文件与数据目录中的其它文件不受影响。
+        std::fs::write(root.join(ATTACHMENTS_DIR).join("stray.txt"), b"x").unwrap();
+        std::fs::write(root.join("sidenotes.db"), b"db").unwrap();
+        let texts = vec![
+            format!("![图]({})", kept.path),
+            // 用户改写过斜杠方向与大小写的引用也算引用。
+            format!("[文件]({})", upper.path.replace('\\', "/").to_uppercase()),
+            "无关的记录".to_string(),
+        ];
+        let day = Duration::from_secs(86_400);
+
+        // 都在保护期内：一个也不删，未引用的两个记为待清理。
+        let report = cleanup(&root, &texts, day, SystemTime::now()).expect("清理");
+        assert_eq!(report, CleanupReport { removed: 0, freed: 0, pending: 2 });
+
+        // 两天之后：未引用的两个删除，引用中的保留。
+        let later = SystemTime::now() + 2 * day;
+        let report = cleanup(&root, &texts, day, later).expect("清理");
+        assert_eq!(report, CleanupReport { removed: 2, freed: 14, pending: 0 });
+        assert!(Path::new(&kept.path).exists());
+        assert!(Path::new(&upper.path).exists());
+        assert!(!Path::new(&orphan.path).exists());
+        assert!(!Path::new(&unsaved.path).exists());
+        assert!(root.join(ATTACHMENTS_DIR).join("stray.txt").exists());
+        assert!(root.join("sidenotes.db").exists());
+        assert_eq!(usage(&root), AttachmentUsage { count: 2, size: 9 });
+
+        // 没有附件文件夹时直接返回。
+        let _ = std::fs::remove_dir_all(&root);
+        assert_eq!(cleanup(&root, &texts, day, later).expect("清理"), CleanupReport::default());
     }
 
     #[test]

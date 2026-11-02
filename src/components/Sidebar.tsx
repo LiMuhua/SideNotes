@@ -1089,6 +1089,21 @@ export function Sidebar() {
   const fileMode = useRef<"image" | "file">("image");
   const fileTarget = useRef<"composer" | string>("composer");
 
+  // 记录变化（删除记录、清空回收站、更换附件等）一分钟后，清理不再被任何记录引用的附件副本；
+  // 启动后半分钟先清理一次。只由侧栏窗口发起，避免三个窗口重复清理；本窗口尚未保存的编辑与
+  // 新建卡片内容一并作为引用传入，刚导入的附件另有保护期（见 bridge.cleanupAttachments）。
+  const cleanupStarted = useRef(false);
+  useEffect(() => {
+    if (!state.ready || state.loadFailed) return;
+    const delay = cleanupStarted.current ? 60_000 : 30_000;
+    cleanupStarted.current = true;
+    const timer = window.setTimeout(() => {
+      const extra = [editingRef.current?.text ?? "", store.getState().draft.text].filter(Boolean);
+      void bridge.cleanupAttachments(extra).catch((error: unknown) => console.warn("附件清理失败", error));
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [state.notes, state.ready, state.loadFailed]);
+
   /**
    * 引用文件：用系统对话框选择文件，复制到应用数据目录中维护，在光标处插入引用（图片为内嵌图片）。
    * 记录只引用副本，原始文件移动或删除后引用仍然有效。

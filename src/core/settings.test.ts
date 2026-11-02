@@ -8,7 +8,7 @@ import {
   sidebarWindowWidth,
   uiZoom,
 } from './settings';
-import { filePath, fileLabel, isLegacyToken, toMarkdownReference } from './files';
+import { filePath, fileLabel, formatBytes, isLegacyToken, toMarkdownReference } from './files';
 
 describe('设置校验', () => {
   it('空输入返回完整默认值', () => {
@@ -166,5 +166,13 @@ describe('文件引用', () => {
   it('生成的 Markdown 引用转义方括号', () => {
     expect(toMarkdownReference('C:\\a\\b.txt')).toBe('[b.txt](C:\\a\\b.txt)');
     expect(toMarkdownReference('C:\\a\\x.txt', '含[方]括号')).toBe('[含\\[方\\]括号](C:\\a\\x.txt)');
+  });
+
+  it('字节数写成便于阅读的大小', () => {
+    expect(formatBytes(812)).toBe('812 B');
+    expect(formatBytes(3482)).toBe('3.4 KB');
+    expect(formatBytes(13_107_200)).toBe('12.5 MB');
+    expect(formatBytes(150 * 1024 * 1024)).toBe('150 MB');
+    expect(formatBytes(-5)).toBe('0 B');
   });
 });

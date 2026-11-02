@@ -79,6 +79,20 @@ export function toMarkdownReference(path: string, name?: string): string {
   return `[${label}](${linkAddress(path)})`;
 }
 
+/** 把字节数写成便于阅读的大小，如 812 B、3.4 KB、12.5 MB。 */
+export function formatBytes(bytes: number): string {
+  const value = Math.max(0, Number(bytes) || 0);
+  if (value < 1024) return `${value} B`;
+  const units = ['KB', 'MB', 'GB'];
+  let size = value / 1024;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  return `${size >= 100 ? Math.round(size) : Number(size.toFixed(1))} ${units[unit]}`;
+}
+
 /** 把图片路径包装成 Markdown 内嵌图片。 */
 export function toMarkdownImage(path: string, name?: string): string {
   const label = escapeLabel(name || fileLabel(path)).replace(/\.[^.]+$/, '');

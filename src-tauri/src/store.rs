@@ -291,6 +291,18 @@ impl Store {
         self.path().parent().map(Path::to_path_buf).unwrap_or_default()
     }
 
+    /// 全部记录（含回收站）与草稿的原文，供附件清理判断哪些副本仍被引用。
+    pub fn reference_texts(&self) -> AppResult<Vec<String>> {
+        let connection = self.connection()?;
+        let mut statement = connection.prepare("SELECT text FROM notes UNION ALL SELECT text FROM drafts")?;
+        let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
+        let mut texts = Vec::new();
+        for row in rows {
+            texts.push(row?);
+        }
+        Ok(texts)
+    }
+
     /// 读取数据目录与数据库规模；默认目录等与位置相关的字段由调用方补上。
     pub fn info(&self) -> AppResult<StorageInfo> {
         let connection = self.connection()?;

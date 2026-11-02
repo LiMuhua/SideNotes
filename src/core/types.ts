@@ -161,6 +161,16 @@ export interface MigrationReport {
   backup: string;
 }
 
+/** 附件清理结果。 */
+export interface CleanupReport {
+  /** 删除的附件数。 */
+  removed: number;
+  /** 释放的字节数。 */
+  freed: number;
+  /** 没有被引用、但刚导入不久而暂时保留的附件数。 */
+  pending: number;
+}
+
 /** 文件引用校验结果。 */
 export interface FileStatus {
   exists: boolean;

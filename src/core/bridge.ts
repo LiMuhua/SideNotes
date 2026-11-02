@@ -14,6 +14,7 @@ import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import { isPermissionGranted, requestPermission } from '@tauri-apps/plugin-notification';
 import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener';
 import type {
+  CleanupReport,
   Draft,
   EdgeSide,
   FileStatus,
@@ -169,6 +170,17 @@ export function storageInfo(): Promise<StorageInfo> {
  */
 export function migrateStorage(target: string): Promise<MigrationReport> {
   return call<MigrationReport>('migrate_storage', { target });
+}
+
+/**
+ * 清理没有被任何记录引用的附件副本。
+ *
+ * 后端以数据库中的全部记录（含回收站）与草稿为准，`extra` 补上本窗口尚未保存的编辑内容；
+ * 刚导入的附件在保护期内保留（`graceMinutes`，默认 24 小时），其它窗口里还没保存的内容查不到。
+ * 浏览器预览没有附件文件夹，返回空结果。
+ */
+export function cleanupAttachments(extra: string[], graceMinutes?: number): Promise<CleanupReport> {
+  return call<CleanupReport>('cleanup_attachments', { extra, graceMinutes }, { removed: 0, freed: 0, pending: 0 });
 }
 
 /** 列出系统已安装的字体族名称；浏览器预览读不到系统字体，返回空列表。 */

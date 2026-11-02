@@ -236,6 +236,25 @@ pub fn open_attachment(app: AppHandle, state: State<'_, AppState>, path: String)
         .map_err(|error| AppError::Other(format!("无法打开文件：{error}")))
 }
 
+/// 清理没有被任何记录引用的附件副本。
+///
+/// 引用以数据库中的全部记录（含回收站）与草稿为准，`extra` 补上调用方窗口里尚未保存的编辑内容。
+/// `grace_minutes` 为新附件的保护期（默认见 `CLEANUP_GRACE`）：其它窗口里还没保存的内容查不到，
+/// 刚导入的附件在保护期内即使没有引用也保留。
+#[tauri::command]
+pub async fn cleanup_attachments(
+    state: State<'_, AppState>,
+    extra: Vec<String>,
+    grace_minutes: Option<u64>,
+) -> AppResult<attachments::CleanupReport> {
+    let mut texts = state.store.reference_texts()?;
+    texts.extend(extra);
+    let grace = grace_minutes.map_or(attachments::CLEANUP_GRACE, |minutes| {
+        std::time::Duration::from_secs(minutes.saturating_mul(60))
+    });
+    attachments::cleanup(&state.store.directory(), &texts, grace, std::time::SystemTime::now())
+}
+
 /// 读取指定路径的文件是否存在及其大小，供文件引用校验。
 #[tauri::command]
 pub fn inspect_file(path: String) -> AppResult<FileStatus> {

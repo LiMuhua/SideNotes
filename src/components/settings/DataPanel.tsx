@@ -2,7 +2,7 @@
  * 数据与同步。
  *
  * 结构对应原型 settings.js 的 renderData：导入与导出、数据目录、云端自动备份三张卡。
- * 导入导出、打开目录与更换存储位置（复制数据并改写附件路径）在桌面端真实可用；
+ * 导入导出、打开目录、更换存储位置（复制数据并改写附件路径）与附件清理在桌面端真实可用；
  * 云端备份尚未接入，界面只保存配置并明确说明，不把未实现的能力表现为已完成。
  */
 
@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 import * as bridge from '../../core/bridge';
 import * as store from '../../core/store';
 import { normalizeDraft, normalizeNote } from '../../core/notes';
+import { formatBytes } from '../../core/files';
 import type { CloudProvider, CloudSettings, Draft, Note, Settings, StorageInfo, StorageLocation } from '../../core/types';
 import { useToast } from '../../hooks/useToast';
 import { useConfirm } from './confirm';
@@ -184,6 +185,7 @@ function DirectoryGroup({
 }) {
   const toast = useToast();
   const confirm = useConfirm();
+  const [cleaning, setCleaning] = useState(false);
   const target = locationDirectory(settings, info);
   // 所选位置与当前目录不同时才需要迁移；读取目录信息之前不显示。
   const needsMigration = Boolean(info && target && !sameDirectory(target, info.directory));
@@ -235,6 +237,29 @@ function DirectoryGroup({
     }
   };
 
+  /**
+   * 立即清理不再被任何记录引用的附件副本（平时在记录变化后自动进行）。
+   * 导入不到一天的附件可能还在其它窗口未保存的内容里，与自动清理一样暂时保留。
+   */
+  const cleanAttachments = async (): Promise<void> => {
+    setCleaning(true);
+    try {
+      const report = await bridge.cleanupAttachments([]);
+      if (report.removed) {
+        toast(`已清理 ${report.removed} 个未引用的附件，释放 ${formatBytes(report.freed)}`);
+      } else if (report.pending) {
+        toast(`没有可清理的附件；${report.pending} 个导入不到一天的附件暂时保留`);
+      } else {
+        toast('没有未引用的附件');
+      }
+      onRefresh();
+    } catch (error) {
+      toast(`附件未清理：${reason(error, '请稍后重试')}`, null, true);
+    } finally {
+      setCleaning(false);
+    }
+  };
+
   return (
     <Group title="数据目录" className="settings-wide">
       {info?.unavailableDirectory ? (
@@ -274,6 +299,26 @@ function DirectoryGroup({
           {info?.directory || '正在读取…'}
         </code>
         <ActionButton label="打开目录" icon="folder" className="icon-button" onClick={() => void openDirectory()} />
+      </div>
+      <div className="settings-row setting-row settings-inline-toggle attachment-usage">
+        <div className="settings-row-info setting-copy">
+          <span className="settings-row-label setting-label">附件</span>
+          <Help
+            title="附件"
+            description="粘贴的截图与引用的文件各保存一份副本。删除记录、清空回收站或更换附件后，不再被引用的副本会自动清理；导入不到一天的附件暂时保留。"
+          />
+        </div>
+        <div className="settings-control">
+          <span className="settings-status" data-attachment-usage="">
+            {info ? `${info.attachmentCount} 个 · ${formatBytes(info.attachmentSize)}` : '正在读取…'}
+          </span>
+          <ActionButton
+            label={cleaning ? '正在清理…' : '立即清理'}
+            icon="trash"
+            disabled={cleaning}
+            onClick={() => void cleanAttachments()}
+          />
+        </div>
       </div>
     </Group>
   );
@@ -411,7 +456,7 @@ export function DataPanel({
   loadFailed: boolean;
 }) {
   const [info, setInfo] = useState<StorageInfo | null>(null);
-  // 打开数据分类、迁移数据之后重新读取目录信息；卸载后返回的结果直接丢弃。
+  // 打开数据分类、迁移数据或清理附件之后重新读取目录信息；卸载后返回的结果直接丢弃。
   const [revision, setRevision] = useState(0);
 
   useEffect(() => {
