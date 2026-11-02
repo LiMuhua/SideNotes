@@ -25,6 +25,7 @@ describe('设置校验', () => {
     expect(settings.protectEditing).toBe(true);
     expect(settings.cloud.enabled).toBe(false);
     expect(settings.cardMaxHeight).toBe(220);
+    expect(settings.toastPosition).toBe('top-center');
     expect(settings.guideSeen).toBe(false);
   });
 
@@ -71,6 +72,8 @@ describe('设置校验', () => {
     expect(normalizeSettings({ surface: 'unknown' }).surface).toBe('standard');
     expect(normalizeSettings({ storageLocation: 'cloud' }).storageLocation).toBe('appdata');
     expect(normalizeSettings({ cloud: { provider: 'dropbox' } }).cloud.provider).toBe('synology');
+    expect(normalizeSettings({ toastPosition: 'left' }).toastPosition).toBe('top-center');
+    expect(normalizeSettings({ toastPosition: 'bottom-center' }).toastPosition).toBe('bottom-center');
     expect(normalizeSettings({ guideSeen: 'yes' }).guideSeen).toBe(false);
   });
 

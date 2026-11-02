@@ -16,7 +16,7 @@ import {
   WIDTH_RANGE,
   parseDelay,
 } from '../../core/settings';
-import type { EdgeSide, Settings } from '../../core/types';
+import type { EdgeSide, Settings, ToastPosition } from '../../core/types';
 import { useToast } from '../../hooks/useToast';
 import { Combobox } from './Combobox';
 import { ActionButton, Group, RangeField, Row, SelectField, TextField, Toggle, classes, type SaveSettings } from './controls';
@@ -38,6 +38,13 @@ const SURFACES: ReadonlyArray<readonly [Settings['surface'], string]> = [
 const EDGES: ReadonlyArray<readonly [EdgeSide, string]> = [
   ['right', '屏幕右侧'],
   ['left', '屏幕左侧'],
+];
+
+/** 提示条位置，顺序与默认值见 TOAST_POSITIONS。 */
+const TOAST_POSITION_LABELS: ReadonlyArray<readonly [ToastPosition, string]> = [
+  ['top-center', '顶部正中'],
+  ['top-right', '右上角'],
+  ['bottom-center', '底部正中'],
 ];
 
 /** 常用延迟只写数字，单位 ms 固定显示在输入框之后。 */
@@ -211,6 +218,14 @@ function RuntimeGroup({ settings, save }: PanelProps) {
           </div>
         </div>
       </div>
+      <Row title="通知位置" description="「已保存」「已移入回收站」等操作提示在窗口中弹出的位置，三个窗口同时生效。">
+        <SelectField
+          label="通知弹出位置"
+          options={TOAST_POSITION_LABELS}
+          value={settings.toastPosition}
+          onChange={(position) => void save({ toastPosition: position as ToastPosition })}
+        />
+      </Row>
     </Group>
   );
 }

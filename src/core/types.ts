@@ -63,6 +63,9 @@ export type SurfaceMode = 'standard' | 'paper' | 'glass' | 'win11';
 /** 侧栏贴附边缘。 */
 export type EdgeSide = 'left' | 'right';
 
+/** 提示条在窗口中弹出的位置。 */
+export type ToastPosition = 'top-center' | 'top-right' | 'bottom-center';
+
 /** 数据目录位置。 */
 export type StorageLocation = 'appdata' | 'portable' | 'custom';
 
@@ -101,6 +104,8 @@ export interface Settings {
   edgeTrigger: boolean;
   /** 卡片正文的最大高度（按 13px 字号计的网页像素），超出部分渐隐，双击卡片查看全文。 */
   cardMaxHeight: number;
+  /** 提示条弹出的位置。 */
+  toastPosition: ToastPosition;
   /** 是否已看过使用指南；首次启动时显示一次，之后可从侧栏菜单再次打开。 */
   guideSeen: boolean;
   /** 滚动按需加载。 */

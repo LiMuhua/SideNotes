@@ -173,18 +173,95 @@ body[data-window='sidebar'] .note-card > .note-content {
   height: 100%;
 }
 
-/* 提示条在窗口内居中，不再按演示页面的侧栏偏移计算。
- * 固定定位元素在 left: 50% 时，自适应宽度最多只有视口的一半，稍长的提示就会折行；
- * 这里按内容取宽度、以窗口宽度减 28px 为上限，仍用平移居中，与原型的定位方式和渲染一致。 */
-body[data-window='sidebar'] .toast-region,
-body[data-window='capture'] .toast-region,
-body[data-window='settings'] .toast-region {
-  left: 50%;
+/* ==================== 提示条 ====================
+ * 原型的提示条贴着演示页面底部、按侧栏偏移居中，样式较平，在窗口里不够醒目。
+ * 桌面端改为卡片式：左侧一条强调色、图标放在浅色圆底中、投影加重；
+ * 弹出位置由设置决定（body 上的 data-toast-position）：顶部正中（默认）、右上角或底部正中。
+ * 宽度按内容计算，上限为窗口宽度减 28px；固定定位元素在 left: 50% 时自适应宽度最多只有视口的一半，
+ * 稍长的提示就会折行，所以用 max-content 再平移居中。 */
+
+body[data-window] .toast-region {
+  top: auto;
   right: auto;
   bottom: 18px;
+  left: 50%;
   width: max-content;
   max-width: calc(100% - 28px);
   transform: translateX(-50%);
+  align-items: center;
+}
+
+body[data-window][data-toast-position='top-center'] .toast-region,
+body[data-window][data-toast-position='top-right'] .toast-region {
+  top: 14px;
+  bottom: auto;
+  /* 新的提示贴在顶部，旧的依次往下。 */
+  flex-direction: column-reverse;
+}
+
+body[data-window][data-toast-position='top-right'] .toast-region {
+  right: 14px;
+  left: auto;
+  transform: none;
+  align-items: flex-end;
+}
+
+body[data-window] .toast {
+  gap: 10px;
+  padding: 11px 12px 11px 13px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow:
+    0 12px 32px color-mix(in srgb, #1d2a1d 22%, transparent),
+    0 2px 6px color-mix(in srgb, #1d2a1d 10%, transparent);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+body[data-window] .toast > .icon {
+  box-sizing: content-box;
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  padding: 4px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+body[data-window] .toast.error {
+  border-color: color-mix(in srgb, var(--danger) 30%, var(--line));
+  border-left-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 6%, var(--card));
+}
+
+body[data-window] .toast.error > .icon {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+}
+
+body[data-window][data-toast-position^='top'] .toast {
+  animation: toast-drop-in 0.2s ease;
+}
+
+@keyframes toast-drop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-window] .toast {
+    animation: none !important;
+  }
 }
 
 /* ==================== 速记浮窗 ==================== */

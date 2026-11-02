@@ -30,6 +30,8 @@ export const ANIM_DURATION_RANGE = { min: 0, max: 600, step: 20 } as const;
 export const CARD_HEIGHT_RANGE = { min: 120, max: 600, step: 10 } as const;
 /** 卡片正文的默认最大高度：原型为 186，按用户要求略微加大。 */
 export const DEFAULT_CARD_HEIGHT = 220;
+/** 提示条位置的可选值，第一项为默认。 */
+export const TOAST_POSITIONS = ['top-center', 'top-right', 'bottom-center'] as const;
 
 /**
  * 设置的结构版本。
@@ -93,6 +95,9 @@ export function normalizeSettings(value: unknown = {}): Settings {
     protectEditing: input.protectEditing !== false,
     edgeTrigger: input.edgeTrigger !== false,
     cardMaxHeight: clampInt(input.cardMaxHeight, CARD_HEIGHT_RANGE.min, CARD_HEIGHT_RANGE.max, DEFAULT_CARD_HEIGHT),
+    toastPosition: TOAST_POSITIONS.includes(input.toastPosition as Settings['toastPosition'])
+      ? (input.toastPosition as Settings['toastPosition'])
+      : TOAST_POSITIONS[0],
     guideSeen: input.guideSeen === true,
     lazyLoading: input.lazyLoading !== false,
     pageSize: clampInt(input.pageSize, PAGE_SIZE_RANGE.min, PAGE_SIZE_RANGE.max, 10),

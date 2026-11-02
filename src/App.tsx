@@ -49,6 +49,8 @@ export function App({ role }: AppProps) {
       node.dataset.surface = settings.surface;
     }
     document.body.dataset.edge = settings.edge;
+    // 提示条位置作用于三个窗口，样式按 body 上的标记切换（见 desktop.css）。
+    document.body.dataset.toastPosition = settings.toastPosition;
     root.style.setProperty('--note-font-family', resolveFontFamily(settings.fontFamily));
     root.style.setProperty('--sidebar-width', `${settings.width}px`);
     root.style.setProperty('--note-content-max-height', `${settings.cardMaxHeight}px`);
