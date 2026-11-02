@@ -1052,24 +1052,10 @@ body[data-window='settings'] .settings-delay-field > .settings-runtime-suffix {
   flex-shrink: 0;
 }
 
-.attachment-dialog-file span,
-.attachment-dialog-meta span {
+.attachment-dialog-file span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.attachment-dialog-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 0;
-  font-size: 10px;
-  color: var(--muted);
-}
-
-.attachment-dialog-meta span {
-  font-family: Consolas, 'Cascadia Code', monospace;
 }
 
 .attachment-dialog-source {
@@ -1080,16 +1066,18 @@ body[data-window='settings'] .settings-delay-field > .settings-runtime-suffix {
   color: var(--muted);
 }
 
+/* 原文框随内容增高（高度由脚本按内容设定），完整显示原文，不出现滚动条。 */
 .attachment-dialog-source textarea {
   width: 100%;
-  min-height: 58px;
-  padding: 8px 9px;
-  resize: vertical;
+  min-height: 92px;
+  padding: 9px 10px;
+  resize: none;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 7px;
   background: var(--paper);
   color: var(--ink);
-  font: 11px/1.6 Consolas, 'Cascadia Code', monospace;
+  font: 12px/1.6 Consolas, 'Cascadia Code', monospace;
   overflow-wrap: anywhere;
 }
 

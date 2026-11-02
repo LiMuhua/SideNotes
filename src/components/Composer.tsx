@@ -62,7 +62,6 @@ export function Composer(props: ComposerProps) {
                   type="button"
                   className="attachment-preview"
                   aria-label={`图片：${image.name}`}
-                  title="点击查看详情"
                   onClick={() => props.onEmbeddedImage(image)}
                 >
                   <img src={image.data} alt={image.name} />

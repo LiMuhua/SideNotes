@@ -748,7 +748,6 @@ export class MarkdownEditor {
     chip.dataset.mdEnd = String(end);
     chip.dataset.mdTarget = attachment.target;
     chip.dataset.mdLabel = attachment.label;
-    chip.title = `${attachment.label || attachment.target}\n点击查看详情，按住 Ctrl 点击直接打开`;
     if (isImage && address) {
       chip.dataset.mdPreview = address;
       chip.setAttribute('aria-label', `图片：${attachment.label || '图片'}`);

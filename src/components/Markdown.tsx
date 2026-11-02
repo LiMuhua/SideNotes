@@ -34,9 +34,6 @@ export interface MarkdownHandlers {
   onAttachment?: (attachment: PreviewAttachment, event: React.MouseEvent) => void;
 }
 
-/** 附件的悬停提示。 */
-const ATTACHMENT_HINT = '点击查看详情，按住 Ctrl 点击直接打开';
-
 /** 图片的显示地址：本机图片换成本地文件协议的地址，其余原样使用。 */
 function imageSource(src: string): string {
   return filePath(src) ? localFileUrl(src) : src;
@@ -78,7 +75,6 @@ function renderInline(nodes: InlineNode[], handlers: MarkdownHandlers, keyPrefix
             type="button"
             className="markdown-image-button"
             aria-label={`图片：${node.alt || '图片'}`}
-            title={handlers.onAttachment ? ATTACHMENT_HINT : undefined}
             {...spanAttributes(node, map)}
             onClick={(event) => {
               event.stopPropagation();
@@ -98,7 +94,6 @@ function renderInline(nodes: InlineNode[], handlers: MarkdownHandlers, keyPrefix
             key={key}
             type="button"
             className="file-reference"
-            title={`${node.path}\n${handlers.onAttachment ? ATTACHMENT_HINT : '点击校验并打开文件'}`}
             {...spanAttributes(node, map)}
             onClick={(event) => {
               event.stopPropagation();
@@ -166,7 +161,6 @@ function renderBlocks(
             <button
               type="button"
               className="file-reference"
-              title={`${block.path}\n${handlers.onAttachment ? ATTACHMENT_HINT : '点击校验并打开文件'}`}
               {...spanAttributes(block, map)}
               onClick={(event) => {
                 event.stopPropagation();

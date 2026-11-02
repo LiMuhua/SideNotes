@@ -95,7 +95,6 @@ function Attachments({
             type="button"
             className="attachment-preview note-image-button"
             aria-label={`图片：${image.name}`}
-            title="点击查看详情"
             onClick={(event) => {
               event.stopPropagation();
               onOpen(image);
@@ -443,7 +442,6 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
                 type="button"
                 className="note-image-button"
                 aria-label={`图片：${image.name}`}
-                title="点击查看详情，按住拖到另一张卡片"
                 data-drag-item="image"
                 data-image-id={image.id}
                 onClick={(event) => {

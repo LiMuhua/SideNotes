@@ -251,7 +251,6 @@ export function Capture() {
                     type="button"
                     className="attachment-preview"
                     aria-label={`图片：${image.name}`}
-                    title="点击查看详情"
                     onClick={() => handleEmbeddedImage(image)}
                   >
                     <img src={image.data} alt={image.name} />

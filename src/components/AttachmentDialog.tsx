@@ -9,15 +9,15 @@
  * 更换后旧的副本不再被引用，由附件清理在稍后删除（见 bridge.cleanupAttachments），撤销窗口内仍可恢复。
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
 import { Modal } from './Modal';
 import * as bridge from '../core/bridge';
 import { bytesToDataUrl, dataUrlToBytes, imageMime, openAttachment, referencesFor } from '../core/attachments';
-import { fileLabel, filePath, formatBytes, isLegacyToken } from '../core/files';
+import { fileLabel, filePath, isLegacyToken } from '../core/files';
 import { MAX_IMAGE_BYTES } from '../core/notes';
 import { useToast } from '../hooks/useToast';
-import type { FileStatus, NoteImage } from '../core/types';
+import type { NoteImage } from '../core/types';
 
 /** 弹窗中的附件：正文里的图片或文件引用，或以 data URL 保存在记录里的图片附件。 */
 export type AttachmentSubject =
@@ -62,24 +62,23 @@ export function AttachmentDialog({
   const imageSource = embedded ? embedded.data : path ? bridge.localFileUrl(path) : reference?.target ?? '';
 
   const [draft, setDraft] = useState(reference?.source ?? '');
-  const [status, setStatus] = useState<FileStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const sourceField = useRef<HTMLTextAreaElement>(null);
 
-  // 本机文件：读取是否存在与大小。
-  useEffect(() => {
-    if (!path) return;
-    let alive = true;
-    void bridge
-      .inspectFile(path)
-      .then((result) => {
-        if (alive) setStatus(result);
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
+  // 原文框随内容增高，完整显示原文，不出现滚动条；窗口宽度变化后重新计算。
+  useLayoutEffect(() => {
+    const field = sourceField.current;
+    if (!field) return;
+    const fit = (): void => {
+      const style = getComputedStyle(field);
+      field.style.height = 'auto';
+      field.style.height = `${field.scrollHeight + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth)}px`;
     };
-  }, [path]);
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, [draft]);
 
   /** 执行一个操作：进行中禁用按钮，失败时提示原因。 */
   const run = useCallback(
@@ -208,6 +207,7 @@ export function AttachmentDialog({
   return (
     <Modal
       title={title}
+      icon={isImage ? 'image' : 'file'}
       className="attachment-modal"
       onClose={onClose}
       footer={
@@ -255,18 +255,13 @@ export function AttachmentDialog({
             <span>{name}</span>
           </div>
         )}
-        {path ? (
-          <p className="attachment-dialog-meta">
-            {status === null ? '正在读取…' : status.exists ? formatBytes(status.size) : '文件不存在或已移动'}
-            <span title={path}>{path}</span>
-          </p>
-        ) : null}
         {reference ? (
           <label className="attachment-dialog-source">
             <span>Markdown 原文</span>
             <textarea
+              ref={sourceField}
               value={draft}
-              rows={3}
+              rows={4}
               spellCheck={false}
               readOnly={!editable}
               aria-label="附件引用的 Markdown 原文"

@@ -6,11 +6,13 @@
  */
 
 import { useCallback, useEffect, useId, useRef, type ReactNode } from 'react';
-import { Icon } from './Icon';
+import { Icon, type IconName } from './Icon';
 import { useToastContext } from '../hooks/useToast';
 
 export interface ModalProps {
   title: string;
+  /** 标题前的图标（样式沿用原型的 .modal-header h2 .icon）。 */
+  icon?: IconName;
   className?: string;
   children: ReactNode;
   footer?: ReactNode;
@@ -18,7 +20,7 @@ export interface ModalProps {
 }
 
 /** 带焦点约束的对话框。 */
-export function Modal({ title, className, children, footer, onClose }: ModalProps) {
+export function Modal({ title, icon, className, children, footer, onClose }: ModalProps) {
   const modal = useRef<HTMLElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
   const titleId = useId();
@@ -79,7 +81,10 @@ export function Modal({ title, className, children, footer, onClose }: ModalProp
         onKeyDown={handleKeyDown}
       >
         <header className="modal-header">
-          <h2 id={titleId}>{title}</h2>
+          <h2 id={titleId}>
+            {icon ? <Icon name={icon} /> : null}
+            {title}
+          </h2>
           <button
             type="button"
             className="icon-button"
