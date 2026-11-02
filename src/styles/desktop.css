@@ -174,8 +174,9 @@ body[data-window='sidebar'] .note-card > .note-content {
 }
 
 /* ==================== 提示条 ====================
- * 原型的提示条贴着演示页面底部、按侧栏偏移居中，样式较平，在窗口里不够醒目。
- * 桌面端改为卡片式：左侧一条强调色、图标放在浅色圆底中、投影加重；
+ * 原型的提示条贴着演示页面底部、按侧栏偏移居中，白底细边与卡片几乎一样，在窗口里分不出来。
+ * 桌面端改用反色：浅色主题下深底浅字、深色主题下浅底深字（背景取 --ink，文字取 --paper），
+ * 左侧一条强调色，图标放在强调色圆底中，投影加重；错误提示用深红底。
  * 弹出位置由设置决定（body 上的 data-toast-position）：顶部正中（默认）、右上角或底部正中。
  * 宽度按内容计算，上限为窗口宽度减 28px；固定定位元素在 left: 50% 时自适应宽度最多只有视口的一半，
  * 稍长的提示就会折行，所以用 max-content 再平移居中。 */
@@ -208,14 +209,15 @@ body[data-window][data-toast-position='top-right'] .toast-region {
 
 body[data-window] .toast {
   gap: 10px;
-  padding: 11px 12px 11px 13px;
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
-  border-left: 3px solid var(--accent);
+  padding: 10px 10px 10px 12px;
+  border: 0;
+  border-left: 3px solid color-mix(in srgb, var(--accent) 55%, #fff);
   border-radius: 10px;
-  background: var(--card);
+  background: var(--ink);
+  color: var(--paper);
   box-shadow:
-    0 12px 32px color-mix(in srgb, #1d2a1d 22%, transparent),
-    0 2px 6px color-mix(in srgb, #1d2a1d 10%, transparent);
+    0 14px 36px rgb(16 24 16 / 0.32),
+    0 3px 8px rgb(16 24 16 / 0.18);
   font-size: 12px;
   font-weight: 500;
   line-height: 1.5;
@@ -228,19 +230,44 @@ body[data-window] .toast > .icon {
   height: 14px;
   padding: 4px;
   border-radius: 50%;
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: color-mix(in srgb, var(--accent) 35%, #fff);
 }
 
+body[data-window] .toast .toast-action {
+  border-left-color: color-mix(in srgb, var(--paper) 28%, transparent);
+  color: color-mix(in srgb, var(--accent) 40%, var(--paper));
+}
+
+body[data-window] .toast .toast-action:hover {
+  text-decoration: underline;
+}
+
+body[data-window] .toast .icon-button {
+  color: color-mix(in srgb, var(--paper) 72%, transparent);
+}
+
+body[data-window] .toast .icon-button:hover {
+  background: color-mix(in srgb, var(--paper) 16%, transparent);
+  color: var(--paper);
+}
+
+/* 错误提示用深红底，两种主题下都与普通提示一眼分开。 */
 body[data-window] .toast.error {
-  border-color: color-mix(in srgb, var(--danger) 30%, var(--line));
-  border-left-color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 6%, var(--card));
+  border-left-color: #f0b4a9;
+  background: #9b3e39;
+  color: #fff;
 }
 
 body[data-window] .toast.error > .icon {
-  background: color-mix(in srgb, var(--danger) 14%, transparent);
-  color: var(--danger);
+  background: rgb(255 255 255 / 0.18);
+  color: #fff;
+}
+
+body[data-window] .toast.error .toast-action,
+body[data-window] .toast.error .icon-button {
+  border-left-color: rgb(255 255 255 / 0.3);
+  color: #fff;
 }
 
 body[data-window][data-toast-position^='top'] .toast {
