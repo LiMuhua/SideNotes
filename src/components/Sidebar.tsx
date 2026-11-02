@@ -27,7 +27,7 @@ import { useToast } from "../hooks/useToast";
 import { useCardInteractions, type ItemDrop } from "../hooks/useCardInteractions";
 import * as store from "../core/store";
 import * as bridge from "../core/bridge";
-import { matchesQuery, shouldNudgeTidy, inTab, compareNoteOrder } from "../core/notes";
+import { matchesQuery, shouldNudgeTidy, inTab, compareNoteOrder, noteTitle } from "../core/notes";
 import { moveImage, moveReference } from "../core/transfer";
 import { chooseAndImportFiles } from "../core/attachments";
 import { parse, removeTag, tagKey, canonicalize } from "../core/tags";
@@ -392,13 +392,18 @@ export function Sidebar() {
     store.changeDraft(composerText);
   }, [composerText]);
 
-  /** 复制记录：菜单首项、卡片上的复制按钮与 Ctrl+C 共用；多条记录之间空一行。 */
+  /** 复制记录：菜单首项、卡片上的复制按钮与 Ctrl+C 共用；多条记录之间空一行。单条时提示带上标题，便于确认复制的是哪一条。 */
   const handleCopyNotes = useCallback(
     async (notes: Note[]) => {
       try {
         const plain = notes.map((note) => `${note.emoji || "📝"} ${note.text}`).join("\n\n");
         await navigator.clipboard.writeText(plain);
-        toast(notes.length > 1 ? `已复制 ${notes.length} 条记录` : "已复制");
+        if (notes.length > 1) {
+          toast(`已复制 ${notes.length} 条记录`);
+        } else {
+          const title = noteTitle(notes[0]);
+          toast(`已复制-${title.length > 24 ? `${title.slice(0, 24)}…` : title}`);
+        }
       } catch {
         toast("剪贴板不可用", null, true);
       }
