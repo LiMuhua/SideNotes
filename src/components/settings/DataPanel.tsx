@@ -1,8 +1,8 @@
 /**
  * 数据与同步。
  *
- * 结构对应原型 settings.js 的 renderData：导入与导出、数据目录、云端自动备份三张卡。
- * 导入导出、打开目录、更换存储位置（复制数据并改写附件路径）与附件清理在桌面端真实可用；
+ * 结构对应原型 settings.js 的 renderData：导入与导出、数据目录、云端自动备份三张卡，桌面端另加「快照」。
+ * 导入导出、打开目录、更换存储位置（复制数据并改写附件路径）、附件清理与快照在桌面端真实可用；
  * 云端备份尚未接入，界面只保存配置并明确说明，不把未实现的能力表现为已完成。
  */
 
@@ -11,7 +11,18 @@ import * as bridge from '../../core/bridge';
 import * as store from '../../core/store';
 import { normalizeDraft, normalizeNote } from '../../core/notes';
 import { formatBytes } from '../../core/files';
-import type { CloudProvider, CloudSettings, Draft, Note, Settings, StorageInfo, StorageLocation } from '../../core/types';
+import { snapshotReason, snapshotTime } from '../../core/snapshots';
+import type {
+  CloudProvider,
+  CloudSettings,
+  DataSnapshot,
+  Draft,
+  Note,
+  Settings,
+  SnapshotOverview,
+  StorageInfo,
+  StorageLocation,
+} from '../../core/types';
 import { useToast } from '../../hooks/useToast';
 import { useConfirm } from './confirm';
 import { ActionButton, Group, Help, Row, SelectField, TextField, Toggle, classes, type SaveSettings } from './controls';
@@ -98,7 +109,7 @@ function BackupGroup({ saveFailed, loadFailed }: { saveFailed: boolean; loadFail
     const name = `SideNotes-备份-${new Date().toISOString().slice(0, 10)}.json`;
     try {
       if (await bridge.saveBackupFile(name, JSON.stringify(payload, null, 2))) {
-        toast('已生成备份，包含记录、草稿和图片');
+        toast('已生成备份，包含记录与草稿；附件文件不在其中，由快照备份');
       }
     } catch (error) {
       toast(`备份未生成：${reason(error, '写入文件失败')}`, null, true);
@@ -121,6 +132,8 @@ function BackupGroup({ saveFailed, loadFailed }: { saveFailed: boolean; loadFail
       confirmLabel: '合并导入',
       icon: 'upload',
       run: async () => {
+        const failed = await store.snapshotBefore('import');
+        if (failed) toast(`导入前的快照未创建：${failed}`, null, true);
         const merged = await store.mergeImported(backup.notes, backup.draft);
         if (merged) toast('备份已合并到本地记录');
         else toast('导入未完成，本地数据库写入失败；当前内容未改动。', null, true);
@@ -211,6 +224,8 @@ function DirectoryGroup({
       icon: 'folder',
       run: async () => {
         try {
+          const failed = await store.snapshotBefore('migrate');
+          if (failed) toast(`迁移前的快照未创建：${failed}`, null, true);
           const report = await bridge.migrateStorage(target);
           await store.reloadEverywhere();
           toast(
@@ -320,6 +335,155 @@ function DirectoryGroup({
           />
         </div>
       </div>
+    </Group>
+  );
+}
+
+/**
+ * 快照：每天自动为数据库创建一份，导入备份、永久删除、迁移与恢复之前也各创建一份；附件只增量备份一次，
+ * 所有快照共用。可以立即创建、从任意一份恢复，或把快照目录放到另一块硬盘。
+ */
+function SnapshotGroup({ settings, save }: { settings: Settings; save: SaveSettings }) {
+  const toast = useToast();
+  const confirm = useConfirm();
+  const directory = settings.snapshotDirectory;
+  const [overview, setOverview] = useState<SnapshotOverview | null>(null);
+  const [problem, setProblem] = useState('');
+  const [busy, setBusy] = useState(false);
+  // 创建、恢复或更换目录之后重新读取列表；卸载后返回的结果直接丢弃。
+  const [revision, setRevision] = useState(0);
+  const refresh = (): void => setRevision((value) => value + 1);
+
+  useEffect(() => {
+    let alive = true;
+    bridge.listSnapshots(directory).then(
+      (result) => {
+        if (!alive) return;
+        setOverview(result);
+        setProblem('');
+      },
+      (error: unknown) => {
+        if (!alive) return;
+        setOverview(null);
+        setProblem(bridge.errorText(error, '无法读取快照目录'));
+      },
+    );
+    return () => {
+      alive = false;
+    };
+  }, [directory, revision]);
+
+  const chooseDirectory = async (): Promise<void> => {
+    const path = await bridge.pickDirectory();
+    if (!path) return;
+    if (await save({ snapshotDirectory: path.slice(0, 500) })) toast('快照目录已更换，之后的快照保存在这里');
+  };
+
+  const resetDirectory = async (): Promise<void> => {
+    if (await save({ snapshotDirectory: '' })) toast('已改回数据目录下的 snapshots 文件夹');
+  };
+
+  const openDirectory = async (): Promise<void> => {
+    if (!overview?.directory) return;
+    try {
+      await bridge.revealInFolder(overview.directory);
+    } catch (error) {
+      toast(`无法打开目录：${bridge.errorText(error, '系统未响应')}`, null, true);
+    }
+  };
+
+  const createNow = async (): Promise<void> => {
+    setBusy(true);
+    try {
+      const snapshot = await bridge.createSnapshot(directory, 'manual');
+      toast(
+        snapshot.missing.length
+          ? `已创建快照；${snapshot.missing.length} 个附件已经找不到，未能备份`
+          : '已创建快照',
+      );
+      refresh();
+    } catch (error) {
+      toast(`快照未创建：${bridge.errorText(error)}`, null, true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const restore = (snapshot: DataSnapshot): void => {
+    const when = snapshotTime(snapshot.createdAt);
+    confirm({
+      title: '恢复快照',
+      message: `将用${when} 的快照（${snapshot.noteCount} 条记录）替换当前全部记录，包括回收站。恢复前会先为当前数据创建一份快照，可以随时换回；设置与草稿保持不变。`,
+      confirmLabel: '恢复',
+      icon: 'restore',
+      run: async () => {
+        try {
+          const report = await bridge.restoreSnapshot(directory, snapshot.id);
+          await store.reloadEverywhere();
+          toast(
+            report.missingAttachments
+              ? `已恢复到${when} 的快照；${report.missingAttachments} 个附件在备份中也找不到`
+              : `已恢复到${when} 的快照`,
+          );
+          refresh();
+          return true;
+        } catch (error) {
+          toast(`恢复未完成：${bridge.errorText(error)}；当前记录未改动`, null, true);
+          return false;
+        }
+      },
+    });
+  };
+
+  return (
+    <Group title="快照" className="settings-wide snapshot-group">
+      <p className="settings-notice">
+        每天自动为数据库创建一份快照，导入备份、永久删除、迁移与恢复之前也各创建一份；附件只备份一次，所有快照共用。保留最近
+        24 小时内的全部快照、之前 7 天每天一份、再之前 4 周每周一份。
+      </p>
+      <Row
+        title="快照位置"
+        description="默认在数据目录下的 snapshots 文件夹。放到另一块硬盘或移动硬盘上，硬盘损坏时也能找回数据。"
+      >
+        <div className="settings-inline snapshot-directory">
+          <ActionButton label="选择目录" icon="folder" onClick={() => void chooseDirectory()} />
+          {directory ? <ActionButton label="恢复默认" icon="restore" onClick={() => void resetDirectory()} /> : null}
+        </div>
+      </Row>
+      <div className="settings-inline current-directory">
+        <code className="settings-path directory-field" aria-label="快照目录" title={overview?.directory}>
+          {overview?.directory || directory || '正在读取…'}
+        </code>
+        <ActionButton label="打开目录" icon="folder" className="icon-button" onClick={() => void openDirectory()} />
+      </div>
+      {problem ? <p className="settings-notice is-error">{`快照目录不可用：${problem}`}</p> : null}
+      <div className="settings-inline snapshot-summary">
+        <span className="settings-status">
+          {overview
+            ? `${overview.snapshots.length} 份快照 · 附件备份 ${overview.attachmentCount} 个，${formatBytes(overview.attachmentSize)}`
+            : '正在读取…'}
+        </span>
+        <ActionButton
+          label={busy ? '正在创建…' : '立即创建快照'}
+          icon="plus"
+          disabled={busy || Boolean(problem)}
+          onClick={() => void createNow()}
+        />
+      </div>
+      {overview?.snapshots.length ? (
+        <ul className="snapshot-list" aria-label="快照列表">
+          {overview.snapshots.map((snapshot) => (
+            <li key={snapshot.id} className="snapshot-item">
+              <span className="snapshot-time">{snapshotTime(snapshot.createdAt)}</span>
+              <span className="snapshot-reason">{snapshotReason(snapshot.reason)}</span>
+              <span className="snapshot-meta">{`${snapshot.noteCount} 条 · ${formatBytes(snapshot.size)}`}</span>
+              <button type="button" className="button secondary compact" onClick={() => restore(snapshot)}>
+                恢复
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </Group>
   );
 }
@@ -480,6 +644,7 @@ export function DataPanel({
       <div className="settings-dashboard data-dashboard">
         <BackupGroup saveFailed={saveFailed} loadFailed={loadFailed} />
         <DirectoryGroup settings={settings} save={save} info={info} onRefresh={() => setRevision((value) => value + 1)} />
+        <SnapshotGroup settings={settings} save={save} />
         <CloudGroup settings={settings} save={save} />
       </div>
     </>

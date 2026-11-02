@@ -491,6 +491,20 @@ export async function reloadEverywhere(): Promise<boolean> {
   return reloaded;
 }
 
+/**
+ * 风险操作（导入备份、永久删除、更换存储位置）之前创建一份快照。失败时返回原因，由调用方提示，
+ * 不阻止这次操作：用户已经确认过，快照只是多一层保护。浏览器预览没有快照，直接返回。
+ */
+export async function snapshotBefore(reason: 'import' | 'delete' | 'migrate'): Promise<string | null> {
+  if (!bridge.isDesktop()) return null;
+  try {
+    await bridge.createSnapshot(state.settings.snapshotDirectory, reason);
+    return null;
+  } catch (error) {
+    return bridge.errorText(error, '快照目录不可用');
+  }
+}
+
 /** 调整正在读取的附件计数。 */
 export function setPendingAttachments(delta: number): void {
   setState({ pendingAttachments: Math.max(0, state.pendingAttachments + delta) });

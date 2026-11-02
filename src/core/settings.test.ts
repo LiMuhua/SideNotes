@@ -27,6 +27,7 @@ describe('设置校验', () => {
     expect(settings.cardMaxHeight).toBe(220);
     expect(settings.toastPosition).toBe('top-center');
     expect(settings.guideSeen).toBe(false);
+    expect(settings.snapshotDirectory).toBe('');
   });
 
   it('旧版本仍是默认的 Segoe UI 13px 时换成新的默认字体，改过的字体保留', () => {
@@ -75,6 +76,8 @@ describe('设置校验', () => {
     expect(normalizeSettings({ toastPosition: 'left' }).toastPosition).toBe('top-center');
     expect(normalizeSettings({ toastPosition: 'bottom-center' }).toastPosition).toBe('bottom-center');
     expect(normalizeSettings({ guideSeen: 'yes' }).guideSeen).toBe(false);
+    expect(normalizeSettings({ snapshotDirectory: '  D:\\备份  ' }).snapshotDirectory).toBe('D:\\备份');
+    expect(normalizeSettings({ snapshotDirectory: 42 }).snapshotDirectory).toBe('42');
   });
 
   it('保留合法输入', () => {

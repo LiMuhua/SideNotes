@@ -193,11 +193,13 @@ export function TrashPanel({ notes, settings }: { notes: Note[]; settings: Setti
     if (!targets.length) return;
     confirm({
       title: '永久删除',
-      message: `永久删除这 ${targets.length} 条记录及其附件？此操作无法撤销。`,
+      message: `永久删除这 ${targets.length} 条记录及其附件？删除前会先创建一份快照，需要时可以在「数据与同步 › 快照」中恢复。`,
       confirmLabel: '永久删除',
       icon: 'trash',
       danger: true,
       run: async () => {
+        const failed = await store.snapshotBefore('delete');
+        if (failed) toast(`删除前的快照未创建：${failed}`, null, true);
         const ok = await store.deleteForever(targets.map((note) => note.id));
         if (ok) toast(`已永久删除 ${targets.length} 条记录`);
         else toast('删除失败，请重试', null, true);

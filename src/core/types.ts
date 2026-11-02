@@ -118,6 +118,8 @@ export interface Settings {
   tidyLimit: number;
   storageLocation: StorageLocation;
   customDirectory: string;
+  /** 快照目录；为空时使用数据目录下的 snapshots 文件夹。 */
+  snapshotDirectory: string;
   /** 回收站保留天数。 */
   trashDays: number;
   cloud: CloudSettings;
@@ -169,6 +171,50 @@ export interface CleanupReport {
   freed: number;
   /** 没有被引用、但刚导入不久而暂时保留的附件数。 */
   pending: number;
+}
+
+/**
+ * 快照的创建原因：每天自动、手动、导入备份前、永久删除前、更换存储位置前、恢复快照前。
+ * 自动与恢复前的快照由后端自己创建。
+ */
+export type SnapshotReason = 'auto' | 'manual' | 'import' | 'delete' | 'migrate' | 'restore';
+
+/** 一份数据快照：数据库副本与它引用的附件（附件在快照目录中只备份一次，所有快照共用）。 */
+export interface DataSnapshot {
+  /** 编号，取创建时的毫秒时间戳。 */
+  id: string;
+  createdAt: number;
+  reason: SnapshotReason;
+  /** 创建时的数据目录。 */
+  dataDirectory: string;
+  /** 记录条数（含回收站）。 */
+  noteCount: number;
+  /** 引用的附件子文件夹名。 */
+  attachments: string[];
+  /** 引用了、但数据目录与备份中都找不到的附件子文件夹。 */
+  missing: string[];
+}
+
+/** 快照目录的概况。 */
+export interface SnapshotOverview {
+  directory: string;
+  /** 按创建时间从新到旧排列，附带数据库快照文件的字节数。 */
+  snapshots: Array<DataSnapshot & { size: number }>;
+  /** 备份的附件子文件夹数与总字节数。 */
+  attachmentCount: number;
+  attachmentSize: number;
+}
+
+/** 从快照恢复的结果。 */
+export interface RestoreReport {
+  /** 恢复前为当前数据创建的快照编号。 */
+  backup: string;
+  /** 恢复后的记录条数（含回收站）。 */
+  notes: number;
+  /** 从备份拷回数据目录的附件数。 */
+  restoredAttachments: number;
+  /** 快照引用了、但备份中也找不到的附件数。 */
+  missingAttachments: number;
 }
 
 /** 文件引用校验结果。 */

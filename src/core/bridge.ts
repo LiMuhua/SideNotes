@@ -15,13 +15,17 @@ import { isPermissionGranted, requestPermission } from '@tauri-apps/plugin-notif
 import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener';
 import type {
   CleanupReport,
+  DataSnapshot,
   Draft,
   EdgeSide,
   FileStatus,
   MigrationReport,
   Note,
+  RestoreReport,
   Settings,
   Snapshot,
+  SnapshotOverview,
+  SnapshotReason,
   StorageInfo,
   TagUsage,
 } from './types';
@@ -181,6 +185,39 @@ export function migrateStorage(target: string): Promise<MigrationReport> {
  */
 export function cleanupAttachments(extra: string[], graceMinutes?: number): Promise<CleanupReport> {
   return call<CleanupReport>('cleanup_attachments', { extra, graceMinutes }, { removed: 0, freed: 0, pending: 0 });
+}
+
+/**
+ * 快照目录的概况。`directory` 为设置中的快照目录，空串表示数据目录下的 snapshots 文件夹。
+ * 浏览器预览没有快照，返回空列表。
+ */
+export function listSnapshots(directory: string): Promise<SnapshotOverview> {
+  return call<SnapshotOverview>(
+    'list_snapshots',
+    { directory },
+    { directory: '', snapshots: [], attachmentCount: 0, attachmentSize: 0 },
+  );
+}
+
+/** 立即创建一份快照：手动，或导入备份、永久删除、更换存储位置之前。浏览器预览不支持。 */
+export function createSnapshot(
+  directory: string,
+  reason: Exclude<SnapshotReason, 'auto' | 'restore'>,
+): Promise<DataSnapshot> {
+  return call<DataSnapshot>('create_snapshot', { directory, reason });
+}
+
+/** 距最新一份快照超过一天时创建新的一份，否则返回 null；浏览器预览直接返回 null。 */
+export function autoSnapshot(directory: string): Promise<DataSnapshot | null> {
+  return call<DataSnapshot | null>('auto_snapshot', { directory }, null);
+}
+
+/**
+ * 从快照恢复记录：后端先为当前数据创建一份快照，再用快照中的记录替换当前记录（设置与草稿不变），
+ * 并从备份拷回缺失的附件。成功后调用方需让各窗口重新读库。浏览器预览不支持。
+ */
+export function restoreSnapshot(directory: string, id: string): Promise<RestoreReport> {
+  return call<RestoreReport>('restore_snapshot', { directory, id });
 }
 
 /** 列出系统已安装的字体族名称；浏览器预览读不到系统字体，返回空列表。 */

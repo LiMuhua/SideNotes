@@ -15,6 +15,7 @@ use crate::error::{AppError, AppResult};
 use crate::location;
 use crate::migration::{self, MigrationReport};
 use crate::models::{Draft, Note, Snapshot, StorageInfo, TagUsage};
+use crate::snapshots;
 use crate::store::Store;
 use crate::windows::{self, SidebarLayout};
 
@@ -103,6 +104,49 @@ pub async fn migrate_storage(app: AppHandle, state: State<'_, AppState>, target:
         *unavailable = None;
     }
     Ok(report)
+}
+
+/// 快照目录：设置中填写的目录，没有填写时为数据目录下的 snapshots 文件夹。
+fn snapshot_root(state: &AppState, directory: &str) -> PathBuf {
+    match directory.trim() {
+        "" => state.store.directory().join(snapshots::SNAPSHOTS_DIR),
+        custom => PathBuf::from(custom),
+    }
+}
+
+/// 列出快照与附件备份的概况。
+#[tauri::command]
+pub async fn list_snapshots(state: State<'_, AppState>, directory: String) -> AppResult<snapshots::SnapshotOverview> {
+    snapshots::overview(&snapshot_root(&state, &directory), &state.store.directory())
+}
+
+/// 立即创建一份快照：手动，或导入备份、永久删除、更换存储位置之前。
+#[tauri::command]
+pub async fn create_snapshot(
+    state: State<'_, AppState>,
+    directory: String,
+    reason: String,
+) -> AppResult<snapshots::SnapshotInfo> {
+    snapshots::create(&state.store, &snapshot_root(&state, &directory), &reason, snapshots::now_millis())
+}
+
+/// 距最新一份快照超过一天时创建新的一份，否则返回 null。由侧栏窗口定时调用。
+#[tauri::command]
+pub async fn auto_snapshot(
+    state: State<'_, AppState>,
+    directory: String,
+) -> AppResult<Option<snapshots::SnapshotInfo>> {
+    snapshots::auto(&state.store, &snapshot_root(&state, &directory), snapshots::now_millis())
+}
+
+/// 从快照恢复记录：先为当前数据创建一份快照，再替换记录并拷回缺失的附件；各窗口需要重新读库。
+#[tauri::command]
+pub async fn restore_snapshot(
+    state: State<'_, AppState>,
+    directory: String,
+    id: String,
+) -> AppResult<snapshots::RestoreReport> {
+    snapshots::restore(&state.store, &snapshot_root(&state, &directory), &id, snapshots::now_millis())
 }
 
 /// 读取启动时的热键冲突列表。

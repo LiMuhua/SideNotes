@@ -1209,6 +1209,23 @@ export function Sidebar() {
     return () => window.clearTimeout(timer);
   }, [state.notes, state.ready, state.loadFailed]);
 
+  // 每天自动为数据库创建一份快照（附件只增量备份一次）：启动一分钟后检查一次，之后每小时检查一次，
+  // 距最新一份超过一天才创建。与附件清理一样只由侧栏窗口发起；失败时设置页的快照列表会提示目录不可用。
+  useEffect(() => {
+    if (!state.ready || state.loadFailed) return;
+    const check = (): void => {
+      void bridge
+        .autoSnapshot(store.getState().settings.snapshotDirectory)
+        .catch((error: unknown) => console.warn("自动快照失败", error));
+    };
+    const first = window.setTimeout(check, 60_000);
+    const hourly = window.setInterval(check, 3_600_000);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(hourly);
+    };
+  }, [state.ready, state.loadFailed]);
+
   /**
    * 引用文件：用系统对话框选择文件，复制到应用数据目录中维护，在光标处插入引用（图片为内嵌图片）。
    * 记录只引用副本，原始文件移动或删除后引用仍然有效。

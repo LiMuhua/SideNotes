@@ -10,6 +10,7 @@ mod migration;
 mod models;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod shortcuts;
+mod snapshots;
 mod store;
 mod tray;
 mod windows;
@@ -125,6 +126,10 @@ pub fn run() {
             commands::export_attachment,
             commands::cleanup_attachments,
             commands::migrate_storage,
+            commands::list_snapshots,
+            commands::create_snapshot,
+            commands::auto_snapshot,
+            commands::restore_snapshot,
             commands::copy_file_paths,
             commands::set_sidebar_pinned,
             commands::quit_app,

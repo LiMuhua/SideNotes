@@ -303,6 +303,18 @@ impl Store {
         Ok(texts)
     }
 
+    /// 用另一个数据库中的记录（含回收站、图片与标签使用记录）替换当前记录，设置与草稿保持不变。
+    /// 从快照恢复时使用：在一个事务中完成，失败时当前数据不变。返回替换后的记录条数。
+    pub fn replace_records(&self, source: &Path) -> AppResult<i64> {
+        let mut connection = self.connection()?;
+        connection.execute("ATTACH DATABASE ?1 AS source", params![source.display().to_string()])?;
+        let copied = copy_records(&mut connection);
+        let detached = connection.execute("DETACH DATABASE source", []);
+        let count = copied?;
+        detached?;
+        Ok(count)
+    }
+
     /// 读取数据目录与数据库规模；默认目录等与位置相关的字段由调用方补上。
     pub fn info(&self) -> AppResult<StorageInfo> {
         let connection = self.connection()?;
@@ -411,6 +423,32 @@ fn read_draft(connection: &Connection) -> AppResult<Draft> {
 }
 
 /// 读取设置 JSON；缺失时返回空对象由前端补默认值。
+/// 把已附加为 `source` 的数据库中的记录、图片与标签使用记录复制过来，替换当前的这三张表。
+fn copy_records(connection: &mut Connection) -> AppResult<i64> {
+    let transaction = connection.transaction()?;
+    transaction.execute("DELETE FROM note_images", [])?;
+    transaction.execute("DELETE FROM notes", [])?;
+    transaction.execute("DELETE FROM tag_usage", [])?;
+    transaction.execute(
+        "INSERT INTO notes (id, text, emoji, pinned, collapsed, status, previous_status, sort_order, created_at, updated_at, deleted_at)
+         SELECT id, text, emoji, pinned, collapsed, status, previous_status, sort_order, created_at, updated_at, deleted_at
+         FROM source.notes",
+        [],
+    )?;
+    transaction.execute(
+        "INSERT INTO note_images (id, note_id, name, mime, data, position)
+         SELECT id, note_id, name, mime, data, position FROM source.note_images",
+        [],
+    )?;
+    transaction.execute(
+        "INSERT INTO tag_usage (tag, use_count, last_used) SELECT tag, use_count, last_used FROM source.tag_usage",
+        [],
+    )?;
+    let count = transaction.query_row("SELECT COUNT(*) FROM notes", [], |row| row.get(0))?;
+    transaction.commit()?;
+    Ok(count)
+}
+
 fn read_settings(connection: &Connection) -> AppResult<serde_json::Value> {
     let raw: Option<String> = connection
         .query_row("SELECT value FROM settings WHERE key = 'app'", [], |row| row.get(0))

@@ -1198,6 +1198,55 @@ body[data-window='sidebar'] .sidebar-navigation.has-search-query #header-search.
   box-shadow: 0 0 0 2px var(--accent-soft);
 }
 
+/* ==================== 快照 ====================
+ * 设置页「数据与同步」中的快照分组：快照位置、概况与列表。列表每行一份快照：时间、原因、
+ * 记录条数与文件大小、恢复按钮；份数多时在列表内滚动，不把设置页撑得很长。 */
+body[data-window='settings'] .snapshot-summary {
+  justify-content: space-between;
+  margin: 6px 0;
+}
+
+body[data-window='settings'] .snapshot-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 232px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+body[data-window='settings'] .snapshot-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1.2fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 6px 5px 12px;
+  font-size: 11px;
+}
+
+body[data-window='settings'] .snapshot-item + .snapshot-item {
+  border-top: 1px solid var(--line);
+}
+
+body[data-window='settings'] .snapshot-time {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+body[data-window='settings'] .snapshot-reason,
+body[data-window='settings'] .snapshot-meta {
+  overflow: hidden;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 /* ==================== 从资源管理器拖入文件 ====================
  * 预览卡片沿用卡片之间拖动引用的插入线（.card-drop-guide）；编辑面中用一条竖线标出落点，
  * 跟随指针的提示说明松开后插到哪里。 */

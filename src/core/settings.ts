@@ -107,6 +107,7 @@ export function normalizeSettings(value: unknown = {}): Settings {
       ? (input.storageLocation as Settings['storageLocation'])
       : 'appdata',
     customDirectory: String(input.customDirectory ?? '').slice(0, 500),
+    snapshotDirectory: String(input.snapshotDirectory ?? '').trim().slice(0, 500),
     trashDays: clampInt(input.trashDays, TRASH_DAYS_RANGE.min, TRASH_DAYS_RANGE.max, 30),
     cloud: normalizeCloud(input.cloud),
   };

@@ -32,7 +32,7 @@ fn other(message: impl Into<String>) -> AppError {
 }
 
 /// 递归复制文件夹，目标中已经存在的文件不覆盖。
-fn copy_dir(from: &Path, to: &Path) -> AppResult<()> {
+pub(crate) fn copy_dir(from: &Path, to: &Path) -> AppResult<()> {
     std::fs::create_dir_all(to)?;
     for entry in std::fs::read_dir(from)? {
         let entry = entry?;
@@ -80,7 +80,7 @@ fn prefixes(directory: &Path) -> [String; 2] {
 ///
 /// 导入附件时写入的是「数据目录\attachments\子文件夹\文件名」的完整路径，前缀与当前数据目录逐字相同，
 /// 按前缀替换即可；用户手工改写过大小写或斜杠方向的路径不改写，原目录保留，这些引用仍能找到文件。
-fn rewrite_paths(database: &Path, from: &Path, to: &Path) -> AppResult<usize> {
+pub(crate) fn rewrite_paths(database: &Path, from: &Path, to: &Path) -> AppResult<usize> {
     let connection = Connection::open(database)?;
     let mut changed = 0;
     for (old, new) in prefixes(from).iter().zip(prefixes(to).iter()) {
