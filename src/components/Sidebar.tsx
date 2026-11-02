@@ -31,6 +31,7 @@ import { matchesQuery, shouldNudgeTidy, inTab, compareNoteOrder } from "../core/
 import { moveImage, moveReference } from "../core/transfer";
 import { chooseAndImportFiles } from "../core/attachments";
 import { parse, removeTag, tagKey, canonicalize } from "../core/tags";
+import { sidebarWindowWidth, uiZoom } from "../core/settings";
 import type { EditSession, Note, NoteImage, TabKey } from "../core/types";
 import type { MarkdownEditor } from "../core/editor";
 
@@ -131,14 +132,16 @@ export function Sidebar() {
    */
   const hidePending = useRef(false);
 
-  /** 组装当前侧栏布局，供窗口命令使用。 */
+  /** 组装当前侧栏布局，供窗口命令使用；窗口宽度随字号等比加宽。 */
   const currentLayout = useCallback(
-    () => ({
-      edge: state.settings.edge,
-      width: state.settings.width,
-      animDuration: state.settings.animDuration,
-    }),
-    [state.settings.edge, state.settings.width, state.settings.animDuration],
+    () =>
+      bridge.sidebarLayout({
+        edge: state.settings.edge,
+        width: state.settings.width,
+        fontSize: state.settings.fontSize,
+        animDuration: state.settings.animDuration,
+      }),
+    [state.settings.edge, state.settings.width, state.settings.fontSize, state.settings.animDuration],
   );
 
   // 对话框打开期间鼠标移出侧栏不收起，否则对话框会随侧栏一起消失。
@@ -199,14 +202,16 @@ export function Sidebar() {
 
   // 屏幕坐标（screenX、outerWidth）的单位既不同于页面像素（受界面缩放影响），
   // 也不同于窗口逻辑像素（受 Windows 文本缩放影响）。用同一窗口在两种单位下的宽度求比例，
-  // 不依赖浏览器对页面缩放和文本缩放的具体处理。
+  // 不依赖浏览器对页面缩放和文本缩放的具体处理。设置中的宽度按 13px 字号计，
+  // 窗口逻辑宽度是它乘以界面缩放（见 sidebarWindowWidth），因此最后再除以界面缩放。
   const refreshPixelRatio = useCallback(() => {
     if (!bridge.isDesktop()) return;
     void bridge.windowScaleFactor().then((scale) => {
       if (scale <= 0 || window.outerWidth <= 0) return;
       // 页面宽度乘页面像素比得到物理宽度，再除以窗口缩放比例得到逻辑宽度。
       const logicalWidth = (window.innerWidth * window.devicePixelRatio) / scale;
-      widthPerScreen.current = logicalWidth / window.outerWidth;
+      widthPerScreen.current =
+        logicalWidth / window.outerWidth / uiZoom(store.getState().settings.fontSize);
     });
   }, []);
 
@@ -256,12 +261,12 @@ export function Sidebar() {
       resizeFrame.current = window.requestAnimationFrame(() => {
         resizeFrame.current = 0;
         void bridge.applySidebarLayout(
-          { edge: state.settings.edge, width: latestWidth.current },
+          { edge: state.settings.edge, width: sidebarWindowWidth(latestWidth.current, state.settings.fontSize) },
           state.settings.edgeTrigger,
         );
       });
     },
-    [state.settings.edge, state.settings.edgeTrigger, commitWidth],
+    [state.settings.edge, state.settings.edgeTrigger, state.settings.fontSize, commitWidth],
   );
 
   const handleResizePointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {

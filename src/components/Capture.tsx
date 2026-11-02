@@ -114,7 +114,7 @@ export function Capture() {
               onClick={async () => {
                 // 把当前浮窗草稿带到侧栏：先确保侧栏可见，再聚焦侧栏输入入口。
                 await bridge.hideCapture();
-                await bridge.showSidebar({ edge: store.getState().settings.edge, width: store.getState().settings.width });
+                await bridge.showSidebar(bridge.sidebarLayout(store.getState().settings));
                 window.dispatchEvent(new CustomEvent('sidenotes:focus-composer'));
               }}
             >

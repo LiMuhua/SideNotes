@@ -7,7 +7,7 @@
 
 import type { CloudSettings, Settings } from './types';
 
-/** 侧栏宽度范围。 */
+/** 侧栏宽度范围（按 13px 字号计，见 sidebarWindowWidth）。 */
 export const WIDTH_RANGE = { min: 360, max: 720, step: 4 } as const;
 /** 字号范围。 */
 export const FONT_SIZE_RANGE = { min: 12, max: 20, step: 1 } as const;
@@ -128,6 +128,14 @@ export function parseDelay(raw: string): number | null {
 /** 字号对应的界面缩放倍数。 */
 export function uiZoom(fontSize: number): number {
   return fontSize / BASE_FONT_SIZE;
+}
+
+/**
+ * 侧栏窗口的逻辑宽度。设置中的宽度按 13px 字号计，字号调大时随界面缩放等比加宽，
+ * 侧栏内容的排布与原来一致，不会因为文字变大而变挤。
+ */
+export function sidebarWindowWidth(width: number, fontSize: number): number {
+  return Math.round(width * uiZoom(fontSize));
 }
 
 /** 解析出实际生效的明暗模式。 */

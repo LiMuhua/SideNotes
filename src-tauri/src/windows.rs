@@ -52,7 +52,7 @@ static SIDEBAR_ANIMATION: AtomicU64 = AtomicU64::new(0);
 pub struct SidebarLayout {
     /// 贴附边缘：left 或 right。
     pub edge: String,
-    /// 逻辑宽度，前端限制 360–720。
+    /// 窗口的逻辑宽度：设置中的宽度（360–720，按 13px 字号计）乘以界面缩放。
     pub width: f64,
     /// 出入动画时长（毫秒）；0 表示不做动画。
     #[serde(default)]
@@ -149,7 +149,8 @@ fn frame_inset(window: &WebviewWindow) -> (f64, f64) {
 /// 返回的坐标已换算为外框位置。
 fn place_sidebar(area: (f64, f64, f64, f64), width: f64, left_edge: bool, inset: (f64, f64)) -> SidebarGeometry {
     let (area_x, area_y, area_width, area_height) = area;
-    let width = width.clamp(360.0, area_width.max(360.0));
+    // 字号小于 13px 时窗口会比设置中的宽度窄，下限放宽到 300。
+    let width = width.clamp(300.0, area_width.max(300.0));
     let (content_x, offscreen_content_x) = if left_edge {
         (area_x, area_x - width)
     } else {
@@ -601,7 +602,7 @@ mod tests {
     #[test]
     fn width_is_clamped_to_work_area() {
         assert!(close(place_sidebar((0.0, 0.0, 1000.0, 800.0), 9999.0, false, (0.0, 0.0)).width, 1000.0));
-        assert!(close(place_sidebar(AREA, 100.0, false, (0.0, 0.0)).width, 360.0));
+        assert!(close(place_sidebar(AREA, 100.0, false, (0.0, 0.0)).width, 300.0));
     }
 
     #[test]

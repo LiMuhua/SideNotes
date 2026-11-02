@@ -16,7 +16,7 @@ import { ToastProvider } from './hooks/useToast';
 import { useStoreSlice } from './hooks/useStore';
 import * as store from './core/store';
 import * as bridge from './core/bridge';
-import { resolveTheme, resolveFontFamily, uiZoom } from './core/settings';
+import { resolveTheme, resolveFontFamily, sidebarWindowWidth, uiZoom } from './core/settings';
 import type { WindowRole } from './main';
 
 export interface AppProps {
@@ -62,13 +62,13 @@ export function App({ role }: AppProps) {
   }, [fontSize]);
 
   /* ==================== 侧栏窗口布局 ==================== */
-  // 只在宽度、贴边或边缘唤出变化时通知后端，避免任意状态变化都重设窗口位置，
-  // 打断正在进行的滑入滑出动画。
+  // 只在宽度、字号、贴边或边缘唤出变化时通知后端，避免任意状态变化都重设窗口位置，
+  // 打断正在进行的滑入滑出动画。窗口宽度随字号等比加宽。
   const { edge, width, edgeTrigger } = settings;
   useEffect(() => {
     if (role !== 'sidebar' || !ready) return;
-    void bridge.applySidebarLayout({ edge, width }, edgeTrigger);
-  }, [role, ready, edge, width, edgeTrigger]);
+    void bridge.applySidebarLayout({ edge, width: sidebarWindowWidth(width, fontSize) }, edgeTrigger);
+  }, [role, ready, edge, width, fontSize, edgeTrigger]);
 
   /* ==================== 全局退出事件 ==================== */
   // 托盘菜单的退出必须在任何加载状态下都可用，因此不放在 Sidebar 内部。
@@ -92,10 +92,7 @@ export function App({ role }: AppProps) {
     const cleanups: Array<() => void> = [];
 
     // 统一的布局参数：带上动画时长，否则窗口会瞬间跳转而不平移。
-    const layout = () => {
-      const current = store.getState().settings;
-      return { edge: current.edge, width: current.width, animDuration: current.animDuration };
-    };
+    const layout = () => bridge.sidebarLayout(store.getState().settings);
 
     // 鼠标进入屏幕边缘：编辑中或正在输入时不自动展开，避免打断。
     void bridge

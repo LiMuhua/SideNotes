@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { boundedNumber, DEFAULT_SETTINGS, normalizeSettings, parseDelay, resolveFontFamily, uiZoom } from './settings';
+import {
+  boundedNumber,
+  DEFAULT_SETTINGS,
+  normalizeSettings,
+  parseDelay,
+  resolveFontFamily,
+  sidebarWindowWidth,
+  uiZoom,
+} from './settings';
 import { filePath, fileLabel, isLegacyToken, toMarkdownReference } from './files';
 
 describe('设置校验', () => {
@@ -102,6 +110,12 @@ describe('设置校验', () => {
   it('字号按 13px 的设计字号换算为界面缩放', () => {
     expect(uiZoom(13)).toBe(1);
     expect(uiZoom(16)).toBeCloseTo(1.2308, 4);
+  });
+
+  it('侧栏窗口宽度随字号等比加宽', () => {
+    expect(sidebarWindowWidth(416, 13)).toBe(416);
+    expect(sidebarWindowWidth(416, 16)).toBe(512);
+    expect(sidebarWindowWidth(360, 12)).toBe(332);
   });
 
   it('字体族过滤引号与反斜杠', () => {

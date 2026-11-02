@@ -19,7 +19,7 @@
         "url": "index.html",
         "width": 416,
         "height": 900,
-        "minWidth": 360,
+        "minWidth": 300,
         "decorations": false,
         "transparent": false,
         "alwaysOnTop": true,

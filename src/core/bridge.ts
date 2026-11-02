@@ -15,7 +15,7 @@ import { isPermissionGranted, requestPermission } from '@tauri-apps/plugin-notif
 import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener';
 import type { Draft, EdgeSide, FileStatus, Note, Settings, Snapshot, StorageInfo, TagUsage } from './types';
 import { normalizeDraft, normalizeNote } from './notes';
-import { normalizeSettings } from './settings';
+import { normalizeSettings, sidebarWindowWidth } from './settings';
 
 /** 侧栏几何参数。 */
 export interface SidebarLayout {
@@ -159,6 +159,17 @@ export function shortcutConflicts(): Promise<string[]> {
 }
 
 /* ==================== 窗口控制 ==================== */
+
+/** 按当前设置组装侧栏布局：窗口宽度随字号等比加宽（见 sidebarWindowWidth），带上出入动画时长。 */
+export function sidebarLayout(
+  settings: Pick<Settings, 'edge' | 'width' | 'fontSize' | 'animDuration'>,
+): SidebarLayout {
+  return {
+    edge: settings.edge,
+    width: sidebarWindowWidth(settings.width, settings.fontSize),
+    animDuration: settings.animDuration,
+  };
+}
 
 /** 显示侧栏。 */
 export function showSidebar(layout: SidebarLayout): Promise<void> {

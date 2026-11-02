@@ -260,7 +260,7 @@ export function AppearancePanel({ settings, save }: PanelProps) {
               />
             </Row>
           </div>
-          <Row title="宽度" description="可拖动侧栏边缘直接调整。" className="sidebar-width-row">
+          <Row title="宽度" description="按 13px 字号计；字号调大时侧栏随之等比加宽，内容排布不变。也可拖动侧栏边缘直接调整。" className="sidebar-width-row">
             <RangeField
               label="侧栏宽度"
               settingKey="width"
