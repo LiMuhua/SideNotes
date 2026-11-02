@@ -137,6 +137,28 @@ export interface StorageInfo {
   database: string;
   size: number;
   noteCount: number;
+  /** 附件副本数。 */
+  attachmentCount: number;
+  /** 附件副本的总字节数。 */
+  attachmentSize: number;
+  /** 系统应用数据目录（「应用数据目录」选项的位置）。 */
+  defaultDirectory: string;
+  /** 便携模式的数据目录（程序所在文件夹下的 SideNotesData）。 */
+  portableDirectory: string;
+  /** 启动时记下的数据目录不可用、暂时改用默认目录时，为原来的目录；否则为空。 */
+  unavailableDirectory: string;
+}
+
+/** 更换数据存储位置的结果。 */
+export interface MigrationReport {
+  /** 新的数据目录。 */
+  directory: string;
+  /** 复制的附件数。 */
+  attachments: number;
+  /** 改写了附件路径的记录与草稿数。 */
+  rewritten: number;
+  /** 新目录中原有的数据库改名后的路径；没有时为空。 */
+  backup: string;
 }
 
 /** 文件引用校验结果。 */

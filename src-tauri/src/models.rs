@@ -81,7 +81,7 @@ pub struct Snapshot {
 }
 
 /// 数据目录信息，供设置页显示实际路径。
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StorageInfo {
     /// 当前数据库所在目录。
@@ -92,4 +92,14 @@ pub struct StorageInfo {
     pub size: u64,
     /// 记录条数（含回收站）。
     pub note_count: i64,
+    /// 附件副本数（每次导入一个子文件夹）。
+    pub attachment_count: usize,
+    /// 附件副本的总字节数。
+    pub attachment_size: u64,
+    /// 系统应用数据目录（「应用数据目录」选项的位置）。
+    pub default_directory: String,
+    /// 便携模式的数据目录（程序所在文件夹下的 SideNotesData）。
+    pub portable_directory: String,
+    /// 启动时记下的数据目录不可用、暂时改用默认目录时，为原来的目录；否则为空。
+    pub unavailable_directory: String,
 }

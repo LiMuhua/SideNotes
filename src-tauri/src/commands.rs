@@ -4,13 +4,16 @@
 //! 与原型保持一致，避免同一规则在两侧重复实现。
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 use tauri::{AppHandle, Manager, State, WebviewWindow};
 
 use crate::attachments::{self, ImportedFile};
 use crate::edge::EdgeWatcher;
 use crate::error::{AppError, AppResult};
+use crate::location;
+use crate::migration::{self, MigrationReport};
 use crate::models::{Draft, Note, Snapshot, StorageInfo, TagUsage};
 use crate::store::Store;
 use crate::windows::{self, SidebarLayout};
@@ -21,6 +24,10 @@ pub struct AppState {
     pub edge: Arc<EdgeWatcher>,
     /// 启动时注册失败的全局热键，供设置页提示冲突。
     pub shortcut_conflicts: Vec<String>,
+    /// 系统应用数据目录：默认的数据目录，也是记下当前数据目录（location.json）的位置。
+    pub default_dir: PathBuf,
+    /// 启动时记下的数据目录不可用、暂时改用默认目录时，为原来的目录；迁移成功后清空。
+    pub unavailable_dir: Mutex<Option<PathBuf>>,
 }
 
 /// 读取完整快照。
@@ -63,10 +70,39 @@ pub fn compact_database(state: State<'_, AppState>) -> AppResult<()> {
     state.store.compact()
 }
 
-/// 读取数据目录信息。
+/// 读取数据目录信息，附带三种存储位置各自的目录，供设置页判断是否需要迁移。
 #[tauri::command]
 pub fn storage_info(state: State<'_, AppState>) -> AppResult<StorageInfo> {
-    state.store.info()
+    let mut info = state.store.info()?;
+    info.default_directory = state.default_dir.display().to_string();
+    info.portable_directory = location::portable_dir()
+        .map(|path| path.display().to_string())
+        .unwrap_or_default();
+    info.unavailable_directory = state
+        .unavailable_dir
+        .lock()
+        .ok()
+        .and_then(|value| value.as_ref().map(|path| path.display().to_string()))
+        .unwrap_or_default();
+    Ok(info)
+}
+
+/// 更换数据存储位置：复制数据库与附件到 `target`、改写附件路径并改用新位置，原目录保留作为备份。
+///
+/// 成功后记下新的数据目录（下次启动直接使用），并把新的附件文件夹开放给本地文件协议。
+/// 各窗口需要重新读库，由前端广播。
+#[tauri::command]
+pub async fn migrate_storage(app: AppHandle, state: State<'_, AppState>, target: String) -> AppResult<MigrationReport> {
+    let report = migration::migrate(&state.store, &PathBuf::from(target.trim()))?;
+    let directory = state.store.directory();
+    let attachments_dir = directory.join(attachments::ATTACHMENTS_DIR);
+    std::fs::create_dir_all(&attachments_dir)?;
+    app.asset_protocol_scope().allow_directory(&attachments_dir, true)?;
+    location::remember(&state.default_dir, &directory)?;
+    if let Ok(mut unavailable) = state.unavailable_dir.lock() {
+        *unavailable = None;
+    }
+    Ok(report)
 }
 
 /// 读取启动时的热键冲突列表。
@@ -160,9 +196,12 @@ pub async fn system_fonts() -> Vec<String> {
 /// 把粘贴的内容（截图或文件）写成附件副本，返回名称与副本路径。
 ///
 /// 内容以原始字节作为请求体传入，避免把大文件编码成 JSON 数组；文件名经 `x-file-name` 请求头
-/// 以 `encodeURIComponent` 编码传入。
+/// 以 `encodeURIComponent` 编码传入。副本写到当前数据目录的附件文件夹中。
 #[tauri::command]
-pub async fn import_attachment(app: AppHandle, request: tauri::ipc::Request<'_>) -> AppResult<ImportedFile> {
+pub async fn import_attachment(
+    state: State<'_, AppState>,
+    request: tauri::ipc::Request<'_>,
+) -> AppResult<ImportedFile> {
     let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
         return Err(AppError::Other("附件内容格式不正确".into()));
     };
@@ -172,13 +211,13 @@ pub async fn import_attachment(app: AppHandle, request: tauri::ipc::Request<'_>)
         .and_then(|value| value.to_str().ok())
         .map(attachments::percent_decode)
         .unwrap_or_default();
-    attachments::import_bytes(&app.path().app_data_dir()?, &name, bytes)
+    attachments::import_bytes(&state.store.directory(), &name, bytes)
 }
 
 /// 把用户选择的文件复制为附件副本，按选择顺序返回名称与副本路径。
 #[tauri::command]
-pub async fn import_files(app: AppHandle, paths: Vec<String>) -> AppResult<Vec<ImportedFile>> {
-    attachments::import_paths(&app.path().app_data_dir()?, &paths)
+pub async fn import_files(state: State<'_, AppState>, paths: Vec<String>) -> AppResult<Vec<ImportedFile>> {
+    attachments::import_paths(&state.store.directory(), &paths)
 }
 
 /// 用系统默认程序打开附件文件夹中的文件。
@@ -186,9 +225,9 @@ pub async fn import_files(app: AppHandle, paths: Vec<String>) -> AppResult<Vec<I
 /// 只打开附件副本：记录中的路径可能来自导入的备份，直接打开任意路径可能运行不明程序。
 /// 由后端按实际路径校验，不受用户目录链接或文件系统虚拟化影响。
 #[tauri::command]
-pub fn open_attachment(app: AppHandle, path: String) -> AppResult<()> {
+pub fn open_attachment(app: AppHandle, state: State<'_, AppState>, path: String) -> AppResult<()> {
     use tauri_plugin_opener::OpenerExt;
-    let root = app.path().app_data_dir()?.join(attachments::ATTACHMENTS_DIR);
+    let root = state.store.directory().join(attachments::ATTACHMENTS_DIR);
     if !attachments::is_inside(&root, std::path::Path::new(&path)) {
         return Err(AppError::Other("只能打开附件文件夹中的文件".into()));
     }

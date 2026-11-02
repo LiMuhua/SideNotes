@@ -2,8 +2,8 @@
  * 数据与同步。
  *
  * 结构对应原型 settings.js 的 renderData：导入与导出、数据目录、云端自动备份三张卡。
- * 导入导出与打开目录在桌面端真实可用；更换存储位置与云端备份尚未接入，
- * 界面只保存配置并明确说明，不把未实现的能力表现为已完成。
+ * 导入导出、打开目录与更换存储位置（复制数据并改写附件路径）在桌面端真实可用；
+ * 云端备份尚未接入，界面只保存配置并明确说明，不把未实现的能力表现为已完成。
  */
 
 import { useEffect, useState } from 'react';
@@ -156,16 +156,74 @@ function BackupGroup({ saveFailed, loadFailed }: { saveFailed: boolean; loadFail
   );
 }
 
+/** 两个目录是否相同（Windows 路径不区分大小写，忽略结尾的分隔符）。 */
+function sameDirectory(left: string, right: string): boolean {
+  const normalize = (path: string): string => path.trim().replace(/[\\/]+$/, '').replace(/\//g, '\\').toLowerCase();
+  return Boolean(left.trim()) && normalize(left) === normalize(right);
+}
+
+/** 所选存储位置对应的目录；自定义目录尚未填写时为空。 */
+function locationDirectory(settings: Settings, info: StorageInfo | null): string {
+  if (!info) return '';
+  if (settings.storageLocation === 'appdata') return info.defaultDirectory;
+  if (settings.storageLocation === 'portable') return info.portableDirectory;
+  return settings.customDirectory.trim();
+}
+
 /** 数据目录。 */
-function DirectoryGroup({ settings, save, info }: { settings: Settings; save: SaveSettings; info: StorageInfo | null }) {
+function DirectoryGroup({
+  settings,
+  save,
+  info,
+  onRefresh,
+}: {
+  settings: Settings;
+  save: SaveSettings;
+  info: StorageInfo | null;
+  onRefresh: () => void;
+}) {
   const toast = useToast();
+  const confirm = useConfirm();
+  const target = locationDirectory(settings, info);
+  // 所选位置与当前目录不同时才需要迁移；读取目录信息之前不显示。
+  const needsMigration = Boolean(info && target && !sameDirectory(target, info.directory));
 
   const chooseDirectory = async (): Promise<void> => {
     const path = await bridge.pickDirectory();
     if (!path) return;
     if (await save({ storageLocation: 'custom', customDirectory: path.slice(0, 500) })) {
-      toast('已记录目标目录；迁移数据尚未接入，记录仍保存在当前目录');
+      toast('已选择目录，点击「迁移到这里」把数据复制过去');
     }
+  };
+
+  /**
+   * 把数据库与附件复制到所选位置并改用那里的数据；原目录保留作为备份。
+   * 成功后各窗口重新读库（记录中的附件路径已改写），目录信息随之刷新。
+   */
+  const migrate = (): void => {
+    if (!info || !target) return;
+    confirm({
+      title: '迁移数据',
+      message: `将把数据库与 ${info.attachmentCount} 个附件复制到「${target}」，之后的记录都保存在新位置。原目录不会删除，保留作为备份。`,
+      confirmLabel: '开始迁移',
+      icon: 'folder',
+      run: async () => {
+        try {
+          const report = await bridge.migrateStorage(target);
+          await store.reloadEverywhere();
+          toast(
+            report.backup
+              ? `已迁移到新目录；那里原有的数据库已改名保留`
+              : `已迁移到新目录，原目录保留作为备份`,
+          );
+          onRefresh();
+          return true;
+        } catch (error) {
+          toast(`迁移未完成：${reason(error, '请稍后重试')}；记录仍保存在原目录`, null, true);
+          return false;
+        }
+      },
+    });
   };
 
   const openDirectory = async (): Promise<void> => {
@@ -179,7 +237,12 @@ function DirectoryGroup({ settings, save, info }: { settings: Settings; save: Sa
 
   return (
     <Group title="数据目录" className="settings-wide">
-      <Row title="存储位置">
+      {info?.unavailableDirectory ? (
+        <p className="settings-notice is-error">
+          {`上次使用的数据目录「${info.unavailableDirectory}」不可用（例如移动硬盘未接入），已暂时使用应用数据目录。接入后重新启动即可恢复，也可以在这里迁移到其它位置。`}
+        </p>
+      ) : null}
+      <Row title="存储位置" description="选择位置后点击「迁移到这里」：数据库与附件复制到新位置，之后的记录保存在那里，原目录保留作为备份。">
         <SelectField
           label="数据存储位置"
           options={LOCATIONS}
@@ -198,8 +261,16 @@ function DirectoryGroup({ settings, save, info }: { settings: Settings; save: Sa
           <ActionButton label="选择目录" icon="folder" onClick={() => void chooseDirectory()} />
         </div>
       ) : null}
+      {needsMigration ? (
+        <div className="settings-inline storage-migration">
+          <code className="settings-path directory-field" aria-label="迁移的目标目录" title={target}>
+            {target}
+          </code>
+          <ActionButton label="迁移到这里" icon="upload" onClick={migrate} />
+        </div>
+      ) : null}
       <div className="settings-inline current-directory">
-        <code className="settings-path directory-field" aria-label="当前数据目录">
+        <code className="settings-path directory-field" aria-label="当前数据目录" title={info?.directory}>
           {info?.directory || '正在读取…'}
         </code>
         <ActionButton label="打开目录" icon="folder" className="icon-button" onClick={() => void openDirectory()} />
@@ -340,6 +411,8 @@ export function DataPanel({
   loadFailed: boolean;
 }) {
   const [info, setInfo] = useState<StorageInfo | null>(null);
+  // 打开数据分类、迁移数据之后重新读取目录信息；卸载后返回的结果直接丢弃。
+  const [revision, setRevision] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -352,16 +425,16 @@ export function DataPanel({
     return () => {
       alive = false;
     };
-  }, []);
+  }, [revision]);
 
   return (
     <>
       <p className="settings-notice">
-        记录保存在本机 SQLite 数据库，不会上传。更换存储位置与云端自动备份尚未接入桌面版，以下相关选项目前只保存配置，不会迁移或上传数据。
+        记录保存在本机 SQLite 数据库，不会上传。云端自动备份尚未接入桌面版，相关选项目前只保存配置，不会上传数据。
       </p>
       <div className="settings-dashboard data-dashboard">
         <BackupGroup saveFailed={saveFailed} loadFailed={loadFailed} />
-        <DirectoryGroup settings={settings} save={save} info={info} />
+        <DirectoryGroup settings={settings} save={save} info={info} onRefresh={() => setRevision((value) => value + 1)} />
         <CloudGroup settings={settings} save={save} />
       </div>
     </>

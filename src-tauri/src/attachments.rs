@@ -125,6 +125,45 @@ pub fn is_inside(root: &Path, path: &Path) -> bool {
     }
 }
 
+/// 附件文件夹的规模，供设置页显示。
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachmentUsage {
+    /// 附件（子文件夹）数。
+    pub count: usize,
+    /// 全部附件的字节数。
+    pub size: u64,
+}
+
+/// 文件夹内全部文件的字节数（递归）。
+fn folder_size(path: &Path) -> u64 {
+    let Ok(entries) = std::fs::read_dir(path) else {
+        return 0;
+    };
+    entries
+        .flatten()
+        .map(|entry| match entry.metadata() {
+            Ok(meta) if meta.is_dir() => folder_size(&entry.path()),
+            Ok(meta) => meta.len(),
+            Err(_) => 0,
+        })
+        .sum()
+}
+
+/// 统计附件文件夹的规模。`root` 为数据目录。
+pub fn usage(root: &Path) -> AttachmentUsage {
+    let Ok(entries) = std::fs::read_dir(root.join(ATTACHMENTS_DIR)) else {
+        return AttachmentUsage::default();
+    };
+    entries
+        .flatten()
+        .filter(|entry| entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false))
+        .fold(AttachmentUsage::default(), |total, entry| AttachmentUsage {
+            count: total.count + 1,
+            size: total.size + folder_size(&entry.path()),
+        })
+}
+
 /// 解码 `encodeURIComponent` 编码的文字（附件名经请求头传入，请求头只能是 ASCII）。
 pub fn percent_decode(value: &str) -> String {
     fn hex(byte: u8) -> Option<u8> {

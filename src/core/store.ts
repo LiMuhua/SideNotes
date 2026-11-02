@@ -469,6 +469,16 @@ export async function retryStorage(): Promise<boolean> {
   return persist({});
 }
 
+/**
+ * 更换数据存储位置之后重新读库，并通知其它窗口也重新读取：
+ * 记录中的附件路径已在新数据库中改写，各窗口内存里还是旧路径，不能再拿去整体写入。
+ */
+export async function reloadEverywhere(): Promise<boolean> {
+  const reloaded = await reloadFromDisk();
+  announce({ kind: 'data' });
+  return reloaded;
+}
+
 /** 调整正在读取的附件计数。 */
 export function setPendingAttachments(delta: number): void {
   setState({ pendingAttachments: Math.max(0, state.pendingAttachments + delta) });

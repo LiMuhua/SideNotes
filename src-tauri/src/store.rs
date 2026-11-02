@@ -5,6 +5,7 @@
 //! - 写入使用事务，保证"原子写入成功后再替换前端状态"的原型约定。
 //! - 图片以独立表存储并按记录级联删除，避免正文行过大影响列表查询。
 //! - `schema_version` 记录迁移进度，升级只追加迁移步骤。
+//! - 更换数据存储位置时，复制完成后经 [`Store::relocate`] 改用新位置的数据库，应用无需重启。
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -21,26 +22,39 @@ const SCHEMA_VERSION: i64 = 1;
 /// 数据库封装。
 pub struct Store {
     connection: Mutex<Connection>,
-    path: PathBuf,
+    path: Mutex<PathBuf>,
+}
+
+/// 打开或创建数据库文件，设置连接参数并完成结构迁移。
+fn open_connection(path: &Path) -> AppResult<Connection> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let connection = Connection::open(path)?;
+    // WAL 提升并发读与崩溃恢复能力；NORMAL 在桌面场景兼顾安全与速度。
+    connection.pragma_update(None, "journal_mode", "WAL")?;
+    connection.pragma_update(None, "synchronous", "NORMAL")?;
+    connection.pragma_update(None, "foreign_keys", "ON")?;
+    migrate(&connection)?;
+    Ok(connection)
 }
 
 impl Store {
     /// 打开或创建数据库，并完成结构迁移。
     pub fn open(path: &Path) -> AppResult<Self> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        let connection = Connection::open(path)?;
-        // WAL 提升并发读与崩溃恢复能力；NORMAL 在桌面场景兼顾安全与速度。
-        connection.pragma_update(None, "journal_mode", "WAL")?;
-        connection.pragma_update(None, "synchronous", "NORMAL")?;
-        connection.pragma_update(None, "foreign_keys", "ON")?;
-        let store = Self {
-            connection: Mutex::new(connection),
-            path: path.to_path_buf(),
-        };
-        store.migrate()?;
-        Ok(store)
+        Ok(Self {
+            connection: Mutex::new(open_connection(path)?),
+            path: Mutex::new(path.to_path_buf()),
+        })
+    }
+
+    /// 改用另一个位置的数据库（更换数据存储位置后）。新数据库打开失败时保持原连接不变。
+    pub fn relocate(&self, path: &Path) -> AppResult<()> {
+        let connection = open_connection(path)?;
+        let mut current = self.connection()?;
+        *current = connection;
+        *self.path.lock().map_err(|_| AppError::Other("数据库路径状态异常，请重启应用".into()))? = path.to_path_buf();
+        Ok(())
     }
 
     /// 取得受保护的连接。锁中毒说明此前写入线程已 panic，直接报错而非继续使用。
@@ -50,9 +64,22 @@ impl Store {
             .map_err(|_| AppError::Other("数据库连接状态异常，请重启应用".into()))
     }
 
-    /// 建表并按版本号执行迁移。
-    fn migrate(&self) -> AppResult<()> {
+    /// 当前数据库文件的路径。
+    pub fn path(&self) -> PathBuf {
+        self.path.lock().map(|path| path.clone()).unwrap_or_default()
+    }
+
+    /// 把当前数据库完整复制到 `target`（含尚未合并进主文件的 WAL 内容），复制的是同一时刻的一致快照。
+    pub fn copy_to(&self, target: &Path) -> AppResult<()> {
         let connection = self.connection()?;
+        connection.execute("VACUUM INTO ?1", params![target.display().to_string()])?;
+        Ok(())
+    }
+}
+
+/// 建表并按版本号执行迁移。
+fn migrate(connection: &Connection) -> AppResult<()> {
+    {
         let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
         if version >= SCHEMA_VERSION {
             return Ok(());
@@ -115,9 +142,11 @@ impl Store {
             "#,
         )?;
         connection.pragma_update(None, "user_version", SCHEMA_VERSION)?;
-        Ok(())
     }
+    Ok(())
+}
 
+impl Store {
     /// 读取完整快照。
     pub fn load(&self) -> AppResult<Snapshot> {
         let connection = self.connection()?;
@@ -257,20 +286,27 @@ impl Store {
         Ok(())
     }
 
-    /// 读取数据目录与数据库规模。
+    /// 数据库所在的数据目录，附件文件夹也在其中。
+    pub fn directory(&self) -> PathBuf {
+        self.path().parent().map(Path::to_path_buf).unwrap_or_default()
+    }
+
+    /// 读取数据目录与数据库规模；默认目录等与位置相关的字段由调用方补上。
     pub fn info(&self) -> AppResult<StorageInfo> {
         let connection = self.connection()?;
         let note_count: i64 = connection.query_row("SELECT COUNT(*) FROM notes", [], |row| row.get(0))?;
-        let size = std::fs::metadata(&self.path).map(|meta| meta.len()).unwrap_or(0);
+        let path = self.path();
+        let size = std::fs::metadata(&path).map(|meta| meta.len()).unwrap_or(0);
+        let directory = self.directory();
+        let attachments = crate::attachments::usage(&directory);
         Ok(StorageInfo {
-            directory: self
-                .path
-                .parent()
-                .map(|parent| parent.display().to_string())
-                .unwrap_or_default(),
-            database: self.path.display().to_string(),
+            directory: directory.display().to_string(),
+            database: path.display().to_string(),
             size,
             note_count,
+            attachment_count: attachments.count,
+            attachment_size: attachments.size,
+            ..StorageInfo::default()
         })
     }
 }

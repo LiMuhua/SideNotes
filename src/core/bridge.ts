@@ -13,7 +13,17 @@ import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialo
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import { isPermissionGranted, requestPermission } from '@tauri-apps/plugin-notification';
 import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener';
-import type { Draft, EdgeSide, FileStatus, Note, Settings, Snapshot, StorageInfo, TagUsage } from './types';
+import type {
+  Draft,
+  EdgeSide,
+  FileStatus,
+  MigrationReport,
+  Note,
+  Settings,
+  Snapshot,
+  StorageInfo,
+  TagUsage,
+} from './types';
 import { normalizeDraft, normalizeNote } from './notes';
 import { normalizeSettings, sidebarWindowWidth } from './settings';
 
@@ -145,7 +155,20 @@ export function storageInfo(): Promise<StorageInfo> {
     database: '',
     size: 0,
     noteCount: 0,
+    attachmentCount: 0,
+    attachmentSize: 0,
+    defaultDirectory: '',
+    portableDirectory: '',
+    unavailableDirectory: '',
   });
+}
+
+/**
+ * 更换数据存储位置：后端复制数据库与附件、改写记录中的附件路径并改用新位置，原目录保留作为备份。
+ * 成功后调用方需让各窗口重新读库。浏览器预览不支持。
+ */
+export function migrateStorage(target: string): Promise<MigrationReport> {
+  return call<MigrationReport>('migrate_storage', { target });
 }
 
 /** 列出系统已安装的字体族名称；浏览器预览读不到系统字体，返回空列表。 */

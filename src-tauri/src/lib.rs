@@ -5,6 +5,8 @@ mod commands;
 mod edge;
 mod error;
 mod fonts;
+mod location;
+mod migration;
 mod models;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod shortcuts;
@@ -12,16 +14,13 @@ mod store;
 mod tray;
 mod windows;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use tauri::{Manager, WebviewWindowBuilder, WindowEvent};
 
 use commands::AppState;
 use edge::EdgeWatcher;
 use store::Store;
-
-/// 数据库文件名。
-const DATABASE_FILE: &str = "sidenotes.db";
 
 /// 启动应用。
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -35,10 +34,13 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
 
-            // 数据默认落在系统应用数据目录，随用户配置迁移由设置页处理。
-            let data_dir = handle.path().app_data_dir()?;
+            // 数据默认落在系统应用数据目录；在设置中更换过存储位置时，按其中记下的目录打开（见 location）。
+            let default_dir = handle.path().app_data_dir()?;
+            std::fs::create_dir_all(&default_dir)?;
+            let resolved = location::resolve(&default_dir);
+            let data_dir = resolved.directory.clone();
             std::fs::create_dir_all(&data_dir)?;
-            let store = Store::open(&data_dir.join(DATABASE_FILE))?;
+            let store = Store::open(&data_dir.join(location::DATABASE_FILE))?;
 
             // 附件文件夹在这里建好，再按实际路径开放给本地文件协议。配置中的范围在窗口创建前解析，
             // 那时文件夹可能还不存在；用户目录经过链接或被虚拟化时，按配置换算出的路径与文件的
@@ -61,6 +63,8 @@ pub fn run() {
                 store,
                 edge: watcher.clone(),
                 shortcut_conflicts: conflicts,
+                default_dir,
+                unavailable_dir: Mutex::new(resolved.unavailable),
             });
 
             // 窗口在状态就绪后才创建。配置中的窗口默认先于 setup 创建，页面会在
@@ -118,6 +122,7 @@ pub fn run() {
             commands::import_attachment,
             commands::import_files,
             commands::open_attachment,
+            commands::migrate_storage,
             commands::copy_file_paths,
             commands::set_sidebar_pinned,
             commands::quit_app,
