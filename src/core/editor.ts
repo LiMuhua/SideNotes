@@ -521,6 +521,16 @@ export class MarkdownEditor {
     let last: { node: Node; offset: number } | null = null;
     while ((node = walker.nextNode())) {
       const text = node as Text;
+      // 显示出来的列表项头是 inline-block（占满悬挂缩进），光标落在它里面时浏览器的 Home、End 只在
+      // 项头这一小块内移动，光标也画在项头文字之后而不是正文开头。项头两端的位置改放到这个元素之外。
+      const listMarker = text.parentElement?.closest<HTMLElement>('.md-list-marker.is-revealed');
+      if (listMarker) {
+        if (remaining <= 0) return childPoint(listMarker, false);
+        if (remaining < text.length) return { node: text, offset: remaining };
+        remaining -= text.length;
+        last = childPoint(listMarker, true);
+        continue;
+      }
       const atomic = text.parentElement?.closest<HTMLElement>('.md-attachment-source');
       if (atomic) {
         if (remaining <= 0) return childPoint(atomic, false);
@@ -1520,6 +1530,8 @@ export class MarkdownEditor {
       } else if (modifier && !key.altKey && !key.shiftKey && physicalKey(key) === 'KeyK') {
         key.preventDefault();
         this.insertLink(this.readSelection());
+      } else if ((key.key === 'Home' || key.key === 'End') && !modifier && !key.altKey) {
+        if (this.moveToLineBoundary(key.key === 'Home', key.shiftKey)) key.preventDefault();
       } else {
         const command = this.shortcut(key);
         if (!command) return;
@@ -1528,6 +1540,54 @@ export class MarkdownEditor {
         this.applyEdit(command(this.value, range.start, range.end), range);
       }
     });
+  }
+
+  /** 带项头的行（列表项、待办、标题、引用）中正文开始的位置，相对行首；其余行返回 0。按 render 的识别结果判断。 */
+  private contentOffset(index: number): number {
+    const line = this.element.children[index];
+    const text = this.lines[index]?.text ?? '';
+    if (!line) return 0;
+    const prefix = (pattern: RegExp): number => (text.match(pattern) ?? [''])[0].length;
+    if (line.classList.contains('md-heading')) return prefix(/^\s{0,3}#{1,6}[\t ]+/);
+    if (line.classList.contains('md-quote')) return prefix(/^\s{0,3}>[\t ]?/);
+    if (line.classList.contains('md-list-item')) return prefix(/^\s{0,3}(?:[-+*]|\d+[.)])[\t ]+(?:\[[ xX]\][\t ]+)?/);
+    return 0;
+  }
+
+  /**
+   * Home 与 End：列表项、待办、标题与引用中，Home 回到正文开头而不是项头之前；光标在项头之中或正文开头时，
+   * End 移到正文第一行的末尾。其余情况交给浏览器，折行时仍按显示的行移动。返回 true 表示已处理。
+   */
+  private moveToLineBoundary(home: boolean, extend: boolean): boolean {
+    const current = this.readSelection();
+    const backward = current.direction === 'backward';
+    const focus = backward ? current.start : current.end;
+    const anchor = backward ? current.end : current.start;
+    const index = this.lineAt(focus);
+    const line = this.lines[index];
+    const contentStart = line.start + this.contentOffset(index);
+    if (contentStart === line.start || (!home && focus > contentStart)) return false;
+    // 先按浏览器的方式移到显示行的开头或末尾：Home 落进项头（第一行）时改为正文开头，
+    // 折行后的其它行照常停在行首；End 停在正文第一行的末尾。End 从正文第一个字之后出发：
+    // 紧挨项头的位置会被浏览器归到 inline-block 的项头里，从那里只能移到项头末尾。
+    const start = home ? focus : Math.min(contentStart + 1, line.end);
+    const reached = this.lineBoundaryFrom(start, home ? 'backward' : 'forward');
+    if (reached === null) return false;
+    const target = home ? Math.max(reached, contentStart) : reached;
+    const from = extend ? anchor : target;
+    const direction = target < from ? 'backward' : target > from ? 'forward' : 'none';
+    this.setSelectionRange(Math.min(from, target), Math.max(from, target), direction);
+    return true;
+  }
+
+  /** 从原文位置出发，按浏览器的方式移到所在显示行的开头或末尾，返回到达的原文位置。 */
+  private lineBoundaryFrom(offset: number, direction: 'forward' | 'backward'): number | null {
+    const selection = window.getSelection();
+    if (!selection || typeof selection.modify !== 'function') return null;
+    const point = this.domPoint(offset);
+    selection.collapse(point.node, point.offset);
+    selection.modify('move', direction, 'lineboundary');
+    return this.sourceOffset(selection.focusNode, selection.focusOffset);
   }
 
   /**
