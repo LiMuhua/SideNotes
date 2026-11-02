@@ -1143,6 +1143,73 @@ body[data-window='settings'] .settings-delay-field > .settings-runtime-suffix {
   color: var(--muted);
 }
 
+/* ==================== 筛选条 ====================
+ * 用户反馈搜索状态不醒目，常忘了列表只是搜索结果。搜索或按标签筛选时，列表正上方显示筛选条，
+ * 左右与卡片对齐：强调色浅底、左侧色条，写明当前条件与「匹配 / 全部」条数，「显示全部」一键退出。
+ * 有搜索内容时搜索框也换成强调色边框。 */
+body[data-window='sidebar'] .filter-banner {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  margin: 4px calc(16px + var(--note-list-gutter, 0px)) 2px 16px;
+  padding: 6px 6px 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--card));
+  color: var(--ink);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+body[data-window='sidebar'] .filter-banner > .icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  color: var(--accent);
+}
+
+body[data-window='sidebar'] .filter-banner-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-window='sidebar'] .filter-banner-text strong {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+body[data-window='sidebar'] .filter-banner-count {
+  flex-shrink: 0;
+  color: var(--subtle);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+body[data-window='sidebar'] .filter-banner-clear {
+  flex-shrink: 0;
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--paper);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+body[data-window='sidebar'] .filter-banner-clear:hover {
+  background: var(--accent-hover);
+}
+
+body[data-window='sidebar'] .sidebar-navigation.has-search-query #header-search.is-open {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
 /* ==================== 从资源管理器拖入文件 ====================
  * 预览卡片沿用卡片之间拖动引用的插入线（.card-drop-guide）；编辑面中用一条竖线标出落点，
  * 跟随指针的提示说明松开后插到哪里。 */

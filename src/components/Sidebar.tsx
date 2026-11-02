@@ -1446,10 +1446,11 @@ export function Sidebar() {
     setTagMenuOpen(false);
   }, []);
 
-  /** 空状态中的「清除筛选」：同时清除标签与搜索。 */
+  /** 清除筛选：同时清除标签与搜索并收起搜索框，空状态的「清除筛选」与筛选条的「显示全部」共用。 */
   const clearFilters = useCallback(() => {
     setSelectedTag("");
     setQuery("");
+    setSearchOpen(false);
   }, []);
 
   const manageTag = useCallback((tag: string) => {
@@ -1494,6 +1495,8 @@ export function Sidebar() {
     }),
     [state.notes],
   );
+  /** 筛选条显示的搜索内容；只有空白时不算在搜索。 */
+  const searchText = query.trim();
 
   // 底部存储状态：读库失败与写入失败都显示为异常。
   const storageError = state.loadFailed || state.saveFailed;
@@ -1763,6 +1766,30 @@ export function Sidebar() {
           onEmbeddedImage={(image) => handleEmbeddedImage(null, image)}
           maxHeight={Math.min(340, window.innerHeight * 0.42)}
         />
+
+        {/* 搜索或按标签筛选时，列表上方显示醒目的筛选条：当前条件与匹配条数，一键回到全部记录。 */}
+        {searchText || selectedTag ? (
+          <div className="filter-banner" role="status">
+            <Icon name="search" />
+            <p className="filter-banner-text">
+              {searchText ? (
+                <>
+                  搜索「<strong>{searchText}</strong>」
+                </>
+              ) : null}
+              {searchText && selectedTag ? "，" : null}
+              {selectedTag ? (
+                <>
+                  标签 <strong>#{selectedTag}</strong>
+                </>
+              ) : null}
+            </p>
+            <span className="filter-banner-count">{`${listNotes.length} / ${tabCounts[tab]} 条`}</span>
+            <button type="button" className="filter-banner-clear" onClick={clearFilters}>
+              显示全部
+            </button>
+          </div>
+        ) : null}
 
         {/* 记录列表 */}
         <div
