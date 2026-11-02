@@ -757,15 +757,31 @@ body[data-window='sidebar'] #note-list .note-card {
     opacity 0.16s;
 }
 
-/* 选中的卡片：单击选中与指针悬停使用同一种边框高亮，悬停优先。
- * 指针停在另一张卡片上时，只有那一张高亮；指针离开所有卡片后，高亮回到单击选中的卡片。
- * 高亮的卡片就是 Ctrl+C 复制的对象。 */
-body[data-window='sidebar'] #note-list > .note-card:not(.is-editing):hover,
-body[data-window='sidebar'] #note-list:not(:has(> .note-card:hover)) > .note-card.is-current:not(.is-editing) {
-  border-color: color-mix(in srgb, var(--accent) 58%, var(--card));
+/* 选中的卡片：单击与指针悬停共用同一个选中状态（悬停即选中），只有一种高亮，统一用绿色，
+ * 不随界面材质的强调色变化。高亮的卡片就是 Ctrl+C 复制、Enter 编辑的对象；指针离开卡片后，
+ * 最后选中的一张保持高亮。原型给获得焦点的卡片另画一圈外框，与选中高亮叠在一起像两种状态，这里去掉。 */
+body[data-window='sidebar'] {
+  --note-selected: #4d714f;
+}
+
+body[data-window='sidebar'][data-theme='dark'] {
+  --note-selected: #9bbd85;
+}
+
+body[data-window='sidebar'] #note-list > .note-card.is-current:not(.is-editing) {
+  border-color: color-mix(in srgb, var(--note-selected) 72%, var(--card));
   box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--note-selected) 32%, transparent),
     0 4px 16px #3d58250b;
+}
+
+body[data-window='sidebar'] #note-list > .note-card:focus-visible {
+  outline: none;
+}
+
+/* 拖动排序、框选期间悬停不改变选中，原型的悬停边框（win11 材质下为蓝色）改为浅绿。 */
+body[data-window='sidebar'] #note-list > .note-card:not(.is-current):not(.is-editing):hover {
+  border-color: color-mix(in srgb, var(--note-selected) 38%, var(--line));
 }
 
 body[data-window='sidebar'] .sidebar.has-editing #note-list > .note-card:not(.is-editing),

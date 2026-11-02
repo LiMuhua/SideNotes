@@ -814,14 +814,13 @@ export function Sidebar() {
   }, [hold, holdWhileFocused, scheduleHide]);
 
   /**
-   * Ctrl+C 复制：多选时复制选中的全部记录；否则复制高亮的卡片，
-   * 指针所在的卡片优先，其次是单击选中的卡片。没有可复制的卡片时提示。
+   * Ctrl+C 复制：多选时复制选中的全部记录；否则复制选中（高亮）的卡片。
+   * 单击与指针悬停共用同一个选中状态，高亮的那一张就是复制的对象。没有可复制的卡片时提示。
    */
   const copyHighlighted = useCallback(async () => {
     let targets = listNotes.filter((note) => interactions.selected.has(note.id));
     if (!targets.length) {
-      const hovered = listRef.current?.querySelector<HTMLElement>(".note-card:hover")?.dataset.noteId;
-      const note = listNotes.find((item) => item.id === (hovered ?? currentId));
+      const note = listNotes.find((item) => item.id === currentId);
       if (note) targets = [note];
     }
     if (!targets.length) {
@@ -952,6 +951,20 @@ export function Sidebar() {
     const target = event.target as HTMLElement;
     if (target.matches(".note-card")) setCurrentId(target.dataset.noteId ?? null);
   }, []);
+
+  /**
+   * 指针移到卡片上即选中这张卡片：单击与悬停共用同一个选中状态，只有一种高亮，
+   * 高亮的就是 Ctrl+C 复制、Enter 编辑的那一张；指针离开卡片后保持最后选中的一张。
+   * 拖动排序与框选期间不改动。
+   */
+  const handleListHover = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (interactions.isBusy() || interactions.isSelecting()) return;
+      const id = (event.target as HTMLElement).closest<HTMLElement>(".note-card")?.dataset.noteId;
+      if (id) setCurrentId((previous) => (previous === id ? previous : id));
+    },
+    [interactions],
+  );
 
   /** 双击卡片开始编辑；多选与拖动之后的双击已由卡片手势拦下。 */
   const handleListDoubleClick = useCallback(
@@ -1761,6 +1774,7 @@ export function Sidebar() {
           aria-label={`${TAB_LABELS[tab]}记录列表`}
           onClick={handleListClick}
           onFocus={handleListFocus}
+          onMouseOver={handleListHover}
           onDoubleClick={handleListDoubleClick}
           onContextMenu={handleListContextMenu}
           onKeyDown={handleListKeyDown}

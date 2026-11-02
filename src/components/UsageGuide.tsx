@@ -12,7 +12,7 @@ const SECTIONS: ReadonlyArray<{ title: string; tips: readonly string[] }> = [
   {
     title: '卡片',
     tips: [
-      '单击选中卡片，按 Ctrl+C 复制；双击进入编辑。',
+      '指针移到卡片上或单击即选中（绿色边框），按 Ctrl+C 复制；双击进入编辑。',
       '右键卡片打开更多操作；按住卡片拖动可以排序，拖到页签或回收站即移动过去。',
       '正文较长时渐隐显示，双击卡片查看全文；最大高度可在设置中调整。',
     ],
