@@ -198,14 +198,49 @@ function afterBlockPrefix(value: string, from: number): number {
   return Math.max(from, lineStart + prefix);
 }
 
-/** 给单行文字加上或去掉标记，标记紧贴文字，不包住首尾空白与行首的块级标记。 */
-function toggleLineSpan(value: string, start: number, end: number, marker: string): EditResult {
+/**
+ * 选区在一行之内的有效文字：去掉首尾空白与行首的块级标记。行内格式与链接只加在这段文字上；
+ * 只选中了空白或项头时返回 null。
+ */
+function lineContent(value: string, start: number, end: number): { from: number; to: number } | null {
   const text = value.slice(start, end);
   const lead = (text.match(/^\s*/) ?? [''])[0].length;
   const trail = text.trim() ? (text.match(/\s*$/) ?? [''])[0].length : 0;
   const from = afterBlockPrefix(value, start + lead);
   const to = end - trail;
-  if (from >= to) return { value, start, end };
+  return from < to ? { from, to } : null;
+}
+
+/**
+ * 选中多行时逐行处理：从后往前，前面各行的位置不受影响，跳过空行。
+ * `apply` 处理一行中被选中的部分并返回新原文；结果的选区覆盖处理后的全部文字。
+ */
+function eachLine(
+  value: string,
+  start: number,
+  end: number,
+  apply: (value: string, from: number, to: number) => string,
+): EditResult {
+  const lines = splitLines(value);
+  let result = value;
+  let selectionEnd = end;
+  for (const index of [...touchedLines(lines, start, end)].reverse()) {
+    const line = lines[index];
+    const from = Math.max(start, line.start);
+    const to = Math.min(end, line.end);
+    if (!value.slice(from, to).trim()) continue;
+    const before = result.length;
+    result = apply(result, from, to);
+    selectionEnd += result.length - before;
+  }
+  return { value: result, start, end: selectionEnd };
+}
+
+/** 给单行文字加上或去掉标记，标记紧贴文字，不包住首尾空白与行首的块级标记。 */
+function toggleLineSpan(value: string, start: number, end: number, marker: string): EditResult {
+  const span = lineContent(value, start, end);
+  if (!span) return { value, start, end };
+  const { from, to } = span;
   const character = marker[0];
   // 选中的文字本身带着标记：去掉。
   const innerBefore = runLength(value, from, 1, character);
@@ -259,31 +294,15 @@ export function toggleInline(value: string, start: number, end: number, marker: 
     }
     return replaceRange(value, start, end, marker + marker, size);
   }
-  const indexes = touchedLines(lines, start, end);
-  if (indexes.length === 1) return toggleLineSpan(value, start, end, marker);
-  // 多行：从后往前逐行处理，前面各行的位置不受影响。
-  let result = value;
-  let selectionEnd = end;
-  for (const index of [...indexes].reverse()) {
-    const line = lines[index];
-    const from = Math.max(start, line.start);
-    const to = Math.min(end, line.end);
-    if (!value.slice(from, to).trim()) continue;
-    const before = result.length;
-    result = toggleLineSpan(result, from, to, marker).value;
-    selectionEnd += result.length - before;
-  }
-  return { value: result, start, end: selectionEnd };
+  if (touchedLines(lines, start, end).length === 1) return toggleLineSpan(value, start, end, marker);
+  return eachLine(value, start, end, (current, from, to) => toggleLineSpan(current, from, to, marker).value);
 }
 
 /** 给单行文字加上或去掉一对 HTML 标签，标签紧贴文字，不包住首尾空白与行首的块级标记。 */
 function toggleTagSpan(value: string, start: number, end: number, open: string, close: string): EditResult {
-  const text = value.slice(start, end);
-  const lead = (text.match(/^\s*/) ?? [''])[0].length;
-  const trail = text.trim() ? (text.match(/\s*$/) ?? [''])[0].length : 0;
-  const from = afterBlockPrefix(value, start + lead);
-  const to = end - trail;
-  if (from >= to) return { value, start, end };
+  const span = lineContent(value, start, end);
+  if (!span) return { value, start, end };
+  const { from, to } = span;
   const is = (at: number, tag: string): boolean => value.slice(at, at + tag.length).toLowerCase() === tag;
   // 选中的文字本身带着标签：去掉。
   if (to - from >= open.length + close.length && is(from, open) && is(to - close.length, close)) {
@@ -325,65 +344,80 @@ export function toggleTag(value: string, start: number, end: number, tag: string
     }
     return replaceRange(value, start, end, open + close, open.length);
   }
-  const indexes = touchedLines(lines, start, end);
-  if (indexes.length === 1) return toggleTagSpan(value, start, end, open, close);
-  // 多行：从后往前逐行处理，前面各行的位置不受影响。
-  let result = value;
-  let selectionEnd = end;
-  for (const index of [...indexes].reverse()) {
-    const line = lines[index];
-    const from = Math.max(start, line.start);
-    const to = Math.min(end, line.end);
-    if (!value.slice(from, to).trim()) continue;
-    const before = result.length;
-    result = toggleTagSpan(result, from, to, open, close).value;
-    selectionEnd += result.length - before;
-  }
-  return { value: result, start, end: selectionEnd };
+  if (touchedLines(lines, start, end).length === 1) return toggleTagSpan(value, start, end, open, close);
+  return eachLine(value, start, end, (current, from, to) => toggleTagSpan(current, from, to, open, close).value);
 }
 
 /** 一个完整的 Markdown 链接。 */
 const LINK = /^\[((?:\\.|[^\]\\])*)\]\(([^)]*)\)$/;
 
 /**
- * 插入或去掉链接。
- *
- * 选中的是网址或文件路径时生成 `[](地址)` 并把光标放进链接文字；选中普通文字时生成
- * `[文字]()` 并把光标放进地址；选中的正好是一个链接时去掉链接只留文字。
+ * 给一行中的文字加上或去掉链接。`address` 为空时：正好是一个链接就去掉链接只留文字，是网址或文件路径
+ * 就作为地址并把光标放进链接文字，否则作为链接文字并把光标放进地址。`address` 非空（剪贴板中的网址）时
+ * 只给普通文字加链接，光标移到选区原来的末尾 `end` 换算后的位置；已是链接、网址或路径的保持不变。
  */
-export function toggleLink(value: string, start: number, end: number): EditResult {
-  const text = value.slice(start, end);
+function linkSpan(value: string, from: number, to: number, end: number, address: string): EditResult {
+  const text = value.slice(from, to);
   const link = text.match(LINK);
+  const target = Boolean(link) || URL_PATTERN.test(text) || Boolean(filePath(text));
+  if (address) {
+    if (target) return { value, start: end, end };
+    const inserted = `[${escapeLabel(text)}](${address})`;
+    const caret = end + inserted.length - (to - from);
+    return { value: value.slice(0, from) + inserted + value.slice(to), start: caret, end: caret };
+  }
   if (link) {
     const label = link[1].replace(/\\([\\[\]])/g, '$1');
-    return replaceRange(value, start, end, label, 0, label.length);
+    return replaceRange(value, from, to, label, 0, label.length);
   }
-  if (!text) return replaceRange(value, start, end, '[]()', 1);
-  const target = text.trim();
-  if (!/[\r\n]/.test(target) && (URL_PATTERN.test(target) || filePath(target))) {
-    return replaceRange(value, start, end, `[](${target})`, 1);
-  }
+  if (target) return replaceRange(value, from, to, `[](${text})`, 1);
   const label = escapeLabel(text);
-  return replaceRange(value, start, end, `[${label}]()`, label.length + 3);
+  return replaceRange(value, from, to, `[${label}]()`, label.length + 3);
+}
+
+/**
+ * 按行加上或去掉链接：与行内格式一样只包住块级标记与首尾空白之间的文字，列表项头不会被包进链接文字；
+ * 选中多行时逐行处理。只选中了空白或项头时不做改动。
+ */
+function linkLines(value: string, start: number, end: number, address: string): EditResult {
+  if (touchedLines(splitLines(value), start, end).length === 1) {
+    const span = lineContent(value, start, end);
+    return span ? linkSpan(value, span.from, span.to, end, address) : { value, start, end };
+  }
+  return eachLine(value, start, end, (current, from, to) => {
+    const span = lineContent(current, from, to);
+    return span ? linkSpan(current, span.from, span.to, to, address).value : current;
+  });
+}
+
+/**
+ * 插入或去掉链接。
+ *
+ * 没有选中时插入 `[]()` 并把光标放进链接文字；选中的是网址或文件路径时生成 `[](地址)` 并把光标放进
+ * 链接文字；选中普通文字时生成 `[文字]()` 并把光标放进地址；选中的正好是一个链接时去掉链接只留文字。
+ */
+export function toggleLink(value: string, start: number, end: number): EditResult {
+  if (start === end) return replaceRange(value, start, end, '[]()', 1);
+  return linkLines(value, start, end, '');
 }
 
 /**
  * Ctrl+K 时剪贴板中是网址：直接用它生成链接，参照 Typora。
  *
- * 选中文字时包成 `[文字](网址)`，首尾空白留在链接之外，光标移到链接之后；
- * 没有选中时插入 `[](网址)` 并把光标放进链接文字。剪贴板不是网址、选中的文字跨行，
- * 或选中的本身就是链接、网址或文件路径时返回 null，交给 toggleLink 处理。
+ * 选中文字时包成 `[文字](网址)`，首尾空白与块级标记留在链接之外，光标移到链接之后；选中多行时逐行生成。
+ * 没有选中时插入 `[](网址)` 并把光标放进链接文字。剪贴板不是网址，或选中的一行本身就是链接、网址或
+ * 文件路径时返回 null，交给 toggleLink 处理。
  */
 export function linkWithAddress(value: string, start: number, end: number, clipboard: string): EditResult | null {
   const address = String(clipboard ?? '').trim();
   if (!URL_PATTERN.test(address)) return null;
-  const text = value.slice(start, end);
-  const target = text.trim();
-  if (/[\r\n]/.test(text) || LINK.test(target) || URL_PATTERN.test(target) || filePath(target)) return null;
-  if (!target) return replaceRange(value, start, end, `[](${address})`, 1);
-  const lead = (text.match(/^\s*/) ?? [''])[0];
-  const trail = (text.match(/\s*$/) ?? [''])[0];
-  return replaceRange(value, start, end, `${lead}[${escapeLabel(target)}](${address})${trail}`);
+  if (start === end) return replaceRange(value, start, end, `[](${address})`, 1);
+  if (touchedLines(splitLines(value), start, end).length === 1) {
+    const span = lineContent(value, start, end);
+    const text = span ? value.slice(span.from, span.to) : '';
+    if (!span || LINK.test(text) || URL_PATTERN.test(text) || filePath(text)) return null;
+  }
+  return linkLines(value, start, end, address);
 }
 
 /* ==================== 块级格式 ==================== */
@@ -449,17 +483,41 @@ export function toggleList(value: string, start: number, end: number, ordered: b
   return applyEdits(value, edits, start, end);
 }
 
-/** 把所选各行包进代码围栏；光标停在空行时插入一对围栏，光标放在中间。 */
+/** 行首的引用标记（可多层）。 */
+const QUOTE_MARKS = /^(?:[ \t]{0,3}>[ \t]?)+/;
+/** 引用标记之后的列表项头（连同缩进与待办框）或标题标记。 */
+const ITEM_OR_HEADING = /^[ \t]*(?:#{1,6}[ \t]+|(?:[-+*]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?)/;
+
+/**
+ * 把所选各行包进代码围栏；光标停在空行时插入一对围栏，光标放在中间。
+ *
+ * 列表项头、待办框与标题标记不放进代码块：卡片中的列表项只能是一行文字，放不下代码块，
+ * 连同 `- ` 一起包住的话，项头就成了代码的一部分。各行都在同一层引用中时，围栏与代码行都保留
+ * 引用标记，代码块仍在引用之内。
+ */
 export function wrapCodeBlock(value: string, start: number, end: number): EditResult {
   const lines = splitLines(value);
-  const indexes = touchedLines(lines, start, end);
-  const first = lines[indexes[0]];
-  const last = lines[indexes[indexes.length - 1]];
+  const touched = touchedLines(lines, start, end).map((index) => lines[index]);
+  const first = touched[0];
+  const last = touched[touched.length - 1];
   const eol = lineBreak(value);
-  const body = value.slice(first.start, last.end);
-  const open = 3 + eol.length;
-  if (!body.trim()) return replaceRange(value, first.start, last.end, `\`\`\`${eol}${eol}\`\`\``, open);
-  return replaceRange(value, first.start, last.end, `\`\`\`${eol}${body}${eol}\`\`\``, open, open + body.length);
+  const quoteOf = (text: string): string => (text.match(QUOTE_MARKS) ?? [''])[0];
+  const depth = (text: string): number => (quoteOf(text).match(/>/g) ?? []).length;
+  const filled = touched.filter((line) => line.text.trim());
+  const level = filled.length ? depth(filled[0].text) : 0;
+  const quote = level && filled.every((line) => depth(line.text) === level) ? quoteOf(filled[0].text) : '';
+  const contents = touched.map((line) => {
+    const rest = quote ? line.text.slice(quoteOf(line.text).length) : line.text;
+    return rest.slice((rest.match(ITEM_OR_HEADING) ?? [''])[0].length);
+  });
+  const fence = `${quote}${'`'.repeat(3)}`;
+  if (!contents.join('').trim()) {
+    const caret = fence.length + eol.length + quote.length;
+    return replaceRange(value, first.start, last.end, `${fence}${eol}${quote}${eol}${fence}`, caret);
+  }
+  const body = contents.map((content) => quote + content).join(eol);
+  const from = fence.length + eol.length;
+  return replaceRange(value, first.start, last.end, `${fence}${eol}${body}${eol}${fence}`, from, from + body.length);
 }
 
 /**
@@ -666,9 +724,9 @@ export function smartPaste(value: string, start: number, end: number, clip: Clip
 
   const selected = value.slice(start, end);
   const trimmed = text.trim();
-  if (selected.trim() && !/[\r\n]/.test(selected) && URL_PATTERN.test(trimmed)) {
-    return replaceRange(value, start, end, `[${escapeLabel(selected)}](${trimmed})`);
-  }
+  // 选中文字后粘贴网址：与 Ctrl+K 一样只包住块级标记与首尾空白之间的文字。
+  const span = !/[\r\n]/.test(selected) && URL_PATTERN.test(trimmed) ? lineContent(value, start, end) : null;
+  if (span) return linkSpan(value, span.from, span.to, end, trimmed);
 
   const document = parseHtml(clip.html ?? '');
   const link = singleLink(document, text);

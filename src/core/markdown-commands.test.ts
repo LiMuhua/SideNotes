@@ -117,12 +117,24 @@ describe('链接', () => {
     expect(run(fromClipboard('https://example.com'), '«a[b]»')).toBe('[a\\[b\\]](https://example.com)|');
   });
 
-  it('剪贴板不是网址，或选中的已是链接、网址或跨行时交给普通链接处理', () => {
+  it('剪贴板不是网址，或选中的已是链接、网址时交给普通链接处理', () => {
     const fromClipboard = (clip: string): Command => (value, start, end) => linkWithAddress(value, start, end, clip);
     expect(run(fromClipboard('普通文字'), '«官网»')).toBeNull();
     expect(run(fromClipboard('https://example.com'), '«[官网](https://a.com)»')).toBeNull();
     expect(run(fromClipboard('https://example.com'), '«https://b.com»')).toBeNull();
-    expect(run(fromClipboard('https://example.com'), '«第一行\n第二行»')).toBeNull();
+  });
+
+  it('列表、待办、引用与标题中链接只包住块级标记之后的文字，选中多行时逐行生成', () => {
+    const url: Command = (value, start, end) => linkWithAddress(value, start, end, 'https://example.com');
+    expect(run(toggleLink, '«- 内容»')).toBe('- [内容](|)');
+    expect(run(toggleLink, '«- [官网](https://a.com)»')).toBe('- «官网»');
+    expect(run(toggleLink, '«1. https://a.com»')).toBe('1. [|](https://a.com)');
+    // 只选中项头时不处理。
+    expect(run(toggleLink, '«- »内容')).toBe('«- »内容');
+    expect(run(url, '«- [ ] 待办»')).toBe('- [ ] [待办](https://example.com)|');
+    expect(run(url, '«> 引用\n## 标题»')).toBe('«> [引用](https://example.com)\n## [标题](https://example.com)»');
+    expect(run(toggleLink, '«- 甲\n- 乙»')).toBe('«- [甲]()\n- [乙]()»');
+    expect(run(url, '«第一行\n第二行»')).toBe('«[第一行](https://example.com)\n[第二行](https://example.com)»');
   });
 });
 
@@ -166,6 +178,16 @@ describe('块级格式', () => {
     expect(run((v, s, e) => toggleList(v, s, e, false), '«甲\n乙»')).toBe('- «甲\n- 乙»');
     expect(run((v, s, e) => toggleList(v, s, e, true), '«- 甲\n- [ ] 乙»')).toBe('1. «甲\n2. [ ] 乙»');
     expect(run((v, s, e) => toggleList(v, s, e, true), '«1. 甲\n2. 乙»')).toBe('«甲\n乙»');
+  });
+
+  it('代码块：列表项头、待办框与标题标记不放进代码块，引用中的代码块保留引用标记', () => {
+    expect(run(wrapCodeBlock, '«- 甲\n- 乙»')).toBe('```\n«甲\n乙»\n```');
+    expect(run(wrapCodeBlock, '«- [ ] 待办\n  2. 第二»')).toBe('```\n«待办\n第二»\n```');
+    expect(run(wrapCodeBlock, '«## 标题»')).toBe('```\n«标题»\n```');
+    expect(run(wrapCodeBlock, '«> 引用\n> - 项»')).toBe('> ```\n«> 引用\n> 项»\n> ```');
+    expect(run(wrapCodeBlock, '> |')).toBe('> ```\n> |\n> ```');
+    // 不是列表项头的写法照常放进代码块。
+    expect(run(wrapCodeBlock, '«-5 度»')).toBe('```\n«-5 度»\n```');
   });
 
   it('代码块：空行插入一对围栏，选中多行时包进围栏', () => {
@@ -246,6 +268,11 @@ describe('智能粘贴', () => {
 
   it('选中文字后粘贴网址生成链接', () => {
     expect(run(paste('https://example.com/a'), '看«官网»')).toBe('看[官网](https://example.com/a)|');
+  });
+
+  it('选中整个列表项后粘贴网址，项头留在链接之外', () => {
+    expect(run(paste('https://example.com/a'), '«- 官网»')).toBe('- [官网](https://example.com/a)|');
+    expect(run(paste('https://example.com/a'), '«- »官网')).toBeNull();
   });
 
   it('没有选中时粘贴网址按原样粘贴', () => {
