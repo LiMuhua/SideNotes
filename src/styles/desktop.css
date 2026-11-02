@@ -792,3 +792,33 @@ body[data-window='settings'] .settings-delay-field > .settings-runtime-suffix {
   border-top: 1px solid var(--line);
   border-radius: 0 0 5px 5px;
 }
+
+/* ==================== 使用指南 ====================
+ * 卡片操作说明集中在这里显示（首次启动一次，之后从侧栏菜单打开），侧栏窗口较窄，弹窗随之收窄。 */
+
+.usage-guide-modal.modal {
+  width: min(360px, calc(100vw - 32px));
+}
+
+.usage-guide-modal .modal-body {
+  padding: 4px 20px 16px;
+}
+
+.usage-guide-section h3 {
+  margin: 12px 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.usage-guide-section ul {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 11px;
+  line-height: 1.75;
+  color: var(--subtle);
+}
+
+.usage-guide-section li + li {
+  margin-top: 2px;
+}

@@ -99,6 +99,8 @@ export interface Settings {
   protectEditing: boolean;
   /** 鼠标移到屏幕边缘时唤出侧栏。 */
   edgeTrigger: boolean;
+  /** 是否已看过使用指南；首次启动时显示一次，之后可从侧栏菜单再次打开。 */
+  guideSeen: boolean;
   /** 滚动按需加载。 */
   lazyLoading: boolean;
   /** 每批加载条数。 */

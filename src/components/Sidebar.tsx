@@ -21,6 +21,7 @@ import { EmojiPicker } from "./EmojiPicker";
 import { TagFilter } from "./TagFilter";
 import { TagManageDialog } from "./TagManageDialog";
 import { ChangelogDialog } from "./ChangelogDialog";
+import { UsageGuide } from "./UsageGuide";
 import { ConfirmDialog, ImagePreview, ToastRegion } from "./Modal";
 import { useStore } from "../hooks/useStore";
 import { useToast } from "../hooks/useToast";
@@ -96,6 +97,13 @@ export function Sidebar() {
   const [managingTag, setManagingTag] = useState<string | null>(null);
   /* 版号打开的「版本与更新」弹窗。 */
   const [changelogOpen, setChangelogOpen] = useState(false);
+  /* 使用指南：首次启动（设置中尚未记下看过）时显示一次，之后从侧栏菜单打开。 */
+  const [guideOpen, setGuideOpen] = useState(false);
+  const guideVisible = guideOpen || (state.ready && !state.loadFailed && !state.settings.guideSeen);
+  const closeGuide = useCallback(() => {
+    setGuideOpen(false);
+    if (!store.getState().settings.guideSeen) void store.updateSettings({ guideSeen: true });
+  }, []);
 
   const listRef = useRef<HTMLDivElement>(null);
   const trashRef = useRef<HTMLDivElement>(null);
@@ -143,7 +151,9 @@ export function Sidebar() {
   );
 
   // 对话框打开期间鼠标移出侧栏不收起，否则对话框会随侧栏一起消失。
-  const dialogOpen = Boolean(trashTarget || managingTag || imagePreview || emojiTarget || changelogOpen);
+  const dialogOpen = Boolean(
+    trashTarget || managingTag || imagePreview || emojiTarget || changelogOpen || guideVisible,
+  );
   // 卡片菜单与对话框渲染在侧栏元素之外，鼠标移上去就会触发侧栏的 mouseleave。
   // 与原型的 keepVisible 一致：到点时按最新状态再判断一次，避免先移出侧栏、随后才打开对话框时仍被收起。
   // 实际值在卡片手势之后计算（见下方）：holdRef 为任何情况下都保持展开的条件；
@@ -740,6 +750,10 @@ export function Sidebar() {
           setChangelogOpen(false);
           return;
         }
+        if (guideVisible) {
+          closeGuide();
+          return;
+        }
         if (trashTarget) {
           setTrashTarget(null);
           return;
@@ -996,6 +1010,9 @@ export function Sidebar() {
           break;
         case "settings":
           window.dispatchEvent(new CustomEvent("sidenotes:open-settings"));
+          break;
+        case "guide":
+          setGuideOpen(true);
           break;
         case "hide":
           setTagMenuOpen(false);
@@ -1545,7 +1562,6 @@ export function Sidebar() {
                 onAttachEditFile={() => triggerFileInput("file", note.id)}
                 onChooseEmoji={() => setEmojiTarget(note)}
                 onToggleCollapse={() => void store.setCollapsed([note.id], !note.collapsed)}
-                onExpand={() => void store.setCollapsed([note.id], false)}
                 onCopy={() => void handleCopyNote(note)}
                 onTogglePin={() => void store.updateNote(note.id, { pinned: !note.pinned })}
                 onArchive={() => void handleArchiveNote(note)}
@@ -1685,6 +1701,9 @@ export function Sidebar() {
 
       {/* 版本与更新：对应原型版号按钮的 show-changelog */}
       {changelogOpen ? <ChangelogDialog onClose={() => setChangelogOpen(false)} /> : null}
+
+      {/* 使用指南：首次启动显示一次，侧栏菜单可再次打开 */}
+      {guideVisible ? <UsageGuide onClose={closeGuide} /> : null}
 
       {/* 标签管理：重命名或合并、全局移除 */}
       {managingTag ? (

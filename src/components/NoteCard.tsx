@@ -2,7 +2,8 @@
  * 记录卡片。
  *
  * 结构与原型一致：Emoji、标题、时间按钮、正文、标签行与操作行；
- * 正文限高并在溢出时显示「展开全文」，折叠状态只保留标题行与操作行。
+ * 正文按设置限高，超出部分渐隐，悬停时提示双击查看全文（不再显示「展开全文」按钮）；
+ * 折叠状态只保留标题行与操作行。
  * 编辑态直接在卡片内嵌入实时 Markdown 编辑面，确认前不写入记录。
  */
 
@@ -51,7 +52,6 @@ export interface NoteCardProps {
 
   onChooseEmoji: () => void;
   onToggleCollapse: () => void;
-  onExpand: () => void;
   onCopy: () => void;
   onTogglePin: () => void;
   onArchive: () => void;
@@ -241,7 +241,7 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
   const content = useRef<HTMLDivElement>(null);
   const [truncated, setTruncated] = useState(() => likelyLong(note));
 
-  // 正文实际溢出才显示「展开全文」，图片加载后需要复核。
+  // 正文实际溢出时渐隐并在悬停时提示，图片加载后需要复核。
   useEffect(() => {
     const target = content.current;
     if (!target || isEditing) return;
@@ -293,7 +293,6 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
       tabIndex={0}
       aria-label={title}
       aria-selected={props.selected}
-      title={isEditing ? undefined : '单击选中后按 Ctrl+C 复制，双击编辑，右键查看更多操作，长按拖动排序'}
       // 编辑中焦点离开整张卡片（而不只是编辑面）才算失焦，卡片内的工具按钮不打断编辑。
       onBlur={isEditing ? props.onEditBlur : undefined}
     >
@@ -392,7 +391,11 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
         </>
       ) : (
         <>
-          <div ref={content} className="note-content markdown-body">
+          <div
+            ref={content}
+            className="note-content markdown-body"
+            title={truncated && !note.collapsed ? '内容较长，双击卡片查看全文' : undefined}
+          >
             <Markdown
               text={display.body}
               sourceMap
@@ -421,18 +424,6 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            className="note-expand"
-            hidden={!truncated || note.collapsed}
-            onClick={(event) => {
-              event.stopPropagation();
-              props.onExpand();
-            }}
-          >
-            <Icon name="chevron-down" />
-            展开全文
-          </button>
         </>
       )}
 

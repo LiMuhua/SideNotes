@@ -3,7 +3,7 @@
  *
  * 在卡片之外的任意位置（标题栏、页签、列表空白处、底栏）右键打开，替代系统窗口菜单与浏览器菜单。
  * 菜单项覆盖侧栏的常用操作：新建与搜索、收起或展开当前列表的全部卡片（双击空白处同样切换）、
- * 选择全部记录、固定侧栏、切换停靠边、打开设置与收起侧栏。
+ * 选择全部记录、固定侧栏、切换停靠边、打开设置与使用指南、收起侧栏。
  */
 
 import { ContextMenu, type MenuAnchor, type MenuItems } from './ContextMenu';
@@ -19,6 +19,7 @@ export type SidebarCommand =
   | 'pin'
   | 'edge'
   | 'settings'
+  | 'guide'
   | 'hide';
 
 export interface SidebarMenuProps {
@@ -55,6 +56,7 @@ function buildEntries({ count, hasExpanded, pinned, edge }: SidebarMenuProps): M
     icon: edge === 'left' ? 'arrow-right' : 'arrow-left',
   });
   entries.push({ command: 'settings', label: '设置', icon: 'settings' });
+  entries.push({ command: 'guide', label: '使用指南', icon: 'info' });
   entries.push('separator');
   entries.push({ command: 'hide', label: '收起侧栏', icon: edge === 'left' ? 'arrow-left' : 'arrow-right', hint: 'Esc' });
   return entries;

@@ -24,6 +24,7 @@ describe('设置校验', () => {
     expect(settings.trashDays).toBe(30);
     expect(settings.protectEditing).toBe(true);
     expect(settings.cloud.enabled).toBe(false);
+    expect(settings.guideSeen).toBe(false);
   });
 
   it('旧版本仍是默认的 Segoe UI 13px 时换成新的默认字体，改过的字体保留', () => {
@@ -67,6 +68,7 @@ describe('设置校验', () => {
     expect(normalizeSettings({ surface: 'unknown' }).surface).toBe('standard');
     expect(normalizeSettings({ storageLocation: 'cloud' }).storageLocation).toBe('appdata');
     expect(normalizeSettings({ cloud: { provider: 'dropbox' } }).cloud.provider).toBe('synology');
+    expect(normalizeSettings({ guideSeen: 'yes' }).guideSeen).toBe(false);
   });
 
   it('保留合法输入', () => {

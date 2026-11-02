@@ -88,6 +88,7 @@ export function normalizeSettings(value: unknown = {}): Settings {
     animDuration: clampInt(input.animDuration, ANIM_DURATION_RANGE.min, ANIM_DURATION_RANGE.max, 260),
     protectEditing: input.protectEditing !== false,
     edgeTrigger: input.edgeTrigger !== false,
+    guideSeen: input.guideSeen === true,
     lazyLoading: input.lazyLoading !== false,
     pageSize: clampInt(input.pageSize, PAGE_SIZE_RANGE.min, PAGE_SIZE_RANGE.max, 10),
     tidySnoozeUntil: Number(input.tidySnoozeUntil) || 0,
