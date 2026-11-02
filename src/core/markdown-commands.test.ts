@@ -79,6 +79,20 @@ describe('行内格式', () => {
   it('行内代码中含反引号时改用双反引号', () => {
     expect(run(code, '«a`b»')).toBe('`` «a`b» ``');
   });
+
+  it('列表、待办、引用与标题中只包住块级标记之后的文字，列表不会失效', () => {
+    const strike: Command = (value, start, end) => toggleInline(value, start, end, '~~');
+    const underline: Command = (value, start, end) => toggleTag(value, start, end, 'u');
+    expect(run(bold, '«- v0.6 桌面端稳定版»')).toBe('- **«v0.6 桌面端稳定版»**');
+    expect(run(bold, '«- 甲\n- 乙»')).toBe('«- **甲**\n- **乙**»');
+    expect(run(strike, '«- [ ] 待办\n  2. 第二»')).toBe('«- [ ] ~~待办~~\n  2. ~~第二~~»');
+    expect(run(underline, '«> 引用\n## 标题»')).toBe('«> <u>引用</u>\n## <u>标题</u>»');
+    // 再按一次取消：选中整行也只去掉文字两侧的标记；只选中项头时不处理。
+    expect(run(bold, '«- **甲**»')).toBe('- «甲»');
+    expect(run(bold, '«- »甲')).toBe('«- »甲');
+    // 不是列表项头的写法照常包住。
+    expect(run(bold, '«-5 度»')).toBe('**«-5 度»**');
+  });
 });
 
 describe('链接', () => {

@@ -183,12 +183,27 @@ function pairs(before: number, after: number, marker: string): boolean {
   return before >= marker.length && after >= marker.length;
 }
 
-/** 给单行文字加上或去掉标记，标记紧贴文字，不包住首尾空白。 */
+/** 行首的块级标记：引用的 >、标题的 #、列表项头与待办框。行内格式只能加在它们之后。 */
+const BLOCK_PREFIX = /^(?:[ \t]{0,3}>[ \t]?)*[ \t]*(?:#{1,6}[ \t]+|(?:[-+*]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?)?/;
+
+/**
+ * 把行内格式的起点挪到块级标记之后：选区从行首开始时（例如选中整个列表项、跨行选中几项），
+ * 加粗、删除线等标记若包住 `- ` 这样的项头，列表就不再是列表。
+ */
+function afterBlockPrefix(value: string, from: number): number {
+  const lineStart = Math.max(value.lastIndexOf('\n', from - 1), value.lastIndexOf('\r', from - 1)) + 1;
+  const lineEnd = value.slice(lineStart).search(/\r|\n/);
+  const line = lineEnd < 0 ? value.slice(lineStart) : value.slice(lineStart, lineStart + lineEnd);
+  const prefix = (line.match(BLOCK_PREFIX) ?? [''])[0].length;
+  return Math.max(from, lineStart + prefix);
+}
+
+/** 给单行文字加上或去掉标记，标记紧贴文字，不包住首尾空白与行首的块级标记。 */
 function toggleLineSpan(value: string, start: number, end: number, marker: string): EditResult {
   const text = value.slice(start, end);
   const lead = (text.match(/^\s*/) ?? [''])[0].length;
   const trail = text.trim() ? (text.match(/\s*$/) ?? [''])[0].length : 0;
-  const from = start + lead;
+  const from = afterBlockPrefix(value, start + lead);
   const to = end - trail;
   if (from >= to) return { value, start, end };
   const character = marker[0];
@@ -261,12 +276,12 @@ export function toggleInline(value: string, start: number, end: number, marker: 
   return { value: result, start, end: selectionEnd };
 }
 
-/** 给单行文字加上或去掉一对 HTML 标签，标签紧贴文字，不包住首尾空白。 */
+/** 给单行文字加上或去掉一对 HTML 标签，标签紧贴文字，不包住首尾空白与行首的块级标记。 */
 function toggleTagSpan(value: string, start: number, end: number, open: string, close: string): EditResult {
   const text = value.slice(start, end);
   const lead = (text.match(/^\s*/) ?? [''])[0].length;
   const trail = text.trim() ? (text.match(/\s*$/) ?? [''])[0].length : 0;
-  const from = start + lead;
+  const from = afterBlockPrefix(value, start + lead);
   const to = end - trail;
   if (from >= to) return { value, start, end };
   const is = (at: number, tag: string): boolean => value.slice(at, at + tag.length).toLowerCase() === tag;
