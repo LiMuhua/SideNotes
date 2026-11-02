@@ -38,6 +38,23 @@ export function App({ role }: AppProps) {
     return store.connectSync();
   }, []);
 
+  /* ==================== 拖入文件的兜底 ==================== */
+  // 窗口关闭了 Tauri 的拖放接管，拖入的文件由网页处理：侧栏见 useFileDrop，附件弹窗与速记浮窗各自接收。
+  // 没人处理的位置也要阻止默认行为，否则松开时窗口会打开这个文件，离开应用界面。
+  useEffect(() => {
+    const guard = (event: DragEvent): void => {
+      if (event.defaultPrevented || !Array.from(event.dataTransfer?.types ?? []).includes('Files')) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'none';
+    };
+    window.addEventListener('dragover', guard);
+    window.addEventListener('drop', guard);
+    return () => {
+      window.removeEventListener('dragover', guard);
+      window.removeEventListener('drop', guard);
+    };
+  }, []);
+
   /* ==================== 主题、字体与材质 ==================== */
   // 原型同时在 html 与 body 上标记主题和材质，部分样式按 :root 匹配。
   // 字体应用到全部界面文字（desktop.css 中 :root 使用同一变量），正文保持 13px 的设计字号。

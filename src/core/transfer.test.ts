@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { noteDisplay } from './display';
 import { parseBlocks, type InlineNode } from './markdown';
-import { insertLine, moveImage, moveReference, removeRange } from './transfer';
+import { insertAtDisplayLine, insertLine, moveImage, moveReference, removeRange } from './transfer';
 import type { Note } from './types';
 
 function note(id: string, text: string, images: Note['images'] = []): Note {
@@ -101,6 +101,12 @@ describe('移动引用', () => {
     const moved = moveReference(pathNote, target, start, end, 0);
     expect(moved?.sourceText).toBe('路径\n说明');
     expect(moved?.targetText.startsWith('目标\nC:\\docs\\a.txt\n')).toBe(true);
+  });
+
+  it('拖入的多个文件作为单独的行插到段落之间或正文末尾', () => {
+    const files = '![图](C:\\a\\图.png)\n[表.xlsx](C:\\a\\表.xlsx)';
+    expect(insertAtDisplayLine(target, 3, files)).toBe(`目标\n\n第一段\n\n${files}\n第二段\n\n#生活`);
+    expect(insertAtDisplayLine(target, Number.MAX_SAFE_INTEGER, files)).toBe(`目标\n\n第一段\n\n第二段\n${files}\n\n#生活`);
   });
 });
 

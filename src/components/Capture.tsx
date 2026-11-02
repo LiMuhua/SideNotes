@@ -14,7 +14,8 @@ import { useStore } from '../hooks/useStore';
 import { useToast } from '../hooks/useToast';
 import * as store from '../core/store';
 import * as bridge from '../core/bridge';
-import { chooseAndImportFiles, openAttachment, replaceReference } from '../core/attachments';
+import { chooseAndImportFiles, importPastedFiles, openAttachment, replaceReference } from '../core/attachments';
+import { caretFromPoint, isFileDrag } from '../hooks/useFileDrop';
 import type { NoteImage } from '../core/types';
 import type { EditorAttachment, MarkdownEditor } from '../core/editor';
 
@@ -70,6 +71,59 @@ export function Capture() {
       },
     });
   }, []);
+
+  // 从资源管理器拖入文件：保存为附件副本，插在指针所指的位置（指针不在文字上时接在末尾）。
+  // 附件弹窗开着时交给弹窗处理。文件放到正获得焦点的编辑面上时 WebView2 不派发 drop 事件，
+  // 拖入期间先取消编辑面的焦点，拖出窗口时还回去（与侧栏的 useFileDrop 相同）。
+  useEffect(() => {
+    let blurred: HTMLElement | null = null;
+    const accepts = (event: DragEvent): boolean => isFileDrag(event) && !document.querySelector('.modal-backdrop');
+    const handleOver = (event: DragEvent): void => {
+      if (!accepts(event)) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+      const active = document.activeElement;
+      if (!blurred && active instanceof HTMLElement && active.isContentEditable) {
+        blurred = active;
+        active.blur();
+      }
+    };
+    const handleLeave = (event: DragEvent): void => {
+      if (!blurred || event.relatedTarget !== null) return;
+      if (blurred.isConnected) blurred.focus({ preventScroll: true });
+      blurred = null;
+    };
+    const handleDrop = (event: DragEvent): void => {
+      if (!accepts(event)) return;
+      event.preventDefault();
+      blurred = null;
+      const editor = editorRef.current;
+      const files = Array.from(event.dataTransfer?.files ?? []);
+      if (!editor || !files.length) return;
+      const point = caretFromPoint(event.clientX, event.clientY);
+      const offset = (point && editor.sourceOffset(point.node, point.offset)) ?? editor.getValue().length;
+      store.setPendingAttachments(1);
+      void importPastedFiles(files)
+        .then((markdown) => {
+          editor.focus({ preventScroll: true });
+          editor.replace(markdown, { start: offset, end: offset, direction: 'none' });
+        })
+        .catch((error: unknown) =>
+          toast(`文件未能插入：${bridge.errorText(error, '请稍后重试')}`, null, true),
+        )
+        .finally(() => store.setPendingAttachments(-1));
+    };
+    document.addEventListener('dragenter', handleOver, true);
+    document.addEventListener('dragover', handleOver, true);
+    document.addEventListener('dragleave', handleLeave, true);
+    document.addEventListener('drop', handleDrop, true);
+    return () => {
+      document.removeEventListener('dragenter', handleOver, true);
+      document.removeEventListener('dragover', handleOver, true);
+      document.removeEventListener('dragleave', handleLeave, true);
+      document.removeEventListener('drop', handleDrop, true);
+    };
+  }, [toast]);
 
   // 同步到共享草稿（防抖写盘由外层 persistDraft 处理）。
   useEffect(() => {

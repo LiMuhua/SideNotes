@@ -2,7 +2,7 @@
  * 附件弹窗。
  *
  * 点击卡片或编辑面中的图片、文件引用时打开（按住 Ctrl 点击则直接打开文件，由调用方处理）：
- * 显示预览与引用的 Markdown 原文，可以直接修改原文，或点「更换」替换，
+ * 显示预览与引用的 Markdown 原文，可以直接修改原文，把新文件拖进弹窗或点「更换」替换，
  * 也可以用系统程序打开、另存为或删除这个引用。以 data URL 保存在记录里的图片附件没有原文，
  * 只提供更换、另存为与删除。
  *
@@ -64,6 +64,7 @@ export function AttachmentDialog({
   const [draft, setDraft] = useState(reference?.source ?? '');
   const [status, setStatus] = useState<FileStatus | null>(null);
   const [busy, setBusy] = useState(false);
+  const [dragging, setDragging] = useState(false);
 
   // 本机文件：读取是否存在与大小。
   useEffect(() => {
@@ -143,6 +144,52 @@ export function AttachmentDialog({
       if (next === reference?.source || (await onReplaceSource?.(next))) onClose();
     }, '未能修改');
 
+  /** 用拖进弹窗的文件替换：内容保存为新的附件副本并改写引用，图片附件读成 data URL。 */
+  const replaceWithDropped = useCallback(
+    async (file: File): Promise<void> => {
+      if (embedded) {
+        const mime = file.type.startsWith('image/') ? file.type : imageMime(file.name);
+        if (!mime) throw new Error('请拖入图片文件');
+        if (file.size > MAX_IMAGE_BYTES) throw new Error('图片附件不能超过 2 MB');
+        const image: NoteImage = {
+          ...embedded,
+          name: file.name,
+          type: mime,
+          data: bytesToDataUrl(new Uint8Array(await file.arrayBuffer()), mime),
+        };
+        if (await onReplaceImage?.(image)) onClose();
+        return;
+      }
+      const imported = await bridge.importAttachment(file, file.name);
+      if (await onReplaceSource?.(referencesFor([imported]))) onClose();
+    },
+    [embedded, onReplaceImage, onReplaceSource, onClose],
+  );
+
+  // 把文件拖进弹窗即替换（WebView2 原生拖放，见 useFileDrop）。
+  const canDrop = editable && bridge.isDesktop();
+  const isFiles = (event: React.DragEvent): boolean => Array.from(event.dataTransfer.types).includes('Files');
+  const dropHandlers = canDrop
+    ? {
+        onDragOver: (event: React.DragEvent<HTMLDivElement>) => {
+          if (!isFiles(event)) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'copy';
+          setDragging(true);
+        },
+        onDragLeave: (event: React.DragEvent<HTMLDivElement>) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+        },
+        onDrop: (event: React.DragEvent<HTMLDivElement>) => {
+          if (!isFiles(event)) return;
+          event.preventDefault();
+          setDragging(false);
+          const file = event.dataTransfer.files[0];
+          if (file) void run(() => replaceWithDropped(file), '未能更换');
+        },
+      }
+    : {};
+
   // Esc 只关闭弹窗，不再传给侧栏（否则会顺带取消正在进行的编辑）。
   useEffect(() => {
     const handler = (event: KeyboardEvent): void => {
@@ -199,7 +246,7 @@ export function AttachmentDialog({
         </>
       }
     >
-      <div className="attachment-dialog">
+      <div className={dragging ? 'attachment-dialog is-dragging' : 'attachment-dialog'} {...dropHandlers}>
         {isImage ? (
           <img className="attachment-dialog-image" src={imageSource} alt={title} draggable={false} />
         ) : (
@@ -233,17 +280,21 @@ export function AttachmentDialog({
             />
           </label>
         ) : null}
-        {editable && reference ? (
+        {editable && (reference || canDrop) ? (
           <div className="attachment-dialog-actions">
-            <span className="attachment-dialog-hint">修改原文后应用</span>
-            <button
-              type="button"
-              className="button primary compact"
-              disabled={busy || draft.trim() === reference.source}
-              onClick={() => void apply()}
-            >
-              应用修改
-            </button>
+            <span className="attachment-dialog-hint">
+              {canDrop ? (dragging ? '松开即替换为拖入的文件' : `可把新${embedded ? '图片' : '文件'}拖到这里替换`) : '修改原文后应用'}
+            </span>
+            {reference ? (
+              <button
+                type="button"
+                className="button primary compact"
+                disabled={busy || draft.trim() === reference.source}
+                onClick={() => void apply()}
+              >
+                应用修改
+              </button>
+            ) : null}
           </div>
         ) : null}
       </div>

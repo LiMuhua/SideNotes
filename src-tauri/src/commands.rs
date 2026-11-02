@@ -196,23 +196,35 @@ pub async fn system_fonts() -> Vec<String> {
 /// 把粘贴的内容（截图或文件）写成附件副本，返回名称与副本路径。
 ///
 /// 内容以原始字节作为请求体传入，避免把大文件编码成 JSON 数组；文件名经 `x-file-name` 请求头
-/// 以 `encodeURIComponent` 编码传入。副本写到当前数据目录的附件文件夹中。
+/// 以 `encodeURIComponent` 编码传入。网页与后端的通道回落到 postMessage 时只能传 JSON，
+/// 前端改为传 `{ name, data }`，`data` 为 base64。副本写到当前数据目录的附件文件夹中。
 #[tauri::command]
 pub async fn import_attachment(
     state: State<'_, AppState>,
     request: tauri::ipc::Request<'_>,
 ) -> AppResult<ImportedFile> {
-    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
-        return Err(AppError::Other("附件内容格式不正确".into()));
-    };
-    let name = request
+    let header_name = request
         .headers()
         .get("x-file-name")
         .and_then(|value| value.to_str().ok())
         .map(attachments::percent_decode)
         .unwrap_or_default();
-    attachments::import_bytes(&state.store.directory(), &name, bytes)
+    match request.body() {
+        tauri::ipc::InvokeBody::Raw(bytes) => attachments::import_bytes(&state.store.directory(), &header_name, bytes),
+        tauri::ipc::InvokeBody::Json(value) => {
+            let data = value
+                .get("data")
+                .and_then(serde_json::Value::as_str)
+                .and_then(attachments::base64_decode)
+                .ok_or_else(|| AppError::Other(RAW_BODY_EXPECTED.into()))?;
+            let name = value.get("name").and_then(serde_json::Value::as_str).unwrap_or(&header_name);
+            attachments::import_bytes(&state.store.directory(), name, &data)
+        }
+    }
 }
+
+/// 请求体既不是原始字节、也没有 base64 内容时的错误，前端据此改用 base64 重试（见 bridge.importAttachment）。
+const RAW_BODY_EXPECTED: &str = "附件内容格式不正确";
 
 /// 把用户选择的文件复制为附件副本，按选择顺序返回名称与副本路径。
 #[tauri::command]

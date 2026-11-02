@@ -1416,6 +1416,10 @@ export class MarkdownEditor {
 
     this.listen(this.element, 'beforeinput', (event) => this.beforeInput(event as InputEvent));
 
+    // 编辑面内不拖动选中的文字：拖动是先删去原处再插到新位置，两步之间编辑器会重新排版，落点可能错位。
+    // 从别处拖来的文字照常插在落点（见 beforeInput 的 insertFromDrop）；拖入的文件由应用处理。
+    this.listen(this.element, 'dragstart', (event) => event.preventDefault());
+
     this.listen(this.element, 'input', (event) => {
       if (event.target === this.element) this.absorbDOM(!this.composing && !(event as InputEvent).isComposing);
     });

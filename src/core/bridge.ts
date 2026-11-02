@@ -350,6 +350,18 @@ export interface ImportedFile {
   path: string;
 }
 
+/** 后端在请求体既不是原始字节、也没有 base64 内容时返回的错误，见 commands.rs 的 import_attachment。 */
+const RAW_BODY_EXPECTED = '附件内容格式不正确';
+
+/** 字节写成 base64，分段拼接，避免大文件一次展开参数时超过调用栈上限。 */
+function toBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let index = 0; index < bytes.length; index += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+  }
+  return btoa(binary);
+}
+
 /** 取出错误说明：后端的错误是字符串，脚本错误是 Error。 */
 export function errorText(error: unknown, fallback = '请稍后重试'): string {
   if (typeof error === 'string' && error) return error;
@@ -357,13 +369,20 @@ export function errorText(error: unknown, fallback = '请稍后重试'): string 
 }
 
 /**
- * 把一段内容（粘贴的截图或文件）写成应用数据目录中的附件副本。
- * 内容以原始字节传给后端，文件名放在请求头中。浏览器预览不支持。
+ * 把一段内容（粘贴的截图或文件、拖入的文件）写成应用数据目录中的附件副本。
+ *
+ * 内容以原始字节传给后端，文件名放在请求头中。网页与后端的通道偶尔会回落到 postMessage
+ * （实测速记浮窗在隐藏期间出现过），这时请求体只能是 JSON，改用 base64 再传一次。浏览器预览不支持。
  */
 export async function importAttachment(content: Blob, name: string): Promise<ImportedFile> {
   if (!isDesktop()) throw new Error('浏览器预览不支持保存附件');
   const bytes = new Uint8Array(await content.arrayBuffer());
-  return invoke<ImportedFile>('import_attachment', bytes, { headers: { 'X-File-Name': encodeURIComponent(name) } });
+  try {
+    return await invoke<ImportedFile>('import_attachment', bytes, { headers: { 'X-File-Name': encodeURIComponent(name) } });
+  } catch (error) {
+    if (error !== RAW_BODY_EXPECTED) throw error;
+    return invoke<ImportedFile>('import_attachment', { name, data: toBase64(bytes) });
+  }
 }
 
 /** 把用户选择的文件复制为附件副本，按选择顺序返回。 */

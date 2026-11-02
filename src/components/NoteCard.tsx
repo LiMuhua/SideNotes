@@ -31,6 +31,11 @@ export interface NoteCardProps {
   menuOpen: boolean;
   /** 拖动图片或引用时，这张卡片是放下的目标。 */
   itemTarget: boolean;
+  /**
+   * 进入编辑时让编辑面获得焦点。从资源管理器拖入文件、停留后进入编辑时为 false：
+   * 拖动途中移动焦点会让 WebView2 不再派发放下事件，放下插入后再聚焦。
+   */
+  editAutoFocus?: boolean;
   /** 标签整理模式：显示标签删除按钮。 */
   tagsExpanded: boolean;
   /** 长按待启动排序的视觉反馈。 */
@@ -359,7 +364,7 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
             ariaLabel="编辑 Markdown 与标签"
             minHeight={100}
             maxHeight={300}
-            autoFocus
+            autoFocus={props.editAutoFocus ?? true}
             onChange={props.onEditChange}
             onReady={props.onEditReady}
             onAttachment={props.onAttachment}

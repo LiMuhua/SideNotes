@@ -939,7 +939,8 @@ body[data-window='settings'] .settings-delay-field > .settings-runtime-suffix {
 }
 
 /* ==================== 附件弹窗 ====================
- * 点击图片或文件引用时打开：预览、Markdown 原文与操作按钮。侧栏窗口较窄，弹窗随之收窄。 */
+ * 点击图片或文件引用时打开：预览、Markdown 原文与操作按钮。侧栏窗口较窄，弹窗随之收窄；
+ * 把文件拖进弹窗时整块描边提示「松开即替换」。 */
 
 .attachment-modal.modal {
   width: min(420px, calc(100vw - 24px));
@@ -959,6 +960,11 @@ body[data-window='settings'] .settings-delay-field > .settings-runtime-suffix {
   transition:
     border-color 0.15s,
     background 0.15s;
+}
+
+.attachment-dialog.is-dragging {
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .attachment-dialog-image {
@@ -1078,4 +1084,35 @@ body[data-window='settings'] .settings-delay-field > .settings-runtime-suffix {
   text-align: center;
   font-size: 10px;
   color: var(--muted);
+}
+
+/* ==================== 从资源管理器拖入文件 ====================
+ * 预览卡片沿用卡片之间拖动引用的插入线（.card-drop-guide）；编辑面中用一条竖线标出落点，
+ * 跟随指针的提示说明松开后插到哪里。 */
+
+.file-drop-caret {
+  position: fixed;
+  z-index: 1390;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+  pointer-events: none;
+}
+
+.file-drop-label {
+  position: fixed;
+  z-index: 1391;
+  max-width: 260px;
+  padding: 4px 8px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  box-shadow: 0 6px 18px color-mix(in srgb, #1d2a1d 22%, transparent);
+  pointer-events: none;
 }

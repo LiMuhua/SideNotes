@@ -14,6 +14,7 @@
     "windows": [
       {
         "label": "main",
+        "dragDropEnabled": false,
         "create": false,
         "title": "SideNotes",
         "url": "index.html",
@@ -33,6 +34,7 @@
       },
       {
         "label": "capture",
+        "dragDropEnabled": false,
         "create": false,
         "title": "SideNotes 速记",
         "url": "index.html",
@@ -52,6 +54,7 @@
       },
       {
         "label": "settings",
+        "dragDropEnabled": false,
         "create": false,
         "title": "SideNotes 设置",
         "url": "index.html",

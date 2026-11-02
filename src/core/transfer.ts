@@ -60,6 +60,16 @@ export function moveImage(
 }
 
 /**
+ * 把一段内容作为单独的行插到记录显示正文第 `line` 行之前，超出时接在正文末尾、标签之前。
+ * 卡片之间拖动引用与从资源管理器拖入文件共用。
+ */
+export function insertAtDisplayLine(target: Note, line: number, content: string): string {
+  const display = noteDisplay(target.text);
+  const targetLine = Math.max(0, Math.min(line, displayLineCount(display))) + display.lineShift;
+  return insertLine(target.text, targetLine, content);
+}
+
+/**
  * 移动正文中的引用：按显示正文中的范围 [start, end) 从来源记录取出，
  * 作为单独一行插到目标记录显示正文第 `line` 行之前（超出时接在正文末尾、标签之前）。
  *
@@ -79,11 +89,9 @@ export function moveReference(
   const sourceEnd = sourceOffset(source.text, from, end);
   const reference = source.text.slice(sourceStart, sourceEnd).trim();
   if (!/^!?\[[^\r\n]*\]\([^\r\n]*\)$/.test(reference) && !filePath(reference)) return null;
-  const to = noteDisplay(target.text);
-  const targetLine = Math.max(0, Math.min(line, displayLineCount(to))) + to.lineShift;
   return {
     sourceText: removeRange(source.text, sourceStart, sourceEnd),
-    targetText: insertLine(target.text, targetLine, reference),
+    targetText: insertAtDisplayLine(target, line, reference),
     reference,
   };
 }

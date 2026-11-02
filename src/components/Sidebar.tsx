@@ -27,12 +27,14 @@ import { AttachmentDialog, type AttachmentSubject } from "./AttachmentDialog";
 import { useStore } from "../hooks/useStore";
 import { useToast } from "../hooks/useToast";
 import { useCardInteractions, type ItemDrop } from "../hooks/useCardInteractions";
+import { useFileDrop, type FileDropTarget } from "../hooks/useFileDrop";
 import * as store from "../core/store";
 import * as bridge from "../core/bridge";
 import { matchesQuery, shouldNudgeTidy, inTab, compareNoteOrder, noteTitle } from "../core/notes";
-import { moveImage, moveReference } from "../core/transfer";
+import { insertAtDisplayLine, moveImage, moveReference } from "../core/transfer";
 import {
   chooseAndImportFiles,
+  importPastedFiles,
   openAttachment,
   replaceReference,
   type AttachmentReference,
@@ -82,6 +84,8 @@ export function Sidebar() {
   useEffect(() => {
     editingRef.current = editing;
   }, [editing]);
+  /** 正在从资源管理器拖入文件，见 useFileDrop。 */
+  const fileDraggingRef = useRef(false);
 
   /* ==================== UI 层叠状态 ==================== */
   const [tagsExpandedId, setTagsExpandedId] = useState<string | null>(null);
@@ -407,6 +411,8 @@ export function Sidebar() {
       const card = listRef.current?.querySelector(".note-card.is-editing");
       if (card?.contains(document.activeElement)) return;
       if (document.querySelector(".modal-backdrop")) return;
+      // 从资源管理器拖入文件期间编辑面会暂时让出焦点（见 useFileDrop），不算离开。
+      if (fileDraggingRef.current) return;
       if (store.getState().pendingAttachments > 0) return;
       void commitEdit();
     }, 0);
@@ -721,12 +727,80 @@ export function Sidebar() {
     onMoveItem: (drop) => void moveItem(drop),
   });
 
+  /* ==================== 从资源管理器拖入文件 ==================== */
+
+  /** 放下拖入的文件：保存为附件副本，插到落点（编辑面中的位置，或预览卡片的段落之间，可撤销）。 */
+  const dropFiles = useCallback(
+    async (target: FileDropTarget | null, files: File[]) => {
+      if (!files.length) return;
+      if (!target) {
+        toast("拖到卡片或新建卡片上才能插入", null, true);
+        return;
+      }
+      let markdown: string;
+      store.setPendingAttachments(1);
+      try {
+        markdown = await importPastedFiles(files);
+      } catch (error) {
+        toast(`文件未能插入：${bridge.errorText(error, "请稍后重试")}`, null, true);
+        return;
+      } finally {
+        store.setPendingAttachments(-1);
+      }
+      if (target.kind === "editor") {
+        target.editor.focus({ preventScroll: true });
+        target.editor.replace(markdown, { start: target.offset, end: target.offset, direction: "none" });
+        return;
+      }
+      const note = store.getState().notes.find((item) => item.id === target.noteId);
+      if (!note) return;
+      const undo = await store.updateNotes([{ id: note.id, text: insertAtDisplayLine(note, target.line, markdown) }]);
+      if (!undo) {
+        toast(SAVE_FAILED_MESSAGE, null, true);
+        return;
+      }
+      toast(`已${target.title}`, { label: "撤销", run: () => void store.restoreNotes(undo) });
+    },
+    [toast],
+  );
+
+  /** 拖入文件时停留进入编辑的卡片：编辑面先不获得焦点，放下插入后再聚焦（见 NoteCard 的 editAutoFocus）。 */
+  const [dragEditId, setDragEditId] = useState<string | null>(null);
+  const fileDrop = useFileDrop({
+    // 对话框开着时交给对话框处理（附件弹窗接收拖入的文件用于替换）。
+    enabled: () => !document.querySelector(".modal-backdrop"),
+    findNote: (id) => store.getState().notes.find((note) => note.id === id),
+    editing: () => (editingRef.current ? { id: editingRef.current.id, editor: editorRef.current } : null),
+    composerEditor: () => composerEditorRef.current,
+    beginEdit: (note) => {
+      setDragEditId(note.id);
+      beginEdit(note);
+    },
+    onActiveChange: (active, left) => {
+      // 拖动期间指针移出移入不会触发鼠标事件，开始时取消已安排的收起；拖出窗口后再安排收起。
+      // 编辑面只在创建时按 editAutoFocus 聚焦，拖动结束即可复原，之后双击编辑照常聚焦。
+      fileDraggingRef.current = active;
+      if (active) cancelHide();
+      else {
+        setDragEditId(null);
+        if (left) scheduleHide();
+      }
+    },
+    onDrop: (target, files) => void dropFiles(target, files),
+  });
+
   // 与原型 keepVisible 一致：固定、弹层、菜单、拖动与读取附件期间不自动收起；
   // 多选，以及「编辑时保持展开」开启时的编辑记录、整理标签与新建卡片的未保存内容，
   // 只在鼠标移出时保持展开：点到侧栏之外（整个侧栏失去焦点）照常收起，编辑中的卡片已在失焦时保存。
   const draftPending = Boolean(state.draft.text.trim() || state.draft.images.length);
   const hold = Boolean(
-    pinned || dialogOpen || contextMenu || sidebarMenu || interactions.busy || state.pendingAttachments > 0,
+    pinned ||
+      dialogOpen ||
+      contextMenu ||
+      sidebarMenu ||
+      interactions.busy ||
+      fileDrop.active ||
+      state.pendingAttachments > 0,
   );
   const holdWhileFocused = Boolean(
     interactions.hasSelection ||
@@ -1717,7 +1791,8 @@ export function Sidebar() {
                 current={currentId === note.id}
                 selected={interactions.selected.has(note.id)}
                 menuOpen={contextMenu?.note.id === note.id}
-                itemTarget={interactions.itemTargetId === note.id}
+                itemTarget={interactions.itemTargetId === note.id || fileDrop.targetId === note.id}
+                editAutoFocus={dragEditId !== note.id}
                 tagsExpanded={tagsExpandedId === note.id}
                 sortPending={interactions.pendingId === note.id}
                 sorting={interactions.sortingId === note.id}

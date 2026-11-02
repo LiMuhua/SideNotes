@@ -236,6 +236,36 @@ pub fn cleanup(root: &Path, texts: &[String], grace: Duration, now: SystemTime) 
     Ok(report)
 }
 
+/// 解码标准 base64（忽略空白与结尾的 =），内容无效时返回 None。
+///
+/// 网页与后端的通道偶尔会回落到 postMessage，这时请求体只能是 JSON，附件内容改以 base64 传入。
+pub fn base64_decode(input: &str) -> Option<Vec<u8>> {
+    fn value(character: u8) -> Option<u32> {
+        match character {
+            b'A'..=b'Z' => Some(u32::from(character - b'A')),
+            b'a'..=b'z' => Some(u32::from(character - b'a') + 26),
+            b'0'..=b'9' => Some(u32::from(character - b'0') + 52),
+            b'+' => Some(62),
+            b'/' => Some(63),
+            _ => None,
+        }
+    }
+    let digits: Vec<u8> = input.bytes().filter(|character| !character.is_ascii_whitespace()).collect();
+    let digits = digits.strip_suffix(b"==").or_else(|| digits.strip_suffix(b"=")).unwrap_or(&digits);
+    let mut out = Vec::with_capacity(digits.len() * 3 / 4);
+    let (mut buffer, mut bits) = (0u32, 0u32);
+    for &character in digits {
+        buffer = (buffer << 6) | value(character)?;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((buffer >> bits) as u8);
+            buffer &= (1 << bits) - 1;
+        }
+    }
+    Some(out)
+}
+
 /// 解码 `encodeURIComponent` 编码的文字（附件名经请求头传入，请求头只能是 ASCII）。
 pub fn percent_decode(value: &str) -> String {
     fn hex(byte: u8) -> Option<u8> {
@@ -343,6 +373,16 @@ mod tests {
         assert_eq!(percent_decode("%E6%88%AA%E5%9B%BE%201.png"), "截图 1.png");
         assert_eq!(percent_decode("plain.txt"), "plain.txt");
         assert_eq!(percent_decode("bad%zz%"), "bad%zz%");
+    }
+
+    #[test]
+    fn decodes_base64() {
+        assert_eq!(base64_decode("aGk=").unwrap(), b"hi");
+        assert_eq!(base64_decode("aGVsbG8gd29ybGQ=").unwrap(), b"hello world");
+        assert_eq!(base64_decode("AAEC/w==").unwrap(), vec![0, 1, 2, 255]);
+        assert_eq!(base64_decode(" aG\nk= ").unwrap(), b"hi");
+        assert_eq!(base64_decode("").unwrap(), Vec::<u8>::new());
+        assert!(base64_decode("a*b").is_none());
     }
 
     #[test]
