@@ -159,6 +159,11 @@ body[data-window='sidebar'] .sidebar .note-list {
   mask-image: linear-gradient(to bottom, transparent 0, #000 6px);
 }
 
+/* 卡片正文的最大高度由设置决定（按 13px 字号计），超出部分沿用原型的渐隐，悬停时提示双击查看全文。 */
+body[data-window='sidebar'] .note-card > .note-content {
+  max-height: var(--note-content-max-height, 220px);
+}
+
 /* 侧栏搜索框换成带标签联想的输入框：外层占满输入区，灰字覆盖在输入框上。 */
 .header-search-field .tag-input-shell {
   display: flex;

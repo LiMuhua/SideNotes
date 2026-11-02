@@ -24,6 +24,7 @@ describe('设置校验', () => {
     expect(settings.trashDays).toBe(30);
     expect(settings.protectEditing).toBe(true);
     expect(settings.cloud.enabled).toBe(false);
+    expect(settings.cardMaxHeight).toBe(220);
     expect(settings.guideSeen).toBe(false);
   });
 
@@ -50,6 +51,8 @@ describe('设置校验', () => {
     expect(normalizeSettings({ hideDelay: 99_999 }).hideDelay).toBe(10_000);
     expect(normalizeSettings({ hideDelay: 850 }).hideDelay).toBe(850);
     expect(normalizeSettings({ hideDelay: 'abc' }).hideDelay).toBe(600);
+    expect(normalizeSettings({ cardMaxHeight: 50 }).cardMaxHeight).toBe(120);
+    expect(normalizeSettings({ cardMaxHeight: 5000 }).cardMaxHeight).toBe(600);
   });
 
   it('移出后收起的输入可带毫秒或秒的单位', () => {

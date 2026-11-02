@@ -26,6 +26,10 @@ export const HIDE_DELAYS = [300, 600, 1000] as const;
 export const HIDE_DELAY_RANGE = { min: 100, max: 10_000 } as const;
 /** 侧栏出入动画时长范围（毫秒），0 表示关闭动画。 */
 export const ANIM_DURATION_RANGE = { min: 0, max: 600, step: 20 } as const;
+/** 卡片正文最大高度范围（按 13px 字号计的网页像素）。 */
+export const CARD_HEIGHT_RANGE = { min: 120, max: 600, step: 10 } as const;
+/** 卡片正文的默认最大高度：原型为 186，按用户要求略微加大。 */
+export const DEFAULT_CARD_HEIGHT = 220;
 
 /**
  * 设置的结构版本。
@@ -88,6 +92,7 @@ export function normalizeSettings(value: unknown = {}): Settings {
     animDuration: clampInt(input.animDuration, ANIM_DURATION_RANGE.min, ANIM_DURATION_RANGE.max, 260),
     protectEditing: input.protectEditing !== false,
     edgeTrigger: input.edgeTrigger !== false,
+    cardMaxHeight: clampInt(input.cardMaxHeight, CARD_HEIGHT_RANGE.min, CARD_HEIGHT_RANGE.max, DEFAULT_CARD_HEIGHT),
     guideSeen: input.guideSeen === true,
     lazyLoading: input.lazyLoading !== false,
     pageSize: clampInt(input.pageSize, PAGE_SIZE_RANGE.min, PAGE_SIZE_RANGE.max, 10),

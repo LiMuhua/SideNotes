@@ -99,6 +99,8 @@ export interface Settings {
   protectEditing: boolean;
   /** 鼠标移到屏幕边缘时唤出侧栏。 */
   edgeTrigger: boolean;
+  /** 卡片正文的最大高度（按 13px 字号计的网页像素），超出部分渐隐，双击卡片查看全文。 */
+  cardMaxHeight: number;
   /** 是否已看过使用指南；首次启动时显示一次，之后可从侧栏菜单再次打开。 */
   guideSeen: boolean;
   /** 滚动按需加载。 */

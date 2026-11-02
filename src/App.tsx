@@ -51,6 +51,7 @@ export function App({ role }: AppProps) {
     document.body.dataset.edge = settings.edge;
     root.style.setProperty('--note-font-family', resolveFontFamily(settings.fontFamily));
     root.style.setProperty('--sidebar-width', `${settings.width}px`);
+    root.style.setProperty('--note-content-max-height', `${settings.cardMaxHeight}px`);
   }, [settings]);
 
   /* ==================== 字号：全局的界面缩放 ==================== */

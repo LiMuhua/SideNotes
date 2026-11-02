@@ -9,6 +9,7 @@
 import { useState } from 'react';
 import {
   ANIM_DURATION_RANGE,
+  CARD_HEIGHT_RANGE,
   FONT_SIZE_RANGE,
   HIDE_DELAY_RANGE,
   HIDE_DELAYS,
@@ -288,6 +289,22 @@ export function AppearancePanel({ settings, save }: PanelProps) {
               step={ANIM_DURATION_RANGE.step}
               unit=" ms"
               onSave={(animDuration) => save({ animDuration })}
+            />
+          </Row>
+          <Row
+            title="卡片高度"
+            description="卡片正文的最大高度，按 13px 字号计。超出部分渐隐显示，双击卡片可查看全文。"
+            className="sidebar-width-row"
+          >
+            <RangeField
+              label="卡片最大高度"
+              settingKey="cardMaxHeight"
+              value={settings.cardMaxHeight}
+              min={CARD_HEIGHT_RANGE.min}
+              max={CARD_HEIGHT_RANGE.max}
+              step={CARD_HEIGHT_RANGE.step}
+              unit=" px"
+              onSave={(cardMaxHeight) => save({ cardMaxHeight })}
             />
           </Row>
         </div>
