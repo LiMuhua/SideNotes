@@ -453,6 +453,8 @@ mod tests {
         assert_eq!(snapshot.settings["theme"], "dark");
         assert_eq!(snapshot.tag_usage["测试"].count, 2);
 
+        // Windows 不能删除仍被打开的文件，先关闭数据库连接再删除，否则临时文件会留在系统临时目录。
+        drop(store);
         let _ = std::fs::remove_file(&path);
     }
 
@@ -487,6 +489,7 @@ mod tests {
         assert_eq!(remaining.notes.len(), 2);
         assert!(remaining.notes.iter().all(|note| note.id != "stale"));
 
+        drop(store);
         let _ = std::fs::remove_file(&path);
     }
 }
