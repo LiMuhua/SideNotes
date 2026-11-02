@@ -149,19 +149,27 @@ export function inTab(note: Note, tab: TabKey): boolean {
  * 支持正文与多个标签组合的搜索。
  *
  * 查询中的 `#标签` 按前缀匹配，其余词条在正文、标签与图片名中逐词匹配。
+ * 单独的 `#`（后面还没有输入标签名）表示「带标签的记录」：与继续输入时按前缀逐步缩小的结果一致，
+ * 不再当作字面的 # 去正文里找。
  */
 export function matchesQuery(note: Note, query: string): boolean {
   if (!String(query).trim()) return true;
   const parsed = parse(note.text);
   const tags: string[] = [];
+  let anyTag = false;
   const text = String(query)
     .replace(/(?:^|\s)#([\p{L}\p{N}_-]+)/gu, (_match, tag: string) => {
       tags.push(tagKey(tag));
       return ' ';
     })
+    .replace(/(?:^|\s)#(?=\s|$)/gu, () => {
+      anyTag = true;
+      return ' ';
+    })
     .trim()
     .toLocaleLowerCase();
 
+  if (anyTag && !parsed.tags.length) return false;
   const tagsMatch = tags.every((tag) => parsed.tags.some((item) => tagKey(item).startsWith(tag)));
   if (!tagsMatch) return false;
 

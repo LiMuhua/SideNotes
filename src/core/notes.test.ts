@@ -151,6 +151,16 @@ describe('搜索', () => {
     expect(matchesQuery(target, '#设计')).toBe(false);
   });
 
+  it('只输入 # 时匹配带标签的记录，字面的 # 仍可搜索', () => {
+    const tagged = note({ text: '周会纪要 #工作' });
+    const plain = note({ text: '学习 C# 语法' });
+    expect(matchesQuery(tagged, '#')).toBe(true);
+    expect(matchesQuery(plain, '#')).toBe(false);
+    expect(matchesQuery(tagged, '# 周会')).toBe(true);
+    expect(matchesQuery(tagged, '# 学习')).toBe(false);
+    expect(matchesQuery(plain, 'C#')).toBe(true);
+  });
+
   it('匹配图片附件名称', () => {
     const target = note({
       text: '配色参考',
