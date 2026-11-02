@@ -904,3 +904,11 @@ body[data-window='settings'] .settings-delay-field > .settings-runtime-suffix {
 .usage-guide-section li + li {
   margin-top: 2px;
 }
+
+/* 按需加载：列表底部的提示，滚动到这里时追加下一批记录。 */
+.list-load-more {
+  padding: 10px 0 14px;
+  text-align: center;
+  font-size: 10px;
+  color: var(--muted);
+}

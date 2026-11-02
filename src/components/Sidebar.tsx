@@ -313,6 +313,33 @@ export function Sidebar() {
     return tab === "pinned" ? pinned : [...pinned, ...normal];
   }, [state.notes, tab, query, selectedTag]);
 
+  /* ==================== 按需加载 ==================== */
+  // 开启「滚动按需加载」时先渲染一批，滚动到列表底部再追加下一批；切换页签、搜索或筛选标签后从第一批开始。
+  // 只影响渲染：多选、全选、收起全部与复制仍按整个列表处理。
+  const pageSize = state.settings.lazyLoading ? state.settings.pageSize : Number.POSITIVE_INFINITY;
+  const viewKey = `${tab}\u0000${query}\u0000${selectedTag}`;
+  const [loaded, setLoaded] = useState({ key: viewKey, count: pageSize });
+  const loadedCount = loaded.key === viewKey ? Math.max(loaded.count, pageSize) : pageSize;
+  const renderedNotes = useMemo(() => listNotes.slice(0, loadedCount), [listNotes, loadedCount]);
+  const hasMore = renderedNotes.length < listNotes.length;
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const sentinel = loadMoreRef.current;
+    const list = listRef.current;
+    if (!hasMore || !sentinel || !list) return;
+    // 底部提示进入列表（提前 120 像素）时追加一批；追加后若仍在可见范围内，会立即再追加，直到填满列表。
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setLoaded({ key: viewKey, count: loadedCount + pageSize });
+        }
+      },
+      { root: list, rootMargin: "0px 0px 120px 0px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, viewKey, loadedCount, pageSize]);
+
   /* ==================== 整理提醒（纯派生值，叠加本次会话内的关闭标记） ==================== */
   const nudgeVisible = !nudgeDismissed && shouldNudgeTidy(state.notes, state.settings);
 
@@ -1528,7 +1555,7 @@ export function Sidebar() {
               ) : null}
             </div>
           ) : (
-            listNotes.map((note) => (
+            renderedNotes.map((note) => (
               <NoteCard
                 key={note.id}
                 note={note}
@@ -1597,6 +1624,11 @@ export function Sidebar() {
               />
             ))
           )}
+          {hasMore ? (
+            <div ref={loadMoreRef} className="list-load-more" role="status">
+              {`已显示 ${renderedNotes.length} / ${listNotes.length} 条，继续滚动加载`}
+            </div>
+          ) : null}
         </div>
 
         {/* 底部状态栏 */}
