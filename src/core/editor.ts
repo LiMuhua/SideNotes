@@ -1554,8 +1554,46 @@ export class MarkdownEditor {
   }
 
   /**
-   * Home 与 End：列表项、待办、标题与引用中，Home 回到正文开头而不是项头之前；光标在项头之中或正文开头时，
-   * End 移到正文第一行的末尾。其余情况交给浏览器，折行时仍按显示的行移动。返回 true 表示已处理。
+   * 正文文字开始的位置：从 `from`（块级标记之后）起，跳过紧挨着的行内格式开头标记，
+   * 如加粗的 **、链接的 [。按渲染出的标记节点判断：开头标记的分组从它自己开始。
+   */
+  private textStart(index: number, from: number): number {
+    const line = this.element.children[index];
+    let offset = from;
+    while (line) {
+      const marker = line.querySelector<HTMLElement>(
+        `.md-syntax[data-md-start="${offset}"][data-md-group-start="${offset}"]`,
+      );
+      const end = Number(marker?.dataset.mdEnd);
+      if (!marker || !(end > offset)) break;
+      offset = end;
+    }
+    return offset;
+  }
+
+  /**
+   * 行内第一个看得见的正文字符之后的位置：不在项头、装饰节点与隐藏的标记里。
+   * 紧挨项头的位置会被浏览器归到 inline-block 的项头里，隐藏的标记里又放不下光标，所以取第一个字之后。
+   */
+  private firstVisibleText(index: number): { node: Node; offset: number } | null {
+    const line = this.element.children[index];
+    if (!line) return null;
+    const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+    let node: Node | null;
+    while ((node = walker.nextNode())) {
+      const parent = node.parentElement;
+      if (!node.textContent || !parent || parent.closest('.md-list-marker, [data-md-decoration], [hidden], .is-hidden')) {
+        continue;
+      }
+      return { node, offset: 1 };
+    }
+    return null;
+  }
+
+  /**
+   * Home 与 End，按正文跳转。Home 回到正文文字的开头：列表项、待办、标题与引用跳过项头，
+   * 以加粗、链接等格式开头的行再跳过紧挨着的开头标记。光标在项头之中或正文开头时，End 移到正文第一行的末尾。
+   * 其余情况交给浏览器，折行时仍按显示的行移动。返回 true 表示已处理。
    */
   private moveToLineBoundary(home: boolean, extend: boolean): boolean {
     const current = this.readSelection();
@@ -1564,26 +1602,31 @@ export class MarkdownEditor {
     const anchor = backward ? current.end : current.start;
     const index = this.lineAt(focus);
     const line = this.lines[index];
-    const contentStart = line.start + this.contentOffset(index);
-    if (contentStart === line.start || (!home && focus > contentStart)) return false;
-    // 先按浏览器的方式移到显示行的开头或末尾：Home 落进项头（第一行）时改为正文开头，
-    // 折行后的其它行照常停在行首；End 停在正文第一行的末尾。End 从正文第一个字之后出发：
-    // 紧挨项头的位置会被浏览器归到 inline-block 的项头里，从那里只能移到项头末尾。
-    const start = home ? focus : Math.min(contentStart + 1, line.end);
-    const reached = this.lineBoundaryFrom(start, home ? 'backward' : 'forward');
-    if (reached === null) return false;
-    const target = home ? Math.max(reached, contentStart) : reached;
+    const prefixEnd = line.start + this.contentOffset(index);
+    let target: number | null;
+    if (home) {
+      const textStart = this.textStart(index, prefixEnd);
+      if (textStart === line.start) return false;
+      // 先按浏览器的方式移到显示行的开头：落到正文文字之前（第一行）时改为正文文字开头，折行后的其它行照常停在行首。
+      const reached = this.lineBoundaryFrom(this.domPoint(focus), 'backward');
+      if (reached === null) return false;
+      target = Math.max(reached, textStart);
+    } else {
+      if (prefixEnd === line.start || focus > prefixEnd) return false;
+      const start = this.firstVisibleText(index);
+      target = start ? this.lineBoundaryFrom(start, 'forward') : line.end;
+      if (target === null) return false;
+    }
     const from = extend ? anchor : target;
     const direction = target < from ? 'backward' : target > from ? 'forward' : 'none';
     this.setSelectionRange(Math.min(from, target), Math.max(from, target), direction);
     return true;
   }
 
-  /** 从原文位置出发，按浏览器的方式移到所在显示行的开头或末尾，返回到达的原文位置。 */
-  private lineBoundaryFrom(offset: number, direction: 'forward' | 'backward'): number | null {
+  /** 从 DOM 位置出发，按浏览器的方式移到所在显示行的开头或末尾，返回到达的原文位置。 */
+  private lineBoundaryFrom(point: { node: Node; offset: number }, direction: 'forward' | 'backward'): number | null {
     const selection = window.getSelection();
     if (!selection || typeof selection.modify !== 'function') return null;
-    const point = this.domPoint(offset);
     selection.collapse(point.node, point.offset);
     selection.modify('move', direction, 'lineboundary');
     return this.sourceOffset(selection.focusNode, selection.focusOffset);

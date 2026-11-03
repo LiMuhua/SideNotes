@@ -15,6 +15,29 @@ function caretAt(editor: MarkdownEditor, offset: number): void {
   editor.setSelectionRange(offset, offset);
 }
 
+/** jsdom 没有 Selection.modify：按整行模拟浏览器移到显示行的开头或末尾。返回还原函数。 */
+function fakeLineBoundary(): () => void {
+  const proto = Selection.prototype as unknown as {
+    modify?: (alter: string, direction: string, granularity: string) => void;
+  };
+  const original = proto.modify;
+  proto.modify = function (this: Selection, _alter: string, direction: string) {
+    const node = this.focusNode;
+    const line = (node instanceof Element ? node : node?.parentElement)?.closest('.md-editor-line');
+    if (line) this.collapse(line, direction === 'backward' ? 0 : line.childNodes.length);
+  };
+  return () => {
+    proto.modify = original;
+  };
+}
+
+/** 在编辑面上按下一个键，返回编辑器是否接管（阻止了默认行为）。 */
+function pressKey(editor: MarkdownEditor, key: string, shiftKey = false): boolean {
+  const event = new KeyboardEvent('keydown', { key, shiftKey, bubbles: true, cancelable: true });
+  editor.element.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+
 describe('实时 Markdown 编辑器', () => {
   beforeEach(() => {
     document.body.replaceChildren();
@@ -78,38 +101,48 @@ describe('实时 Markdown 编辑器', () => {
   });
 
   it('列表项中 Home 回到正文开头，正文开头按 End 到达行尾，按住 Shift 时扩选', () => {
-    const proto = Selection.prototype as unknown as {
-      modify?: (alter: string, direction: string, granularity: string) => void;
-    };
-    const original = proto.modify;
-    // jsdom 没有 Selection.modify：按整行模拟浏览器移到显示行的开头或末尾。
-    proto.modify = function (this: Selection, _alter: string, direction: string) {
-      const node = this.focusNode;
-      const line = (node instanceof Element ? node : node?.parentElement)?.closest('.md-editor-line');
-      if (line) this.collapse(line, direction === 'backward' ? 0 : line.childNodes.length);
-    };
+    const restore = fakeLineBoundary();
     try {
       const { editor } = mount('- [ ] 待办内容');
-      const press = (target: MarkdownEditor, key: string, shiftKey = false): boolean => {
-        const event = new KeyboardEvent('keydown', { key, shiftKey, bubbles: true, cancelable: true });
-        target.element.dispatchEvent(event);
-        return event.defaultPrevented;
-      };
       caretAt(editor, 8);
-      expect(press(editor, 'Home')).toBe(true);
+      expect(pressKey(editor, 'Home')).toBe(true);
       expect(editor.readSelection()).toEqual({ start: 6, end: 6, direction: 'none' });
-      expect(press(editor, 'End')).toBe(true);
+      expect(pressKey(editor, 'End')).toBe(true);
       expect(editor.readSelection()).toEqual({ start: 10, end: 10, direction: 'none' });
       // 已在正文之中时 End 交给浏览器，折行时按显示的行移动。
-      expect(press(editor, 'End')).toBe(false);
-      expect(press(editor, 'Home', true)).toBe(true);
+      expect(pressKey(editor, 'End')).toBe(false);
+      expect(pressKey(editor, 'Home', true)).toBe(true);
       expect(editor.readSelection()).toEqual({ start: 6, end: 10, direction: 'backward' });
       // 没有项头的普通段落不处理。
       const plain = mount('普通文字').editor;
       caretAt(plain, 2);
-      expect(press(plain, 'Home')).toBe(false);
+      expect(pressKey(plain, 'Home')).toBe(false);
     } finally {
-      proto.modify = original;
+      restore();
+    }
+  });
+
+  it('以加粗开头的列表项：光标在项头上时 End 到达行尾，Home 停在加粗文字开头', () => {
+    const restore = fakeLineBoundary();
+    try {
+      const { editor } = mount('- **v0.7 数据导入导出**');
+      // 光标在「-」上：正文开头是隐藏的 **，End 不能再停回项头之后。
+      caretAt(editor, 1);
+      expect(pressKey(editor, 'End')).toBe(true);
+      expect(editor.readSelection().end).toBe(17);
+      caretAt(editor, 0);
+      expect(pressKey(editor, 'Home')).toBe(true);
+      expect(editor.readSelection()).toEqual({ start: 4, end: 4, direction: 'none' });
+      caretAt(editor, 9);
+      expect(pressKey(editor, 'Home')).toBe(true);
+      expect(editor.readSelection().start).toBe(4);
+      // 普通段落以加粗开头时，Home 同样停在文字开头。
+      const plain = mount('**粗体**开头').editor;
+      caretAt(plain, 5);
+      expect(pressKey(plain, 'Home')).toBe(true);
+      expect(plain.readSelection().start).toBe(2);
+    } finally {
+      restore();
     }
   });
 
