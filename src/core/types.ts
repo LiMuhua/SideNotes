@@ -151,6 +151,18 @@ export interface StorageInfo {
   unavailableDirectory: string;
 }
 
+/** 导出备份的结果。 */
+export interface ExportReport {
+  /** 导出的文件夹。 */
+  directory: string;
+  /** 其中的 JSON 文件。 */
+  file: string;
+  /** 一并导出的附件数。 */
+  attachments: number;
+  /** 记录引用了、但数据目录中已经找不到的附件数。 */
+  missing: number;
+}
+
 /** 更换数据存储位置的结果。 */
 export interface MigrationReport {
   /** 新的数据目录。 */

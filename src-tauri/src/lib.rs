@@ -1,6 +1,7 @@
 //! SideNotes 桌面端入口。
 
 mod attachments;
+mod backup;
 mod commands;
 mod edge;
 mod error;
@@ -126,6 +127,8 @@ pub fn run() {
             commands::export_attachment,
             commands::cleanup_attachments,
             commands::migrate_storage,
+            commands::export_backup,
+            commands::import_backup_attachments,
             commands::list_snapshots,
             commands::create_snapshot,
             commands::auto_snapshot,

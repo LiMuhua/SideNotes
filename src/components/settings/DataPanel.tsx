@@ -9,15 +9,13 @@
 import { useEffect, useState } from 'react';
 import * as bridge from '../../core/bridge';
 import * as store from '../../core/store';
-import { normalizeDraft, normalizeNote } from '../../core/notes';
+import { BACKUP_ATTACHMENTS, backupName, parseBackup, rewriteAttachmentPaths, type ParsedBackup } from '../../core/backup';
 import { formatBytes } from '../../core/files';
 import { snapshotReason, snapshotTime } from '../../core/snapshots';
 import type {
   CloudProvider,
   CloudSettings,
   DataSnapshot,
-  Draft,
-  Note,
   Settings,
   SnapshotOverview,
   StorageInfo,
@@ -76,23 +74,6 @@ function reason(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : typeof error === 'string' ? error : fallback;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object';
-}
-
-/** 解析备份文件，与原型 inspectImport 的校验规则一致。 */
-function parseBackup(text: string): { notes: Note[]; draft: Draft | null } {
-  const parsed: unknown = JSON.parse(text);
-  const rawNotes = Array.isArray(parsed) ? parsed : isRecord(parsed) ? parsed.notes : null;
-  if (!Array.isArray(rawNotes) || rawNotes.length > 10000) throw new Error('未找到有效的记录列表');
-  const notes = rawNotes.map(normalizeNote);
-  if (notes.some((note) => !note)) throw new Error('备份含有无效记录，未导入任何内容');
-  const rawDraft = isRecord(parsed) ? parsed.draft : null;
-  const draft =
-    isRecord(rawDraft) && typeof rawDraft.text === 'string' ? { ...normalizeDraft(rawDraft), updatedAt: Date.now() } : null;
-  return { notes: notes as Note[], draft };
-}
-
 /** 导入与导出。 */
 function BackupGroup({ saveFailed, loadFailed }: { saveFailed: boolean; loadFailed: boolean }) {
   const toast = useToast();
@@ -104,37 +85,67 @@ function BackupGroup({ saveFailed, loadFailed }: { saveFailed: boolean; loadFail
       toast('尚未读取到本地记录，暂不能导出', null, true);
       return;
     }
-    const { notes, draft, settings, tagUsage } = store.getState();
-    const payload = { application: 'SideNotes', exportedAt: new Date().toISOString(), notes, draft, settings, tagUsage };
-    const name = `SideNotes-备份-${new Date().toISOString().slice(0, 10)}.json`;
     try {
-      if (await bridge.saveBackupFile(name, JSON.stringify(payload, null, 2))) {
-        toast('已生成备份，包含记录与草稿；附件文件不在其中，由快照备份');
-      }
+      const parent = await bridge.pickDirectory('选择导出位置');
+      if (!parent) return;
+      const { notes, draft, settings, tagUsage } = store.getState();
+      // 记下数据目录，导入时据此把附件路径改写到导入方的数据目录。
+      const { directory } = await bridge.storageInfo();
+      const payload = {
+        application: 'SideNotes',
+        exportedAt: new Date().toISOString(),
+        dataDirectory: directory,
+        attachmentsDirectory: BACKUP_ATTACHMENTS,
+        notes,
+        draft,
+        settings,
+        tagUsage,
+      };
+      const report = await bridge.exportBackup(parent, backupName(), JSON.stringify(payload, null, 2));
+      const summary = `已导出 ${notes.length} 条记录与 ${report.attachments} 个附件`;
+      toast(report.missing ? `${summary}；${report.missing} 个附件已经找不到` : summary, {
+        label: '打开',
+        run: () => void bridge.revealInFolder(report.file),
+      });
     } catch (error) {
-      toast(`备份未生成：${reason(error, '写入文件失败')}`, null, true);
+      toast(`备份未导出：${reason(error, '写入文件失败')}`, null, true);
     }
   };
 
   const importBackup = async (): Promise<void> => {
-    let backup: { notes: Note[]; draft: Draft | null };
+    let backup: ParsedBackup;
+    let file: string;
     try {
-      const text = await bridge.openBackupFile();
-      if (text === null) return;
-      backup = parseBackup(text);
+      const chosen = await bridge.openBackupFile();
+      if (chosen === null) return;
+      backup = parseBackup(chosen.text);
+      file = chosen.path;
     } catch (error) {
       toast(`无法导入：${reason(error, '请选择有效的 JSON 备份')}`, null, true);
       return;
     }
     confirm({
       title: '导入本地备份',
-      message: `已读取 ${backup.notes.length} 条记录。导入将合并到当前内容，现有记录和当前草稿会保留；标识相同的记录仅在备份更新时替换，图片会一起导入。`,
+      message: `已读取 ${backup.notes.length} 条记录。导入将合并到当前内容，现有记录和当前草稿会保留；标识相同的记录仅在备份更新时替换，${backup.attachmentsDirectory ? '附件一并拷回' : '图片会一起导入'}。`,
       confirmLabel: '合并导入',
       icon: 'upload',
       run: async () => {
         const failed = await store.snapshotBefore('import');
         if (failed) toast(`导入前的快照未创建：${failed}`, null, true);
-        const merged = await store.mergeImported(backup.notes, backup.draft);
+        let { notes, draft } = backup;
+        // 新版备份带有附件：先拷回数据目录，再把记录里的附件路径改写到当前数据目录。
+        if (backup.attachmentsDirectory) {
+          try {
+            await bridge.importBackupAttachments(file, backup.attachmentsDirectory);
+            const { directory } = await bridge.storageInfo();
+            const relocate = (value: string): string => rewriteAttachmentPaths(value, backup.dataDirectory, directory);
+            notes = notes.map((note) => ({ ...note, text: relocate(note.text) }));
+            if (draft) draft = { ...draft, text: relocate(draft.text) };
+          } catch (error) {
+            toast(`附件未能拷回：${reason(error, '请稍后重试')}；记录照常导入`, null, true);
+          }
+        }
+        const merged = await store.mergeImported(notes, draft);
         if (merged) toast('备份已合并到本地记录');
         else toast('导入未完成，本地数据库写入失败；当前内容未改动。', null, true);
         return merged;
@@ -151,7 +162,7 @@ function BackupGroup({ saveFailed, loadFailed }: { saveFailed: boolean; loadFail
   return (
     <Group
       title="导入与导出"
-      description="JSON 备份包含记录、图片、草稿与设置。导入前可预览并确认。"
+      description="导出为一个文件夹：记录、草稿与设置写成 JSON，附件一并复制。导入时附件一同拷回。"
       className="settings-wide"
     >
       <div className="settings-actions data-actions">

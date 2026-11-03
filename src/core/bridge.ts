@@ -10,7 +10,7 @@ import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow, Window } from '@tauri-apps/api/window';
 import { readText } from '@tauri-apps/plugin-clipboard-manager';
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
-import { readFile, readTextFile, writeFile, writeTextFile } from '@tauri-apps/plugin-fs';
+import { readFile, readTextFile, writeFile } from '@tauri-apps/plugin-fs';
 import { isPermissionGranted, requestPermission } from '@tauri-apps/plugin-notification';
 import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener';
 import type {
@@ -18,6 +18,7 @@ import type {
   DataSnapshot,
   Draft,
   EdgeSide,
+  ExportReport,
   FileStatus,
   MigrationReport,
   Note,
@@ -497,33 +498,32 @@ export const MAX_BACKUP_BYTES = 25 * 1024 * 1024;
 const BACKUP_FILTERS = [{ name: 'SideNotes JSON 备份', extensions: ['json'] }];
 
 /**
- * 让用户选择保存位置并写入备份文本。
- *
- * 路径来自系统对话框，对话框插件会把所选路径加入文件系统作用域，
- * 因此不需要放宽固定目录之外的写入权限。返回 false 表示用户取消。
+ * 导出备份：后端在 `directory` 下新建名为 `name` 的文件夹（重名时加序号），写入 JSON 内容，
+ * 并把记录引用的附件复制到其中的 attachments 文件夹。浏览器预览不支持。
  */
-export async function saveBackupFile(defaultName: string, contents: string): Promise<boolean> {
-  if (!isDesktop()) throw new Error('浏览器预览不支持写入本地文件');
-  const path = await saveDialog({ defaultPath: defaultName, filters: BACKUP_FILTERS });
-  if (!path) return false;
-  await writeTextFile(path, contents);
-  return true;
+export function exportBackup(directory: string, name: string, contents: string): Promise<ExportReport> {
+  return call<ExportReport>('export_backup', { directory, name, contents });
 }
 
-/** 让用户选择备份文件并读取文本；取消时返回 null。 */
-export async function openBackupFile(): Promise<string | null> {
+/** 让用户选择备份 JSON 并读取；返回路径与文本，取消时返回 null。 */
+export async function openBackupFile(): Promise<{ path: string; text: string } | null> {
   if (!isDesktop()) throw new Error('浏览器预览不支持读取本地文件');
   const path = await openDialog({ multiple: false, directory: false, filters: BACKUP_FILTERS });
   if (!path || Array.isArray(path)) return null;
   const status = await inspectFile(path);
   if (status.size > MAX_BACKUP_BYTES) throw new Error('备份文件超过 25 MB，请选择较小的 JSON 文件');
-  return readTextFile(path);
+  return { path, text: await readTextFile(path) };
 }
 
-/** 让用户选择目录；取消时返回 null。 */
-export async function pickDirectory(): Promise<string | null> {
+/** 导入备份时拷回附件：把 JSON 文件旁边 `folder` 中的附件复制到数据目录，已有的保留，返回新复制的数量。 */
+export function importBackupAttachments(file: string, folder: string): Promise<number> {
+  return call<number>('import_backup_attachments', { file, folder });
+}
+
+/** 让用户选择目录；`title` 为对话框标题。取消时返回 null。 */
+export async function pickDirectory(title?: string): Promise<string | null> {
   if (!isDesktop()) return null;
-  const path = await openDialog({ multiple: false, directory: true });
+  const path = await openDialog({ multiple: false, directory: true, title });
   return typeof path === 'string' ? path : null;
 }
 

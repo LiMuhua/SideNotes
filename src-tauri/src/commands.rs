@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Manager, State, WebviewWindow};
 
 use crate::attachments::{self, ImportedFile};
+use crate::backup;
 use crate::edge::EdgeWatcher;
 use crate::error::{AppError, AppResult};
 use crate::location;
@@ -104,6 +105,23 @@ pub async fn migrate_storage(app: AppHandle, state: State<'_, AppState>, target:
         *unavailable = None;
     }
     Ok(report)
+}
+
+/// 导出备份：在 `directory` 下新建名为 `name` 的文件夹，写入 JSON 内容 `contents`，并复制记录引用的附件。
+#[tauri::command]
+pub async fn export_backup(
+    state: State<'_, AppState>,
+    directory: String,
+    name: String,
+    contents: String,
+) -> AppResult<backup::ExportReport> {
+    backup::export(&state.store, std::path::Path::new(directory.trim()), &name, &contents)
+}
+
+/// 导入备份时拷回附件：把 JSON 文件 `file` 旁边 `folder` 文件夹中的附件复制到数据目录，返回新复制的数量。
+#[tauri::command]
+pub async fn import_backup_attachments(state: State<'_, AppState>, file: String, folder: String) -> AppResult<usize> {
+    backup::import_attachments(&state.store.directory(), std::path::Path::new(&file), &folder)
 }
 
 /// 快照目录：设置中填写的目录，没有填写时为数据目录下的 snapshots 文件夹。
