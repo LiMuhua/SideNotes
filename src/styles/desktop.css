@@ -862,15 +862,17 @@ body[data-theme='dark'] #note-list .note-card.is-editing {
   }
 }
 
-/* 设置窗口可以调整大小：「侧栏」分组首行的三列在窗口变窄时不再按比例挤到内容之下，
- * 标签与下拉框始终完整显示。默认尺寸下各列都宽于内容，宽度与原型一致。
- * 三项之间的间距比原型的 10px 宽一些，各项更容易分清。 */
+/* 设置窗口可以调整大小：「侧栏」分组首行的三项按内容取宽度，标签与下拉框始终完整显示；
+ * 窗口窄到放不下时第三项折到下一行。三项之间的间距比原型的 10px 宽一些，各项更容易分清。 */
 body[data-window='settings'] .settings-modal .sidebar-settings-primary {
-  grid-template-columns:
-    minmax(max-content, 1.06fr)
-    minmax(max-content, 0.94fr)
-    minmax(max-content, 1.04fr);
-  column-gap: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px 24px;
+}
+
+body[data-window='settings'] .settings-modal .sidebar-settings-primary > .settings-row {
+  flex: 0 0 auto;
 }
 
 /* 「其它」一行中的通知位置：下拉框与左侧两个输入框同高，宽度只放得下选项文字。 */
@@ -878,11 +880,28 @@ body[data-window='settings'] .settings-modal .settings-runtime-controls > select
   width: auto;
   min-width: 0;
   max-width: none;
-  height: 28px;
-  min-height: 28px;
+  height: 30px;
+  min-height: 30px;
   padding: 3px 8px;
   border-radius: 6px;
-  font-size: 10px;
+  font-size: 13px;
+}
+
+/* 「其它」一行的名称后面跟着问号说明。字号放大后三项放不进一行，折行时不再用竖线分隔，各项左对齐。 */
+body[data-window='settings'] .settings-modal .settings-runtime-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+body[data-window='settings'] .settings-modal .settings-runtime-row {
+  gap: 12px 32px;
+}
+
+body[data-window='settings'] .settings-modal .settings-runtime-field + .settings-runtime-field {
+  padding-left: 0;
+  border-left: 0;
 }
 
 /* ==================== 版本与更新 ====================
@@ -1012,7 +1031,7 @@ body[data-window='settings'] .settings-delay-field > .font-combobox {
 body[data-window='settings'] .settings-delay-field > .settings-runtime-suffix {
   padding: 0;
   border-left: 0;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1;
 }
 
@@ -1334,4 +1353,99 @@ body[data-window='settings'] .snapshot-meta {
   text-overflow: ellipsis;
   box-shadow: 0 6px 18px color-mix(in srgb, #1d2a1d 22%, transparent);
   pointer-events: none;
+}
+
+/* ==================== 设置窗口的字号 ====================
+ * 设计规范（用户要求）：设置页的文字与侧栏卡片正文一样大。正文、标签、输入框、按钮与按键统一为 13px，
+ * 即侧栏正文的设计字号（--note-font-size）；字号设置是作用于各窗口的整页缩放，两边实际显示的大小始终相同。
+ * 单位、附注等次要文字 12px，分组标题 14px，页面标题沿用原型。原型中设置页的字号分散在许多不同权重的
+ * 规则里（9–12px），这里加上窗口前缀统一覆盖。说明一律放进问号，不再以小字显示。 */
+body[data-window='settings'] .settings-modal :is(
+    .settings-nav-button,
+    .settings-row-label,
+    .settings-runtime-name,
+    .settings-runtime-suffix,
+    .form-control,
+    .font-combobox-option,
+    .button,
+    .resource-link,
+    .settings-choice,
+    .surface-choice,
+    .sync-provider,
+    .settings-notice,
+    .settings-notice button,
+    .settings-status,
+    .setting-description,
+    .trash-title,
+    .trash-retention-label,
+    .trash-retention-days,
+    .trash-retention-unit,
+    .trash-retention-option,
+    .settings-trash-summary,
+    .snapshot-item,
+    .empty-state,
+    .settings-range-value,
+    kbd
+  ) {
+  font-size: 13px;
+}
+
+body[data-window='settings'] .settings-modal :is(
+    .settings-range-unit,
+    .settings-path,
+    .sync-provider small,
+    .settings-version,
+    .trash-item-meta,
+    .trash-tag,
+    .settings-help-text,
+    .font-combobox-status
+  ) {
+  font-size: 12px;
+}
+
+body[data-window='settings'] .settings-modal .settings-group-title {
+  font-size: 14px;
+}
+
+/* 原型给「侧栏」首行的下拉框与「侧栏」分组的标签写了带 !important 的 10px、11px。 */
+body[data-window='settings'] .settings-modal .sidebar-settings-primary select.form-control,
+body[data-window='settings'] .settings-modal .sidebar-settings-layout .settings-row-label {
+  font-size: 13px !important;
+}
+
+body[data-window='settings'] .settings-modal .sync-provider .sync-provider-name {
+  font-size: 13px;
+}
+
+/* 确认层显示在设置对话框之外。 */
+body[data-window='settings'] :is(.settings-confirm-message, .settings-confirm-error, .settings-confirm-actions .button) {
+  font-size: 13px;
+}
+
+/* 问号与说明气泡随文字放大。 */
+body[data-window='settings'] .settings-help {
+  flex-basis: 18px;
+  width: 18px;
+  height: 18px;
+}
+
+body[data-window='settings'] .settings-help-button {
+  flex-basis: 17px;
+  width: 17px;
+  height: 17px;
+  font-size: 11px;
+}
+
+body[data-window='settings'] .settings-help-text {
+  width: 240px;
+  line-height: 1.6;
+}
+
+/* 「其它」一行的数字输入框与右侧的下拉框同高。 */
+body[data-window='settings'] .settings-modal .settings-runtime-value {
+  height: 30px;
+}
+
+body[data-window='settings'] .settings-modal .settings-runtime-value input[type='number'] {
+  height: 28px !important;
 }

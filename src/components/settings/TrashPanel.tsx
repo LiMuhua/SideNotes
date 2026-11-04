@@ -136,7 +136,7 @@ export function TrashRetention({ days, save }: { days: number; save: SaveSetting
     <div className="trash-retention-inline">
       <span className="trash-retention-label">保留</span>
       <RetentionPicker days={days} save={save} />
-      <Help title="保留策略" description="默认 30 天；到期后提示清理，确认前仍可恢复。" />
+      <Help title="保留策略" description="到期后提示清理，确认前仍可恢复" />
     </div>
   );
 }

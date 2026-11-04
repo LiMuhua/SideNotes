@@ -6,7 +6,6 @@
  * 末尾的「调试」为桌面端新增，打开各窗口的开发者工具，便于排查界面问题。
  */
 
-import { useState } from 'react';
 import logoUrl from '../../assets/favicon.svg';
 import * as bridge from '../../core/bridge';
 import { useToast } from '../../hooks/useToast';
@@ -56,7 +55,6 @@ function ExternalLink({ label, url, glyph, description }: { label: string; url: 
 
 export function AboutPanel() {
   const toast = useToast();
-  const [sponsor, setSponsor] = useState(false);
 
   return (
     <>
@@ -78,7 +76,7 @@ export function AboutPanel() {
                 ♡
               </span>
             }
-            onClick={() => setSponsor((shown) => !shown)}
+            onClick={() => toast('赞助入口暂未开放，欢迎通过反馈与代码贡献支持项目')}
           />
           <ActionButton
             label="检查更新"
@@ -87,20 +85,15 @@ export function AboutPanel() {
             onClick={() => toast('更新服务待桌面端接入')}
           />
         </div>
-        {sponsor ? (
-          <p className="setting-description sponsor-note">赞助入口暂未开放，也欢迎通过反馈与代码贡献支持项目。</p>
-        ) : null}
       </Group>
       <Group title="开源致谢">
-        <p className="setting-description">感谢开源项目与社区的支持。</p>
         <div className="resource-links settings-credits">
           {CREDITS.map(([label, url, glyph, description]) => (
             <ExternalLink key={label} label={label} url={url} glyph={glyph} description={description} />
           ))}
         </div>
       </Group>
-      <Group title="调试">
-        <p className="setting-description">打开窗口的开发者工具，查看控制台输出与页面结构。</p>
+      <Group title="调试" description="打开开发者工具，查看控制台与页面结构">
         <div className="resource-links settings-debug-links">
           {DEVTOOLS.map(([label, name]) => (
             <ActionButton

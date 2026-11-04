@@ -19,7 +19,7 @@ import {
 import type { EdgeSide, Settings, ToastPosition } from '../../core/types';
 import { useToast } from '../../hooks/useToast';
 import { Combobox } from './Combobox';
-import { ActionButton, Group, RangeField, Row, SelectField, TextField, Toggle, classes, type SaveSettings } from './controls';
+import { ActionButton, Group, Help, RangeField, Row, SelectField, TextField, Toggle, classes, type SaveSettings } from './controls';
 import { FontPicker } from './FontPicker';
 
 const THEMES: ReadonlyArray<readonly [Settings['theme'], string]> = [
@@ -152,8 +152,9 @@ function RuntimeGroup({ settings, save }: PanelProps) {
     <Group title="其它" className="settings-wide settings-runtime-card">
       <div className="settings-runtime-row">
         <div className="settings-runtime-field">
-          <div className="settings-runtime-name" title="滚动到列表底部时按批追加记录，每批可设置 5 至 100 条。">
+          <div className="settings-runtime-name">
             列表加载
+            <Help title="列表加载" description="滚动到底部时按批加载，每批 5–100 条" />
           </div>
           <div className="settings-runtime-controls">
             <Toggle
@@ -184,8 +185,9 @@ function RuntimeGroup({ settings, save }: PanelProps) {
           </div>
         </div>
         <div className="settings-runtime-field">
-          <div className="settings-runtime-name" title="工作区记录超过阈值时提醒整理，关闭后不再提示。">
+          <div className="settings-runtime-name">
             整理提醒
+            <Help title="整理提醒" description="工作区记录超过这个数时提醒整理" />
           </div>
           <div className="settings-runtime-controls">
             <Toggle
@@ -218,11 +220,9 @@ function RuntimeGroup({ settings, save }: PanelProps) {
           </div>
         </div>
         <div className="settings-runtime-field">
-          <div
-            className="settings-runtime-name"
-            title="「已保存」「已移入回收站」等操作提示在窗口中弹出的位置，三个窗口同时生效。"
-          >
+          <div className="settings-runtime-name">
             通知位置
+            <Help title="通知位置" description="「已保存」等操作提示弹出的位置" />
           </div>
           <div className="settings-runtime-controls">
             <SelectField
@@ -246,10 +246,10 @@ export function AppearancePanel({ settings, save }: PanelProps) {
 
       <Group title="文字" className="settings-wide">
         <div className="settings-field-grid settings-typography">
-          <Row title="字体" description="应用到侧栏、速记浮窗与设置窗口的全部文字；代码仍使用等宽字体。">
+          <Row title="字体" description="用于全部界面文字，代码仍用等宽字体">
             <FontPicker value={settings.fontFamily} onChoose={(fontFamily) => save({ fontFamily })} />
           </Row>
-          <Row title="字号" description="正文显示为所选字号，按钮、标签等界面文字随之等比缩放，三个窗口同时生效。拖动滑块时，松开后才应用。">
+          <Row title="字号" description="界面文字随之等比缩放，松开滑块后应用">
             <RangeField
               label="字体大小"
               settingKey="fontSize"
@@ -279,11 +279,11 @@ export function AppearancePanel({ settings, save }: PanelProps) {
             </Row>
             <Row
               title="移出后收起"
-              description="鼠标移出侧栏或点到其它窗口后，等待这段时间再自动收起。可从列表选择，也可直接输入 100 至 10000 毫秒。固定侧栏、打开菜单或对话框期间不收起。"
+              description="鼠标移出侧栏后多久收起，100–10000 毫秒"
             >
               <HideDelayField value={settings.hideDelay} save={save} />
             </Row>
-            <Row title="编辑时保持展开" description="正在书写时，鼠标移出也保持侧栏展开。">
+            <Row title="编辑时保持展开" description="书写时鼠标移出也不收起">
               <Toggle
                 label="编辑时保持展开"
                 checked={settings.protectEditing}
@@ -291,7 +291,7 @@ export function AppearancePanel({ settings, save }: PanelProps) {
               />
             </Row>
           </div>
-          <Row title="宽度" description="按 13px 字号计；字号调大时侧栏随之等比加宽，内容排布不变。也可拖动侧栏边缘直接调整。" className="sidebar-width-row">
+          <Row title="宽度" description="随字号等比加宽，也可拖动侧栏边缘调整" className="sidebar-width-row">
             <RangeField
               label="侧栏宽度"
               settingKey="width"
@@ -303,7 +303,7 @@ export function AppearancePanel({ settings, save }: PanelProps) {
               onSave={(width) => save({ width })}
             />
           </Row>
-          <Row title="出入动画" description="侧栏滑入与收起的时长，设为 0 时关闭动画。" className="sidebar-width-row">
+          <Row title="出入动画" description="设为 0 关闭动画" className="sidebar-width-row">
             <RangeField
               label="出入动画时长"
               settingKey="animDuration"
@@ -317,7 +317,7 @@ export function AppearancePanel({ settings, save }: PanelProps) {
           </Row>
           <Row
             title="卡片高度"
-            description="卡片正文的最大高度，按 13px 字号计。超出部分渐隐显示，双击卡片可查看全文。"
+            description="超出部分渐隐，双击卡片查看全文"
             className="sidebar-width-row"
           >
             <RangeField
