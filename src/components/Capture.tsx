@@ -11,6 +11,8 @@ import { LiveEditor } from './LiveEditor';
 import { ToastRegion } from './Modal';
 import { AttachmentDialog, type AttachmentSubject } from './AttachmentDialog';
 import { useStore } from '../hooks/useStore';
+import { useShortcut } from '../hooks/useShortcut';
+import { matches } from '../core/shortcuts';
 import { useToast } from '../hooks/useToast';
 import * as store from '../core/store';
 import * as bridge from '../core/bridge';
@@ -21,6 +23,7 @@ import type { EditorAttachment, MarkdownEditor } from '../core/editor';
 
 export function Capture() {
   const state = useStore();
+  const saveKeys = useShortcut('save');
   const toast = useToast();
   const editorRef = useRef<MarkdownEditor | null>(null);
   const [localText, setLocalText] = useState(state.draft.text);
@@ -152,10 +155,10 @@ export function Capture() {
     else toast('记录已保存');
   }, [localText, state.draft.images.length, toast]);
 
-  // 全局热键 Ctrl+Enter 保存并隐藏浮窗。
+  // 保存记录的快捷键（默认 Ctrl+Enter）保存并隐藏浮窗。
   useEffect(() => {
     const handler = (event: KeyboardEvent): void => {
-      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+      if (matches(event, store.getState().settings.shortcuts, 'save')) {
         event.preventDefault();
         void saveDraft(true);
       }
@@ -234,8 +237,8 @@ export function Capture() {
         <div className="capture-body">
           <LiveEditor
             value={localText}
-            placeholder={'随手记… 支持 Markdown 与 #标签\nCtrl+Enter 保存并收起，Esc 直接收起'}
-            ariaLabel="速记输入，Ctrl+Enter 保存并收起"
+            placeholder={`随手记… 支持 Markdown 与 #标签\n${saveKeys} 保存并收起，Esc 直接收起`}
+            ariaLabel={`速记输入，${saveKeys} 保存并收起`}
             autoFocus
             onChange={setLocalText}
             onReady={(editor) => { editorRef.current = editor; }}

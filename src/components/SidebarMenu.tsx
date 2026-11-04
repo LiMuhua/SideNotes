@@ -8,6 +8,7 @@
 
 import { ContextMenu, type MenuAnchor, type MenuItems } from './ContextMenu';
 import type { EdgeSide } from '../core/types';
+import { useShortcut } from '../hooks/useShortcut';
 
 /** 菜单命令。 */
 export type SidebarCommand =
@@ -34,10 +35,13 @@ export interface SidebarMenuProps {
   onClose: () => void;
 }
 
-function buildEntries({ count, hasExpanded, pinned, edge }: SidebarMenuProps): MenuItems<SidebarCommand> {
+function buildEntries(
+  { count, hasExpanded, pinned, edge }: SidebarMenuProps,
+  keys: { newNote: string; search: string },
+): MenuItems<SidebarCommand> {
   const entries: MenuItems<SidebarCommand> = [
-    { command: 'new', label: '新建记录', icon: 'plus', hint: 'Ctrl+N' },
-    { command: 'search', label: '搜索记录', icon: 'search', hint: 'Ctrl+F' },
+    { command: 'new', label: '新建记录', icon: 'plus', hint: keys.newNote },
+    { command: 'search', label: '搜索记录', icon: 'search', hint: keys.search },
   ];
   if (count > 0) {
     entries.push('separator');
@@ -64,9 +68,11 @@ function buildEntries({ count, hasExpanded, pinned, edge }: SidebarMenuProps): M
 
 /** 侧栏菜单。 */
 export function SidebarMenu(props: SidebarMenuProps) {
+  const newNote = useShortcut('newNote');
+  const search = useShortcut('search');
   return (
     <ContextMenu
-      entries={buildEntries(props)}
+      entries={buildEntries(props, { newNote, search })}
       anchor={props.anchor}
       label="侧栏操作"
       data={{ 'data-sidebar-menu': '' }}

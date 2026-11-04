@@ -922,13 +922,71 @@ body[data-window='settings'] .settings-modal .settings-runtime-controls > select
   grid-column: 1 / -1;
 }
 
+/* 标题栏右侧是「恢复默认」，与回收站标题栏的保留策略一样排布。 */
+.settings-modal .settings-panel[data-section='shortcuts'] .settings-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 15px;
+}
+
 .settings-modal .shortcuts-dashboard .shortcut-format .shortcut-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   column-gap: 22px;
 }
 
-.settings-modal .shortcuts-dashboard .shortcut-format-note {
-  margin: 10px 0 0;
+/* 按键可以点击更换：悬停时描边提示；录入中为强调色虚线框，显示正按住的修饰键；
+ * 全局快捷键被其他程序占用时为红框。改过的按键左侧是「恢复默认」，固定的按键没有悬停效果。 */
+.settings-modal .shortcuts-dashboard .shortcut-binding {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.settings-modal .shortcuts-dashboard .shortcut-key {
+  display: inline-flex;
+  padding: 0;
+  border-radius: 6px;
+}
+
+.settings-modal .shortcuts-dashboard .shortcut-key kbd {
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    color 0.15s;
+}
+
+.settings-modal .shortcuts-dashboard .shortcut-key:hover kbd {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.settings-modal .shortcuts-dashboard .shortcut-key.is-recording kbd {
+  border-style: dashed;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.settings-modal .shortcuts-dashboard .shortcut-key.is-error kbd {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.settings-modal .shortcuts-dashboard .shortcut-reset {
+  width: 26px;
+  height: 26px;
+}
+
+.settings-modal .shortcuts-dashboard .shortcut-reset .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.settings-modal .shortcuts-dashboard .shortcut-fixed {
+  color: var(--muted);
+  cursor: default;
 }
 
 /* 「文字」分组的标签列在原型中固定为 34px，换成全局字体（如等宽的 Maple Mono）并带上说明问号后放不下，

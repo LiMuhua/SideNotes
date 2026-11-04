@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import * as bridge from '../../core/bridge';
+import type { GlobalShortcutId } from '../../core/shortcuts';
 import * as store from '../../core/store';
 import type { Settings } from '../../core/types';
 import { useStoreSlice } from '../../hooks/useStore';
@@ -20,7 +21,7 @@ import { AppearancePanel } from './AppearancePanel';
 import { ConfirmOverlay, ConfirmProvider, type ConfirmRequest } from './confirm';
 import { ActionButton, classes } from './controls';
 import { DataPanel } from './DataPanel';
-import { ShortcutsPanel } from './ShortcutsPanel';
+import { ShortcutsPanel, ShortcutsReset } from './ShortcutsPanel';
 import { TrashPanel, TrashRetention } from './TrashPanel';
 
 type SectionId = 'appearance' | 'shortcuts' | 'data' | 'trash' | 'about';
@@ -49,18 +50,20 @@ export function SettingsDialog({ onClose, onMinimize }: SettingsDialogProps) {
   const loadFailed = useStoreSlice((state) => state.loadFailed);
   const [section, setSection] = useState<SectionId>('appearance');
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
-  const [conflicts, setConflicts] = useState<string[]>([]);
+  const [conflicts, setConflicts] = useState<GlobalShortcutId[]>([]);
   const panel = useRef<HTMLDivElement>(null);
   const nav = useRef<HTMLElement>(null);
   // 确认层关闭后把焦点还给触发它的按钮。
   const returnFocus = useRef<Element | null>(null);
 
-  useEffect(() => {
+  // 注册失败（多半被其他程序占用）的全局快捷键：启动时读取一次，快捷键页更换或重试注册后再读。
+  const refreshConflicts = useCallback(() => {
     void bridge
       .shortcutConflicts()
       .then(setConflicts)
       .catch(() => {});
   }, []);
+  useEffect(refreshConflicts, [refreshConflicts]);
 
   // 切换分类后回到内容顶部，与原型 renderPanel 一致。
   useLayoutEffect(() => {
@@ -180,9 +183,14 @@ export function SettingsDialog({ onClose, onMinimize }: SettingsDialogProps) {
               <div className="settings-panel-heading settings-content-header">
                 <h3>{current.label}</h3>
                 {section === 'trash' ? <TrashRetention days={settings.trashDays} save={save} /> : null}
+                {section === 'shortcuts' ? (
+                  <ShortcutsReset settings={settings} save={save} onConflictsChange={refreshConflicts} />
+                ) : null}
               </div>
               {section === 'appearance' ? <AppearancePanel settings={settings} save={save} /> : null}
-              {section === 'shortcuts' ? <ShortcutsPanel conflicts={conflicts} /> : null}
+              {section === 'shortcuts' ? (
+                <ShortcutsPanel settings={settings} save={save} conflicts={conflicts} onConflictsChange={refreshConflicts} />
+              ) : null}
               {section === 'data' ? (
                 <DataPanel settings={settings} save={save} saveFailed={saveFailed} loadFailed={loadFailed} />
               ) : null}

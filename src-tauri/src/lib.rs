@@ -9,6 +9,7 @@ mod fonts;
 mod location;
 mod migration;
 mod models;
+mod recorder;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod shortcuts;
 mod snapshots;
@@ -23,6 +24,11 @@ use tauri::{Manager, WebviewWindowBuilder, WindowEvent};
 use commands::AppState;
 use edge::EdgeWatcher;
 use store::Store;
+
+/// 作为录入快捷键的辅助进程启动时录入按键并返回 true，否则返回 false（见 recorder）。
+pub fn run_shortcut_helper() -> bool {
+    recorder::run_helper()
+}
 
 /// 启动应用。
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -53,18 +59,19 @@ pub fn run() {
 
             let watcher = Arc::new(EdgeWatcher::new());
 
+            // 全局快捷键按设置中保存的按键注册；设置读不出时用默认按键。
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            let conflicts = {
+            let hotkeys = {
                 handle.plugin(tauri_plugin_global_shortcut::Builder::new().build())?;
-                shortcuts::register_all(&handle)
+                shortcuts::register_all(&handle, &store.settings().unwrap_or_default())
             };
             #[cfg(any(target_os = "android", target_os = "ios"))]
-            let conflicts: Vec<String> = Vec::new();
+            let hotkeys = commands::HotkeyState::default();
 
             app.manage(AppState {
                 store,
                 edge: watcher.clone(),
-                shortcut_conflicts: conflicts,
+                hotkeys: Mutex::new(hotkeys),
                 default_dir,
                 unavailable_dir: Mutex::new(resolved.unavailable),
             });
@@ -108,6 +115,9 @@ pub fn run() {
             commands::compact_database,
             commands::storage_info,
             commands::shortcut_conflicts,
+            commands::set_global_shortcuts,
+            commands::start_shortcut_recording,
+            commands::stop_shortcut_recording,
             commands::show_sidebar,
             commands::hide_sidebar,
             commands::toggle_sidebar,

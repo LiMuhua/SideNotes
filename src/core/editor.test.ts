@@ -371,6 +371,18 @@ describe('格式快捷键', () => {
     document.body.replaceChildren();
   });
 
+  it('按设置中的按键生效，改走后原来的按键不再触发', () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const editor = new MarkdownEditor(host, { value: '重点', shortcuts: () => ({ bold: 'Ctrl+Shift+B' }) });
+    editor.element.focus();
+    editor.setSelectionRange(0, 2);
+    press(editor, { key: 'b', code: 'KeyB', ctrlKey: true });
+    expect(editor.getValue()).toBe('重点');
+    press(editor, { key: 'B', code: 'KeyB', ctrlKey: true, shiftKey: true });
+    expect(editor.getValue()).toBe('**重点**');
+  });
+
   it('Ctrl+U 下划线，Alt+S 与 Alt+Shift+5 删除线', () => {
     const { editor } = mount('重点');
     editor.element.focus();

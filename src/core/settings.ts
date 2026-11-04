@@ -5,6 +5,7 @@
  * `normalizeSettings` 补全，避免两侧重复维护默认值与边界。
  */
 
+import { normalizeBindings } from './shortcuts';
 import type { CloudSettings, Settings } from './types';
 
 /** 侧栏宽度范围（按 13px 字号计，见 sidebarWindowWidth）。 */
@@ -108,6 +109,7 @@ export function normalizeSettings(value: unknown = {}): Settings {
       : 'appdata',
     customDirectory: String(input.customDirectory ?? '').slice(0, 500),
     snapshotDirectory: String(input.snapshotDirectory ?? '').trim().slice(0, 500),
+    shortcuts: normalizeBindings(input.shortcuts),
     trashDays: clampInt(input.trashDays, TRASH_DAYS_RANGE.min, TRASH_DAYS_RANGE.max, 30),
     cloud: normalizeCloud(input.cloud),
   };

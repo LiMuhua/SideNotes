@@ -32,6 +32,7 @@ import type {
 } from './types';
 import { normalizeDraft, normalizeNote } from './notes';
 import { normalizeSettings, sidebarWindowWidth } from './settings';
+import type { GlobalShortcutId } from './shortcuts';
 
 /** 侧栏几何参数。 */
 export interface SidebarLayout {
@@ -61,6 +62,8 @@ export const APP_EVENTS = {
   storeChanged: 'sidenotes://store-changed',
   /** 设置窗口打开、关闭、最小化或还原，载荷为是否正在显示。 */
   settingsVisibility: 'sidenotes://settings-visibility',
+  /** 录入快捷键期间的按键，只发给设置窗口，载荷见 RecordedKeys。 */
+  shortcutRecorded: 'sidenotes://shortcut-recorded',
 } as const;
 
 /**
@@ -226,9 +229,49 @@ export function systemFonts(): Promise<string[]> {
   return call<string[]>('system_fonts', undefined, []);
 }
 
-/** 读取启动时注册失败的全局热键。 */
-export function shortcutConflicts(): Promise<string[]> {
-  return call<string[]>('shortcut_conflicts', undefined, []);
+/** 读取注册失败（多半被其他程序占用）的全局快捷键编号。 */
+export function shortcutConflicts(): Promise<GlobalShortcutId[]> {
+  return call<GlobalShortcutId[]>('shortcut_conflicts', undefined, []);
+}
+
+/**
+ * 更换全局快捷键（编号 → 按键）。后端实际注册一次新的按键，
+ * 被其他程序占用时抛出原因，原来的按键保持不变。
+ */
+export function setGlobalShortcuts(bindings: Partial<Record<GlobalShortcutId, string>>): Promise<void> {
+  return call<void>('set_global_shortcuts', { bindings }, undefined as unknown as void);
+}
+
+/** 录入快捷键期间后端发来的按键，见 src-tauri/src/recorder.rs。 */
+export interface RecordedKeys {
+  /** 正按住的修饰键，如 Ctrl+Shift；没有按住时为空。 */
+  modifiers: string;
+  /** 按下的完整组合（规范写法）；只按修饰键时为 null。 */
+  combo: string | null;
+  /** 后端已结束录入（设置窗口转到后台或超时）。 */
+  ended: boolean;
+}
+
+/**
+ * 由后端录入快捷键：Windows 上临时接管键盘，被其他程序占用的组合也能录到，
+ * 录入期间其他程序与本应用的全局快捷键都不会被触发。成功时返回结束录入的函数；
+ * 不支持时（浏览器预览、其他平台）返回 null，调用方改用网页的按键事件录入。
+ */
+export async function recordShortcut(handler: (keys: RecordedKeys) => void): Promise<(() => void) | null> {
+  if (!isDesktop()) return null;
+  const unlisten = await listen<RecordedKeys>(APP_EVENTS.shortcutRecorded, (event) => handler(event.payload));
+  let session: number;
+  try {
+    session = await invoke<number>('start_shortcut_recording');
+  } catch {
+    unlisten();
+    return null;
+  }
+  return () => {
+    unlisten();
+    // 按编号结束：快速切换录入时，上一次的结束不会停掉新开始的这一次。
+    void invoke('stop_shortcut_recording', { session }).catch(() => {});
+  };
 }
 
 /* ==================== 窗口控制 ==================== */

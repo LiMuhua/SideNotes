@@ -6,6 +6,8 @@
  */
 
 /** 记录所在位置。 */
+import type { ShortcutBindings } from './shortcuts';
+
 export type NoteStatus = 'active' | 'archived' | 'trash';
 
 /** 列表页签。 */
@@ -120,6 +122,8 @@ export interface Settings {
   customDirectory: string;
   /** 快照目录；为空时使用数据目录下的 snapshots 文件夹。 */
   snapshotDirectory: string;
+  /** 改过的快捷键；没有出现的命令使用默认按键，见 core/shortcuts。 */
+  shortcuts: ShortcutBindings;
   /** 回收站保留天数。 */
   trashDays: number;
   cloud: CloudSettings;

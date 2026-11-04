@@ -18,6 +18,7 @@ import { noteDisplay, sourceOffset } from '../core/display';
 import type { AttachmentReference } from '../core/attachments';
 import type { EditSession, Note, NoteImage } from '../core/types';
 import type { MarkdownEditor } from '../core/editor';
+import { useShortcut } from '../hooks/useShortcut';
 
 export interface NoteCardProps {
   note: Note;
@@ -251,6 +252,7 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
   const parsed = parse(note.text);
   const content = useRef<HTMLDivElement>(null);
   const [truncated, setTruncated] = useState(() => likelyLong(note));
+  const saveKeys = useShortcut('save');
 
   // 正文实际溢出时渐隐并在悬停时提示，图片加载后需要复核。
   useEffect(() => {
@@ -407,8 +409,8 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
               <button
                 type="button"
                 className="icon-button primary"
-                aria-label="保存修改 · Ctrl+Enter"
-                title="保存修改 · Ctrl+Enter"
+                aria-label={`保存修改 · ${saveKeys}`}
+                title={`保存修改 · ${saveKeys}`}
                 onClick={props.onFinishEdit}
               >
                 <Icon name="check" />

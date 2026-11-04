@@ -25,6 +25,7 @@ import { UsageGuide } from "./UsageGuide";
 import { ConfirmDialog, ToastRegion } from "./Modal";
 import { AttachmentDialog, type AttachmentSubject } from "./AttachmentDialog";
 import { useStore } from "../hooks/useStore";
+import { useShortcut } from "../hooks/useShortcut";
 import { useToast } from "../hooks/useToast";
 import { useCardInteractions, type ItemDrop } from "../hooks/useCardInteractions";
 import { useFileDrop, type FileDropTarget } from "../hooks/useFileDrop";
@@ -42,6 +43,7 @@ import {
 } from "../core/attachments";
 import { parse, removeTag, tagKey, canonicalize } from "../core/tags";
 import { sidebarWindowWidth, uiZoom } from "../core/settings";
+import { comboFromEvent, matches } from "../core/shortcuts";
 import type { EditSession, Note, NoteImage, TabKey } from "../core/types";
 import type { EditorAttachment, MarkdownEditor } from "../core/editor";
 
@@ -64,6 +66,7 @@ function sameImages(left: NoteImage[], right: NoteImage[]): boolean {
 
 export function Sidebar() {
   const state = useStore();
+  const searchKeys = useShortcut("search");
   const toast = useToast();
 
   /* ==================== 侧栏与 Tab 状态 ==================== */
@@ -833,7 +836,8 @@ export function Sidebar() {
   /* ==================== 键盘快捷键 ==================== */
   useEffect(() => {
     const handler = (event: KeyboardEvent): void => {
-      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      const shortcuts = store.getState().settings.shortcuts;
+      if (matches(event, shortcuts, "save")) {
         event.preventDefault();
         event.stopImmediatePropagation();
         if (editing) {
@@ -898,12 +902,15 @@ export function Sidebar() {
         setTagMenuOpen(false);
         void bridge.hideSidebar(currentLayout());
       }
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
+      if (matches(event, shortcuts, "search")) {
         event.preventDefault();
         openSearch();
+      } else if (comboFromEvent(event) === "Ctrl+F") {
+        // 搜索换成了别的按键时，Ctrl+F 也不交给 WebView 打开网页的查找栏。
+        event.preventDefault();
       }
-      // Ctrl+N：与原型「新建记录」一致，先提交正在进行的编辑，再聚焦顶部输入卡片。
-      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "n") {
+      // 新建记录：与原型一致，先提交正在进行的编辑，再聚焦顶部输入卡片。
+      if (matches(event, shortcuts, "newNote")) {
         event.preventDefault();
         startNewNote();
       }
@@ -1648,10 +1655,10 @@ export function Sidebar() {
             <button
               type="button"
               className={`icon-button search-toggle${searchOpen ? " is-active" : ""}`}
-              aria-label="搜索记录 · Ctrl+F"
+              aria-label={`搜索记录 · ${searchKeys}`}
               aria-controls="search-panel"
               aria-expanded={searchOpen}
-              title="搜索 · Ctrl+F"
+              title={`搜索 · ${searchKeys}`}
               onClick={() => {
                 const next = !searchOpen;
                 setSearchOpen(next);

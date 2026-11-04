@@ -31,12 +31,14 @@ thiserror = "2"
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-global-shortcut = "2"
 
-# 与 Tauri 使用的版本一致，直接调用 DWM、窗口定位与 DirectWrite（列出系统字体）API。
+# 与 Tauri 使用的版本一致，直接调用 DWM、窗口定位、DirectWrite（列出系统字体）与低级键盘钩子（录入快捷键）API。
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [
   "Win32_Foundation",
   "Win32_Graphics_DirectWrite",
   "Win32_Graphics_Dwm",
+  "Win32_System_LibraryLoader",
+  "Win32_System_Threading",
   "Win32_UI_WindowsAndMessaging",
 ] }
 

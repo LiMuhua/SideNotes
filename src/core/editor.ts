@@ -37,6 +37,7 @@ import {
   wrapCodeBlock,
   type EditResult,
 } from './markdown-commands';
+import { comboFromEvent, commandFor, physicalKey, type ShortcutBindings, type ShortcutId } from './shortcuts';
 
 /** 行模型，保留各行原始换行符与首尾空白。 */
 interface LineModel {
@@ -97,6 +98,8 @@ export interface EditorOptions {
   pasteFiles?: (files: File[]) => Promise<string | null>;
   /** 把本机图片路径换算为可显示的地址；未提供时本机图片只显示原文。 */
   resolveImage?: (path: string) => string;
+  /** 设置中改过的快捷键，按键时读取，改动立即生效；未提供时全部使用默认按键（见 core/shortcuts）。 */
+  shortcuts?: () => ShortcutBindings;
 }
 
 /** 一段隐藏的成对标记（行内代码、强调、下划线、链接）：分组范围、内容范围与各个标记的位置。 */
@@ -209,20 +212,6 @@ function markerVisible(caret: number | null, start: number, length: number): boo
   return caret !== null && caret >= start && caret <= start + length;
 }
 
-/**
- * 按键的物理位置（KeyboardEvent.code），不受输入法与键盘布局影响。
- *
- * 部分输入来源（自动化工具、远程桌面、按键映射软件）不带扫描码，code 为空，
- * 这时按虚拟键码换算字母、数字与常用符号键。
- */
-function physicalKey(event: KeyboardEvent): string {
-  if (event.code) return event.code;
-  const vk = event.keyCode;
-  if (vk >= 65 && vk <= 90) return `Key${String.fromCharCode(vk)}`;
-  if (vk >= 48 && vk <= 57) return `Digit${vk - 48}`;
-  return { 192: 'Backquote', 219: 'BracketLeft', 221: 'BracketRight' }[vk] ?? '';
-}
-
 /** 当前聚焦的实例，供全局 selectionchange 复用。 */
 let focusedEditor: MarkdownEditor | null = null;
 let selectionFrame = 0;
@@ -286,10 +275,9 @@ export class MarkdownEditor {
     this.element = element('div', 'live-markdown-editor markdown-body');
     this.element.contentEditable = 'true';
     this.element.dataset.mdEditor = '';
-    this.element.dataset.placeholder = options.placeholder ?? '写下内容…';
     this.element.setAttribute('role', 'textbox');
     this.element.setAttribute('aria-multiline', 'true');
-    this.element.setAttribute('aria-label', options.ariaLabel ?? this.element.dataset.placeholder);
+    this.setLabels(options.placeholder, options.ariaLabel);
     this.element.spellcheck = false;
     this.element.tabIndex = 0;
     if (typeof options.minHeight === 'number') this.element.style.minHeight = `${options.minHeight}px`;
@@ -447,6 +435,13 @@ export class MarkdownEditor {
   /** 更新高度上限，设置变化时调用。 */
   setMaxHeight(value: number): void {
     this.element.style.maxHeight = `${value}px`;
+  }
+
+  /** 更新占位提示与无障碍名称；提示中写有快捷键，更换按键后随之更新。 */
+  setLabels(placeholder?: string, ariaLabel?: string): void {
+    const text = placeholder ?? '写下内容…';
+    this.element.dataset.placeholder = text;
+    this.element.setAttribute('aria-label', ariaLabel ?? text);
   }
 
   /** 选区变化时同步状态；仅在标记边界或所在行变化时重排，否则只更新标签联想。 */
@@ -1526,13 +1521,16 @@ export class MarkdownEditor {
         if (!this.applyEdit(indentLines(this.value, range.start, range.end, key.shiftKey), range) && !key.shiftKey) {
           this.replace('  ', range);
         }
-      } else if (modifier && !key.altKey && !key.shiftKey && physicalKey(key) === 'KeyK') {
-        key.preventDefault();
-        this.insertLink(this.readSelection());
       } else if ((key.key === 'Home' || key.key === 'End') && !modifier && !key.altKey) {
         if (this.moveToLineBoundary(key.key === 'Home', key.shiftKey)) key.preventDefault();
       } else {
-        const command = this.shortcut(key);
+        const bound = commandFor(key, this.options.shortcuts?.() ?? {}, ['format']);
+        if (bound === 'link') {
+          key.preventDefault();
+          this.insertLink(this.readSelection());
+          return;
+        }
+        const command = this.shortcut(key, bound);
         if (!command) return;
         key.preventDefault();
         const range = this.readSelection();
@@ -1633,33 +1631,30 @@ export class MarkdownEditor {
   }
 
   /**
-   * 格式快捷键，参照 Typora。按物理按键识别，不受输入法与键盘布局影响。
-   * 返回 null 表示不是格式快捷键；Ctrl+K 需要先读剪贴板，单独处理（见 insertLink）。
+   * 格式快捷键对应的编辑命令：先按设置中的按键找到的命令（`bound`），再看固定的快捷键：
+   * Ctrl+0–6 设为正文与标题，兼容 Typora 的 Alt+Shift+5 删除线与 Ctrl+Shift+` 行内代码。
+   * 返回 null 表示不是格式快捷键；Ctrl+K 链接需要先读剪贴板，由调用方单独处理（见 insertLink）。
    */
-  private shortcut(key: KeyboardEvent): ((value: string, start: number, end: number) => EditResult) | null {
-    const control = key.ctrlKey || key.metaKey;
-    const { shiftKey: shift, altKey: alt } = key;
-    const code = physicalKey(key);
-    if (control && !alt && !shift) {
-      if (code === 'KeyB') return (value, start, end) => toggleInline(value, start, end, '**');
-      if (code === 'KeyI') return (value, start, end) => toggleInline(value, start, end, '*');
-      if (code === 'KeyU') return (value, start, end) => toggleTag(value, start, end, 'u');
-      const heading = code.match(/^Digit([0-6])$/);
-      if (heading) return (value, start, end) => setHeading(value, start, end, Number(heading[1]));
-    }
-    if (control && !alt && shift) {
-      if (code === 'Backquote') return (value, start, end) => toggleInline(value, start, end, '`');
-      if (code === 'KeyQ') return toggleQuote;
-      if (code === 'BracketLeft') return (value, start, end) => toggleList(value, start, end, true);
-      if (code === 'BracketRight') return (value, start, end) => toggleList(value, start, end, false);
-      if (code === 'KeyK') return wrapCodeBlock;
-    }
-    if (alt && !control) {
-      if (code === 'KeyC' && !shift) return (value, start, end) => toggleInline(value, start, end, '`');
-      if ((code === 'KeyS' && !shift) || (code === 'Digit5' && shift)) {
-        return (value, start, end) => toggleInline(value, start, end, '~~');
-      }
-    }
+  private shortcut(key: KeyboardEvent, bound: ShortcutId | null): ((value: string, start: number, end: number) => EditResult) | null {
+    type Command = (value: string, start: number, end: number) => EditResult;
+    const inline = (marker: string): Command => (value, start, end) => toggleInline(value, start, end, marker);
+    const commands: Partial<Record<ShortcutId, Command>> = {
+      bold: inline('**'),
+      italic: inline('*'),
+      underline: (value, start, end) => toggleTag(value, start, end, 'u'),
+      strike: inline('~~'),
+      inlineCode: inline('`'),
+      codeBlock: wrapCodeBlock,
+      quote: toggleQuote,
+      orderedList: (value, start, end) => toggleList(value, start, end, true),
+      bulletList: (value, start, end) => toggleList(value, start, end, false),
+    };
+    if (bound && commands[bound]) return commands[bound] ?? null;
+    const combo = comboFromEvent(key);
+    const heading = combo?.match(/^Ctrl\+([0-6])$/);
+    if (heading) return (value, start, end) => setHeading(value, start, end, Number(heading[1]));
+    if (combo === 'Alt+Shift+5') return commands.strike ?? null;
+    if (combo === 'Ctrl+Shift+`') return commands.inlineCode ?? null;
     return null;
   }
 

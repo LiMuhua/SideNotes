@@ -6,9 +6,11 @@
  */
 
 import { Modal } from './Modal';
+import { useShortcut } from '../hooks/useShortcut';
 
-/** 指南条目：分组标题与要点。 */
-const SECTIONS: ReadonlyArray<{ title: string; tips: readonly string[] }> = [
+/** 指南条目：分组标题与要点；写到的快捷键取当前设置。 */
+function guideSections(keys: { save: string; search: string }): ReadonlyArray<{ title: string; tips: readonly string[] }> {
+  return [
   {
     title: '卡片',
     tips: [
@@ -20,7 +22,7 @@ const SECTIONS: ReadonlyArray<{ title: string; tips: readonly string[] }> = [
   {
     title: '编辑',
     tips: [
-      'Ctrl+Enter 保存，Esc 取消。新建卡片保存后侧栏保持展开，可以接着记下一条。',
+      `${keys.save} 保存，Esc 取消。新建卡片保存后侧栏保持展开，可以接着记下一条。`,
       '支持 Markdown 快捷键与 #标签；粘贴截图或文件会保存一份副本，插入到光标处。',
       '点击图片或文件查看详情，可以修改引用、更换文件或另存为；按住 Ctrl 点击直接打开。',
       '从资源管理器把文件拖到卡片上即可插入；在卡片上停留片刻会进入编辑，可以放到具体位置。',
@@ -30,13 +32,16 @@ const SECTIONS: ReadonlyArray<{ title: string; tips: readonly string[] }> = [
     title: '侧栏',
     tips: [
       '鼠标移到屏幕边缘呼出侧栏，移开后自动收起；固定按钮可以让它保持展开。',
-      'Ctrl+F 搜索，输入 # 按标签查找。',
+      `${keys.search} 搜索，输入 # 按标签查找。`,
       '空白处右键打开侧栏菜单，双击空白处收起或展开全部卡片。',
     ],
   },
-];
+  ];
+}
 
 export function UsageGuide({ onClose }: { onClose: () => void }) {
+  const save = useShortcut('save');
+  const search = useShortcut('search');
   return (
     <Modal
       title="使用指南"
@@ -48,7 +53,7 @@ export function UsageGuide({ onClose }: { onClose: () => void }) {
         </button>
       }
     >
-      {SECTIONS.map((section) => (
+      {guideSections({ save, search }).map((section) => (
         <section key={section.title} className="usage-guide-section">
           <h3>{section.title}</h3>
           <ul>

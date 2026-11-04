@@ -268,6 +268,12 @@ impl Store {
         Ok(())
     }
 
+    /// 读取设置，启动时按其中的快捷键注册全局热键。
+    pub fn settings(&self) -> AppResult<serde_json::Value> {
+        let connection = self.connection()?;
+        read_settings(&connection)
+    }
+
     /// 清理超过保留天数的回收站记录，返回删除条数。
     pub fn purge_expired(&self, retain_days: i64, now: i64) -> AppResult<usize> {
         let connection = self.connection()?;

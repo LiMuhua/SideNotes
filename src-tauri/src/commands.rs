@@ -20,12 +20,19 @@ use crate::snapshots;
 use crate::store::Store;
 use crate::windows::{self, SidebarLayout};
 
+/// 全局快捷键的现状：各编号正在使用的按键，以及注册失败（多半被其他程序占用）的编号。
+#[derive(Debug, Default)]
+pub struct HotkeyState {
+    pub bound: HashMap<String, String>,
+    pub failed: Vec<String>,
+}
+
 /// 应用共享状态。
 pub struct AppState {
     pub store: Store,
     pub edge: Arc<EdgeWatcher>,
-    /// 启动时注册失败的全局热键，供设置页提示冲突。
-    pub shortcut_conflicts: Vec<String>,
+    /// 全局快捷键的现状，供设置页提示冲突与更换按键。
+    pub hotkeys: Mutex<HotkeyState>,
     /// 系统应用数据目录：默认的数据目录，也是记下当前数据目录（location.json）的位置。
     pub default_dir: PathBuf,
     /// 启动时记下的数据目录不可用、暂时改用默认目录时，为原来的目录；迁移成功后清空。
@@ -167,10 +174,40 @@ pub async fn restore_snapshot(
     snapshots::restore(&state.store, &snapshot_root(&state, &directory), &id, snapshots::now_millis())
 }
 
-/// 读取启动时的热键冲突列表。
+/// 读取注册失败的全局快捷键编号，设置页据此提示冲突。
 #[tauri::command]
 pub fn shortcut_conflicts(state: State<'_, AppState>) -> Vec<String> {
-    state.shortcut_conflicts.clone()
+    state.hotkeys.lock().map(|hotkeys| hotkeys.failed.clone()).unwrap_or_default()
+}
+
+/// 更换全局快捷键（编号 → 按键）：新按键注册成功才生效，被占用时返回原因，原来的按键保持不变。
+///
+/// 保持同步命令：注册由插件转到主线程执行，同步命令本身就在主线程上，
+/// 持有状态锁等待注册时不会与主线程上读取冲突列表的命令互相等待。
+#[tauri::command]
+pub fn set_global_shortcuts(app: AppHandle, state: State<'_, AppState>, bindings: HashMap<String, String>) -> AppResult<()> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return crate::shortcuts::apply(&app, &state.hotkeys, &bindings);
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let _ = (app, state, bindings);
+        Err(AppError::Other("移动端不支持全局快捷键".into()))
+    }
+}
+
+/// 开始录入快捷键：辅助进程接管键盘，按下的组合发给设置窗口（见 recorder），返回录入编号。
+/// 当前平台不支持时返回错误，设置页改用网页的按键事件录入。等辅助进程装好钩子需要一点时间，放到后台线程，不阻塞主线程。
+#[tauri::command]
+pub async fn start_shortcut_recording(app: AppHandle) -> AppResult<u64> {
+    tauri::async_runtime::spawn_blocking(move || crate::recorder::start(&app))
+        .await
+        .map_err(|error| AppError::Other(format!("无法录入按键：{error}")))?
+}
+
+/// 结束编号为 `session` 的录入，卸载键盘钩子。
+#[tauri::command]
+pub fn stop_shortcut_recording(session: u64) {
+    crate::recorder::stop(session);
 }
 
 /// 显示侧栏。

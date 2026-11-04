@@ -72,6 +72,7 @@ export function LiveEditor({
       tagSuggestions: (prefix, text) => callbacks.current.tagSuggestions?.(prefix, text) ?? [],
       readClipboard: bridge.readClipboardText,
       resolveImage: bridge.localFileUrl,
+      shortcuts: () => store.getState().settings.shortcuts,
       pasteFiles: async (files) => {
         try {
           return await importPastedFiles(files);
@@ -107,6 +108,11 @@ export function LiveEditor({
   useEffect(() => {
     if (editor.current && typeof maxHeight === 'number') editor.current.setMaxHeight(maxHeight);
   }, [maxHeight]);
+
+  // 提示中写有快捷键，更换按键后随之更新。
+  useEffect(() => {
+    editor.current?.setLabels(placeholder, ariaLabel);
+  }, [placeholder, ariaLabel]);
 
   return <div ref={host} className="live-editor-host" />;
 }

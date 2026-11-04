@@ -9,6 +9,7 @@ import { Icon } from './Icon';
 import { LiveEditor } from './LiveEditor';
 import type { EditorAttachment, MarkdownEditor } from '../core/editor';
 import type { NoteImage } from '../core/types';
+import { useShortcut } from '../hooks/useShortcut';
 
 export interface ComposerProps {
   text: string;
@@ -33,6 +34,7 @@ export interface ComposerProps {
 
 /** 列表顶部的新建输入卡片。 */
 export function Composer(props: ComposerProps) {
+  const saveKeys = useShortcut('save');
   const empty = !props.text.trim() && !props.images.length;
   return (
     <div className="composer-dock">
@@ -45,8 +47,8 @@ export function Composer(props: ComposerProps) {
       >
         <LiveEditor
           value={props.text}
-          placeholder={'记一条… 支持 Markdown、#标签\nCtrl+Enter 保存，侧栏保持展开'}
-          ariaLabel="直接输入新记录，Ctrl+Enter 保存"
+          placeholder={`记一条… 支持 Markdown、#标签\n${saveKeys} 保存，侧栏保持展开`}
+          ariaLabel={`直接输入新记录，${saveKeys} 保存`}
           minHeight={76}
           maxHeight={props.maxHeight}
           onChange={props.onChange}
