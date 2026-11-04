@@ -6,7 +6,7 @@
 
 ## 当前版本
 
-0.7.2（预览版）。版本号以 `package.json` 为准，`src-tauri/Cargo.toml` 与 `src-tauri/tauri.conf.json` 同步修改，并在 `src/core/changelog.ts` 最前面补充一条更新日志（单元测试会检查两者一致）。
+0.7.3（预览版）。版本号以 `package.json` 为准，`src-tauri/Cargo.toml` 与 `src-tauri/tauri.conf.json` 同步修改，并在 `src/core/changelog.ts` 最前面补充一条更新日志（单元测试会检查两者一致）。
 
 ## 任务列表
 
