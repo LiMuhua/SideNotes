@@ -1,12 +1,14 @@
 /**
  * 数据与同步。
  *
- * 结构对应原型 settings.js 的 renderData：导入与导出、数据目录、云端自动备份三张卡，桌面端另加「快照」。
+ * 内容对应原型 settings.js 的 renderData（导入与导出、数据目录、云端自动备份），桌面端另加「快照」。
+ * 用户反馈原型的布局太乱，桌面端改为一行一项：名称（说明放在问号里）在左，取值与操作靠右，
+ * 目录路径占据中间的空间；分组按常用程度排列：数据目录、快照、导入与导出、云端自动备份。
  * 导入导出、打开目录、更换存储位置（复制数据并改写附件路径）、附件清理与快照在桌面端真实可用；
  * 云端备份尚未接入，界面只保存配置并明确说明，不把未实现的能力表现为已完成。
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import * as bridge from '../../core/bridge';
 import * as store from '../../core/store';
 import { BACKUP_ATTACHMENTS, backupName, parseBackup, rewriteAttachmentPaths, type ParsedBackup } from '../../core/backup';
@@ -23,7 +25,7 @@ import type {
 } from '../../core/types';
 import { useToast } from '../../hooks/useToast';
 import { useConfirm } from './confirm';
-import { ActionButton, Group, Help, Row, SelectField, TextField, Toggle, classes, type SaveSettings } from './controls';
+import { ActionButton, Group, Help, SelectField, TextField, Toggle, classes, type SaveSettings } from './controls';
 
 const LOCATIONS: ReadonlyArray<readonly [StorageLocation, string]> = [
   ['appdata', '应用数据目录（AppData）'],
@@ -66,6 +68,28 @@ function ProviderMark({ provider }: { provider: CloudProvider }) {
       viewBox={mark.viewBox}
       dangerouslySetInnerHTML={{ __html: mark.paths }}
     />
+  );
+}
+
+/** 一行设置：名称与问号说明在左，取值与操作靠右。 */
+function DataRow({ title, help, children }: { title: string; help?: string; children: ReactNode }) {
+  return (
+    <div className="data-row">
+      <div className="data-row-label">
+        <span>{title}</span>
+        {help ? <Help title={title} description={help} /> : null}
+      </div>
+      <div className="data-row-control">{children}</div>
+    </div>
+  );
+}
+
+/** 目录路径，过长时折行。 */
+function PathText({ label, path }: { label: string; path: string }) {
+  return (
+    <code className="data-path" aria-label={label} title={path}>
+      {path}
+    </code>
   );
 }
 
@@ -160,22 +184,20 @@ function BackupGroup({ saveFailed, loadFailed }: { saveFailed: boolean; loadFail
   };
 
   return (
-    <Group
-      title="导入与导出"
-      description="导出为一个文件夹：记录、草稿与设置写成 JSON，附件一并复制。导入时附件一同拷回。"
-      className="settings-wide"
-    >
-      <div className="settings-actions data-actions">
+    <Group title="导入与导出" className="settings-wide">
+      {saveFailed || loadFailed ? (
+        <p className="settings-notice is-error">
+          {loadFailed ? '未能读取本地记录，已暂停保存，以免覆盖已有数据。' : '本地存储受限，请先导出备份。'}
+        </p>
+      ) : null}
+      <DataRow title="本地备份" help="导出为一个文件夹，含附件；导入时合并到现有记录，附件一同拷回">
         <ActionButton label="导出备份" icon="download" data-action="export-data" onClick={() => void exportBackup()} />
         <ActionButton label="导入备份" icon="upload" data-action="import-data" onClick={() => void importBackup()} />
-      </div>
+      </DataRow>
       {saveFailed || loadFailed ? (
-        <>
-          <p className="settings-notice is-error">
-            {loadFailed ? '未能读取本地记录，已暂停保存，以免覆盖已有数据。' : '本地存储受限，请先导出备份。'}
-          </p>
+        <DataRow title="本地保存">
           <ActionButton label="重试本地保存" icon="restore" data-action="retry-storage" onClick={() => void retry()} />
-        </>
+        </DataRow>
       ) : null}
     </Group>
   );
@@ -287,22 +309,22 @@ function DirectoryGroup({
   };
 
   return (
-    <Group title="数据目录" className="settings-wide">
+    <Group title="数据目录" description="记录保存在本机，不会上传" className="settings-wide">
       {info?.unavailableDirectory ? (
         <p className="settings-notice is-error">
-          {`上次使用的数据目录「${info.unavailableDirectory}」不可用（例如移动硬盘未接入），已暂时使用应用数据目录。接入后重新启动即可恢复，也可以在这里迁移到其它位置。`}
+          {`数据目录「${info.unavailableDirectory}」不可用（例如移动硬盘未接入），已暂时改用应用数据目录；接入后重新启动即可恢复。`}
         </p>
       ) : null}
-      <Row title="存储位置" description="选择位置后点击「迁移到这里」：数据库与附件复制到新位置，之后的记录保存在那里，原目录保留作为备份。">
+      <DataRow title="存储位置" help="迁移后原目录保留作为备份">
         <SelectField
           label="数据存储位置"
           options={LOCATIONS}
           value={settings.storageLocation}
           onChange={(location) => void save({ storageLocation: location as StorageLocation })}
         />
-      </Row>
+      </DataRow>
       {settings.storageLocation === 'custom' ? (
-        <div className="settings-inline">
+        <DataRow title="自定义目录">
           <TextField
             label="自定义数据目录"
             value={settings.customDirectory}
@@ -310,42 +332,29 @@ function DirectoryGroup({
             onCommit={(customDirectory) => save({ customDirectory: customDirectory.slice(0, 500) })}
           />
           <ActionButton label="选择目录" icon="folder" onClick={() => void chooseDirectory()} />
-        </div>
+        </DataRow>
       ) : null}
       {needsMigration ? (
-        <div className="settings-inline storage-migration">
-          <code className="settings-path directory-field" aria-label="迁移的目标目录" title={target}>
-            {target}
-          </code>
-          <ActionButton label="迁移到这里" icon="upload" onClick={migrate} />
-        </div>
+        <DataRow title="迁移到" help="数据库与附件复制到这里，之后的记录保存在这里">
+          <PathText label="迁移的目标目录" path={target} />
+          <ActionButton label="迁移到这里" icon="upload" className="button primary compact" onClick={migrate} />
+        </DataRow>
       ) : null}
-      <div className="settings-inline current-directory">
-        <code className="settings-path directory-field" aria-label="当前数据目录" title={info?.directory}>
-          {info?.directory || '正在读取…'}
-        </code>
+      <DataRow title="当前目录">
+        <PathText label="当前数据目录" path={info?.directory || '正在读取…'} />
         <ActionButton label="打开目录" icon="folder" className="icon-button" onClick={() => void openDirectory()} />
-      </div>
-      <div className="settings-row setting-row settings-inline-toggle attachment-usage">
-        <div className="settings-row-info setting-copy">
-          <span className="settings-row-label setting-label">附件</span>
-          <Help
-            title="附件"
-            description="粘贴的截图与引用的文件各保存一份副本。删除记录、清空回收站或更换附件后，不再被引用的副本会自动清理；导入不到一天的附件暂时保留。"
-          />
-        </div>
-        <div className="settings-control">
-          <span className="settings-status" data-attachment-usage="">
-            {info ? `${info.attachmentCount} 个 · ${formatBytes(info.attachmentSize)}` : '正在读取…'}
-          </span>
-          <ActionButton
-            label={cleaning ? '正在清理…' : '立即清理'}
-            icon="trash"
-            disabled={cleaning}
-            onClick={() => void cleanAttachments()}
-          />
-        </div>
-      </div>
+      </DataRow>
+      <DataRow title="附件" help="不再被任何记录引用的附件会自动清理">
+        <span className="data-value" data-attachment-usage="">
+          {info ? `${info.attachmentCount} 个 · ${formatBytes(info.attachmentSize)}` : '正在读取…'}
+        </span>
+        <ActionButton
+          label={cleaning ? '正在清理…' : '立即清理'}
+          icon="trash"
+          disabled={cleaning}
+          onClick={() => void cleanAttachments()}
+        />
+      </DataRow>
     </Group>
   );
 }
@@ -447,40 +456,31 @@ function SnapshotGroup({ settings, save }: { settings: Settings; save: SaveSetti
   };
 
   return (
-    <Group title="快照" className="settings-wide snapshot-group">
-      <p className="settings-notice">
-        每天自动为数据库创建一份快照，导入备份、永久删除、迁移与恢复之前也各创建一份；附件只备份一次，所有快照共用。保留最近
-        24 小时内的全部快照、之前 7 天每天一份、再之前 4 周每周一份。
-      </p>
-      <Row
-        title="快照位置"
-        description="默认在数据目录下的 snapshots 文件夹。放到另一块硬盘或移动硬盘上，硬盘损坏时也能找回数据。"
-      >
-        <div className="settings-inline snapshot-directory">
-          <ActionButton label="选择目录" icon="folder" onClick={() => void chooseDirectory()} />
-          {directory ? <ActionButton label="恢复默认" icon="restore" onClick={() => void resetDirectory()} /> : null}
-        </div>
-      </Row>
-      <div className="settings-inline current-directory">
-        <code className="settings-path directory-field" aria-label="快照目录" title={overview?.directory}>
-          {overview?.directory || directory || '正在读取…'}
-        </code>
-        <ActionButton label="打开目录" icon="folder" className="icon-button" onClick={() => void openDirectory()} />
-      </div>
+    <Group
+      title="快照"
+      description="每天自动创建；导入、永久删除、迁移与恢复之前也会创建"
+      className="settings-wide snapshot-group"
+    >
       {problem ? <p className="settings-notice is-error">{`快照目录不可用：${problem}`}</p> : null}
-      <div className="settings-inline snapshot-summary">
-        <span className="settings-status">
+      <DataRow title="快照目录" help="放到另一块硬盘，硬盘损坏时也能找回数据">
+        <PathText label="快照目录" path={overview?.directory || directory || '正在读取…'} />
+        <ActionButton label="打开目录" icon="folder" className="icon-button" onClick={() => void openDirectory()} />
+        <ActionButton label="更换" icon="edit" onClick={() => void chooseDirectory()} />
+        {directory ? <ActionButton label="恢复默认" icon="restore" onClick={() => void resetDirectory()} /> : null}
+      </DataRow>
+      <DataRow title="已有快照" help="保留 24 小时内的全部，7 天内每天一份，4 周内每周一份">
+        <span className="data-value">
           {overview
-            ? `${overview.snapshots.length} 份快照 · 附件备份 ${overview.attachmentCount} 个，${formatBytes(overview.attachmentSize)}`
+            ? `${overview.snapshots.length} 份 · 附件 ${overview.attachmentCount} 个，${formatBytes(overview.attachmentSize)}`
             : '正在读取…'}
         </span>
         <ActionButton
-          label={busy ? '正在创建…' : '立即创建快照'}
+          label={busy ? '正在创建…' : '立即创建'}
           icon="plus"
           disabled={busy || Boolean(problem)}
           onClick={() => void createNow()}
         />
-      </div>
+      </DataRow>
       {overview?.snapshots.length ? (
         <ul className="snapshot-list" aria-label="快照列表">
           {overview.snapshots.map((snapshot) => (
@@ -534,16 +534,10 @@ function CloudGroup({ settings, save }: { settings: Settings; save: SaveSettings
   };
 
   return (
-    <Group title="云端自动备份" className="settings-wide">
-      <div className="settings-row setting-row settings-inline-toggle">
-        <div className="settings-row-info setting-copy">
-          <span className="settings-row-label setting-label">自动备份</span>
-          <Help title="自动备份" description="桌面版尚未接入云端服务；开启后只保存配置，不会上传数据。" />
-        </div>
-        <div className="settings-control">
-          <Toggle label="启用云端自动备份" checked={cloud.enabled} onChange={(enabled) => void saveCloud({ enabled })} />
-        </div>
-      </div>
+    <Group title="云端自动备份" description="尚未接入云端服务，只保存配置，不上传数据" className="settings-wide">
+      <DataRow title="自动备份">
+        <Toggle label="启用云端自动备份" checked={cloud.enabled} onChange={(enabled) => void saveCloud({ enabled })} />
+      </DataRow>
       <div className="sync-provider-grid">
         {PROVIDERS.map(([provider, name, protocol]) => {
           const active = cloud.provider === provider;
@@ -566,55 +560,49 @@ function CloudGroup({ settings, save }: { settings: Settings; save: SaveSettings
         })}
       </div>
       {cloud.provider === 'synology' ? (
-        <Row title="WebDAV 地址">
+        <DataRow title="WebDAV 地址">
           <TextField
             label="NAS WebDAV 地址"
             value={cloud.endpoint}
             placeholder="https://nas.example.com:5006"
             onCommit={(endpoint) => saveCloud({ endpoint: endpoint.slice(0, 500) })}
           />
-        </Row>
+        </DataRow>
       ) : null}
-      <div className="settings-field-grid">
-        <Row title="账户" description="仅配置预览，无需密码或令牌。">
-          <TextField
-            label="同步账户标识"
-            value={cloud.account}
-            placeholder={cloud.provider === 'synology' ? 'NAS 用户名' : '账户邮箱'}
-            onCommit={(account) => saveCloud({ account: account.slice(0, 120) })}
-          />
-        </Row>
-        <Row title="远程文件夹">
-          <TextField
-            label="云端备份文件夹"
-            value={cloud.folder}
-            placeholder="SideNotes"
-            onCommit={(folder) => saveCloud({ folder: folder.slice(0, 240) })}
-          />
-        </Row>
-      </div>
-      <p className={classes('settings-status sync-status', cloud.enabled && 'is-warning')} data-cloud-status="true">
-        {cloud.enabled ? '已启用 · 云端服务尚未接入，暂不上传' : '未启用 · 云端服务尚未接入'}
-      </p>
-      <div className="settings-actions data-actions">
+      <DataRow title="账户" help="无需密码或令牌">
+        <TextField
+          label="同步账户标识"
+          value={cloud.account}
+          placeholder={cloud.provider === 'synology' ? 'NAS 用户名' : '账户邮箱'}
+          onCommit={(account) => saveCloud({ account: account.slice(0, 120) })}
+        />
+      </DataRow>
+      <DataRow title="远程文件夹">
+        <TextField
+          label="云端备份文件夹"
+          value={cloud.folder}
+          placeholder="SideNotes"
+          onCommit={(folder) => saveCloud({ folder: folder.slice(0, 240) })}
+        />
+      </DataRow>
+      <DataRow title="状态">
+        <span className={classes('data-value', cloud.enabled && 'is-warning')} data-cloud-status="true">
+          {cloud.enabled ? '已启用，暂不上传' : '未启用'}
+        </span>
         <ActionButton
           label="云端备份"
           icon="cloud"
           onClick={() => toast(cloud.enabled ? '云端服务尚未接入桌面版，可先导出本地备份' : '请先启用自动备份')}
         />
-      </div>
-      <Row
-        title="备份失败系统通知"
-        description={
-          notify === null
-            ? '当前环境不支持系统通知。'
-            : notify
-              ? '已允许；仅在备份失败时提醒。'
-              : '经你允许后，备份失败时发送系统通知。'
-        }
-      >
-        <ActionButton label={notify ? '已开启' : '开启通知'} icon="bell" onClick={() => void enableNotifications()} />
-      </Row>
+      </DataRow>
+      <DataRow title="失败通知" help="备份失败时发送系统通知">
+        <ActionButton
+          label={notify ? '已开启' : '开启通知'}
+          icon="bell"
+          title={notify === null ? '当前环境不支持系统通知' : undefined}
+          onClick={() => void enableNotifications()}
+        />
+      </DataRow>
     </Group>
   );
 }
@@ -648,16 +636,11 @@ export function DataPanel({
   }, [revision]);
 
   return (
-    <>
-      <p className="settings-notice">
-        记录保存在本机 SQLite 数据库，不会上传。云端自动备份尚未接入桌面版，相关选项目前只保存配置，不会上传数据。
-      </p>
-      <div className="settings-dashboard data-dashboard">
-        <BackupGroup saveFailed={saveFailed} loadFailed={loadFailed} />
-        <DirectoryGroup settings={settings} save={save} info={info} onRefresh={() => setRevision((value) => value + 1)} />
-        <SnapshotGroup settings={settings} save={save} />
-        <CloudGroup settings={settings} save={save} />
-      </div>
-    </>
+    <div className="settings-dashboard data-dashboard">
+      <DirectoryGroup settings={settings} save={save} info={info} onRefresh={() => setRevision((value) => value + 1)} />
+      <SnapshotGroup settings={settings} save={save} />
+      <BackupGroup saveFailed={saveFailed} loadFailed={loadFailed} />
+      <CloudGroup settings={settings} save={save} />
+    </div>
   );
 }
