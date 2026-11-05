@@ -63,7 +63,8 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
-    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    // design-system 下是设计系统的检查：令牌齐全、关键颜色组合的对比度达标、产品样式只引用令牌。
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'design-system/**/*.test.ts', 'design-system/**/*.test.tsx'],
     globals: false,
   },
 });

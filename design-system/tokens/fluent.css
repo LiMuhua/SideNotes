@@ -1,0 +1,189 @@
+/* ==================== 方向：Windows 11（Fluent） ====================
+ *
+ * 一张亚克力面板，和开始菜单、快速设置一样（Glance Windows 11 外观，theme.rs、skins.rs）：
+ * 离开屏幕边缘 12 像素，8 像素圆角，一像素描边；文字是黑色或白色加透明度，内容靠标题和留白分组；
+ * 底栏稍暗；强调色取系统强调色，取不到时用 Glance 记录的默认值。
+ * 弱化文字的透明度比 Fluent 的第三级文字高，保证亚克力叠在任何背景上都达到 4.5:1。
+ */
+
+/* ---------- 与明暗无关的令牌 ---------- */
+[data-sn-direction='fluent'] {
+  --sn-font-ui: 'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans SC',
+    'Noto Sans CJK SC', system-ui, -apple-system, Roboto, 'Noto Sans', Ubuntu, Cantarell, sans-serif;
+  --sn-font-title: 'Segoe UI Variable Display', 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans SC',
+    'Noto Sans CJK SC', system-ui, -apple-system, Roboto, 'Noto Sans', Ubuntu, Cantarell, sans-serif;
+  --sn-font-note: var(--sn-font-ui);
+  --sn-font-meta: var(--sn-font-ui);
+  --sn-font-code: 'Cascadia Mono', 'Maple Mono NF CN', Consolas, 'Noto Sans Mono', 'DejaVu Sans Mono', monospace;
+  --sn-font-size-xs: 11px;
+  --sn-font-size-sm: 12px;
+  --sn-font-size-md: 13px;
+  --sn-font-size-lg: 14px;
+  --sn-font-size-xl: 20px;
+  --sn-line-height-tight: 1.3;
+  --sn-line-height-normal: 1.45;
+  --sn-line-height-relaxed: 1.6;
+  --sn-note-size: 14px;
+  --sn-note-line-height: 1.55;
+  --sn-code-size: 12.5px;
+  --sn-body-weight: 400;
+  --sn-title-weight: 600;
+  --sn-title-tracking: 0em;
+
+  --sn-radius-xs: 2px;
+  --sn-radius-sm: 4px;
+  --sn-radius-md: 4px;
+  --sn-radius-lg: 8px;
+  --sn-radius-control: 4px;
+  --sn-radius-chip: 4px;
+  --sn-card-radius: 4px;
+
+  --sn-panel-blur: 30px;
+  --sn-panel-saturate: 1.25;
+  --sn-panel-inset: 12px;
+  --sn-panel-radius: 8px;
+  --sn-panel-radius-edge: 8px;
+  --sn-block-gap: 0px;
+
+  --sn-duration-fast: 100ms;
+  --sn-duration-normal: 167ms;
+  --sn-duration-slow: 250ms;
+  --sn-ease-standard: cubic-bezier(0.33, 0, 0.67, 1);
+  --sn-ease-enter: cubic-bezier(0.1, 0.9, 0.2, 1);
+  --sn-ease-exit: cubic-bezier(0.7, 0, 1, 0.5);
+  --sn-motion-distance: 8px;
+
+  --sn-header-height: 44px;
+  --sn-tab-height: 32px;
+  --sn-footer-height: 48px;
+  --sn-panel-padding: 12px;
+  --sn-card-padding-x: 12px;
+  --sn-card-padding-y: 10px;
+  --sn-card-gap: 4px;
+  --sn-control-height-sm: 24px;
+  --sn-control-height: 32px;
+  --sn-control-height-lg: 40px;
+  --sn-icon-size: 16px;
+  --sn-icon-size-sm: 14px;
+  --sn-icon-stroke: 1.5;
+  --sn-menu-item-height: 32px;
+  --sn-dialog-width: 440px;
+}
+
+/* ---------- 浅色 ---------- */
+[data-sn-direction='fluent'] {
+  color-scheme: light;
+  --sn-color-panel: rgb(252 252 252 / 0.85);
+  --sn-color-panel-band: rgb(0 0 0 / 0.035);
+  --sn-color-card: rgb(255 255 255 / 0.7);
+  --sn-color-card-head: rgb(0 0 0 / 0);
+  --sn-color-bg: #f3f3f3;
+  --sn-color-surface: #fbfbfb;
+  --sn-color-surface-raised: #f9f9f9;
+  --sn-color-surface-sunken: rgb(255 255 255 / 0.7);
+  --sn-color-hover: rgb(0 0 0 / 0.04);
+  --sn-color-pressed: rgb(0 0 0 / 0.06);
+  --sn-color-selected: rgb(0 0 0 / 0.06);
+  --sn-color-overlay: rgb(0 0 0 / 0.3);
+
+  --sn-color-border: rgb(0 0 0 / 0.1);
+  --sn-color-border-subtle: rgb(0 0 0 / 0.06);
+  --sn-color-border-strong: rgb(0 0 0 / 0.56);
+  --sn-color-edge-highlight: rgb(255 255 255 / 0);
+
+  --sn-color-text: rgb(0 0 0 / 0.9);
+  --sn-color-text-secondary: rgb(0 0 0 / 0.72);
+  --sn-color-text-muted: rgb(0 0 0 / 0.62);
+  --sn-color-text-disabled: rgb(0 0 0 / 0.36);
+  --sn-color-halo: rgb(255 255 255 / 0);
+
+  --sn-color-accent: #005fb8;
+  --sn-color-accent-hover: #1a6fc4;
+  --sn-color-accent-text: #005fb8;
+  --sn-color-accent-subtle: rgb(0 95 184 / 0.1);
+  --sn-color-on-accent: #ffffff;
+  --sn-color-focus: rgb(0 0 0 / 0.9);
+  --sn-color-highlight: rgb(255 200 0 / 0.38);
+  --sn-color-selection: rgb(0 95 184 / 0.22);
+  --sn-color-inverse: #2b2b2b;
+  --sn-color-on-inverse: #ffffff;
+  --sn-color-mark-workspace: rgb(0 0 0 / 0.62);
+  --sn-color-mark-pinned: #005fb8;
+  --sn-color-mark-archive: rgb(0 0 0 / 0.62);
+
+  --sn-color-success: #0f7b0f;
+  --sn-color-success-subtle: rgb(15 123 15 / 0.1);
+  --sn-color-warning: #8a5300;
+  --sn-color-warning-subtle: rgb(157 93 0 / 0.12);
+  --sn-color-danger: #c42b1c;
+  --sn-color-danger-subtle: rgb(196 43 28 / 0.1);
+  --sn-color-info: #005fb8;
+  --sn-color-info-subtle: rgb(0 95 184 / 0.08);
+
+  --sn-code-bg: rgb(0 0 0 / 0.05);
+  --sn-code-text: rgb(0 0 0 / 0.9);
+
+  --sn-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.06);
+  --sn-shadow-md: 0 8px 16px rgb(0 0 0 / 0.14), 0 0 0 1px rgb(0 0 0 / 0.05);
+  --sn-shadow-lg: 0 32px 64px rgb(0 0 0 / 0.19), 0 2px 21px rgb(0 0 0 / 0.15);
+  --sn-shadow-panel: 0 8px 32px rgb(0 0 0 / 0.18), 0 2px 8px rgb(0 0 0 / 0.08);
+}
+
+/* ---------- 深色 ---------- */
+[data-sn-direction='fluent'][data-sn-theme='dark'] {
+  color-scheme: dark;
+  --sn-color-panel: rgb(44 44 44 / 0.96);
+  --sn-color-panel-band: rgb(0 0 0 / 0.18);
+  --sn-color-card: rgb(255 255 255 / 0.05);
+  --sn-color-card-head: rgb(0 0 0 / 0);
+  --sn-color-bg: #202020;
+  --sn-color-surface: #272727;
+  --sn-color-surface-raised: #2c2c2c;
+  --sn-color-surface-sunken: rgb(255 255 255 / 0.06);
+  --sn-color-hover: rgb(255 255 255 / 0.06);
+  --sn-color-pressed: rgb(255 255 255 / 0.04);
+  --sn-color-selected: rgb(255 255 255 / 0.08);
+  --sn-color-overlay: rgb(0 0 0 / 0.45);
+
+  --sn-color-border: rgb(255 255 255 / 0.09);
+  --sn-color-border-subtle: rgb(255 255 255 / 0.06);
+  --sn-color-border-strong: rgb(255 255 255 / 0.54);
+  --sn-color-edge-highlight: rgb(255 255 255 / 0);
+
+  --sn-color-text: #ffffff;
+  --sn-color-text-secondary: rgb(255 255 255 / 0.79);
+  --sn-color-text-muted: rgb(255 255 255 / 0.62);
+  --sn-color-text-disabled: rgb(255 255 255 / 0.36);
+  --sn-color-halo: rgb(0 0 0 / 0);
+
+  --sn-color-accent: #60cdff;
+  --sn-color-accent-hover: #7fd6ff;
+  --sn-color-accent-text: #99ebff;
+  --sn-color-accent-subtle: rgb(96 205 255 / 0.12);
+  --sn-color-on-accent: #000000;
+  --sn-color-focus: #ffffff;
+  --sn-color-highlight: rgb(255 200 0 / 0.3);
+  --sn-color-selection: rgb(96 205 255 / 0.3);
+  --sn-color-inverse: #f3f3f3;
+  --sn-color-on-inverse: #1c1c1c;
+  --sn-color-mark-workspace: rgb(255 255 255 / 0.62);
+  --sn-color-mark-pinned: #99ebff;
+  --sn-color-mark-archive: rgb(255 255 255 / 0.62);
+
+  --sn-color-success: #6ccb5f;
+  --sn-color-success-subtle: rgb(108 203 95 / 0.13);
+  --sn-color-warning: #fce100;
+  --sn-color-warning-subtle: rgb(252 225 0 / 0.12);
+  --sn-color-danger: #ff99a4;
+  --sn-color-danger-subtle: rgb(255 153 164 / 0.12);
+  --sn-color-info: #99ebff;
+  --sn-color-info-subtle: rgb(96 205 255 / 0.1);
+
+  --sn-code-bg: rgb(255 255 255 / 0.06);
+  --sn-code-text: #ffffff;
+
+  --sn-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.3);
+  --sn-shadow-md: 0 8px 16px rgb(0 0 0 / 0.26), 0 0 0 1px rgb(0 0 0 / 0.2);
+  --sn-shadow-lg: 0 32px 64px rgb(0 0 0 / 0.37), 0 2px 21px rgb(0 0 0 / 0.37);
+  --sn-shadow-panel: 0 8px 32px rgb(0 0 0 / 0.4), 0 2px 8px rgb(0 0 0 / 0.25);
+}

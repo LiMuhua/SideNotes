@@ -1,0 +1,187 @@
+/* ==================== 方向：开发者工作台（Developer Workbench） ====================
+ *
+ * 像编辑器的一角：界面与正文都用等宽字体（沿用现有 SideNotes 的默认字体 Maple Mono NF CN），
+ * 石墨色中性色加琥珀强调色；整块贴边，面板是略深的窗口底色，每条记录是一个带标题栏的浅色窗格，
+ * 窗格之间留 6 像素的缝，小圆角、几乎没有阴影；底部状态栏常驻存储状态与快捷键提示；动效极短。
+ */
+
+/* ---------- 与明暗无关的令牌 ---------- */
+[data-sn-direction='workbench'] {
+  --sn-font-ui: 'Maple Mono NF CN', 'Cascadia Mono', 'JetBrains Mono', Consolas, 'Noto Sans Mono', 'DejaVu Sans Mono',
+    monospace;
+  --sn-font-title: var(--sn-font-ui);
+  --sn-font-note: var(--sn-font-ui);
+  --sn-font-meta: var(--sn-font-ui);
+  --sn-font-code: var(--sn-font-ui);
+  --sn-font-size-xs: 11px;
+  --sn-font-size-sm: 12px;
+  --sn-font-size-md: 13px;
+  --sn-font-size-lg: 13px;
+  --sn-font-size-xl: 15px;
+  --sn-line-height-tight: 1.3;
+  --sn-line-height-normal: 1.5;
+  --sn-line-height-relaxed: 1.65;
+  --sn-note-size: 13px;
+  --sn-note-line-height: 1.65;
+  --sn-code-size: 12px;
+  --sn-body-weight: 400;
+  --sn-title-weight: 700;
+  --sn-title-tracking: 0em;
+
+  --sn-radius-xs: 2px;
+  --sn-radius-sm: 3px;
+  --sn-radius-md: 4px;
+  --sn-radius-lg: 6px;
+  --sn-radius-control: 3px;
+  --sn-radius-chip: 2px;
+  --sn-card-radius: 4px;
+
+  --sn-panel-blur: 0px;
+  --sn-panel-saturate: 1;
+  --sn-panel-inset: 0px;
+  --sn-panel-radius: 0px;
+  --sn-panel-radius-edge: 0px;
+  --sn-block-gap: 0px;
+
+  --sn-duration-fast: 70ms;
+  --sn-duration-normal: 110ms;
+  --sn-duration-slow: 160ms;
+  --sn-ease-standard: cubic-bezier(0.2, 0, 0.2, 1);
+  --sn-ease-enter: cubic-bezier(0, 0, 0.2, 1);
+  --sn-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --sn-motion-distance: 4px;
+
+  --sn-header-height: 36px;
+  --sn-tab-height: 30px;
+  --sn-footer-height: 26px;
+  --sn-panel-padding: 10px;
+  --sn-card-padding-x: 10px;
+  --sn-card-padding-y: 8px;
+  --sn-card-gap: 6px;
+  --sn-control-height-sm: 22px;
+  --sn-control-height: 26px;
+  --sn-control-height-lg: 30px;
+  --sn-icon-size: 16px;
+  --sn-icon-size-sm: 14px;
+  --sn-icon-stroke: 1.5;
+  --sn-menu-item-height: 26px;
+  --sn-dialog-width: 420px;
+}
+
+/* ---------- 浅色 ---------- */
+[data-sn-direction='workbench'] {
+  color-scheme: light;
+  --sn-color-panel: #eeeeea;
+  --sn-color-panel-band: rgb(28 28 26 / 0.035);
+  --sn-color-card: #fdfdfc;
+  --sn-color-card-head: rgb(28 28 26 / 0.045);
+  --sn-color-bg: #efefec;
+  --sn-color-surface: #fafaf8;
+  --sn-color-surface-raised: #ffffff;
+  --sn-color-surface-sunken: #e6e6e2;
+  --sn-color-hover: rgb(28 28 26 / 0.05);
+  --sn-color-pressed: rgb(28 28 26 / 0.09);
+  --sn-color-selected: rgb(163 95 0 / 0.11);
+  --sn-color-overlay: rgb(20 20 18 / 0.35);
+
+  --sn-color-border: #d6d6d0;
+  --sn-color-border-subtle: #e3e3de;
+  --sn-color-border-strong: #86867f;
+  --sn-color-edge-highlight: rgb(255 255 255 / 0);
+
+  --sn-color-text: #1b1b19;
+  --sn-color-text-secondary: #4a4a45;
+  --sn-color-text-muted: #5e5e58;
+  --sn-color-text-disabled: #a8a8a2;
+  --sn-color-halo: rgb(255 255 255 / 0);
+
+  --sn-color-accent: #a35f00;
+  --sn-color-accent-hover: #8a5000;
+  --sn-color-accent-text: #8f5300;
+  --sn-color-accent-subtle: rgb(163 95 0 / 0.12);
+  --sn-color-on-accent: #ffffff;
+  --sn-color-focus: #a35f00;
+  --sn-color-highlight: rgb(250 204 21 / 0.4);
+  --sn-color-selection: rgb(163 95 0 / 0.2);
+  --sn-color-inverse: #262624;
+  --sn-color-on-inverse: #f3f3f1;
+  --sn-color-mark-workspace: #5e5e58;
+  --sn-color-mark-pinned: #8f5300;
+  --sn-color-mark-archive: #5e5e58;
+
+  --sn-color-success: #1b6e3d;
+  --sn-color-success-subtle: rgb(31 122 68 / 0.1);
+  --sn-color-warning: #7d5f00;
+  --sn-color-warning-subtle: rgb(202 160 0 / 0.14);
+  --sn-color-danger: #b83a2e;
+  --sn-color-danger-subtle: rgb(184 58 46 / 0.1);
+  --sn-color-info: #2a62b0;
+  --sn-color-info-subtle: rgb(42 98 176 / 0.1);
+
+  --sn-code-bg: #f0f0ec;
+  --sn-code-text: #1e1e1c;
+
+  --sn-shadow-sm: 0 1px 2px rgb(20 20 18 / 0.06);
+  --sn-shadow-md: 0 4px 12px rgb(20 20 18 / 0.12);
+  --sn-shadow-lg: 0 14px 32px rgb(20 20 18 / 0.18);
+  --sn-shadow-panel: 0 0 0 1px #d6d6d0, 0 0 24px rgb(20 20 18 / 0.12);
+}
+
+/* ---------- 深色 ---------- */
+[data-sn-direction='workbench'][data-sn-theme='dark'] {
+  color-scheme: dark;
+  --sn-color-panel: #111418;
+  --sn-color-panel-band: rgb(0 0 0 / 0.22);
+  --sn-color-card: #181c21;
+  --sn-color-card-head: rgb(255 255 255 / 0.035);
+  --sn-color-bg: #0f1215;
+  --sn-color-surface: #13161a;
+  --sn-color-surface-raised: #1b1f24;
+  --sn-color-surface-sunken: #0b0d0f;
+  --sn-color-hover: rgb(255 255 255 / 0.045);
+  --sn-color-pressed: rgb(255 255 255 / 0.08);
+  --sn-color-selected: rgb(229 165 75 / 0.13);
+  --sn-color-overlay: rgb(0 0 0 / 0.55);
+
+  --sn-color-border: #2a3037;
+  --sn-color-border-subtle: #21262c;
+  --sn-color-border-strong: #67707b;
+  --sn-color-edge-highlight: rgb(255 255 255 / 0);
+
+  --sn-color-text: #d8dde3;
+  --sn-color-text-secondary: #a7afb8;
+  --sn-color-text-muted: #8a939d;
+  --sn-color-text-disabled: #4b525a;
+  --sn-color-halo: rgb(0 0 0 / 0);
+
+  --sn-color-accent: #e5a54b;
+  --sn-color-accent-hover: #f0b865;
+  --sn-color-accent-text: #f0b865;
+  --sn-color-accent-subtle: rgb(229 165 75 / 0.14);
+  --sn-color-on-accent: #1a1206;
+  --sn-color-focus: #f0b865;
+  --sn-color-highlight: rgb(240 184 101 / 0.28);
+  --sn-color-selection: rgb(229 165 75 / 0.25);
+  --sn-color-inverse: #d8dde3;
+  --sn-color-on-inverse: #13161a;
+  --sn-color-mark-workspace: #8a939d;
+  --sn-color-mark-pinned: #f0b865;
+  --sn-color-mark-archive: #8a939d;
+
+  --sn-color-success: #6cc487;
+  --sn-color-success-subtle: rgb(108 196 135 / 0.14);
+  --sn-color-warning: #e9c46a;
+  --sn-color-warning-subtle: rgb(233 196 106 / 0.14);
+  --sn-color-danger: #f2766b;
+  --sn-color-danger-subtle: rgb(242 118 107 / 0.14);
+  --sn-color-info: #6fa8f0;
+  --sn-color-info-subtle: rgb(111 168 240 / 0.14);
+
+  --sn-code-bg: #0b0d0f;
+  --sn-code-text: #d7dce2;
+
+  --sn-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.35);
+  --sn-shadow-md: 0 6px 16px rgb(0 0 0 / 0.45);
+  --sn-shadow-lg: 0 16px 36px rgb(0 0 0 / 0.55);
+  --sn-shadow-panel: 0 0 0 1px #2a3037, 0 0 28px rgb(0 0 0 / 0.45);
+}

@@ -1,0 +1,189 @@
+/* ==================== 方向：记录纸（Paper） ====================
+ *
+ * 一叠贴着屏幕边缘的记录纸（取自 Glance 记录纸外观，theme.rs）：灰绿纸色、单色墨水，贴边一侧没有圆角；
+ * 面板是略深的纸垫，每条记录是一张浅色纸片，纸片底边有一像素的纸厚阴影，彼此留 8 像素的缝。
+ * Glance 原本用细线分栏，记录多、长短不一时边界不清楚，这里改为纸片。信号色只在需要时出现。
+ * 弱化文字比 Glance 原值略深，以满足 4.5:1；Archivo 未随应用打包时回落到系统无衬线字体。
+ */
+
+/* ---------- 与明暗无关的令牌 ---------- */
+[data-sn-direction='paper'] {
+  --sn-font-ui: Archivo, 'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans SC',
+    'Noto Sans CJK SC', system-ui, -apple-system, Roboto, 'Noto Sans', Ubuntu, Cantarell, sans-serif;
+  --sn-font-title: var(--sn-font-ui);
+  --sn-font-note: var(--sn-font-ui);
+  --sn-font-meta: var(--sn-font-ui);
+  --sn-font-code: 'Cascadia Mono', 'Maple Mono NF CN', Consolas, 'Noto Sans Mono', 'DejaVu Sans Mono', monospace;
+  --sn-font-size-xs: 11px;
+  --sn-font-size-sm: 12px;
+  --sn-font-size-md: 13px;
+  --sn-font-size-lg: 13px;
+  --sn-font-size-xl: 16px;
+  --sn-line-height-tight: 1.3;
+  --sn-line-height-normal: 1.5;
+  --sn-line-height-relaxed: 1.7;
+  --sn-note-size: 13.5px;
+  --sn-note-line-height: 1.7;
+  --sn-code-size: 12px;
+  --sn-body-weight: 400;
+  --sn-title-weight: 650;
+  --sn-title-tracking: -0.005em;
+
+  --sn-radius-xs: 3px;
+  --sn-radius-sm: 4px;
+  --sn-radius-md: 6px;
+  --sn-radius-lg: 10px;
+  --sn-radius-control: 6px;
+  --sn-radius-chip: 4px;
+  --sn-card-radius: 3px;
+
+  --sn-panel-blur: 0px;
+  --sn-panel-saturate: 1;
+  --sn-panel-inset: 0px;
+  --sn-panel-radius: 16px;
+  --sn-panel-radius-edge: 0px;
+  --sn-block-gap: 0px;
+
+  --sn-duration-fast: 160ms;
+  --sn-duration-normal: 240ms;
+  --sn-duration-slow: 280ms;
+  --sn-ease-standard: cubic-bezier(0.16, 1, 0.3, 1);
+  --sn-ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --sn-ease-exit: cubic-bezier(0.4, 0, 0.7, 1);
+  --sn-motion-distance: 6px;
+
+  --sn-header-height: 42px;
+  --sn-tab-height: 32px;
+  --sn-footer-height: 38px;
+  --sn-panel-padding: 12px;
+  --sn-card-padding-x: 12px;
+  --sn-card-padding-y: 10px;
+  --sn-card-gap: 8px;
+  --sn-control-height-sm: 24px;
+  --sn-control-height: 30px;
+  --sn-control-height-lg: 36px;
+  --sn-icon-size: 16px;
+  --sn-icon-size-sm: 14px;
+  --sn-icon-stroke: 1.6;
+  --sn-menu-item-height: 32px;
+  --sn-dialog-width: 440px;
+}
+
+/* ---------- 浅色 ---------- */
+[data-sn-direction='paper'] {
+  color-scheme: light;
+  --sn-color-panel: #e3e9e1;
+  --sn-color-panel-band: rgb(22 34 30 / 0);
+  --sn-color-card: #f5f8f3;
+  --sn-color-card-head: rgb(0 0 0 / 0);
+  --sn-color-bg: #dde3da;
+  --sn-color-surface: #eef2ec;
+  --sn-color-surface-raised: #f7f9f5;
+  --sn-color-surface-sunken: #dae1d7;
+  --sn-color-hover: rgb(22 34 30 / 0.05);
+  --sn-color-pressed: rgb(22 34 30 / 0.09);
+  --sn-color-selected: rgb(22 34 30 / 0.075);
+  --sn-color-overlay: rgb(22 34 30 / 0.3);
+
+  --sn-color-border: #cdd6cb;
+  --sn-color-border-subtle: #d6ded4;
+  --sn-color-border-strong: #75827b;
+  --sn-color-edge-highlight: rgb(255 255 255 / 0);
+
+  --sn-color-text: #16221e;
+  --sn-color-text-secondary: #3f4c46;
+  --sn-color-text-muted: #56645d;
+  --sn-color-text-disabled: #a5b1aa;
+  --sn-color-halo: rgb(255 255 255 / 0);
+
+  /* 记录纸只有一种墨色：强调色就是墨色本身，只有一种「第二墨色」用于主要操作与选中。 */
+  --sn-color-accent: #1f6b45;
+  --sn-color-accent-hover: #185838;
+  --sn-color-accent-text: #1f6b45;
+  --sn-color-accent-subtle: rgb(31 107 69 / 0.1);
+  --sn-color-on-accent: #ffffff;
+  --sn-color-focus: #16221e;
+  --sn-color-highlight: rgb(214 180 60 / 0.38);
+  --sn-color-selection: rgb(31 107 69 / 0.2);
+  --sn-color-inverse: #16221e;
+  --sn-color-on-inverse: #eef2ec;
+  --sn-color-mark-workspace: #56645d;
+  --sn-color-mark-pinned: #1f6b45;
+  --sn-color-mark-archive: #56645d;
+
+  --sn-color-success: #1f6b45;
+  --sn-color-success-subtle: rgb(31 107 69 / 0.1);
+  --sn-color-warning: #855c00;
+  --sn-color-warning-subtle: rgb(200 150 40 / 0.14);
+  --sn-color-danger: #a83318;
+  --sn-color-danger-subtle: rgb(210 63 28 / 0.1);
+  --sn-color-info: #2f5f8a;
+  --sn-color-info-subtle: rgb(47 95 138 / 0.1);
+
+  --sn-code-bg: #e4eae2;
+  --sn-code-text: #16221e;
+
+  --sn-shadow-sm: 0 1px 0 rgb(22 34 30 / 0.09);
+  --sn-shadow-md: 0 10px 28px -8px rgb(22 34 30 / 0.28), 0 2px 6px rgb(22 34 30 / 0.1);
+  --sn-shadow-lg: 0 18px 40px -12px rgb(22 34 30 / 0.35), 0 2px 6px rgb(22 34 30 / 0.12);
+  --sn-shadow-panel: 0 18px 40px -12px rgb(22 34 30 / 0.35), 0 2px 6px rgb(22 34 30 / 0.12);
+}
+
+/* ---------- 深色 ---------- */
+[data-sn-direction='paper'][data-sn-theme='dark'] {
+  color-scheme: dark;
+  --sn-color-panel: #0f1a17;
+  --sn-color-panel-band: rgb(0 0 0 / 0);
+  --sn-color-card: #172723;
+  --sn-color-card-head: rgb(0 0 0 / 0);
+  --sn-color-bg: #0c1513;
+  --sn-color-surface: #14231f;
+  --sn-color-surface-raised: #1b2d28;
+  --sn-color-surface-sunken: #0b1412;
+  --sn-color-hover: rgb(231 238 231 / 0.06);
+  --sn-color-pressed: rgb(231 238 231 / 0.1);
+  --sn-color-selected: rgb(231 238 231 / 0.08);
+  --sn-color-overlay: rgb(0 0 0 / 0.5);
+
+  --sn-color-border: #273a34;
+  --sn-color-border-subtle: #20312c;
+  --sn-color-border-strong: #6f817a;
+  --sn-color-edge-highlight: rgb(255 255 255 / 0);
+
+  --sn-color-text: #e7eee7;
+  --sn-color-text-secondary: #a1b0a8;
+  --sn-color-text-muted: #8c9c94;
+  --sn-color-text-disabled: #4f615a;
+  --sn-color-halo: rgb(0 0 0 / 0);
+
+  --sn-color-accent: #4ecb82;
+  --sn-color-accent-hover: #6ad597;
+  --sn-color-accent-text: #4ecb82;
+  --sn-color-accent-subtle: rgb(78 203 130 / 0.13);
+  --sn-color-on-accent: #0b1f15;
+  --sn-color-focus: #e7eee7;
+  --sn-color-highlight: rgb(214 180 60 / 0.3);
+  --sn-color-selection: rgb(78 203 130 / 0.25);
+  --sn-color-inverse: #e7eee7;
+  --sn-color-on-inverse: #14231f;
+  --sn-color-mark-workspace: #a1b0a8;
+  --sn-color-mark-pinned: #4ecb82;
+  --sn-color-mark-archive: #a1b0a8;
+
+  --sn-color-success: #4ecb82;
+  --sn-color-success-subtle: rgb(78 203 130 / 0.13);
+  --sn-color-warning: #e4b45a;
+  --sn-color-warning-subtle: rgb(228 180 90 / 0.14);
+  --sn-color-danger: #ff7b4a;
+  --sn-color-danger-subtle: rgb(255 123 74 / 0.14);
+  --sn-color-info: #7fb3dd;
+  --sn-color-info-subtle: rgb(127 179 221 / 0.14);
+
+  --sn-code-bg: #0f1b18;
+  --sn-code-text: #dfe8e0;
+
+  --sn-shadow-sm: 0 1px 0 rgb(0 0 0 / 0.4);
+  --sn-shadow-md: 0 10px 28px -8px rgb(0 0 0 / 0.6), 0 2px 6px rgb(0 0 0 / 0.3);
+  --sn-shadow-lg: 0 18px 40px -12px rgb(0 0 0 / 0.6), 0 2px 6px rgb(0 0 0 / 0.3);
+  --sn-shadow-panel: 0 18px 40px -12px rgb(0 0 0 / 0.6), 0 2px 6px rgb(0 0 0 / 0.3);
+}
