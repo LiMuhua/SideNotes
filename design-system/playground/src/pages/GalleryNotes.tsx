@@ -10,7 +10,7 @@ import { ChangelogDialog, EmojiDialog, GuideDialog, NoteInfoDialog, noteMenuItem
 import { NoteCard, type NoteCardProps } from '../app/NoteCard';
 import { FilterBanner, ListTopline, SidebarFooter, SidebarNav, TidyNudge } from '../app/SidebarParts';
 import { Button } from '../ui/Button';
-import { cx, useDirection } from '../ui/context';
+import { cx, useSurface } from '../ui/context';
 import { Icon } from '../ui/Icon';
 import { ContextMenu } from '../ui/Menu';
 import { useToast } from '../ui/Tabs';
@@ -20,10 +20,10 @@ const noop = () => {};
 
 /** 侧栏面板的一小块：示例放在真实的面板底色上，宽度与侧栏一致；记录卡片放在与侧栏相同的列表容器里。 */
 function PanelSample({ children, className, list = false }: { children: ReactNode; className?: string; list?: boolean }) {
-  const direction = useDirection();
+  const surface = useSurface();
   return (
-    <div className={cx('sn-panel-sample', 'sn-sidebar', `is-${direction.dock}`, `has-${direction.entries}`, className)}>
-      {list ? <div className={cx('sn-note-list', `is-${direction.entries}`)}>{children}</div> : children}
+    <div className={cx('sn-panel-sample', 'sn-sidebar', `is-${surface.dock}`, `has-${surface.entries}`, className)}>
+      {list ? <div className={cx('sn-note-list', `is-${surface.entries}`)}>{children}</div> : children}
     </div>
   );
 }
@@ -184,7 +184,7 @@ export function PartsSection() {
           <Composer />
         </PanelSample>
       </Demo>
-      <Demo title="底栏" note="存储状态与设置入口；开发者工作台方向改为常驻状态栏。">
+      <Demo title="底栏" note="存储状态与设置入口；终端主题改为常驻状态栏。">
         <PanelSample>
           <SidebarFooter view={plain} onSettings={noop} />
         </PanelSample>

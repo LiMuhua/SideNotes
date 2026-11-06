@@ -1,4 +1,4 @@
-/* ==================== 方向：现代编辑（Modern Editorial） ====================
+/* ==================== 主题：杂志（Magazine） ====================
  *
  * 一本随手翻的笔记本：暖纸色中性色、鼠尾草绿强调色（沿用现有 SideNotes 的配色基调），
  * 衬线标题、宽松留白；侧栏离开屏幕边缘 8 像素，圆角面板，记录是带轻微阴影的圆角卡片；
@@ -6,7 +6,7 @@
  */
 
 /* ---------- 与明暗无关的令牌 ---------- */
-[data-sn-direction='editorial'] {
+[data-sn-surface='magazine'] {
   --sn-font-ui: 'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans SC',
     'Noto Sans CJK SC', system-ui, -apple-system, Roboto, 'Noto Sans', Ubuntu, Cantarell, sans-serif;
   /* 衬线标题：西文用 Georgia 一类，中文回落到各平台的宋体或思源宋体。 */
@@ -72,7 +72,7 @@
 }
 
 /* ---------- 浅色 ---------- */
-[data-sn-direction='editorial'] {
+[data-sn-surface='magazine'] {
   color-scheme: light;
   --sn-color-panel: #f4f1eb;
   --sn-color-panel-band: rgb(60 50 30 / 0);
@@ -131,7 +131,7 @@
 }
 
 /* ---------- 深色 ---------- */
-[data-sn-direction='editorial'][data-sn-theme='dark'] {
+[data-sn-surface='magazine'][data-sn-theme='dark'] {
   color-scheme: dark;
   --sn-color-panel: #1d1c19;
   --sn-color-panel-band: rgb(0 0 0 / 0);

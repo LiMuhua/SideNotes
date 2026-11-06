@@ -1,7 +1,7 @@
 /**
  * 场景中的工作窗口：模拟用户正在使用的编辑器，侧栏与浮窗浮在它之上。
  *
- * 内容足够「杂乱」（代码、文字、色块），用来检验半透明方向在复杂背景上的可读性
+ * 内容足够「杂乱」（代码、文字、色块），用来检验半透明主题在复杂背景上的可读性
  * （Glance：「背后的画面越杂乱，就磨得越砂」）。它不是 SideNotes 的界面，不使用设计令牌。
  */
 
@@ -20,7 +20,7 @@ const LINES: ReadonlyArray<{ indent: number; text: string; kind?: 'heading' | 'c
   { indent: 0, text: '## 风险', kind: 'heading' },
   { indent: 1, text: '- 透明窗口在 Linux 上没有系统模糊，需要退回实心表面' },
   { indent: 1, text: '- 高分屏下 1px 描边的清晰度；125% 与 150% 缩放都要检查' },
-  { indent: 0, text: '会议纪要：评审五套视觉方向，确认首选与备选，下周给出正式规范。' },
+  { indent: 0, text: '会议纪要：五套主题都要实现，设置里随时切换，默认用终端；下周给出正式规范。' },
 ];
 
 export function WorkWindow() {

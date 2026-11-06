@@ -15,7 +15,7 @@ import { useNotes } from '../model/notes';
 import type { SidebarViewOptions } from '../model/notes';
 import { cx, FormContext } from '../ui/context';
 import { TokenScope } from '../ui/Scope';
-import type { DirectionId } from '../directions';
+import type { SurfaceId } from '../surfaces';
 import { CaptureWindow } from './CaptureWindow';
 import { SettingsWindow, type SettingsSection } from './SettingsWindow';
 import { SidebarPanel } from './SidebarPanel';
@@ -36,23 +36,23 @@ export interface DesktopProps {
   wallpaper: 'light' | 'dark' | 'busy';
   initial?: DesktopInitial;
   /** 方案对比页为每个场景指定方向。 */
-  direction?: DirectionId;
+  surface?: SurfaceId;
   /** 单场景页面：页面级监听全局快捷键。 */
   primary?: boolean;
 }
 
 /** 窗口：一个令牌作用域，内容按字号缩放。 */
-function AppWindow({ className, style, zoom, direction, children }: { className: string; style?: CSSProperties; zoom: number; direction?: DirectionId; children: ReactNode }) {
+function AppWindow({ className, style, zoom, surface, children }: { className: string; style?: CSSProperties; zoom: number; surface?: SurfaceId; children: ReactNode }) {
   const { settings } = useNotes();
   const form = useContext(FormContext);
   return (
-    <TokenScope direction={direction} className={cx('sn-window', className)} style={{ ...style, zoom }} toast={settings.toastPosition} form={form}>
+    <TokenScope surface={surface} className={cx('sn-window', className)} style={{ ...style, zoom }} toast={settings.toastPosition} form={form}>
       {children}
     </TokenScope>
   );
 }
 
-export function Desktop({ form, platform, wallpaper, initial = {}, direction, primary = false }: DesktopProps) {
+export function Desktop({ form, platform, wallpaper, initial = {}, surface, primary = false }: DesktopProps) {
   const data = useNotes();
   const { settings } = data;
   const [visible, setVisible] = useState(initial.sidebar !== 'hidden');
@@ -126,7 +126,7 @@ export function Desktop({ form, platform, wallpaper, initial = {}, direction, pr
             onPointerEnter={cancelHide}
             onPointerLeave={scheduleHide}
           >
-            <AppWindow className="sn-sidebar-window" zoom={zoom} direction={direction}>
+            <AppWindow className="sn-sidebar-window" zoom={zoom} surface={surface}>
               <SidebarPanel
                 pinned={pinned}
                 linked={Boolean(settingsWindow)}
@@ -143,7 +143,7 @@ export function Desktop({ form, platform, wallpaper, initial = {}, direction, pr
           {capture ? (
             <div className="sn-floating-frame is-capture">
               <div className="sn-window-box">
-                <AppWindow className="sn-capture-window" zoom={zoom} direction={direction}>
+                <AppWindow className="sn-capture-window" zoom={zoom} surface={surface}>
                   <CaptureWindow
                     onClose={() => setCapture(false)}
                     onContinue={() => {
@@ -159,7 +159,7 @@ export function Desktop({ form, platform, wallpaper, initial = {}, direction, pr
           {settingsWindow ? (
             <div className="sn-floating-frame is-settings">
               <div className="sn-window-box">
-                <AppWindow className="sn-settings-window" zoom={zoom} direction={direction}>
+                <AppWindow className="sn-settings-window" zoom={zoom} surface={surface}>
                   <SettingsWindow initial={settingsWindow} onClose={() => setSettingsWindow(null)} />
                 </AppWindow>
               </div>

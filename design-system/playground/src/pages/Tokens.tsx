@@ -1,5 +1,5 @@
 /**
- * 令牌页：当前方向与主题下的全部令牌。
+ * 令牌页：当前主题与明暗下的全部令牌。
  *
  * 数值由令牌文件直接解析（与设计系统测试共用 `tokens/parse.ts`），示例则用 var() 引用令牌渲染，
  * 两者不一致时一眼就能看出来。对比度表列出关键组合的实际比值与 WCAG 2.2 的最低要求。
@@ -7,30 +7,30 @@
 
 import { useMemo, type CSSProperties } from 'react';
 import baseCss from '../../../tokens/base.css?raw';
-import editorialCss from '../../../tokens/editorial.css?raw';
-import fluentCss from '../../../tokens/fluent.css?raw';
+import editorialCss from '../../../tokens/magazine.css?raw';
+import fluentCss from '../../../tokens/win11.css?raw';
 import glassCss from '../../../tokens/glass.css?raw';
 import paperCss from '../../../tokens/paper.css?raw';
-import workbenchCss from '../../../tokens/workbench.css?raw';
+import workbenchCss from '../../../tokens/terminal.css?raw';
 import { GROUP_LABELS, TOKENS, type TokenGroup, type TokenSpec } from '../../../tokens/schema';
 import { KEY_CONTRAST_PAIRS, mergeTokens, pairContrast, resolve } from '../../../tokens/parse';
-import { DIRECTION_BY_ID, type DirectionId } from '../directions';
+import { SURFACE_BY_ID, type SurfaceId } from '../surfaces';
 import { usePlayground } from '../shell/state';
 import { cx } from '../ui/context';
 import { TokenScope } from '../ui/Scope';
 import { PageIntro, PageSection, PageToc } from './common';
 
-export const DIRECTION_CSS: Record<DirectionId, string> = {
-  workbench: workbenchCss,
-  editorial: editorialCss,
+export const SURFACE_CSS: Record<SurfaceId, string> = {
+  terminal: workbenchCss,
+  magazine: editorialCss,
   paper: paperCss,
-  fluent: fluentCss,
+  win11: fluentCss,
   glass: glassCss,
 };
 
-/** 某方向某主题下的全部令牌（未展开引用）。 */
-export function directionTokens(direction: DirectionId, theme: 'light' | 'dark'): Map<string, string> {
-  return mergeTokens(baseCss, DIRECTION_CSS[direction], direction, theme);
+/** 某主题某明暗模式下的全部令牌（未展开引用）。 */
+export function surfaceTokens(surface: SurfaceId, theme: 'light' | 'dark'): Map<string, string> {
+  return mergeTokens(baseCss, SURFACE_CSS[surface], surface, theme);
 }
 
 const COLOR_GROUPS: ReadonlySet<TokenGroup> = new Set(['surface', 'border', 'text', 'accent', 'status', 'code']);
@@ -78,9 +78,9 @@ function Sample({ token }: { token: TokenSpec }) {
 }
 
 export function TokensPage() {
-  const { direction, resolvedTheme } = usePlayground();
-  const tokens = useMemo(() => directionTokens(direction, resolvedTheme), [direction, resolvedTheme]);
-  const spec = DIRECTION_BY_ID[direction];
+  const { surface, resolvedTheme } = usePlayground();
+  const tokens = useMemo(() => surfaceTokens(surface, resolvedTheme), [surface, resolvedTheme]);
+  const spec = SURFACE_BY_ID[surface];
   const sections = [{ id: 'tokens-contrast', label: '对比度' }, ...GROUPS.map((group) => ({ id: `tokens-${group}`, label: GROUP_LABELS[group] }))];
 
   return (
@@ -89,7 +89,7 @@ export function TokensPage() {
         <div className="sn-page-content">
           <PageIntro
             title="设计令牌"
-            description={`「${spec.name}」方向，${resolvedTheme === 'dark' ? '深色' : '浅色'}主题，共 ${TOKENS.length} 个令牌。数值从令牌文件解析，示例用 var() 实际渲染；共享令牌在所有方向中相同。`}
+            description={`「${spec.name}」主题，${resolvedTheme === 'dark' ? '深色' : '浅色'}模式，共 ${TOKENS.length} 个令牌。数值从令牌文件解析，示例用 var() 实际渲染；共享令牌在所有主题中相同。`}
           />
           <PageToc sections={sections} />
           <PageSection id="tokens-contrast" title="对比度" description="正文与图标文字不低于 4.5:1，控件边界与焦点环不低于 3:1（WCAG 2.2 的 1.4.3 与 1.4.11）。半透明表面按叠在纯黑与纯白背景上两种情况中较差的一个计算。">

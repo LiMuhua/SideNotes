@@ -563,7 +563,7 @@ button.sn-tag-main[data-force='hover'] {
   resize: vertical;
 }
 
-/* 胶囊形控件（方向 C）只用于单行；多行文本框保留常规圆角。 */
+/* 胶囊形控件（杂志主题）只用于单行；多行文本框保留常规圆角。 */
 .sn-textarea {
   border-radius: min(var(--sn-radius-control), var(--sn-radius-md));
 }

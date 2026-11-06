@@ -10,7 +10,7 @@ import type { MarkdownEditor } from '@/core/editor';
 import { NoteEditor } from '../content/NoteEditor';
 import { useNotes } from '../model/notes';
 import { IconButton } from '../ui/Button';
-import { cx, useDirection, useFormFactor } from '../ui/context';
+import { cx, useSurface, useFormFactor } from '../ui/context';
 import { Keys } from '../ui/Misc';
 import { useToast } from '../ui/Tabs';
 import { SHORTCUT_KEYS } from './shortcuts';
@@ -25,7 +25,7 @@ export interface ComposerProps {
 export function Composer({ onSaved, onReady }: ComposerProps) {
   const data = useNotes();
   const toast = useToast();
-  const direction = useDirection();
+  const surface = useSurface();
   const phone = useFormFactor() === 'phone';
   const editor = useRef<MarkdownEditor | null>(null);
   const [focused, setFocused] = useState(false);
@@ -72,7 +72,7 @@ export function Composer({ onSaved, onReady }: ComposerProps) {
           <IconButton icon="image" label="添加图片附件；截图也可直接粘贴到光标处" size="sm" onMouseDown={keepFocus} onClick={() => toast({ message: 'Playground 不读取本机文件，附件只作展示' })} />
           <IconButton icon="file" label="引用文件（复制一份保存）；也可粘贴复制的文件" size="sm" onMouseDown={keepFocus} onClick={() => toast({ message: 'Playground 不读取本机文件，附件只作展示' })} />
         </div>
-        {direction.inlineShortcuts ? <Keys combo={SHORTCUT_KEYS.save} /> : <span className="sn-composer-count">{Array.from(data.draft).length} 字</span>}
+        {surface.inlineShortcuts ? <Keys combo={SHORTCUT_KEYS.save} /> : <span className="sn-composer-count">{Array.from(data.draft).length} 字</span>}
         <IconButton
           icon="x"
           label="收起输入"

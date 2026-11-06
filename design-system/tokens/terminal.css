@@ -1,4 +1,4 @@
-/* ==================== 方向：开发者工作台（Developer Workbench） ====================
+/* ==================== 主题：终端（Terminal） ====================
  *
  * 像编辑器的一角：界面与正文都用等宽字体（沿用现有 SideNotes 的默认字体 Maple Mono NF CN），
  * 石墨色中性色加琥珀强调色；整块贴边，面板是略深的窗口底色，每条记录是一个带标题栏的浅色窗格，
@@ -6,7 +6,7 @@
  */
 
 /* ---------- 与明暗无关的令牌 ---------- */
-[data-sn-direction='workbench'] {
+[data-sn-surface='terminal'] {
   --sn-font-ui: 'Maple Mono NF CN', 'Cascadia Mono', 'JetBrains Mono', Consolas, 'Noto Sans Mono', 'DejaVu Sans Mono',
     monospace;
   --sn-font-title: var(--sn-font-ui);
@@ -69,7 +69,7 @@
 }
 
 /* ---------- 浅色 ---------- */
-[data-sn-direction='workbench'] {
+[data-sn-surface='terminal'] {
   color-scheme: light;
   --sn-color-panel: #eeeeea;
   --sn-color-panel-band: rgb(28 28 26 / 0.035);
@@ -128,7 +128,7 @@
 }
 
 /* ---------- 深色 ---------- */
-[data-sn-direction='workbench'][data-sn-theme='dark'] {
+[data-sn-surface='terminal'][data-sn-theme='dark'] {
   color-scheme: dark;
   --sn-color-panel: #111418;
   --sn-color-panel-band: rgb(0 0 0 / 0.22);

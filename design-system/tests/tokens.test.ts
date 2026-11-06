@@ -1,7 +1,7 @@
 /**
  * 设计令牌的完整性与对比度检查。
  *
- * - 每个方向在浅色与深色下都必须定义清单中的全部令牌，共享令牌只在 base.css 中定义一次。
+ * - 每个主题在浅色与深色下都必须定义清单中的全部令牌，共享令牌只在 base.css 中定义一次。
  * - 关键的前景与背景组合必须满足 WCAG 2.2：正文 4.5:1，界面元素与辅助信息 3:1。
  * - 半透明表面（Windows 11、磨砂玻璃）按最坏情况检查：表面由下到上叠在纯黑与纯白背景上，
  *   两种情况都要达标；这样无论桌面背景是什么，侧栏里的文字都清楚。
@@ -12,12 +12,12 @@ import { TOKENS } from '../tokens/schema';
 import { isTransparent, stackContrast } from '../tokens/parse';
 import { parseBlocks, readDesignFile, resolve, tokensFor, type Theme } from './token-utils';
 
-/** 参与检查的方向与令牌文件。 */
-export const DIRECTION_FILES: ReadonlyArray<{ id: string; file: string }> = [
-  { id: 'workbench', file: 'tokens/workbench.css' },
-  { id: 'editorial', file: 'tokens/editorial.css' },
+/** 参与检查的主题与令牌文件。 */
+export const SURFACE_FILES: ReadonlyArray<{ id: string; file: string }> = [
+  { id: 'terminal', file: 'tokens/terminal.css' },
+  { id: 'magazine', file: 'tokens/magazine.css' },
   { id: 'paper', file: 'tokens/paper.css' },
-  { id: 'fluent', file: 'tokens/fluent.css' },
+  { id: 'win11', file: 'tokens/win11.css' },
   { id: 'glass', file: 'tokens/glass.css' },
 ];
 
@@ -32,13 +32,13 @@ describe('共享令牌', () => {
     expect(missing).toEqual([]);
   });
 
-  it('base.css 不包含方向令牌', () => {
+  it('base.css 不包含主题令牌', () => {
     const extra = Array.from(defined).filter((name) => !TOKENS.find((token) => token.name === name)?.shared);
     expect(extra).toEqual([]);
   });
 });
 
-describe.each(DIRECTION_FILES)('方向 $id 的令牌', ({ id, file }) => {
+describe.each(SURFACE_FILES)('主题 $id 的令牌', ({ id, file }) => {
   const blocks = parseBlocks(readDesignFile(file));
 
   it('不重复定义共享令牌，也没有清单之外的令牌', () => {
@@ -49,14 +49,14 @@ describe.each(DIRECTION_FILES)('方向 $id 的令牌', ({ id, file }) => {
     expect(shared).toEqual([]);
   });
 
-  it('随主题变化的令牌在深色规则中全部重新定义', () => {
+  it('随明暗变化的令牌在深色规则中全部重新定义', () => {
     const dark = blocks.filter((block) => block.selector.includes("[data-sn-theme='dark']"));
     const names = new Set(dark.flatMap((block) => Array.from(block.declarations.keys())));
     const missing = TOKENS.filter((token) => token.themed && !names.has(token.name)).map((token) => token.name);
     expect(missing).toEqual([]);
   });
 
-  it.each(THEMES)('%s 主题下定义了全部令牌，引用都能展开', (theme) => {
+  it.each(THEMES)('%s 模式下定义了全部令牌，引用都能展开', (theme) => {
     const tokens = tokensFor(id, file, theme);
     const missing = TOKENS.filter((token) => !tokens.has(token.name)).map((token) => token.name);
     expect(missing).toEqual([]);
@@ -67,8 +67,8 @@ describe.each(DIRECTION_FILES)('方向 $id 的令牌', ({ id, file }) => {
 
 const CARD = ['--sn-color-panel', '--sn-color-card'];
 
-describe.each(DIRECTION_FILES.flatMap(({ id, file }) => THEMES.map((theme) => ({ id, file, theme }))))(
-  '方向 $id（$theme）的对比度',
+describe.each(SURFACE_FILES.flatMap(({ id, file }) => THEMES.map((theme) => ({ id, file, theme }))))(
+  '主题 $id（$theme）的对比度',
   ({ id, file, theme }) => {
     const tokens = tokensFor(id, file, theme);
     const ratio = (foreground: string, layers: string[]) => stackContrast(tokens, foreground, layers);

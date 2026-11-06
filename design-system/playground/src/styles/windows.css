@@ -15,7 +15,7 @@
   overflow: hidden;
   border: var(--sn-border-width) solid var(--sn-color-border);
   border-radius: var(--sn-radius-lg);
-  /* 卡片色叠在面板色上：实心方向就是卡片色，半透明方向保留磨砂。 */
+  /* 卡片色叠在面板色上：实心主题就是卡片色，半透明主题保留磨砂。 */
   background: linear-gradient(var(--sn-color-card), var(--sn-color-card)), var(--sn-color-panel);
   backdrop-filter: blur(var(--sn-panel-blur)) saturate(var(--sn-panel-saturate));
   box-shadow: var(--sn-shadow-lg), inset 0 var(--sn-border-width) 0 var(--sn-color-edge-highlight);
@@ -350,7 +350,7 @@
   width: calc(var(--sn-dialog-width) * 0.45);
 }
 
-/* 选项卡片：明暗模式与界面材质，预览用所示方向与主题的令牌绘制。 */
+/* 选项卡片：明暗模式与主题，预览用所示主题与明暗模式的令牌绘制。 */
 .sn-choice-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -1,23 +1,23 @@
 /**
- * 五套对比：五个方向的侧栏放在同一张壁纸上，每个侧栏都可以操作；数据共享，浏览状态各自独立。
- * 下方的表格列出结构差异（directions.ts）与关键令牌的取值（直接从令牌文件解析）。
+ * 五套对比：五个主题的侧栏放在同一张壁纸上，每个侧栏都可以操作；数据共享，浏览状态各自独立。
+ * 下方的表格列出结构差异（surfaces.ts）与关键令牌的取值（直接从令牌文件解析）。
  */
 
 import { useMemo } from 'react';
 import { resolve } from '../../../tokens/parse';
 import { SidebarPanel } from '../app/SidebarPanel';
 import { WorkWindow } from '../app/WorkWindow';
-import { DIRECTIONS, type DirectionSpec } from '../directions';
+import { SURFACES, type SurfaceSpec } from '../surfaces';
 import { Scaled } from '../shell/Stage';
 import { usePlayground } from '../shell/state';
 import { TokenScope } from '../ui/Scope';
-import { directionTokens } from './Tokens';
+import { surfaceTokens } from './Tokens';
 
 const SLOT = { width: 440, height: 860, gap: 28 };
-const CANVAS = { width: DIRECTIONS.length * SLOT.width + (DIRECTIONS.length + 1) * SLOT.gap, height: SLOT.height + 72 };
+const CANVAS = { width: SURFACES.length * SLOT.width + (SURFACES.length + 1) * SLOT.gap, height: SLOT.height + 72 };
 const noop = () => {};
 
-const STRUCTURE: ReadonlyArray<{ label: string; value: (direction: DirectionSpec) => string }> = [
+const STRUCTURE: ReadonlyArray<{ label: string; value: (surface: SurfaceSpec) => string }> = [
   { label: '与屏幕边缘', value: (d) => ({ flush: '贴边的一整块', floating: '离开边缘的浮动面板', blocks: '分开的几块' })[d.dock] },
   { label: '记录', value: (d) => ({ panes: '带标题栏的窗格', cards: '带底色的卡片', tiles: '各自独立的玻璃块' })[d.entries] },
   { label: '页签', value: (d) => (d.tabs === 'underline' ? '文字加下划线' : '分段控件') },
@@ -42,7 +42,7 @@ function shortValue(value: string): string {
 
 export function ComparePage() {
   const { resolvedWallpaper, set } = usePlayground();
-  const tables = useMemo(() => new Map(DIRECTIONS.map((d) => [d.id, { light: directionTokens(d.id, 'light'), dark: directionTokens(d.id, 'dark') }])), []);
+  const tables = useMemo(() => new Map(SURFACES.map((d) => [d.id, { light: surfaceTokens(d.id, 'light'), dark: surfaceTokens(d.id, 'dark') }])), []);
 
   return (
     <div className="pg-compare">
@@ -53,15 +53,13 @@ export function ComparePage() {
             <WorkWindow />
           </div>
           <div className="sn-compare-row">
-            {DIRECTIONS.map((direction) => (
-              <section key={direction.id} className="sn-compare-slot" style={{ width: SLOT.width }} aria-label={direction.name}>
+            {SURFACES.map((surface) => (
+              <section key={surface.id} className="sn-compare-slot" style={{ width: SLOT.width }} aria-label={surface.name}>
                 <p className="sn-compare-label">
-                  {direction.name}
-                  {direction.preference === 'primary' ? <span className="sn-compare-badge">首选</span> : null}
-                  {direction.preference === 'alternative' ? <span className="sn-compare-badge">备选</span> : null}
+                  {surface.name}
                 </p>
                 <div className="sn-sidebar-frame is-visible is-static" data-edge="right" style={{ width: SLOT.width, height: SLOT.height }}>
-                  <TokenScope direction={direction.id} className="sn-window sn-sidebar-window">
+                  <TokenScope surface={surface.id} className="sn-window sn-sidebar-window">
                     <SidebarPanel pinned onTogglePinned={noop} onHide={noop} onOpenSettings={noop} />
                   </TokenScope>
                 </div>
@@ -74,10 +72,10 @@ export function ComparePage() {
         <thead>
           <tr>
             <th scope="col">维度</th>
-            {DIRECTIONS.map((direction) => (
-              <th key={direction.id} scope="col">
-                <button type="button" className="pg-link" onClick={() => set({ direction: direction.id, page: 'sidebar' })}>
-                  {direction.name}
+            {SURFACES.map((surface) => (
+              <th key={surface.id} scope="col">
+                <button type="button" className="pg-link" onClick={() => set({ surface: surface.id, page: 'sidebar' })}>
+                  {surface.name}
                 </button>
               </th>
             ))}
@@ -86,29 +84,29 @@ export function ComparePage() {
         <tbody>
           <tr>
             <th scope="row">理念</th>
-            {DIRECTIONS.map((direction) => (
-              <td key={direction.id}>{direction.idea}</td>
+            {SURFACES.map((surface) => (
+              <td key={surface.id}>{surface.idea}</td>
             ))}
           </tr>
           {STRUCTURE.map((row) => (
             <tr key={row.label}>
               <th scope="row">{row.label}</th>
-              {DIRECTIONS.map((direction) => (
-                <td key={direction.id}>{row.value(direction)}</td>
+              {SURFACES.map((surface) => (
+                <td key={surface.id}>{row.value(surface)}</td>
               ))}
             </tr>
           ))}
           {TOKEN_ROWS.map((row) => (
             <tr key={row.label}>
               <th scope="row">{row.label}</th>
-              {DIRECTIONS.map((direction) => {
-                const table = tables.get(direction.id);
+              {SURFACES.map((surface) => {
+                const table = tables.get(surface.id);
                 const values = row.tokens.map((name) => {
                   const [theme, token] = name.includes(':') ? (name.split(':') as ['light' | 'dark', string]) : (['light', name] as const);
                   return table ? shortValue(resolve(table[theme], token)) : '';
                 });
                 return (
-                  <td key={direction.id}>
+                  <td key={surface.id}>
                     <code>{values.join(' / ')}</code>
                   </td>
                 );
@@ -117,8 +115,8 @@ export function ComparePage() {
           ))}
           <tr>
             <th scope="row">参考</th>
-            {DIRECTIONS.map((direction) => (
-              <td key={direction.id}>{direction.references.join('、')}</td>
+            {SURFACES.map((surface) => (
+              <td key={surface.id}>{surface.references.join('、')}</td>
             ))}
           </tr>
         </tbody>

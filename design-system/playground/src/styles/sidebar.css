@@ -1,6 +1,6 @@
 /* ==================== 侧栏：面板、标题区、页签与搜索、新建卡片、记录卡片、底栏 ====================
  *
- * 五套方向共用这一份结构样式，差异来自两处：令牌（颜色、字体、尺寸、材质），
+ * 五套主题共用这一份结构样式，差异来自两处：令牌（颜色、字体、尺寸、材质），
  * 以及面板与列表上表示结构差异的类名：
  * - 面板：is-flush（贴边整块）、is-floating（浮动面板）、is-blocks（分开的玻璃块）；
  * - 列表：is-panes（带标题栏的窗格）、is-cards（卡片）、is-tiles（玻璃块）。
@@ -646,7 +646,7 @@
   box-shadow: var(--sn-shadow-panel), inset 0 var(--sn-border-width) 0 var(--sn-color-edge-highlight);
 }
 
-/* 窗格（开发者工作台）：标题栏有底色，与正文之间有分隔线，像编辑器里并排的一个个窗格。 */
+/* 窗格（终端）：标题栏有底色，与正文之间有分隔线，像编辑器里并排的一个个窗格。 */
 .sn-note-list.is-panes .sn-note {
   gap: var(--sn-space-3);
   border-color: var(--sn-color-border);

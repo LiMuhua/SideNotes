@@ -2,13 +2,13 @@
  * 设置：外观与交互、快捷键。
  *
  * 设置项、取值范围与默认值取自现有应用（`src/core/settings.ts`、`AppearancePanel.tsx`、0.7.3 的快捷键页）。
- * 明暗模式与界面材质在 Playground 中分别对应外壳的「主题」与「方向」。
+ * 明暗模式与主题在 Playground 中分别对应外壳的「明暗」与「主题」。
  */
 
 import { useState, type KeyboardEvent } from 'react';
 import { ANIM_DURATION_RANGE, CARD_HEIGHT_RANGE, FONT_SIZE_RANGE, HIDE_DELAY_RANGE, PAGE_SIZE_RANGE, WIDTH_RANGE } from '@/core/settings';
 import type { ToastPosition } from '@/core/types';
-import { DIRECTIONS } from '../directions';
+import { SURFACES } from '../surfaces';
 import { useNotes } from '../model/notes';
 import { usePlayground, useSystemDark, type ThemeMode } from '../shell/state';
 import { Button } from '../ui/Button';
@@ -115,11 +115,11 @@ export function AppearancePanel() {
                 <span className="sn-choice-preview" aria-hidden="true">
                   {theme.value === 'system' ? (
                     <>
-                      <MiniSidebar direction={playground.direction} theme="light" />
-                      <MiniSidebar direction={playground.direction} theme="dark" />
+                      <MiniSidebar surface={playground.surface} theme="light" />
+                      <MiniSidebar surface={playground.surface} theme="dark" />
                     </>
                   ) : (
-                    <MiniSidebar direction={playground.direction} theme={theme.value} />
+                    <MiniSidebar surface={playground.surface} theme={theme.value} />
                   )}
                 </span>
                 <span className="sn-choice-label">
@@ -130,15 +130,15 @@ export function AppearancePanel() {
             ))}
           </div>
         </SettingRow>
-        <SettingRow title="界面材质" help="Playground 中对应五套设计方向；正式版保留哪些材质待评审后确定" stacked>
-          <div className="sn-choice-grid is-five" role="radiogroup" aria-label="界面材质">
-            {DIRECTIONS.map((direction) => (
-              <label key={direction.id} className={cx('sn-choice', playground.direction === direction.id && 'is-selected')}>
-                <input type="radio" name="sn-material" className="sn-sr-only" checked={playground.direction === direction.id} onChange={() => playground.set({ direction: direction.id })} />
+        <SettingRow title="主题" help="五套主题都会实现，可以随时切换；默认为终端" stacked>
+          <div className="sn-choice-grid is-five" role="radiogroup" aria-label="主题">
+            {SURFACES.map((surface) => (
+              <label key={surface.id} className={cx('sn-choice', playground.surface === surface.id && 'is-selected')}>
+                <input type="radio" name="sn-material" className="sn-sr-only" checked={playground.surface === surface.id} onChange={() => playground.set({ surface: surface.id })} />
                 <span className="sn-choice-preview" aria-hidden="true">
-                  <MiniSidebar direction={direction.id} theme={playground.resolvedTheme} />
+                  <MiniSidebar surface={surface.id} theme={playground.resolvedTheme} />
                 </span>
-                <span className="sn-choice-label">{direction.name}</span>
+                <span className="sn-choice-label">{surface.name}</span>
               </label>
             ))}
           </div>
@@ -236,10 +236,10 @@ export function AppearancePanel() {
   );
 }
 
-/** 迷你侧栏：颜色全部来自所示方向与主题的令牌。 */
-function MiniSidebar({ direction, theme }: { direction: string; theme: 'light' | 'dark' }) {
+/** 迷你侧栏：颜色全部来自所示主题与明暗模式的令牌。 */
+function MiniSidebar({ surface, theme }: { surface: string; theme: 'light' | 'dark' }) {
   return (
-    <span className="sn-mini" data-sn-direction={direction} data-sn-theme={theme}>
+    <span className="sn-mini" data-sn-surface={surface} data-sn-theme={theme}>
       <span className="sn-mini-panel">
         <span className="sn-mini-line is-title" />
         <span className="sn-mini-card is-active">

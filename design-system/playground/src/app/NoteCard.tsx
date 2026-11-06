@@ -18,7 +18,7 @@ import { formatFullTime, formatTime, noteTitle } from '@/core/notes';
 import { parse } from '@/core/tags';
 import type { Note, TabKey } from '@/core/types';
 import { NoteEditor } from '../content/NoteEditor';
-import { useDirection, cx } from '../ui/context';
+import { useSurface, cx } from '../ui/context';
 import { IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
 import { Keys } from '../ui/Misc';
@@ -55,7 +55,7 @@ export interface NoteCardProps {
 
 export function NoteCard(props: NoteCardProps) {
   const { note, active, checked, editing, dimmed, maxHeight } = props;
-  const direction = useDirection();
+  const surface = useSurface();
   const content = useRef<HTMLDivElement>(null);
   const [truncated, setTruncated] = useState(false);
   const display = noteDisplay(note.text);
@@ -158,7 +158,7 @@ export function NoteCard(props: NoteCardProps) {
       </header>
 
       {editing ? (
-        <NoteEditArea text={note.text} inlineShortcuts={direction.inlineShortcuts} onSave={props.onSave} onCancel={props.onCancel} />
+        <NoteEditArea text={note.text} inlineShortcuts={surface.inlineShortcuts} onSave={props.onSave} onCancel={props.onCancel} />
       ) : note.collapsed || !display.body.trim() ? null : (
         <div
           ref={content}

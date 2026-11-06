@@ -18,7 +18,7 @@ import type { EdgeSide, Note } from '@/core/types';
 import { copyText } from '../model/clipboard';
 import { useNotes, useSidebarView, type SidebarView, type SidebarViewOptions } from '../model/notes';
 import { Button } from '../ui/Button';
-import { cx, useDirection, useFormFactor } from '../ui/context';
+import { cx, useSurface, useFormFactor } from '../ui/context';
 import { ContextMenu, type MenuItem } from '../ui/Menu';
 import { EmptyState } from '../ui/Misc';
 import { useToast } from '../ui/Tabs';
@@ -59,7 +59,7 @@ export function SidebarPanel(props: SidebarPanelProps) {
   const view = props.view ?? own;
   const data = useNotes();
   const toast = useToast();
-  const direction = useDirection();
+  const surface = useSurface();
   const phone = useFormFactor() === 'phone';
   const root = useRef<HTMLElement>(null);
   // 搜索框与新建卡片的编辑器存在 state 中：菜单命令要用到它们，渲染期间不读 ref。
@@ -296,7 +296,7 @@ export function SidebarPanel(props: SidebarPanelProps) {
   return (
     <aside
       ref={root}
-      className={cx('sn-sidebar', `is-${direction.dock}`, `has-${direction.entries}`, editing && 'has-editing')}
+      className={cx('sn-sidebar', `is-${surface.dock}`, `has-${surface.entries}`, editing && 'has-editing')}
       data-edge={edge}
       aria-label="SideNotes 侧栏"
       tabIndex={-1}
@@ -351,7 +351,7 @@ export function SidebarPanel(props: SidebarPanelProps) {
         <Composer onReady={setComposer} onSaved={(id) => view.select(id)} />
       )}
       {view.filtering ? <FilterBanner view={view} /> : null}
-      <div className={cx('sn-note-list', `is-${direction.entries}`)} role="list" aria-label={`${items.length} 条记录`}>
+      <div className={cx('sn-note-list', `is-${surface.entries}`)} role="list" aria-label={`${items.length} 条记录`}>
         {items.length ? (
           items.map((note) => {
             const active = view.activeId === note.id;

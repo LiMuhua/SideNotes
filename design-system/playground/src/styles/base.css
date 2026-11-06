@@ -72,7 +72,7 @@
   display: none !important; /* 固定：hidden 属性必须压过组件自身的 display */
 }
 
-/* 滚动条：细而低调，颜色跟随主题。 */
+/* 滚动条：细而低调，颜色跟随明暗。 */
 .sn-scope * {
   scrollbar-width: thin;
   scrollbar-color: var(--sn-color-border-strong) transparent;

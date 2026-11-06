@@ -1,4 +1,4 @@
-/* ==================== 方向：磨砂玻璃（Frosted Glass） ====================
+/* ==================== 主题：磨砂玻璃（Frosted Glass） ====================
  *
  * 分开的几块磨砂玻璃，在边缘透出桌面（Glance 磨砂玻璃外观，theme.rs、skins.rs）：
  * 每块独立、大圆角，块间留 8 像素；顶部受光、底部带一点反光；文字带一圈光晕。
@@ -7,7 +7,7 @@
  */
 
 /* ---------- 与明暗无关的令牌 ---------- */
-[data-sn-direction='glass'] {
+[data-sn-surface='glass'] {
   --sn-font-ui: Inter, 'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans SC',
     'Noto Sans CJK SC', system-ui, -apple-system, Roboto, 'Noto Sans', Ubuntu, Cantarell, sans-serif;
   --sn-font-title: var(--sn-font-ui);
@@ -70,7 +70,7 @@
 }
 
 /* ---------- 浅色 ---------- */
-[data-sn-direction='glass'] {
+[data-sn-surface='glass'] {
   color-scheme: light;
   --sn-color-panel: rgb(255 255 255 / 0);
   --sn-color-panel-band: rgb(255 255 255 / 0);
@@ -130,7 +130,7 @@
 }
 
 /* ---------- 深色 ---------- */
-[data-sn-direction='glass'][data-sn-theme='dark'] {
+[data-sn-surface='glass'][data-sn-theme='dark'] {
   color-scheme: dark;
   --sn-color-panel: rgb(20 20 26 / 0);
   --sn-color-panel-band: rgb(20 20 26 / 0);

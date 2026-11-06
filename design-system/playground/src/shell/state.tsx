@@ -1,12 +1,12 @@
 /**
- * Playground 的全局状态：当前页面、设计方向、明暗主题、平台、屏幕尺寸与壁纸。
+ * Playground 的全局状态：当前页面、主题、明暗模式、平台、屏幕尺寸与壁纸。
  *
  * 状态写入地址栏参数，刷新或分享链接后保持同一个视图；
  * `frame=bare` 只显示场景本身，便于在指定尺寸下截图验证。
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { DIRECTION_IDS, type DirectionId } from '../directions';
+import { DEFAULT_SURFACE, SURFACE_IDS, type SurfaceId } from '../surfaces';
 
 export type PageId = 'sidebar' | 'capture' | 'settings' | 'components' | 'tokens' | 'compare';
 
@@ -41,7 +41,7 @@ export const PAGES: ReadonlyArray<{ id: PageId; label: string; group: 'app' | 's
 ];
 
 export const WALLPAPERS: ReadonlyArray<{ id: Wallpaper; label: string }> = [
-  { id: 'auto', label: '跟随主题' },
+  { id: 'auto', label: '跟随明暗' },
   { id: 'light', label: '浅色' },
   { id: 'dark', label: '深色' },
   { id: 'busy', label: '繁杂' },
@@ -49,7 +49,7 @@ export const WALLPAPERS: ReadonlyArray<{ id: Wallpaper; label: string }> = [
 
 interface PlaygroundState {
   page: PageId;
-  direction: DirectionId;
+  surface: SurfaceId;
   theme: ThemeMode;
   platform: Platform;
   viewport: ViewportId;
@@ -59,7 +59,7 @@ interface PlaygroundState {
 
 interface PlaygroundContextValue extends PlaygroundState {
   resolvedTheme: 'light' | 'dark';
-  /** 壁纸的实际取值：跟随主题时按明暗决定。 */
+  /** 壁纸的实际取值：选「跟随明暗」时按当前的明暗模式决定。 */
   resolvedWallpaper: 'light' | 'dark' | 'busy';
   set: (patch: Partial<PlaygroundState>) => void;
 }
@@ -68,7 +68,7 @@ const PlaygroundContext = createContext<PlaygroundContextValue | null>(null);
 
 const DEFAULT_STATE: PlaygroundState = {
   page: 'sidebar',
-  direction: 'workbench',
+  surface: DEFAULT_SURFACE,
   theme: 'system',
   platform: 'windows',
   viewport: 'fit',
@@ -85,7 +85,7 @@ function readState(): PlaygroundState {
   const params = new URLSearchParams(window.location.search);
   return {
     page: pick(params.get('page'), PAGES.map((page) => page.id), DEFAULT_STATE.page),
-    direction: pick(params.get('direction'), DIRECTION_IDS, DEFAULT_STATE.direction),
+    surface: pick(params.get('surface'), SURFACE_IDS, DEFAULT_STATE.surface),
     theme: pick(params.get('theme'), ['light', 'dark', 'system'] as const, DEFAULT_STATE.theme),
     platform: pick(params.get('platform'), ['windows', 'linux'] as const, DEFAULT_STATE.platform),
     viewport: pick(params.get('viewport'), VIEWPORTS.map((viewport) => viewport.id), DEFAULT_STATE.viewport),

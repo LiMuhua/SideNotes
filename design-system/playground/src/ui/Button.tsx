@@ -7,7 +7,7 @@
  */
 
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { cx, useDirection } from './context';
+import { cx, useSurface } from './context';
 import { Icon, type IconName } from './Icon';
 import { Keys, Spinner } from './Misc';
 import { Tooltip } from './Tooltip';
@@ -21,7 +21,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: IconName;
   trailingIcon?: IconName;
   loading?: boolean;
-  /** 快捷键：开发者工作台方向直接显示在按钮上，其它方向写入 aria-keyshortcuts 与工具提示。 */
+  /** 快捷键：终端主题直接显示在按钮上，其它主题写入 aria-keyshortcuts 与工具提示。 */
   shortcut?: string;
   force?: ForcedState;
   children?: ReactNode;
@@ -31,7 +31,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   { variant = 'secondary', size = 'md', icon, trailingIcon, loading = false, shortcut, force, className, children, disabled, ...rest },
   ref,
 ) {
-  const direction = useDirection();
+  const surface = useSurface();
   const button = (
     <button
       ref={ref}
@@ -46,10 +46,10 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       {loading ? <Spinner label="处理中" /> : icon ? <Icon name={icon} /> : null}
       {children ? <span className="sn-button-label">{children}</span> : null}
       {trailingIcon ? <Icon name={trailingIcon} /> : null}
-      {shortcut && direction.inlineShortcuts ? <Keys combo={shortcut} tone={variant === 'primary' ? 'accent' : 'default'} /> : null}
+      {shortcut && surface.inlineShortcuts ? <Keys combo={shortcut} tone={variant === 'primary' ? 'accent' : 'default'} /> : null}
     </button>
   );
-  return shortcut && !direction.inlineShortcuts && children ? (
+  return shortcut && !surface.inlineShortcuts && children ? (
     <Tooltip content={children} shortcut={shortcut}>
       {button}
     </Tooltip>

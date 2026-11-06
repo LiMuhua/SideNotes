@@ -1,11 +1,11 @@
 /**
- * 组件页：当前方向与主题下的侧栏组件与基础控件。
+ * 组件页：当前主题与明暗下的侧栏组件与基础控件。
  *
  * 示例在令牌作用域内渲染，与桌面场景中的窗口使用同一套令牌与样式；
  * 这里按 13px 的设计基准显示，不做字号缩放。
  */
 
-import { DIRECTION_BY_ID } from '../directions';
+import { SURFACE_BY_ID } from '../surfaces';
 import { usePlayground } from '../shell/state';
 import { TokenScope } from '../ui/Scope';
 import { PageIntro, PageToc } from './common';
@@ -20,15 +20,15 @@ const SECTIONS = [
 ];
 
 export function GalleryPage() {
-  const { direction, resolvedTheme } = usePlayground();
-  const spec = DIRECTION_BY_ID[direction];
+  const { surface, resolvedTheme } = usePlayground();
+  const spec = SURFACE_BY_ID[surface];
   return (
     <TokenScope className="sn-page">
       <div className="sn-page-scroll">
         <div className="sn-page-content">
           <PageIntro
             title="组件"
-            description={`「${spec.name}」方向，${resolvedTheme === 'dark' ? '深色' : '浅色'}主题。切换方向或主题后，所有组件随令牌一起变化；卡片、页签、新建卡片都是侧栏中真实的组件。`}
+            description={`「${spec.name}」主题，${resolvedTheme === 'dark' ? '深色' : '浅色'}模式。切换主题或明暗后，所有组件随令牌一起变化；卡片、页签、新建卡片都是侧栏中真实的组件。`}
           />
           <PageToc sections={SECTIONS} />
           <NotesSection />

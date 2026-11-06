@@ -1,11 +1,11 @@
 /**
  * 设计令牌清单。
  *
- * 这里只登记令牌的名称、分组、语义与是否随明暗主题变化，数值写在 CSS 中：
- * - `base.css`：与方向无关的共享令牌（间距、描边宽度、字重、层级等）。
- * - 各方向的令牌文件：随方向变化的令牌，按 `data-sn-direction` 与 `data-sn-theme` 分组。
+ * 这里只登记令牌的名称、分组、语义与是否随明暗模式变化，数值写在 CSS 中：
+ * - `base.css`：与主题无关的共享令牌（间距、描边宽度、字重、层级等）。
+ * - 各主题的令牌文件：随主题变化的令牌，按 `data-sn-surface` 与 `data-sn-theme` 分组。
  *
- * 这份清单同时供 Playground 的令牌页展示、`design-system/tests` 检查各方向是否定义完整、
+ * 这份清单同时供 Playground 的令牌页展示、`design-system/tests` 检查各主题是否定义完整、
  * 组件样式是否只引用清单中的令牌，以及 `design-tokens.md` 与 CSS 是否一致。
  */
 
@@ -34,7 +34,7 @@ export interface TokenSpec {
   meaning: string;
   /** 浅色与深色是否分别取值。 */
   themed: boolean;
-  /** 所有方向共用同一个值，写在 base.css。 */
+  /** 所有主题共用同一个值，写在 base.css。 */
   shared?: boolean;
 }
 
@@ -49,7 +49,7 @@ export const TOKENS: readonly TokenSpec[] = [
     ['--sn-color-panel', '侧栏与速记浮窗的面板底色，可以半透明（Windows 11、磨砂玻璃）'],
     ['--sn-color-panel-band', '面板中的页脚带，叠在面板之上'],
     ['--sn-color-card', '记录卡片与新建卡片的底色，叠在面板之上，可以半透明'],
-    ['--sn-color-card-head', '记录卡片标题栏的底色，叠在卡片之上；只有窗格式的记录（开发者工作台）使用，其余方向透明'],
+    ['--sn-color-card-head', '记录卡片标题栏的底色，叠在卡片之上；只有窗格式的记录（终端）使用，其余主题透明'],
     ['--sn-color-bg', '设置窗口的窗口底色与分类栏'],
     ['--sn-color-surface', '设置窗口的内容区、弹窗正文'],
     ['--sn-color-surface-raised', '浮起的表面：菜单、弹窗'],

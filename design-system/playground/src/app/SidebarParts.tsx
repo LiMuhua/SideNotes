@@ -1,7 +1,7 @@
 /**
  * 侧栏的各个部件：标题区、页签与搜索、整理提醒、列表顶栏与标签筛选、筛选条、底栏。
  *
- * 结构与文字沿用现有应用（`src/components/Sidebar.tsx`）；外观由设计方向的令牌与结构说明决定。
+ * 结构与文字沿用现有应用（`src/components/Sidebar.tsx`）；外观由主题的令牌与结构说明决定。
  */
 
 import { useRef, useState, type KeyboardEvent } from 'react';
@@ -9,7 +9,7 @@ import { suggestTags } from '@/core/notes';
 import type { EdgeSide, TabKey } from '@/core/types';
 import { TAB_LABELS, TAB_ORDER, tagsInTab, useNotes, type SidebarView } from '../model/notes';
 import { IconButton } from '../ui/Button';
-import { cx, useDirection, useFormFactor } from '../ui/context';
+import { cx, useSurface, useFormFactor } from '../ui/context';
 import { Icon, type IconName } from '../ui/Icon';
 import { DropdownMenu } from '../ui/Menu';
 import { Keys } from '../ui/Misc';
@@ -69,10 +69,10 @@ export function SidebarHeader({ pinned, linked, edge, onTogglePinned, onHide, on
 const TAB_ICONS: Record<TabKey, IconName | null> = { workspace: null, pinned: 'pin', archive: 'archive' };
 
 export function SidebarNav({ view, onSearchInput }: { view: SidebarView; onSearchInput?: (element: HTMLInputElement | null) => void }) {
-  const direction = useDirection();
+  const surface = useSurface();
   return (
     <div className={cx('sn-side-nav', view.searchOpen && 'is-searching')}>
-      <div className={cx('sn-tabs-row', `is-${direction.tabs}`, direction.tabMarks && 'has-marks')} role="tablist" aria-label="记录列表">
+      <div className={cx('sn-tabs-row', `is-${surface.tabs}`, surface.tabMarks && 'has-marks')} role="tablist" aria-label="记录列表">
         {TAB_ORDER.map((tab) => {
           const icon = TAB_ICONS[tab];
           return (
@@ -104,7 +104,7 @@ export function SidebarNav({ view, onSearchInput }: { view: SidebarView; onSearc
  */
 function SearchBox({ view, onInput }: { view: SidebarView; onInput?: (element: HTMLInputElement | null) => void }) {
   const data = useNotes();
-  const direction = useDirection();
+  const surface = useSurface();
   const match = view.query.match(/(?:^|\s)#([\p{L}\p{N}_-]+)$/u);
   const prefix = match?.[1] ?? '';
   const ghost = prefix ? (suggestTags(data.notes, {}, prefix)[0] ?? '').slice(prefix.length) : '';
@@ -160,7 +160,7 @@ function SearchBox({ view, onInput }: { view: SidebarView; onInput?: (element: H
           }}
         />
       </div>
-      {ghost ? <Keys combo="Tab" /> : direction.inlineShortcuts && !view.query ? <Keys combo="Esc" /> : null}
+      {ghost ? <Keys combo="Tab" /> : surface.inlineShortcuts && !view.query ? <Keys combo="Esc" /> : null}
       {view.query ? <IconButton icon="x" label="清空搜索" size="sm" onClick={() => view.setQuery('')} /> : null}
     </div>
   );
@@ -246,10 +246,10 @@ export function FilterBanner({ view }: { view: SidebarView }) {
   );
 }
 
-/** 底栏：存储状态与设置；开发者工作台方向改为常驻的状态栏，加上快捷键提示。 */
+/** 底栏：存储状态与设置；终端主题改为常驻的状态栏，加上快捷键提示。 */
 export function SidebarFooter({ view, onSettings }: { view: SidebarView; onSettings: () => void }) {
-  const direction = useDirection();
-  if (direction.statusLine) {
+  const surface = useSurface();
+  if (surface.statusLine) {
     return (
       <footer className="sn-side-foot is-status">
         <span className="sn-status-item">
@@ -259,7 +259,7 @@ export function SidebarFooter({ view, onSettings }: { view: SidebarView; onSetti
         <span className="sn-status-item">{TAB_LABELS[view.tab]} {view.counts[view.tab]} 条</span>
         {/* 放不下的快捷键提示折到第二行并被裁掉：侧栏调窄时整项消失，不会只剩半个。 */}
         <span className="sn-status-keys">
-          {direction.inlineShortcuts ? (
+          {surface.inlineShortcuts ? (
             <>
               <span className="sn-status-item is-keys">
                 <Keys combo={SHORTCUT_KEYS.newNote} /> 新建

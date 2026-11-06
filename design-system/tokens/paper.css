@@ -1,4 +1,4 @@
-/* ==================== 方向：记录纸（Paper） ====================
+/* ==================== 主题：记录纸（Paper） ====================
  *
  * 一叠贴着屏幕边缘的记录纸（取自 Glance 记录纸外观，theme.rs）：灰绿纸色、单色墨水，贴边一侧没有圆角；
  * 面板是略深的纸垫，每条记录是一张浅色纸片，纸片底边有一像素的纸厚阴影，彼此留 8 像素的缝。
@@ -7,7 +7,7 @@
  */
 
 /* ---------- 与明暗无关的令牌 ---------- */
-[data-sn-direction='paper'] {
+[data-sn-surface='paper'] {
   --sn-font-ui: Archivo, 'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans SC',
     'Noto Sans CJK SC', system-ui, -apple-system, Roboto, 'Noto Sans', Ubuntu, Cantarell, sans-serif;
   --sn-font-title: var(--sn-font-ui);
@@ -70,7 +70,7 @@
 }
 
 /* ---------- 浅色 ---------- */
-[data-sn-direction='paper'] {
+[data-sn-surface='paper'] {
   color-scheme: light;
   --sn-color-panel: #e3e9e1;
   --sn-color-panel-band: rgb(22 34 30 / 0);
@@ -130,7 +130,7 @@
 }
 
 /* ---------- 深色 ---------- */
-[data-sn-direction='paper'][data-sn-theme='dark'] {
+[data-sn-surface='paper'][data-sn-theme='dark'] {
   color-scheme: dark;
   --sn-color-panel: #0f1a17;
   --sn-color-panel-band: rgb(0 0 0 / 0);

@@ -1,4 +1,4 @@
-/* ==================== 方向：Windows 11（Fluent） ====================
+/* ==================== 主题：Windows 11 ====================
  *
  * 一张亚克力面板，和开始菜单、快速设置一样（Glance Windows 11 外观，theme.rs、skins.rs）：
  * 离开屏幕边缘 12 像素，8 像素圆角，一像素描边；文字是黑色或白色加透明度，内容靠标题和留白分组；
@@ -7,7 +7,7 @@
  */
 
 /* ---------- 与明暗无关的令牌 ---------- */
-[data-sn-direction='fluent'] {
+[data-sn-surface='win11'] {
   --sn-font-ui: 'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans SC',
     'Noto Sans CJK SC', system-ui, -apple-system, Roboto, 'Noto Sans', Ubuntu, Cantarell, sans-serif;
   --sn-font-title: 'Segoe UI Variable Display', 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans SC',
@@ -71,7 +71,7 @@
 }
 
 /* ---------- 浅色 ---------- */
-[data-sn-direction='fluent'] {
+[data-sn-surface='win11'] {
   color-scheme: light;
   --sn-color-panel: rgb(252 252 252 / 0.85);
   --sn-color-panel-band: rgb(0 0 0 / 0.035);
@@ -130,7 +130,7 @@
 }
 
 /* ---------- 深色 ---------- */
-[data-sn-direction='fluent'][data-sn-theme='dark'] {
+[data-sn-surface='win11'][data-sn-theme='dark'] {
   color-scheme: dark;
   --sn-color-panel: rgb(44 44 44 / 0.96);
   --sn-color-panel-band: rgb(0 0 0 / 0.18);

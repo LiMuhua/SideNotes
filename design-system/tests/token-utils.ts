@@ -17,7 +17,7 @@ export function readDesignFile(relative: string): string {
   return readFileSync(resolvePath(DESIGN_ROOT, relative), 'utf-8');
 }
 
-/** 某方向某主题下全部令牌的原始值。 */
-export function tokensFor(direction: string, file: string, theme: Theme): Map<string, string> {
-  return mergeTokens(readDesignFile('tokens/base.css'), readDesignFile(file), direction, theme);
+/** 某主题某明暗模式下全部令牌的原始值。 */
+export function tokensFor(surface: string, file: string, theme: Theme): Map<string, string> {
+  return mergeTokens(readDesignFile('tokens/base.css'), readDesignFile(file), surface, theme);
 }

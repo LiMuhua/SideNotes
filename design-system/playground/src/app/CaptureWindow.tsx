@@ -11,7 +11,7 @@ import type { MarkdownEditor } from '@/core/editor';
 import { NoteEditor } from '../content/NoteEditor';
 import { useNotes } from '../model/notes';
 import { IconButton } from '../ui/Button';
-import { useDirection, useFormFactor } from '../ui/context';
+import { useSurface, useFormFactor } from '../ui/context';
 import { Keys } from '../ui/Misc';
 import { useToast } from '../ui/Tabs';
 import { BrandMark } from './SidebarParts';
@@ -27,7 +27,7 @@ export interface CaptureWindowProps {
 export function CaptureWindow({ onClose, onContinue }: CaptureWindowProps) {
   const data = useNotes();
   const toast = useToast();
-  const direction = useDirection();
+  const surface = useSurface();
   const phone = useFormFactor() === 'phone';
   const editor = useRef<MarkdownEditor | null>(null);
   const empty = !data.draft.trim();
@@ -92,7 +92,7 @@ export function CaptureWindow({ onClose, onContinue }: CaptureWindowProps) {
           <IconButton icon="image" label="添加图片附件；截图也可直接粘贴到光标处" size="sm" onClick={() => toast({ message: 'Playground 不读取本机文件，附件只作展示' })} />
           <IconButton icon="file" label="引用文件（复制一份保存）；也可粘贴复制的文件" size="sm" onClick={() => toast({ message: 'Playground 不读取本机文件，附件只作展示' })} />
         </div>
-        {direction.inlineShortcuts ? (
+        {surface.inlineShortcuts ? (
           <span className="sn-capture-keys">
             <Keys combo={SHORTCUT_KEYS.save} /> 保存并收起 <Keys combo="Esc" /> 收起
           </span>

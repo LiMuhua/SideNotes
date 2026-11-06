@@ -1,5 +1,5 @@
 /**
- * Playground 外壳：页面导航与预览设置（方向、主题、平台、屏幕、壁纸），下面是预览区。
+ * Playground 外壳：页面导航与预览设置（主题、明暗、平台、屏幕、壁纸），下面是预览区。
  *
  * 外壳本身不属于 SideNotes 的设计，只用自己的少量变量（shell.css 中的 --pg-*），
  * 不使用设计系统组件，避免把展示台与被展示的对象混在一起。
@@ -7,7 +7,7 @@
  */
 
 import type { ReactNode } from 'react';
-import { DIRECTIONS } from '../directions';
+import { SURFACES } from '../surfaces';
 import { useNotes } from '../model/notes';
 import { Desktop } from '../app/Desktop';
 import { ComparePage } from '../pages/Compare';
@@ -19,10 +19,10 @@ import { PAGES, usePlayground, VIEWPORTS, WALLPAPERS, type PageId, type ThemeMod
 const HINTS: Record<PageId, string> = {
   sidebar: '侧栏贴在屏幕边缘：单击或悬停选中，双击编辑，右键打开菜单，Ctrl+C 复制；收起后把鼠标移到屏幕边缘唤出，Alt+Shift+S 切换。浏览器保留了 Ctrl+N，新建请直接在顶部输入。',
   capture: '速记浮窗：在任何程序里按 Ctrl+Shift+Space 呼出，Ctrl+Enter 保存并收起，Esc 保留草稿并收起；草稿与侧栏的新建卡片共用。',
-  settings: '设置窗口 880 × 720：明暗模式、界面材质、侧栏行为、字号等改动立即作用于所有窗口。字号是整页缩放（字号 ÷ 13）。',
-  components: '当前方向与主题下的组件与状态：卡片的各种状态、新建卡片、页签、筛选条、菜单、弹窗与提示条。',
-  tokens: '当前方向与主题下的全部令牌。数值从令牌文件解析，与设计系统测试检查的是同一份数据；半透明表面的对比度按纯黑与纯白背景中较差的一个计算。',
-  compare: '五套方向的侧栏放在同一张壁纸上对比，每个侧栏都可以操作；数据共享，浏览状态各自独立。',
+  settings: '设置窗口 880 × 720：明暗模式、主题、侧栏行为、字号等改动立即作用于所有窗口。字号是整页缩放（字号 ÷ 13）。',
+  components: '当前主题与明暗下的组件与状态：卡片的各种状态、新建卡片、页签、筛选条、菜单、弹窗与提示条。',
+  tokens: '当前主题与明暗下的全部令牌。数值从令牌文件解析，与设计系统测试检查的是同一份数据；半透明表面的对比度按纯黑与纯白背景中较差的一个计算。',
+  compare: '五套主题的侧栏放在同一张壁纸上对比，每个侧栏都可以操作；数据共享，浏览状态各自独立。',
 };
 
 const THEMES: ReadonlyArray<{ value: ThemeMode; label: string }> = [
@@ -68,7 +68,7 @@ function PageContent({ page }: { page: PageId }) {
 export function Shell() {
   const playground = usePlayground();
   const data = useNotes();
-  const { page, direction, theme, platform, viewport, wallpaper, bare, set } = playground;
+  const { page, surface, theme, platform, viewport, wallpaper, bare, set } = playground;
   const scenePage = PAGES.find((item) => item.id === page)?.group === 'app';
   const current = VIEWPORTS.find((item) => item.id === viewport) ?? VIEWPORTS[0];
   // 组件、令牌与对比页总是填满预览区。
@@ -106,16 +106,16 @@ export function Shell() {
       </header>
       <div className="pg-controls" role="toolbar" aria-label="预览设置">
         <Choice
-          label="方向"
-          value={direction}
-          onChange={(value) => set({ direction: value })}
-          options={DIRECTIONS.map((item) => ({
+          label="主题"
+          value={surface}
+          onChange={(value) => set({ surface: value })}
+          options={SURFACES.map((item) => ({
             value: item.id,
-            label: item.preference === 'primary' ? `${item.name}（首选）` : item.preference === 'alternative' ? `${item.name}（备选）` : item.name,
+            label: item.name,
             title: item.english,
           }))}
         />
-        <Choice label="主题" value={theme} onChange={(value) => set({ theme: value })} options={THEMES} />
+        <Choice label="明暗" value={theme} onChange={(value) => set({ theme: value })} options={THEMES} />
         <Choice
           label="平台"
           value={platform}

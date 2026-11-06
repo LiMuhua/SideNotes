@@ -29,26 +29,26 @@ export function parseBlocks(css: string): CssBlock[] {
   return blocks;
 }
 
-/** 方向令牌文件中的选择器：浅色规则不带主题属性，深色规则带 `[data-sn-theme='dark']`。 */
-function matches(selector: string, direction: string, theme: Theme): boolean {
+/** 主题令牌文件中的选择器：浅色规则不带明暗属性，深色规则带 `[data-sn-theme='dark']`。 */
+function matches(selector: string, surface: string, theme: Theme): boolean {
   return selector.split(',').some((part) => {
     const item = part.trim();
-    const isDirection = item.includes(`[data-sn-direction='${direction}']`) || item.startsWith(':root');
-    if (!isDirection) return false;
+    const isSurface = item.includes(`[data-sn-surface='${surface}']`) || item.startsWith(':root');
+    if (!isSurface) return false;
     return item.includes("[data-sn-theme='dark']") ? theme === 'dark' : true;
   });
 }
 
-/** 合并共享令牌与方向令牌，得到某方向某主题下全部令牌的原始值（与 CSS 层叠顺序一致）。 */
-export function mergeTokens(baseCss: string, directionCss: string, direction: string, theme: Theme): Map<string, string> {
+/** 合并共享令牌与主题令牌，得到某主题某明暗模式下全部令牌的原始值（与 CSS 层叠顺序一致）。 */
+export function mergeTokens(baseCss: string, surfaceCss: string, surface: string, theme: Theme): Map<string, string> {
   const merged = new Map<string, string>();
   const apply = (blocks: CssBlock[], filter: (block: CssBlock) => boolean) =>
     blocks.filter(filter).forEach((block) => block.declarations.forEach((value, name) => merged.set(name, value)));
   apply(parseBlocks(baseCss), (block) => block.selector === ':root');
-  const blocks = parseBlocks(directionCss);
-  // 先应用浅色（不带主题的）规则，再应用深色规则。
-  apply(blocks, (block) => !block.selector.includes('data-sn-theme') && matches(block.selector, direction, theme));
-  if (theme === 'dark') apply(blocks, (block) => block.selector.includes('data-sn-theme') && matches(block.selector, direction, theme));
+  const blocks = parseBlocks(surfaceCss);
+  // 先应用浅色（不带明暗属性的）规则，再应用深色规则。
+  apply(blocks, (block) => !block.selector.includes('data-sn-theme') && matches(block.selector, surface, theme));
+  if (theme === 'dark') apply(blocks, (block) => block.selector.includes('data-sn-theme') && matches(block.selector, surface, theme));
   return merged;
 }
 
