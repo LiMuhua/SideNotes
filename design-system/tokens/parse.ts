@@ -150,6 +150,10 @@ export interface ContrastPair {
 }
 
 const CARD = ['--sn-color-panel', '--sn-color-card'] as const;
+/** 悬停或选中的卡片：卡片底色上叠一层选中叠加色。 */
+const ACTIVE_CARD = [...CARD, '--sn-color-card-active'] as const;
+/** 编辑中的卡片：编辑底色取代卡片底色，直接叠在面板上。 */
+const EDITING = ['--sn-color-panel', '--sn-color-editing'] as const;
 
 export const KEY_CONTRAST_PAIRS: readonly ContrastPair[] = [
   { label: '主要文字 / 卡片', foreground: '--sn-color-text', layers: CARD, minimum: 4.5 },
@@ -158,8 +162,14 @@ export const KEY_CONTRAST_PAIRS: readonly ContrastPair[] = [
   { label: '弱化文字 / 页脚', foreground: '--sn-color-text-muted', layers: [...CARD, '--sn-color-panel-band'], minimum: 4.5 },
   { label: '主要文字 / 卡片标题栏', foreground: '--sn-color-text', layers: [...CARD, '--sn-color-card-head'], minimum: 4.5 },
   { label: '弱化文字 / 卡片标题栏', foreground: '--sn-color-text-muted', layers: [...CARD, '--sn-color-card-head'], minimum: 4.5 },
-  { label: '主要文字 / 选中卡片', foreground: '--sn-color-text', layers: [...CARD, '--sn-color-selected'], minimum: 4.5 },
-  { label: '次要文字 / 选中卡片', foreground: '--sn-color-text-secondary', layers: [...CARD, '--sn-color-selected'], minimum: 4.5 },
+  { label: '主要文字 / 选中卡片', foreground: '--sn-color-text', layers: ACTIVE_CARD, minimum: 4.5 },
+  { label: '次要文字 / 选中卡片', foreground: '--sn-color-text-secondary', layers: ACTIVE_CARD, minimum: 4.5 },
+  { label: '主要文字 / 选中的标题栏', foreground: '--sn-color-text', layers: [...ACTIVE_CARD, '--sn-color-card-head-active'], minimum: 4.5 },
+  { label: '次要文字 / 选中的标题栏', foreground: '--sn-color-text-secondary', layers: [...ACTIVE_CARD, '--sn-color-card-head-active'], minimum: 4.5 },
+  { label: '主要文字 / 编辑区', foreground: '--sn-color-text', layers: EDITING, minimum: 4.5 },
+  { label: 'Markdown 标记与行号 / 编辑区', foreground: '--sn-color-syntax', layers: EDITING, minimum: 4.5 },
+  { label: '输入光标 / 编辑区', foreground: '--sn-color-caret', layers: EDITING, minimum: 3 },
+  { label: '状态栏文字 / 状态栏', foreground: '--sn-color-on-statusbar', layers: ['--sn-color-panel', '--sn-color-statusbar'], minimum: 4.5 },
   { label: '强调色文字 / 卡片', foreground: '--sn-color-accent-text', layers: CARD, minimum: 4.5 },
   { label: '强调色上的文字', foreground: '--sn-color-on-accent', layers: ['--sn-color-accent'], minimum: 4.5 },
   { label: '危险色 / 菜单', foreground: '--sn-color-danger', layers: ['--sn-color-surface-raised'], minimum: 4.5 },

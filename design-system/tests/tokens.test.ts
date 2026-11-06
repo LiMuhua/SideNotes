@@ -90,9 +90,13 @@ describe.each(SURFACE_FILES.flatMap(({ id, file }) => THEMES.map((theme) => ({ i
     });
 
     it('选中与悬停卡片上的文字不低于 4.5:1', () => {
-      // 选中卡片内的弱化文字改用次要文字色（见 components.md「记录卡片」），弱化文字只要求在悬停时达标。
-      expect(ratio('--sn-color-text', [...CARD, '--sn-color-selected'])).toBeGreaterThanOrEqual(4.5);
-      expect(ratio('--sn-color-text-secondary', [...CARD, '--sn-color-selected'])).toBeGreaterThanOrEqual(4.5);
+      // 选中卡片内的弱化文字改用次要文字色（见 components.md「记录卡片」），弱化文字只要求在悬停的控件上达标。
+      const active = [...CARD, '--sn-color-card-active'];
+      expect(ratio('--sn-color-text', active)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio('--sn-color-text-secondary', active)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio('--sn-color-text', [...active, '--sn-color-card-head-active'])).toBeGreaterThanOrEqual(4.5);
+      expect(ratio('--sn-color-text-secondary', [...active, '--sn-color-card-head-active'])).toBeGreaterThanOrEqual(4.5);
+      expect(ratio('--sn-color-text-secondary', [...CARD, '--sn-color-accent-subtle']), '多选').toBeGreaterThanOrEqual(4.5);
       expect(ratio('--sn-color-text-muted', [...CARD, '--sn-color-hover'])).toBeGreaterThanOrEqual(4.5);
       expect(ratio('--sn-color-text', ['--sn-color-bg', '--sn-color-selected'])).toBeGreaterThanOrEqual(4.5);
       expect(ratio('--sn-color-text-secondary', ['--sn-color-bg', '--sn-color-selected'])).toBeGreaterThanOrEqual(4.5);
@@ -124,6 +128,20 @@ describe.each(SURFACE_FILES.flatMap(({ id, file }) => THEMES.map((theme) => ({ i
       ['workspace', 'pinned', 'archive'].forEach((mark) =>
         expect(ratio(`--sn-color-mark-${mark}`, CARD), mark).toBeGreaterThanOrEqual(3),
       );
+    });
+
+    it('编辑区的文字、Markdown 标记、行号与光标清楚可辨', () => {
+      // 编辑底色取代卡片底色，直接叠在面板上；占位文字与标签补全用弱化文字色，行号用 Markdown 标记的颜色。
+      const editing = ['--sn-color-panel', '--sn-color-editing'];
+      ['--sn-color-text', '--sn-color-text-secondary', '--sn-color-text-muted', '--sn-color-syntax', '--sn-color-accent-text'].forEach(
+        (text) => expect(ratio(text, editing), text).toBeGreaterThanOrEqual(4.5),
+      );
+      expect(ratio('--sn-code-text', [...editing, '--sn-code-bg'])).toBeGreaterThanOrEqual(4.5);
+      expect(ratio('--sn-color-caret', editing)).toBeGreaterThanOrEqual(3);
+    });
+
+    it('状态栏上的文字不低于 4.5:1', () => {
+      expect(ratio('--sn-color-on-statusbar', ['--sn-color-panel', '--sn-color-statusbar'])).toBeGreaterThanOrEqual(4.5);
     });
 
     it('代码文字在代码块上不低于 4.5:1', () => {

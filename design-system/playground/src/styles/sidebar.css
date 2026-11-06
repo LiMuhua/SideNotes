@@ -75,12 +75,28 @@
 }
 
 .sn-sidebar.is-blocks > :is(.sn-side-top, .sn-topline, .sn-composer, .sn-nudge, .sn-filter-banner, .sn-side-foot) {
+  position: relative;
   margin: 0;
   border: var(--sn-border-width) solid var(--sn-color-border-subtle);
   border-radius: var(--sn-panel-radius);
   background-color: var(--sn-color-card);
+  background-image: linear-gradient(to bottom, var(--sn-color-sheen), transparent var(--sn-space-9));
   backdrop-filter: blur(var(--sn-panel-blur)) saturate(var(--sn-panel-saturate));
   box-shadow: var(--sn-shadow-panel), inset 0 var(--sn-border-width) 0 var(--sn-color-edge-highlight);
+}
+
+/* 玻璃的立体感来自边缘受光，而不是投影：一圈上亮下暗的渐变描边盖在边框上，配合顶部的光泽。
+ * 投影叠在块与块之间的缝里会显得脏，磨砂玻璃的投影只保留贴近边缘的一点（令牌 --sn-shadow-panel）。 */
+.sn-sidebar.is-blocks > :is(.sn-side-top, .sn-topline, .sn-composer, .sn-nudge, .sn-filter-banner, .sn-side-foot)::before,
+.sn-note-list.is-tiles .sn-note::before {
+  content: '';
+  position: absolute;
+  inset: calc(var(--sn-border-width) * -1);
+  padding: var(--sn-border-width);
+  border-radius: inherit;
+  background: linear-gradient(to bottom, var(--sn-color-rim-top), var(--sn-color-rim-bottom));
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); /* 固定：遮罩只取透明度 */
+  pointer-events: none;
 }
 
 .sn-sidebar.is-blocks > :is(.sn-topline, .sn-nudge, .sn-filter-banner) {
@@ -566,6 +582,7 @@
 
 .sn-composer:focus-within {
   border-color: var(--sn-color-focus);
+  background-color: var(--sn-color-editing);
   box-shadow: 0 0 0 var(--sn-border-width) var(--sn-color-focus);
 }
 
@@ -619,9 +636,11 @@
 }
 
 /* ---------- 记录卡片 ----------
- * 每条记录都有自己的底面与边框，条目之间留出间隙：只靠一条细线分隔时，长列表里很难找到每条的边界。 */
+ * 每条记录都有自己的底面与边框，条目之间留出间隙：只靠一条细线分隔时，长列表里很难找到每条的边界。
+ * 投影与叠加色写在组件内部变量（--local-shadow、--local-overlay）中，各状态只改这两项。 */
 .sn-note {
   --local-overlay: transparent;
+  --local-shadow: var(--sn-shadow-sm);
   position: relative;
   display: flex;
   flex: none;
@@ -631,8 +650,11 @@
   border: var(--sn-border-width) solid var(--sn-color-border-subtle);
   border-radius: var(--sn-card-radius);
   background-color: var(--sn-color-card);
-  background-image: linear-gradient(var(--local-overlay), var(--local-overlay));
-  box-shadow: var(--sn-shadow-sm);
+  /* 下层是悬停、多选的叠加色，上层是玻璃顶部的光泽；不用时都是透明。 */
+  background-image:
+    linear-gradient(var(--local-overlay), var(--local-overlay)),
+    linear-gradient(to bottom, var(--sn-color-sheen), transparent var(--sn-space-9));
+  box-shadow: var(--local-shadow);
   outline: none;
   transition:
     background-color var(--sn-duration-fast) var(--sn-ease-standard),
@@ -642,11 +664,11 @@
 }
 
 .sn-note-list.is-tiles .sn-note {
+  --local-shadow: var(--sn-shadow-panel);
   backdrop-filter: blur(var(--sn-panel-blur)) saturate(var(--sn-panel-saturate));
-  box-shadow: var(--sn-shadow-panel), inset 0 var(--sn-border-width) 0 var(--sn-color-edge-highlight);
 }
 
-/* 窗格（终端）：标题栏有底色，与正文之间有分隔线，像编辑器里并排的一个个窗格。 */
+/* 窗格（终端）：标题栏有底色，与正文之间有分隔线，像终端里并排的一个个窗格。 */
 .sn-note-list.is-panes .sn-note {
   gap: var(--sn-space-3);
   border-color: var(--sn-color-border);
@@ -667,17 +689,25 @@
   border-radius: calc(var(--sn-card-radius) - var(--sn-border-width));
 }
 
-/* 高亮：悬停与单击共用一种状态（T66），用强调色边框表示；窗格的标题栏同时换成选中色。 */
-.sn-note:hover,
-.sn-note.is-active {
+/* 高亮：悬停与单击共用一种状态（T66）。强调色边框加一圈外圈（令牌 --sn-shadow-card-active），
+ * 卡片叠一层选中色；窗格的标题栏换成选中色，顶部一条强调色的线，像编辑器里当前的页签。 */
+.sn-note-list .sn-note:is(:hover, .is-active) {
+  --local-overlay: var(--sn-color-card-active);
+  --local-shadow: var(--sn-shadow-card-active);
   border-color: var(--sn-color-accent);
 }
 
-.sn-note-list.is-panes .sn-note:is(:hover, .is-active, .is-checked) .sn-note-head {
-  background: var(--sn-color-selected);
+.sn-note-list.is-panes .sn-note:is(:hover, .is-active, .is-checked, .is-editing) .sn-note-head {
+  background: var(--sn-color-card-head-active);
+  box-shadow: inset 0 var(--sn-focus-ring-width) 0 var(--sn-color-accent);
 }
 
-.sn-note.is-checked {
+/* 玻璃块高亮时去掉边缘受光，露出强调色边框。 */
+.sn-note-list.is-tiles .sn-note:is(:hover, .is-active, .is-checked, .is-editing)::before {
+  opacity: 0;
+}
+
+.sn-note-list .sn-note.is-checked {
   --local-overlay: var(--sn-color-accent-subtle);
   border-color: var(--sn-color-accent);
 }
@@ -692,16 +722,14 @@
   outline-offset: calc(var(--sn-focus-ring-width) * -1);
 }
 
-/* 编辑中的卡片是视觉焦点：强调色边框、外圈与投影，其余卡片变淡，悬停恢复（T21）。 */
-.sn-note.is-editing {
-  z-index: 1;
+/* 编辑中的卡片是视觉焦点：编辑底色、强调色边框与外圈（令牌 --sn-shadow-editing），
+ * 其余卡片变淡，悬停恢复（T21）。 */
+.sn-note-list .sn-note.is-editing {
   --local-overlay: transparent;
+  --local-shadow: var(--sn-shadow-editing);
+  z-index: 1;
   border-color: var(--sn-color-accent);
-  background-color: var(--sn-color-surface-raised);
-  box-shadow:
-    0 0 0 var(--sn-border-width) var(--sn-color-accent),
-    0 0 0 calc(var(--sn-border-width) + var(--sn-space-2)) var(--sn-color-accent-subtle),
-    var(--sn-shadow-md);
+  background-color: var(--sn-color-editing);
 }
 
 .sn-note.is-dimmed {
@@ -712,12 +740,15 @@
   opacity: 1;
 }
 
+/* ---------- 标题行 ----------
+ * 标题最多两行。右侧的时间与操作按钮叠放在同一格（sn-note-side），格宽取两者中较宽的一个：
+ * 平时显示时间，悬停、选中或聚焦时换成操作按钮，收起按钮在最右边，落在时间原来的位置。
+ * 标题的宽度因此在悬停前后不变，不会被按钮挤短。Emoji、时间与按钮对齐标题的第一行。 */
 .sn-note-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--sn-space-3);
   min-width: 0;
-  min-height: var(--sn-control-height-sm);
 }
 
 .sn-note-emoji {
@@ -726,7 +757,7 @@
   align-items: center;
   justify-content: center;
   width: calc(var(--sn-icon-size) + var(--sn-space-3));
-  height: calc(var(--sn-icon-size) + var(--sn-space-3));
+  height: var(--sn-control-height-sm);
   margin-left: calc(var(--sn-space-2) * -1);
   border-radius: var(--sn-radius-sm);
   font-family: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif; /* 固定：Emoji 使用系统彩色字体 */
@@ -740,20 +771,43 @@
 }
 
 .sn-note-title {
+  display: -webkit-box;
   flex: 1;
   min-width: 0;
+  margin-block: calc((var(--sn-control-height-sm) - 1lh) / 2);
   overflow: hidden;
+  overflow-wrap: anywhere;
   font-family: var(--sn-font-title);
   font-size: var(--sn-font-size-lg);
   font-weight: var(--sn-title-weight);
   letter-spacing: var(--sn-title-tracking);
   line-height: var(--sn-line-height-tight);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .sn-note-title * {
   font-size: inherit;
+}
+
+.sn-note-side {
+  display: grid;
+  flex: none;
+  align-items: center;
+  justify-items: end;
+}
+
+.sn-note-side > * {
+  grid-area: 1 / 1;
+}
+
+.sn-note-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-2);
+  height: var(--sn-control-height-sm);
+  transition: opacity var(--sn-duration-fast) var(--sn-ease-standard);
 }
 
 .sn-note-pin {
@@ -764,9 +818,7 @@
 
 .sn-note-time {
   display: inline-flex;
-  flex: none;
   align-items: center;
-  gap: var(--sn-space-1);
   height: var(--sn-control-height-sm);
   padding: 0 var(--sn-space-2);
   border-radius: var(--sn-radius-sm);
@@ -777,18 +829,32 @@
   white-space: nowrap;
 }
 
-.sn-note-time:hover {
-  background: var(--sn-color-hover);
-  color: var(--sn-color-text);
+.sn-note-actions {
+  display: flex;
+  gap: var(--sn-space-1);
+  visibility: hidden;
+  opacity: 0;
+  transition:
+    opacity var(--sn-duration-fast) var(--sn-ease-standard),
+    visibility var(--sn-duration-fast) var(--sn-ease-standard);
 }
 
-.sn-note-time-chevron {
-  width: var(--sn-icon-size-sm);
-  height: var(--sn-icon-size-sm);
+/* 触屏没有悬停：点一下卡片即选中，按钮随之出现。编辑中只显示时间。 */
+.sn-note:is(:hover, .is-active, :focus-within):not(.is-editing) .sn-note-actions {
+  visibility: visible;
+  opacity: 1;
+}
+
+.sn-note:is(:hover, .is-active, :focus-within):not(.is-editing) .sn-note-meta {
+  visibility: hidden;
+  opacity: 0;
+}
+
+.sn-note-collapse .sn-icon {
   transition: transform var(--sn-duration-normal) var(--sn-ease-standard);
 }
 
-.sn-note.is-collapsed .sn-note-time-chevron {
+.sn-note-collapse.is-collapsed .sn-icon {
   transform: rotate(-90deg);
 }
 
@@ -825,23 +891,10 @@
   color: var(--sn-color-accent-text);
 }
 
-/* 操作按钮放在标题行，只在悬停、选中或键盘聚焦时出现，平时不占位置；
- * 触屏没有悬停，点一下卡片即选中，按钮随之出现。 */
-.sn-note-actions {
-  display: none;
-  flex: none;
-  gap: var(--sn-space-1);
-}
-
-.sn-note:is(:hover, .is-active, :focus-within) .sn-note-actions {
-  display: flex;
-}
-
-/* 操作按钮里已有「取消置顶」，置顶标记让位。 */
-.sn-note:is(:hover, .is-active, :focus-within) .sn-note-pin {
-  display: none;
-}
-
+/* ---------- 编辑区（卡片编辑与速记浮窗） ----------
+ * 五套主题共用一种结构，差异来自令牌：记录纸每行下方有横线（--sn-color-rule），
+ * Windows 11 的编辑区获得焦点时底部有强调线（--sn-color-editor-underline）；
+ * 终端在左侧显示行号（surfaces.ts 的 lineNumbers）。光标、选区与 Markdown 标记的颜色见 content.css。 */
 .sn-note-editor {
   display: flex;
   flex-direction: column;
@@ -858,6 +911,58 @@
   display: flex;
   gap: var(--sn-space-1);
   margin-right: auto;
+}
+
+:is(.sn-note-editor, .sn-capture-body) .sn-editor-host {
+  padding-bottom: var(--sn-focus-ring-width);
+  transition: box-shadow var(--sn-duration-fast) var(--sn-ease-standard);
+}
+
+:is(.sn-note-editor, .sn-capture-body) .sn-editor-host:focus-within {
+  box-shadow: inset 0 calc(var(--sn-focus-ring-width) * -1) 0 var(--sn-color-editor-underline);
+}
+
+:is(.sn-note-editor, .sn-capture-body) .md-editor-line {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0 calc(1lh - var(--sn-border-width)),
+    var(--sn-color-rule) calc(1lh - var(--sn-border-width)) 1lh
+  );
+}
+
+/* 行号：编辑区左侧留出三位数字的宽度，数字与正文第一行对齐。 */
+.sn-scope .has-line-numbers .live-markdown-editor {
+  counter-reset: sn-line;
+  padding-left: calc(3ch + var(--sn-space-4));
+}
+
+.sn-scope .has-line-numbers .md-editor-line {
+  position: relative;
+  counter-increment: sn-line;
+}
+
+.sn-scope .has-line-numbers .md-editor-line::before {
+  content: counter(sn-line);
+  position: absolute;
+  top: 0;
+  right: calc(100% + var(--sn-space-4));
+  min-width: 3ch;
+  color: var(--sn-color-syntax);
+  font-family: var(--sn-font-code);
+  font-size: var(--sn-font-size-xs);
+  font-style: normal;
+  font-weight: var(--sn-font-weight-regular);
+  line-height: calc(var(--sn-note-size) * var(--sn-note-line-height));
+  text-align: right;
+  text-decoration: none;
+  text-indent: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* 代码块的围栏行在光标离开时收成一条细线，这一行不显示行号（编号照常计数，像折叠后的行）。 */
+.sn-scope .has-line-numbers .md-editor-line.is-collapsed::before {
+  content: none;
 }
 
 /* ---------- 拖动排序（组件页示意） ---------- */
@@ -937,8 +1042,39 @@
 
 .sn-side-foot.is-status {
   gap: var(--sn-space-5);
+  border-top-color: transparent;
+  background: var(--sn-color-statusbar);
+  color: var(--sn-color-on-statusbar);
   font-family: var(--sn-font-meta);
   font-size: var(--sn-font-size-xs);
+}
+
+/* 状态栏的底色与面板不同（终端浅色时是深色），按键与按钮跟随状态栏文字的颜色。 */
+.sn-side-foot.is-status .sn-kbd {
+  border-color: color-mix(in srgb, var(--sn-color-on-statusbar) 30%, transparent);
+  background: color-mix(in srgb, var(--sn-color-on-statusbar) 10%, transparent);
+  color: inherit;
+}
+
+.sn-side-foot.is-status .sn-icon-button {
+  color: inherit;
+}
+
+.sn-side-foot.is-status .sn-icon-button:hover {
+  background: color-mix(in srgb, var(--sn-color-on-statusbar) 14%, transparent);
+}
+
+/* 编辑状态：强调色的小块，和编辑中卡片的强调色边框呼应。 */
+.sn-status-mode {
+  display: inline-flex;
+  align-items: center;
+  height: calc(var(--sn-footer-height) - var(--sn-space-3) * 2);
+  padding: 0 var(--sn-space-3);
+  border-radius: var(--sn-radius-xs);
+  background: var(--sn-color-accent);
+  color: var(--sn-color-on-accent);
+  font-weight: var(--sn-font-weight-semibold);
+  white-space: nowrap;
 }
 
 .sn-status-item {

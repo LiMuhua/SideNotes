@@ -246,29 +246,40 @@ export function FilterBanner({ view }: { view: SidebarView }) {
   );
 }
 
-/** 底栏：存储状态与设置；终端主题改为常驻的状态栏，加上快捷键提示。 */
+/** 底栏：存储状态与设置；终端主题改为常驻的状态栏，加上快捷键提示，编辑时显示编辑状态与保存、取消的按键。 */
 export function SidebarFooter({ view, onSettings }: { view: SidebarView; onSettings: () => void }) {
   const surface = useSurface();
   if (surface.statusLine) {
+    const editing = Boolean(view.editingId);
+    const keys = editing
+      ? [
+          { combo: SHORTCUT_KEYS.save, label: '保存' },
+          { combo: 'Esc', label: '取消' },
+        ]
+      : [
+          { combo: SHORTCUT_KEYS.newNote, label: '新建' },
+          { combo: SHORTCUT_KEYS.search, label: '搜索' },
+        ];
     return (
       <footer className="sn-side-foot is-status">
-        <span className="sn-status-item">
-          <span className="sn-status-dot" />
-          已保存
-        </span>
+        {editing ? (
+          <span className="sn-status-mode">编辑中</span>
+        ) : (
+          <span className="sn-status-item">
+            <span className="sn-status-dot" />
+            已保存
+          </span>
+        )}
         <span className="sn-status-item">{TAB_LABELS[view.tab]} {view.counts[view.tab]} 条</span>
         {/* 放不下的快捷键提示折到第二行并被裁掉：侧栏调窄时整项消失，不会只剩半个。 */}
         <span className="sn-status-keys">
-          {surface.inlineShortcuts ? (
-            <>
-              <span className="sn-status-item is-keys">
-                <Keys combo={SHORTCUT_KEYS.newNote} /> 新建
-              </span>
-              <span className="sn-status-item is-keys">
-                <Keys combo={SHORTCUT_KEYS.search} /> 搜索
-              </span>
-            </>
-          ) : null}
+          {surface.inlineShortcuts
+            ? keys.map((key) => (
+                <span key={key.combo} className="sn-status-item is-keys">
+                  <Keys combo={key.combo} /> {key.label}
+                </span>
+              ))
+            : null}
         </span>
         <IconButton icon="settings" label="偏好设置与数据" size="sm" onClick={onSettings} />
       </footer>

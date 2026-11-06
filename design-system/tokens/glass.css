@@ -1,7 +1,9 @@
 /* ==================== 主题：磨砂玻璃（Frosted Glass） ====================
  *
  * 分开的几块磨砂玻璃，在边缘透出桌面（Glance 磨砂玻璃外观，theme.rs、skins.rs）：
- * 每块独立、大圆角，块间留 8 像素；顶部受光、底部带一点反光；文字带一圈光晕。
+ * 每块独立、大圆角，块间留 8 像素；文字带一圈光晕；紫色强调，与 Windows 11 的蓝色区分开。
+ * 立体感来自边缘受光：一圈上亮下暗的渐变描边，加上顶部从上往下渐隐的光泽。投影叠在块与块之间的缝里会显得脏，
+ * 只保留贴近边缘的一点；悬停、选中与编辑用强调色的光晕，而不是更深的投影。
  * Glance 按背景亮度与杂乱程度实时调整磨砂程度；CSS 中取固定的较高不透明度，
  * 保证玻璃叠在纯黑或纯白背景上，弱化文字仍达到 4.5:1（可读性优先于效果）。
  */
@@ -72,44 +74,57 @@
 /* ---------- 浅色 ---------- */
 [data-sn-surface='glass'] {
   color-scheme: light;
+
   --sn-color-panel: rgb(255 255 255 / 0);
   --sn-color-panel-band: rgb(255 255 255 / 0);
   --sn-color-card: rgb(255 255 255 / 0.78);
   --sn-color-card-head: rgb(0 0 0 / 0);
-  --sn-color-bg: #eef0f6;
-  --sn-color-surface: #f7f8fb;
+  --sn-color-card-active: rgb(98 54 216 / 0.05);
+  --sn-color-card-head-active: rgb(0 0 0 / 0);
+  --sn-color-editing: rgb(255 255 255 / 0.93);
+  --sn-color-sheen: rgb(255 255 255 / 0.55);
+  --sn-color-statusbar: rgb(255 255 255 / 0.78);
+  --sn-color-bg: #efeef7;
+  --sn-color-surface: #f8f7fc;
   --sn-color-surface-raised: #ffffff;
   --sn-color-surface-sunken: rgb(255 255 255 / 0.72);
   --sn-color-hover: rgb(0 0 0 / 0.05);
   --sn-color-pressed: rgb(0 0 0 / 0.08);
-  --sn-color-selected: rgb(10 100 216 / 0.1);
-  --sn-color-overlay: rgb(10 14 30 / 0.3);
+  --sn-color-selected: rgb(98 54 216 / 0.1);
+  --sn-color-overlay: rgb(14 10 30 / 0.3);
 
   --sn-color-border: rgb(0 0 0 / 0.1);
-  --sn-color-border-subtle: rgb(0 0 0 / 0.07);
+  --sn-color-border-subtle: rgb(0 0 0 / 0.06);
   --sn-color-border-strong: rgb(0 0 0 / 0.56);
-  --sn-color-edge-highlight: rgb(255 255 255 / 0.75);
+  --sn-color-edge-highlight: rgb(255 255 255 / 0);
+  --sn-color-rim-top: rgb(255 255 255 / 0.95);
+  --sn-color-rim-bottom: rgb(255 255 255 / 0.3);
+  --sn-color-rule: rgb(0 0 0 / 0);
+  --sn-color-editor-underline: rgb(0 0 0 / 0);
 
   --sn-color-text: rgb(0 0 0 / 0.88);
   --sn-color-text-secondary: rgb(0 0 0 / 0.72);
   --sn-color-text-muted: rgb(0 0 0 / 0.62);
   --sn-color-text-disabled: rgb(0 0 0 / 0.34);
   --sn-color-halo: rgb(255 255 255 / 0.6);
+  --sn-color-on-statusbar: rgb(0 0 0 / 0.62);
+  --sn-color-syntax: rgb(0 0 0 / 0.62);
 
-  --sn-color-accent: #0a64d8;
-  --sn-color-accent-hover: #0857bd;
-  --sn-color-accent-text: #003f8a;
-  --sn-color-accent-subtle: rgb(10 100 216 / 0.12);
+  --sn-color-accent: #6236d8;
+  --sn-color-accent-hover: #522bc0;
+  --sn-color-accent-text: #4c22b0;
+  --sn-color-accent-subtle: rgb(98 54 216 / 0.12);
   --sn-color-on-accent: #ffffff;
-  --sn-color-focus: #0a64d8;
+  --sn-color-focus: #6236d8;
+  --sn-color-caret: #6236d8;
   --sn-color-highlight: rgb(255 204 0 / 0.4);
-  --sn-color-selection: rgb(10 100 216 / 0.22);
-  --sn-color-inverse: #1c1c22;
+  --sn-color-selection: rgb(98 54 216 / 0.2);
+  --sn-color-inverse: #1c1a26;
   --sn-color-on-inverse: #ffffff;
   /* 分区色：Glance 每个模块一种颜色；这里只用在页签的小圆点上。 */
-  --sn-color-mark-workspace: #0a64d8;
+  --sn-color-mark-workspace: #6236d8;
   --sn-color-mark-pinned: #a35400;
-  --sn-color-mark-archive: #7a3db3;
+  --sn-color-mark-archive: #0b7285;
 
   --sn-color-success: #146a33;
   --sn-color-success-subtle: rgb(36 161 72 / 0.12);
@@ -123,52 +138,68 @@
   --sn-code-bg: rgb(0 0 0 / 0.05);
   --sn-code-text: rgb(0 0 0 / 0.88);
 
-  --sn-shadow-sm: 0 1px 3px rgb(0 0 0 / 0.08);
-  --sn-shadow-md: 0 10px 30px rgb(0 0 0 / 0.12), 0 1px 3px rgb(0 0 0 / 0.08);
-  --sn-shadow-lg: 0 24px 60px rgb(0 0 0 / 0.18), 0 2px 8px rgb(0 0 0 / 0.08);
-  --sn-shadow-panel: 0 10px 30px rgb(0 0 0 / 0.12), 0 1px 3px rgb(0 0 0 / 0.08);
+  --sn-shadow-sm: 0 1px 2px rgb(30 20 60 / 0.05);
+  --sn-shadow-md: 0 10px 30px rgb(30 20 60 / 0.14), 0 1px 3px rgb(30 20 60 / 0.08);
+  --sn-shadow-lg: 0 24px 60px rgb(30 20 60 / 0.2), 0 2px 8px rgb(30 20 60 / 0.08);
+  --sn-shadow-panel: 0 1px 2px rgb(30 20 60 / 0.06);
+  --sn-shadow-card-active: 0 0 0 1px var(--sn-color-accent), 0 0 18px rgb(98 54 216 / 0.22);
+  --sn-shadow-editing: 0 0 0 1px var(--sn-color-accent), 0 0 0 4px rgb(98 54 216 / 0.14), 0 0 26px rgb(98 54 216 / 0.2);
 }
 
 /* ---------- 深色 ---------- */
 [data-sn-surface='glass'][data-sn-theme='dark'] {
   color-scheme: dark;
+
   --sn-color-panel: rgb(20 20 26 / 0);
   --sn-color-panel-band: rgb(20 20 26 / 0);
   --sn-color-card: rgb(20 20 26 / 0.8);
   --sn-color-card-head: rgb(0 0 0 / 0);
-  --sn-color-bg: #121218;
-  --sn-color-surface: #1a1a21;
-  --sn-color-surface-raised: #23232b;
+  --sn-color-card-active: rgb(166 139 255 / 0.07);
+  --sn-color-card-head-active: rgb(0 0 0 / 0);
+  --sn-color-editing: rgb(24 22 34 / 0.94);
+  --sn-color-sheen: rgb(255 255 255 / 0.07);
+  --sn-color-statusbar: rgb(20 20 26 / 0.8);
+  --sn-color-bg: #121118;
+  --sn-color-surface: #1a1922;
+  --sn-color-surface-raised: #23222c;
   --sn-color-surface-sunken: rgb(255 255 255 / 0.07);
   --sn-color-hover: rgb(255 255 255 / 0.08);
   --sn-color-pressed: rgb(255 255 255 / 0.12);
-  --sn-color-selected: rgb(124 192 255 / 0.14);
+  --sn-color-selected: rgb(166 139 255 / 0.14);
   --sn-color-overlay: rgb(0 0 0 / 0.5);
 
   --sn-color-border: rgb(255 255 255 / 0.12);
   --sn-color-border-subtle: rgb(255 255 255 / 0.08);
   --sn-color-border-strong: rgb(255 255 255 / 0.56);
-  --sn-color-edge-highlight: rgb(255 255 255 / 0.16);
+  --sn-color-edge-highlight: rgb(255 255 255 / 0);
+  --sn-color-rim-top: rgb(255 255 255 / 0.3);
+  --sn-color-rim-bottom: rgb(255 255 255 / 0.06);
+  --sn-color-rule: rgb(0 0 0 / 0);
+  --sn-color-editor-underline: rgb(0 0 0 / 0);
 
   --sn-color-text: rgb(255 255 255 / 0.95);
   --sn-color-text-secondary: rgb(255 255 255 / 0.8);
   --sn-color-text-muted: rgb(255 255 255 / 0.7);
   --sn-color-text-disabled: rgb(255 255 255 / 0.34);
   --sn-color-halo: rgb(0 0 0 / 0.5);
+  --sn-color-on-statusbar: rgb(255 255 255 / 0.7);
+  --sn-color-syntax: rgb(255 255 255 / 0.7);
 
-  --sn-color-accent: #3d9bff;
-  --sn-color-accent-hover: #5aabff;
-  --sn-color-accent-text: #9ccfff;
-  --sn-color-accent-subtle: rgb(61 155 255 / 0.16);
-  --sn-color-on-accent: #001833;
-  --sn-color-focus: #9ccfff;
+  --sn-color-accent: #a68bff;
+  --sn-color-accent-hover: #b9a3ff;
+  --sn-color-accent-text: #d3c4ff;
+  --sn-color-accent-subtle: rgb(166 139 255 / 0.16);
+  --sn-color-on-accent: #140b33;
+  --sn-color-focus: #d3c4ff;
+  --sn-color-caret: #c9b6ff;
   --sn-color-highlight: rgb(255 204 0 / 0.3);
-  --sn-color-selection: rgb(61 155 255 / 0.3);
-  --sn-color-inverse: #f2f2f7;
-  --sn-color-on-inverse: #1c1c22;
-  --sn-color-mark-workspace: #9ccfff;
+  --sn-color-selection: rgb(166 139 255 / 0.3);
+  --sn-color-inverse: #f2f1f8;
+  --sn-color-on-inverse: #1c1a26;
+  /* 分区色：Glance 每个模块一种颜色；这里只用在页签的小圆点上。 */
+  --sn-color-mark-workspace: #d3c4ff;
   --sn-color-mark-pinned: #ffb347;
-  --sn-color-mark-archive: #d3a5ff;
+  --sn-color-mark-archive: #6fd6e8;
 
   --sn-color-success: #57d67b;
   --sn-color-success-subtle: rgb(48 209 88 / 0.14);
@@ -182,8 +213,10 @@
   --sn-code-bg: rgb(255 255 255 / 0.07);
   --sn-code-text: rgb(255 255 255 / 0.95);
 
-  --sn-shadow-sm: 0 1px 3px rgb(0 0 0 / 0.3);
-  --sn-shadow-md: 0 10px 30px rgb(0 0 0 / 0.3), 0 1px 3px rgb(0 0 0 / 0.2);
+  --sn-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.3);
+  --sn-shadow-md: 0 10px 30px rgb(0 0 0 / 0.35), 0 1px 3px rgb(0 0 0 / 0.2);
   --sn-shadow-lg: 0 24px 60px rgb(0 0 0 / 0.45), 0 2px 8px rgb(0 0 0 / 0.25);
-  --sn-shadow-panel: 0 10px 30px rgb(0 0 0 / 0.3), 0 1px 3px rgb(0 0 0 / 0.2);
+  --sn-shadow-panel: 0 1px 2px rgb(0 0 0 / 0.25);
+  --sn-shadow-card-active: 0 0 0 1px var(--sn-color-accent), 0 0 20px rgb(166 139 255 / 0.25);
+  --sn-shadow-editing: 0 0 0 1px var(--sn-color-accent), 0 0 0 4px rgb(166 139 255 / 0.16), 0 0 28px rgb(166 139 255 / 0.22);
 }

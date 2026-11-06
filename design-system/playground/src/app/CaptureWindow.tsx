@@ -11,7 +11,7 @@ import type { MarkdownEditor } from '@/core/editor';
 import { NoteEditor } from '../content/NoteEditor';
 import { useNotes } from '../model/notes';
 import { IconButton } from '../ui/Button';
-import { useSurface, useFormFactor } from '../ui/context';
+import { cx, useSurface, useFormFactor } from '../ui/context';
 import { Keys } from '../ui/Misc';
 import { useToast } from '../ui/Tabs';
 import { BrandMark } from './SidebarParts';
@@ -66,7 +66,7 @@ export function CaptureWindow({ onClose, onContinue }: CaptureWindowProps) {
           <IconButton icon="x" label="保留草稿并收起" shortcut="Esc" onClick={onClose} />
         </div>
       </header>
-      <div className="sn-capture-body">
+      <div className={cx('sn-capture-body', surface.lineNumbers && 'has-line-numbers')}>
         <NoteEditor
           value={data.draft}
           onChange={data.setDraft}

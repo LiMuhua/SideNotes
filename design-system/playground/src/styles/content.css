@@ -146,6 +146,7 @@
   position: relative;
   overflow-y: auto;
   outline: none;
+  caret-color: var(--sn-color-caret);
   cursor: text;
 }
 
@@ -165,8 +166,9 @@
   white-space: pre-wrap;
 }
 
+/* Markdown 标记（#、**、- 等）：终端用强调色，像代码的语法着色；其余主题用弱化文字色。 */
 .sn-scope .md-syntax {
-  color: var(--sn-color-text-muted);
+  color: var(--sn-color-syntax);
   font-weight: var(--sn-font-weight-regular);
   font-style: normal;
   text-decoration: none;
@@ -196,7 +198,7 @@
 .sn-scope .live-markdown-editor :is(.md-list-bullet, .md-list-marker.is-revealed) {
   display: inline-block;
   min-width: var(--md-list-hang);
-  color: var(--sn-color-text-muted);
+  color: var(--sn-color-syntax);
   text-indent: 0;
   white-space: pre;
 }
@@ -235,7 +237,8 @@
   background: var(--sn-color-border);
 }
 
-.sn-scope .md-task-checkbox {
+/* 编辑区的根元素同时带 markdown-body，选择器写到编辑区之内，才能盖过正文中待办按钮的样式。 */
+.sn-scope .live-markdown-editor .md-task-checkbox {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -252,7 +255,7 @@
   vertical-align: -0.12em;
 }
 
-.sn-scope .md-task-checkbox[aria-checked='true'] {
+.sn-scope .live-markdown-editor .md-task-checkbox[aria-checked='true'] {
   border-color: var(--sn-color-accent);
   background: var(--sn-color-accent-subtle);
 }

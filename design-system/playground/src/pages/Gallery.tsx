@@ -10,10 +10,12 @@ import { usePlayground } from '../shell/state';
 import { TokenScope } from '../ui/Scope';
 import { PageIntro, PageToc } from './common';
 import { ControlsSection } from './GalleryControls';
+import { EditingSection } from './GalleryEditing';
 import { NotesSection, OverlaySection, PartsSection } from './GalleryNotes';
 
 const SECTIONS = [
   { id: 'gallery-cards', label: '记录卡片' },
+  { id: 'gallery-editing', label: '编辑模式' },
   { id: 'gallery-parts', label: '侧栏部件' },
   { id: 'gallery-overlays', label: '菜单、弹窗与提示' },
   { id: 'gallery-controls', label: '基础控件' },
@@ -32,6 +34,7 @@ export function GalleryPage() {
           />
           <PageToc sections={SECTIONS} />
           <NotesSection />
+          <EditingSection />
           <PartsSection />
           <OverlaySection />
           <ControlsSection />

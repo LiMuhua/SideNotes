@@ -2,13 +2,15 @@
  * 记录卡片。
  *
  * 交互沿用现有应用：指针移到卡片上或单击即选中（悬停与单击共用一个高亮），双击进入编辑，
- * 右键打开卡片菜单，点时间收起或展开正文，点 Emoji 更换，点标签按标签筛选；
+ * 右键打开卡片菜单，点时间收起或展开正文，点 Emoji 更换，点标签按标签筛选；时间显示创建时间。
  * 编辑时 Ctrl+Enter 保存、Esc 取消，焦点离开卡片即保存并回到预览。
  * 正文超过设置中的最大高度时渐隐，双击查看全文。
  *
  * 本次提出的补充（见 interactions.md）：卡片可以用 ↑ ↓ 逐张聚焦，Enter 编辑，Delete 移入回收站；
- * 操作按钮移到标题行，只在悬停、选中或聚焦时显示，不再单独占一行；底部只在有标签时显示标签。
- * 单行记录与收起的记录只剩标题行。
+ * 操作按钮移到标题行右侧，与时间共用一个位置：平时显示时间，悬停、选中或聚焦时换成操作按钮，
+ * 收起按钮在操作按钮的最右边，正好落在时间原来的位置。这个位置的宽度取两者中较宽的一个，
+ * 所以标题的宽度在悬停前后不变，不会因为按钮出现而被挤短；标题最多显示两行。
+ * 底部只在有标签时显示标签，单行记录与收起的记录只剩标题行。
  */
 
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
@@ -32,6 +34,8 @@ export interface NoteCardProps {
   /** 多选中。 */
   checked: boolean;
   editing: boolean;
+  /** 进入编辑时把焦点放进编辑区；组件页的常驻示例不抢焦点。 */
+  editAutoFocus?: boolean;
   /** 另一张卡片正在编辑，本卡片变淡。 */
   dimmed: boolean;
   /** 正文最大高度（设置中的「卡片高度」，按 13px 字号计的像素）。 */
@@ -118,8 +122,22 @@ export function NoteCard(props: NoteCardProps) {
           {note.emoji}
         </button>
         <h3 className="sn-note-title">{display.structured ? noteTitle(note) : <MarkdownInline text={titleText} />}</h3>
-        {note.pinned && props.tab !== 'pinned' ? <Icon name="pin" className="sn-note-pin" /> : null}
-        {editing ? null : (
+        <div className="sn-note-side">
+          <div className="sn-note-meta">
+            {note.pinned && props.tab !== 'pinned' ? <Icon name="pin" className="sn-note-pin" /> : null}
+            <button
+              type="button"
+              className="sn-note-time"
+              tabIndex={-1}
+              title={`创建：${formatFullTime(note.createdAt)}\n修改：${formatFullTime(note.updatedAt)}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                props.onToggleCollapse();
+              }}
+            >
+              {formatTime(note.createdAt)}
+            </button>
+          </div>
           <div className="sn-note-actions" onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
             <IconButton icon="copy" label="复制记录与附件" size="sm" onClick={props.onCopy} />
             {note.status === 'active' ? (
@@ -140,25 +158,27 @@ export function NoteCard(props: NoteCardProps) {
                 props.onMenu({ x: box.left, y: box.bottom });
               }}
             />
+            <IconButton
+              icon="chevron-down"
+              label={note.collapsed ? '展开正文' : '收起正文'}
+              aria-expanded={!note.collapsed}
+              size="sm"
+              className={cx('sn-note-collapse', note.collapsed && 'is-collapsed')}
+              onClick={props.onToggleCollapse}
+            />
           </div>
-        )}
-        <button
-          type="button"
-          className="sn-note-time"
-          aria-label={`${note.collapsed ? '展开' : '收起'}记录正文`}
-          title={`创建：${formatFullTime(note.createdAt)}\n修改：${formatFullTime(note.updatedAt)}`}
-          onClick={(event) => {
-            event.stopPropagation();
-            props.onToggleCollapse();
-          }}
-        >
-          {formatTime(note.updatedAt)}
-          <Icon name="chevron-down" className="sn-note-time-chevron" />
-        </button>
+        </div>
       </header>
 
       {editing ? (
-        <NoteEditArea text={note.text} inlineShortcuts={surface.inlineShortcuts} onSave={props.onSave} onCancel={props.onCancel} />
+        <NoteEditArea
+          text={note.text}
+          autoFocus={props.editAutoFocus ?? true}
+          inlineShortcuts={surface.inlineShortcuts}
+          lineNumbers={surface.lineNumbers}
+          onSave={props.onSave}
+          onCancel={props.onCancel}
+        />
       ) : note.collapsed || !display.body.trim() ? null : (
         <div
           ref={content}
@@ -206,12 +226,26 @@ export function NoteCard(props: NoteCardProps) {
  * Ctrl+Enter 保存，Esc 取消；焦点离开编辑区（例如点到卡片之外）时保存并回到预览。
  * 编辑栏的按钮按下时不抢焦点，点「取消」不会先触发失焦保存。
  */
-function NoteEditArea({ text, inlineShortcuts, onSave, onCancel }: { text: string; inlineShortcuts: boolean; onSave: (text: string) => void; onCancel: () => void }) {
+function NoteEditArea({
+  text,
+  autoFocus,
+  inlineShortcuts,
+  lineNumbers,
+  onSave,
+  onCancel,
+}: {
+  text: string;
+  autoFocus: boolean;
+  inlineShortcuts: boolean;
+  lineNumbers: boolean;
+  onSave: (text: string) => void;
+  onCancel: () => void;
+}) {
   const [draft, setDraft] = useState(text);
   const keepFocus = (event: MouseEvent) => event.preventDefault();
   return (
     <div
-      className="sn-note-editor"
+      className={cx('sn-note-editor', lineNumbers && 'has-line-numbers')}
       onKeyDown={(event) => {
         if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
           event.preventDefault();
@@ -226,7 +260,7 @@ function NoteEditArea({ text, inlineShortcuts, onSave, onCancel }: { text: strin
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onSave(draft);
       }}
     >
-      <NoteEditor value={draft} onChange={setDraft} autoFocus ariaLabel="编辑记录" minHeight={60} maxHeight={320} />
+      <NoteEditor value={draft} onChange={setDraft} autoFocus={autoFocus} ariaLabel="编辑记录" minHeight={60} maxHeight={320} />
       <div className="sn-note-edit-bar">
         <div className="sn-note-tools">
           <IconButton icon="image" label="添加图片" size="sm" onMouseDown={keepFocus} />

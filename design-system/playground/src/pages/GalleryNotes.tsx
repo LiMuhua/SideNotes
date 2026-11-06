@@ -19,7 +19,7 @@ import { Demo, DemoRow, PageSection, StateCell } from './common';
 const noop = () => {};
 
 /** 侧栏面板的一小块：示例放在真实的面板底色上，宽度与侧栏一致；记录卡片放在与侧栏相同的列表容器里。 */
-function PanelSample({ children, className, list = false }: { children: ReactNode; className?: string; list?: boolean }) {
+export function PanelSample({ children, className, list = false }: { children: ReactNode; className?: string; list?: boolean }) {
   const surface = useSurface();
   return (
     <div className={cx('sn-panel-sample', 'sn-sidebar', `is-${surface.dock}`, `has-${surface.entries}`, className)}>
@@ -28,7 +28,7 @@ function PanelSample({ children, className, list = false }: { children: ReactNod
   );
 }
 
-function StaticCard({ note, ...overrides }: { note: Note } & Partial<NoteCardProps>) {
+export function StaticCard({ note, ...overrides }: { note: Note } & Partial<NoteCardProps>) {
   return (
     <NoteCard
       note={note}
