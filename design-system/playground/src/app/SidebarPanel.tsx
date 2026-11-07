@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import type { MarkdownEditor } from '@/core/editor';
 import { noteTitle, shouldNudgeTidy } from '@/core/notes';
+import { tagKey } from '@/core/tags';
 import { WIDTH_RANGE } from '@/core/settings';
 import type { EdgeSide, Note } from '@/core/types';
 import { copyText } from '../model/clipboard';
@@ -24,7 +25,7 @@ import { EmptyState } from '../ui/Misc';
 import { useToast } from '../ui/Tabs';
 import { Composer } from './Composer';
 import { SHORTCUT_KEYS } from './shortcuts';
-import { ChangelogDialog, EmojiDialog, GuideDialog, NoteInfoDialog, noteMenuItems, sidebarMenuItems, TrashConfirm, type NoteCommand, type SidebarCommand } from './menus';
+import { ChangelogDialog, EmojiDialog, GuideDialog, NoteInfoDialog, noteMenuItems, sidebarMenuItems, TagManageDialog, TrashConfirm, type NoteCommand, type SidebarCommand } from './menus';
 import { NoteCard } from './NoteCard';
 import { FilterBanner, ListTopline, Resizer, SidebarFooter, SidebarHeader, SidebarNav, TidyNudge } from './SidebarParts';
 
@@ -70,13 +71,14 @@ export function SidebarPanel(props: SidebarPanelProps) {
   const [trashing, setTrashing] = useState<Note[] | null>(null);
   const [infoNote, setInfoNote] = useState<Note | null>(null);
   const [emojiNote, setEmojiNote] = useState<Note | null>(null);
+  const [managingTag, setManagingTag] = useState<string | null>(null);
   const [guide, setGuide] = useState(false);
   const [changelog, setChangelog] = useState(false);
   const [nudgeClosed, setNudgeClosed] = useState(false);
 
   const { settings } = data;
   const edge: EdgeSide = settings.edge;
-  const busy = Boolean(view.editingId || menu || trashing || infoNote || emojiNote || guide || changelog);
+  const busy = Boolean(view.editingId || menu || trashing || infoNote || emojiNote || managingTag || guide || changelog);
   const { onBusyChange } = props;
 
   useEffect(() => {
@@ -352,7 +354,20 @@ export function SidebarPanel(props: SidebarPanelProps) {
           onClose={() => setNudgeClosed(true)}
         />
       ) : null}
-      <ListTopline view={view} />
+      <ListTopline
+        view={view}
+        onManageTag={setManagingTag}
+        onSearchTags={() => {
+          // 打开搜索并预填 #，光标停在 # 之后，继续输入即按标签查找（现有应用的「搜索」）。
+          view.setSearchOpen(true);
+          view.setQuery('#');
+          window.setTimeout(() => {
+            const input = root.current?.querySelector<HTMLInputElement>('.sn-side-search input');
+            input?.focus();
+            input?.setSelectionRange(1, 1);
+          }, 50);
+        }}
+      />
       {view.tab === 'archive' ? null : (
         <Composer onReady={setComposer} onSaved={(id) => view.select(id)} />
       )}
@@ -394,7 +409,7 @@ export function SidebarPanel(props: SidebarPanelProps) {
                   onTogglePin={() => runNote(note, 'pin')}
                   onToggleArchive={() => archive(targets(note.id))}
                   onToggleCollapse={() => data.setCollapsed([note.id], !note.collapsed)}
-                  onTag={(tag) => view.setTag(tag)}
+                  onTag={(tag) => view.selectTag(tag)}
                   onEmoji={() => setEmojiNote(note)}
                   onTextChange={(text) => data.update(note.id, text)}
                   onKeyDown={(event) => onCardKey(note, event)}
@@ -406,7 +421,7 @@ export function SidebarPanel(props: SidebarPanelProps) {
           <EmptyState
             icon="search"
             title="没有匹配的记录"
-            description="试试更短的关键词；输入 # 可以按标签查找。"
+            description="调整搜索或标签筛选。"
             action={
               <Button variant="secondary" size="sm" onClick={view.clearFilters}>
                 清除筛选
@@ -429,13 +444,25 @@ export function SidebarPanel(props: SidebarPanelProps) {
           />
         )}
       </div>
-      <SidebarFooter view={view} onSettings={props.onOpenSettings} />
+      <SidebarFooter onSettings={props.onOpenSettings} />
 
       {menu && menuItems.length ? (
         <ContextMenu label={menu.type === 'note' ? '记录操作' : '侧栏操作'} items={menuItems} point={menu.point} onClose={() => setMenu(null)} />
       ) : null}
       <TrashConfirm notes={trashing} onCancel={() => setTrashing(null)} onConfirm={confirmTrash} />
       <NoteInfoDialog note={infoNote} onClose={() => setInfoNote(null)} />
+      <TagManageDialog
+        tag={managingTag}
+        onClose={() => setManagingTag(null)}
+        onRenamed={(next) => {
+          if (managingTag && view.tag && tagKey(view.tag) === tagKey(managingTag)) view.setTag(next);
+          setManagingTag(null);
+        }}
+        onRemoved={() => {
+          if (managingTag && view.tag && tagKey(view.tag) === tagKey(managingTag)) view.setTag('');
+          setManagingTag(null);
+        }}
+      />
       <EmojiDialog
         note={emojiNote}
         onClose={() => setEmojiNote(null)}

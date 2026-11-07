@@ -169,7 +169,6 @@ export const KEY_CONTRAST_PAIRS: readonly ContrastPair[] = [
   { label: '主要文字 / 编辑区', foreground: '--sn-color-text', layers: EDITING, minimum: 4.5 },
   { label: 'Markdown 标记与行号 / 编辑区', foreground: '--sn-color-syntax', layers: EDITING, minimum: 4.5 },
   { label: '输入光标 / 编辑区', foreground: '--sn-color-caret', layers: EDITING, minimum: 3 },
-  { label: '状态栏文字 / 状态栏', foreground: '--sn-color-on-statusbar', layers: ['--sn-color-panel', '--sn-color-statusbar'], minimum: 4.5 },
   { label: '强调色文字 / 卡片', foreground: '--sn-color-accent-text', layers: CARD, minimum: 4.5 },
   { label: '强调色上的文字', foreground: '--sn-color-on-accent', layers: ['--sn-color-accent'], minimum: 4.5 },
   { label: '危险色 / 菜单', foreground: '--sn-color-danger', layers: ['--sn-color-surface-raised'], minimum: 4.5 },

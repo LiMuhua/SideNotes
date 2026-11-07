@@ -74,7 +74,8 @@
   box-shadow: none;
 }
 
-.sn-sidebar.is-blocks > :is(.sn-side-top, .sn-topline, .sn-composer, .sn-nudge, .sn-filter-banner, .sn-side-foot) {
+.sn-sidebar.is-blocks > :is(.sn-side-top, .sn-topline, .sn-composer, .sn-nudge, .sn-filter-banner, .sn-side-foot),
+.sn-capture.is-blocks > :is(.sn-capture-head, .sn-capture-body, .sn-capture-foot) {
   position: relative;
   margin: 0;
   border: var(--sn-border-width) solid var(--sn-color-border-subtle);
@@ -88,6 +89,7 @@
 /* 玻璃的立体感来自边缘受光，而不是投影：一圈上亮下暗的渐变描边盖在边框上，配合顶部的光泽。
  * 投影叠在块与块之间的缝里会显得脏，磨砂玻璃的投影只保留贴近边缘的一点（令牌 --sn-shadow-panel）。 */
 .sn-sidebar.is-blocks > :is(.sn-side-top, .sn-topline, .sn-composer, .sn-nudge, .sn-filter-banner, .sn-side-foot)::before,
+.sn-capture.is-blocks > :is(.sn-capture-head, .sn-capture-body, .sn-capture-foot)::before,
 .sn-note-list.is-tiles .sn-note::before {
   content: '';
   position: absolute;
@@ -373,6 +375,15 @@
   margin-left: auto;
 }
 
+/* 搜索时搜索框盖住页签（与现有应用一致），放大镜留在搜索框最左边，再点一次收起。 */
+.sn-side-nav.is-searching .sn-tabs-row {
+  display: none;
+}
+
+.sn-side-search .sn-search-toggle {
+  margin-left: 0;
+}
+
 .sn-side-search {
   display: flex;
   flex: 1;
@@ -381,16 +392,11 @@
   gap: var(--sn-space-3);
   min-width: 0;
   height: var(--sn-control-height);
-  padding: 0 var(--sn-space-1) 0 var(--sn-space-4);
+  padding: 0 var(--sn-space-1);
   border: var(--sn-border-width) solid var(--sn-color-border);
   border-radius: var(--sn-radius-control);
   background: var(--sn-color-surface-sunken);
   color: var(--sn-color-text-muted);
-}
-
-.sn-side-search > .sn-icon {
-  width: var(--sn-icon-size-sm);
-  height: var(--sn-icon-size-sm);
 }
 
 .sn-side-search:focus-within {
@@ -521,6 +527,81 @@
 .sn-topline-tag.is-engaged {
   background: var(--sn-color-accent-subtle);
   color: var(--sn-color-accent-text);
+}
+
+/* 标签筛选菜单（现有应用的 TagFilter）：候选标签右侧是条数；首位标签旁边是「管理」；底部提示与「搜索」。 */
+.sn-tag-menu {
+  width: calc(var(--sn-dialog-width) * 0.6);
+}
+
+.sn-tag-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-1);
+}
+
+.sn-tag-option {
+  flex: 1;
+  min-width: 0;
+}
+
+.sn-tag-count {
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.sn-tag-manage {
+  flex: none;
+  justify-content: center;
+  width: var(--sn-menu-item-height);
+  padding: 0;
+}
+
+.sn-tag-manage .sn-icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  color: var(--sn-color-text-muted);
+}
+
+.sn-tag-menu-empty {
+  padding: var(--sn-space-4);
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-sm);
+}
+
+.sn-tag-menu-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sn-space-4);
+  margin-top: var(--sn-space-2);
+  padding: var(--sn-space-3) var(--sn-space-2) var(--sn-space-1) var(--sn-space-4);
+  border-top: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-xs);
+}
+
+.sn-tag-menu-search {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sn-space-2);
+  height: var(--sn-control-height-sm);
+  padding: 0 var(--sn-space-3);
+  border-radius: var(--sn-radius-control);
+  color: var(--sn-color-accent-text);
+}
+
+.sn-tag-menu-search .sn-icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.sn-tag-menu-search:hover,
+.sn-tag-menu-search:focus-visible {
+  background: var(--sn-color-hover);
 }
 
 .sn-filter-banner {
@@ -1008,7 +1089,8 @@
   font-size: var(--sn-font-size-sm);
 }
 
-/* ---------- 底栏 ---------- */
+/* ---------- 底栏 ----------
+ * 与现有应用一致：左边一个存储状态的小圆点，右边是设置，其余留白。 */
 .sn-side-foot {
   display: flex;
   flex: none;
@@ -1027,8 +1109,8 @@
   display: inline-flex;
   flex: 1;
   align-items: center;
-  gap: var(--sn-space-3);
   min-width: 0;
+  height: 100%;
 }
 
 .sn-status-dot {
@@ -1038,64 +1120,4 @@
   height: var(--sn-space-3);
   border-radius: var(--sn-radius-full);
   background: var(--sn-color-success);
-}
-
-.sn-side-foot.is-status {
-  gap: var(--sn-space-5);
-  border-top-color: transparent;
-  background: var(--sn-color-statusbar);
-  color: var(--sn-color-on-statusbar);
-  font-family: var(--sn-font-meta);
-  font-size: var(--sn-font-size-xs);
-}
-
-/* 状态栏的底色与面板不同（终端浅色时是深色），按键与按钮跟随状态栏文字的颜色。 */
-.sn-side-foot.is-status .sn-kbd {
-  border-color: color-mix(in srgb, var(--sn-color-on-statusbar) 30%, transparent);
-  background: color-mix(in srgb, var(--sn-color-on-statusbar) 10%, transparent);
-  color: inherit;
-}
-
-.sn-side-foot.is-status .sn-icon-button {
-  color: inherit;
-}
-
-.sn-side-foot.is-status .sn-icon-button:hover {
-  background: color-mix(in srgb, var(--sn-color-on-statusbar) 14%, transparent);
-}
-
-/* 编辑状态：强调色的小块，和编辑中卡片的强调色边框呼应。 */
-.sn-status-mode {
-  display: inline-flex;
-  align-items: center;
-  height: calc(var(--sn-footer-height) - var(--sn-space-3) * 2);
-  padding: 0 var(--sn-space-3);
-  border-radius: var(--sn-radius-xs);
-  background: var(--sn-color-accent);
-  color: var(--sn-color-on-accent);
-  font-weight: var(--sn-font-weight-semibold);
-  white-space: nowrap;
-}
-
-.sn-status-item {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sn-space-2);
-  white-space: nowrap;
-}
-
-/* 快捷键提示放不下时整项折到第二行并被裁掉：侧栏调窄时提示逐项消失，不会只剩半个。 */
-.sn-status-keys {
-  display: flex;
-  flex: 1;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0 var(--sn-space-5);
-  min-width: 0;
-  height: var(--sn-footer-height);
-  overflow: hidden;
-}
-
-.sn-status-keys > .sn-status-item {
-  height: var(--sn-footer-height);
 }

@@ -54,7 +54,6 @@ export const TOKENS: readonly TokenSpec[] = [
     ['--sn-color-card-head-active', '悬停或选中时标题栏的底色，取代标题栏底色；只有窗格式的记录（终端）使用，其余主题透明'],
     ['--sn-color-editing', '编辑中的卡片与速记浮窗编辑区的底色，取代卡片底色'],
     ['--sn-color-sheen', '玻璃块顶部的光泽，从上往下渐隐（磨砂玻璃）；不用时为透明'],
-    ['--sn-color-statusbar', '底部状态栏的底色（终端）；没有状态栏的主题与页脚一致'],
     ['--sn-color-bg', '设置窗口的窗口底色与分类栏'],
     ['--sn-color-surface', '设置窗口的内容区、弹窗正文'],
     ['--sn-color-surface-raised', '浮起的表面：菜单、弹窗'],
@@ -80,7 +79,6 @@ export const TOKENS: readonly TokenSpec[] = [
     ['--sn-color-text-muted', '弱化文字：时间、计数、占位（对比度不低于 4.5:1）'],
     ['--sn-color-text-disabled', '禁用文字（不要求对比度）'],
     ['--sn-color-halo', '文字光晕：玻璃上为文字加一圈浅色或深色晕；不用时为透明'],
-    ['--sn-color-on-statusbar', '状态栏上的文字（对比度不低于 4.5:1）'],
     ['--sn-color-syntax', '编辑时 Markdown 标记（#、**、- 等）与行号的颜色（对比度不低于 4.5:1）'],
   ]),
   ...themed('accent', [

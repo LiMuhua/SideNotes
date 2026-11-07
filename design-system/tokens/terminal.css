@@ -3,7 +3,7 @@
  * 像终端里并排的窗格：界面与正文都用等宽字体（沿用现有 SideNotes 的默认字体 Maple Mono NF CN），
  * 冷灰色的面板上是一个个白色窗格，每个窗格有标题栏，窗格之间留 6 像素的缝；琥珀色强调。
  * 悬停或选中的窗格：琥珀色边框加外圈，标题栏染成琥珀色，顶部一条琥珀色的线。
- * 底部是深色的状态栏：存储状态与快捷键，编辑时显示编辑状态；编辑时左侧显示行号，Markdown 标记用琥珀色。
+ * 编辑时左侧显示行号，Markdown 标记用琥珀色。
  * 几乎没有圆角与阴影，动效极短。
  */
 
@@ -82,7 +82,6 @@
   --sn-color-card-head-active: rgb(184 108 0 / 0.17);
   --sn-color-editing: #ffffff;
   --sn-color-sheen: rgb(255 255 255 / 0);
-  --sn-color-statusbar: #262b32;
   --sn-color-bg: #dfe2e6;
   --sn-color-surface: #f5f6f8;
   --sn-color-surface-raised: #ffffff;
@@ -106,7 +105,6 @@
   --sn-color-text-muted: #58606a;
   --sn-color-text-disabled: #a2a8b0;
   --sn-color-halo: rgb(255 255 255 / 0);
-  --sn-color-on-statusbar: #d6dbe1;
   --sn-color-syntax: #94570a;
 
   --sn-color-accent: #a35f00;
@@ -156,7 +154,6 @@
   --sn-color-card-head-active: rgb(229 165 75 / 0.2);
   --sn-color-editing: #1b2026;
   --sn-color-sheen: rgb(255 255 255 / 0);
-  --sn-color-statusbar: #0a0c0f;
   --sn-color-bg: #0e1114;
   --sn-color-surface: #13161a;
   --sn-color-surface-raised: #1c2026;
@@ -180,7 +177,6 @@
   --sn-color-text-muted: #8b949e;
   --sn-color-text-disabled: #4b525a;
   --sn-color-halo: rgb(0 0 0 / 0);
-  --sn-color-on-statusbar: #a3acb6;
   --sn-color-syntax: #e0a458;
 
   --sn-color-accent: #e5a54b;

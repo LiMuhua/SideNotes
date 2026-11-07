@@ -139,7 +139,6 @@
 | `--sn-color-card-head-active` | `rgb(0 0 0 / 0)` | `rgb(0 0 0 / 0)` |
 | `--sn-color-editing` | `rgb(255 255 255 / 0.93)` | `rgb(24 22 34 / 0.94)` |
 | `--sn-color-sheen` | `rgb(255 255 255 / 0.55)` | `rgb(255 255 255 / 0.07)` |
-| `--sn-color-statusbar` | `rgb(255 255 255 / 0.78)` | `rgb(20 20 26 / 0.8)` |
 | `--sn-color-bg` | `#efeef7` | `#121118` |
 | `--sn-color-surface` | `#f8f7fc` | `#1a1922` |
 | `--sn-color-surface-raised` | `#ffffff` | `#23222c` |
@@ -161,7 +160,6 @@
 | `--sn-color-text-muted` | `rgb(0 0 0 / 0.62)` | `rgb(255 255 255 / 0.7)` |
 | `--sn-color-text-disabled` | `rgb(0 0 0 / 0.34)` | `rgb(255 255 255 / 0.34)` |
 | `--sn-color-halo` | `rgb(255 255 255 / 0.6)` | `rgb(0 0 0 / 0.5)` |
-| `--sn-color-on-statusbar` | `rgb(0 0 0 / 0.62)` | `rgb(255 255 255 / 0.7)` |
 | `--sn-color-syntax` | `rgb(0 0 0 / 0.62)` | `rgb(255 255 255 / 0.7)` |
 | `--sn-color-accent` | `#6236d8` | `#a68bff` |
 | `--sn-color-accent-hover` | `#522bc0` | `#b9a3ff` |

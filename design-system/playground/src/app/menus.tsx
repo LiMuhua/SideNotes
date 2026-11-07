@@ -1,5 +1,5 @@
 /**
- * 菜单与弹窗：卡片菜单、侧栏菜单、移入回收站的确认、版本与更新、记录信息、更换 Emoji、使用指南。
+ * 菜单与弹窗：卡片菜单、侧栏菜单、移入回收站的确认、版本与更新、记录信息、更换 Emoji、管理标签、使用指南。
  *
  * 菜单项的名称、顺序与提示键沿用现有应用（`src/components/NoteMenu.tsx`、`SidebarMenu.tsx`）；
  * 使用指南的文字取自 `src/components/UsageGuide.tsx`，版本说明取自 `src/core/changelog.ts`。
@@ -9,13 +9,15 @@ import { useMemo, useState } from 'react';
 import { CHANGELOG } from '@/core/changelog';
 import { EMOJI_GROUPS, searchEmoji } from '@/core/emoji';
 import { formatFullTime, noteTitle } from '@/core/notes';
-import { parse } from '@/core/tags';
+import { isValidTag, parse } from '@/core/tags';
 import type { EdgeSide, Note } from '@/core/types';
 import { Button } from '../ui/Button';
 import { ConfirmDialog, Dialog } from '../ui/Dialog';
-import { SearchInput } from '../ui/Field';
+import { SearchInput, TextInput } from '../ui/Field';
 import type { MenuItem } from '../ui/Menu';
 import { cx } from '../ui/context';
+import { useToast } from '../ui/Tabs';
+import { useNotes } from '../model/notes';
 import { SHORTCUT_KEYS } from './shortcuts';
 
 export type NoteCommand = 'copy' | 'edit' | 'collapse' | 'pin' | 'archive' | 'duplicate' | 'export' | 'info' | 'trash' | 'restore';
@@ -194,6 +196,92 @@ export function EmojiDialog({ note, onPick, onClose }: { note: Note | null; onPi
           ))}
         </div>
       </div>
+    </Dialog>
+  );
+}
+
+/**
+ * 管理标签（沿用现有应用的 TagManageDialog）：只修改标签、保留记录内容；
+ * 可以在所有记录中重命名（与已有标签同名时合并），或经二次确认后从所有记录中移除。
+ */
+export function TagManageDialog({
+  tag,
+  onClose,
+  onRenamed,
+  onRemoved,
+}: {
+  tag: string | null;
+  onClose: () => void;
+  onRenamed: (next: string) => void;
+  onRemoved: () => void;
+}) {
+  // 每次打开都以当前标签为输入框的初始值。
+  return tag ? <TagManageBody key={tag} tag={tag} onClose={onClose} onRenamed={onRenamed} onRemoved={onRemoved} /> : null;
+}
+
+function TagManageBody({ tag, onClose, onRenamed, onRemoved }: { tag: string; onClose: () => void; onRenamed: (next: string) => void; onRemoved: () => void }) {
+  const data = useNotes();
+  const toast = useToast();
+  const [name, setName] = useState(tag);
+  const [confirming, setConfirming] = useState(false);
+
+  const rename = () => {
+    const next = name.trim().replace(/^#/, '');
+    if (!isValidTag(next)) {
+      toast({ message: '标签最多40字；使用文字、数字、下划线或短横线，避免十六进制色值', tone: 'danger' });
+      return;
+    }
+    data.renameTag(tag, next);
+    onRenamed(next);
+    toast({ message: '标签已更新，相同标签已合并', tone: 'success' });
+  };
+
+  if (confirming) {
+    return (
+      <ConfirmDialog
+        open
+        title={`移除 #${tag}？`}
+        description="从所有记录中移除此标签；记录正文与附件保留。"
+        confirmLabel="移除标签"
+        danger
+        onCancel={() => setConfirming(false)}
+        onConfirm={() => {
+          data.removeTagEverywhere(tag);
+          onRemoved();
+        }}
+      />
+    );
+  }
+
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={`管理 #${tag}`}
+      description="只修改标签，保留记录内容。"
+      size="sm"
+      footer={
+        <>
+          <Button variant="danger" icon="trash" onClick={() => setConfirming(true)}>
+            移除此标签
+          </Button>
+          <Button variant="primary" icon="edit" onClick={rename}>
+            重命名 / 合并
+          </Button>
+        </>
+      }
+    >
+      <TextInput
+        aria-label="标签名称"
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
+          event.preventDefault();
+          rename();
+        }}
+        data-autofocus
+      />
     </Dialog>
   );
 }

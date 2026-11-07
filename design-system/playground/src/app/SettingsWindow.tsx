@@ -1,11 +1,12 @@
 /**
  * 设置窗口：880 × 720，可调整大小，最小 720 × 560（与现有应用的窗口配置一致）。
  *
- * 五个分类沿用现有应用：外观与交互、快捷键、数据与同步、回收站、关于。
+ * 布局沿用现有应用 0.7.3：标题栏只写「设置」；左边是窄的分类栏，右边是当前分类的页面，
+ * 页面由几张分组卡片组成，相关的设置放在一起。五个分类：外观与交互、快捷键、数据与同步、回收站、关于。
  * 分类栏用上下方向键切换；设置改动立即生效，没有「应用」按钮。
  */
 
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { IconButton } from '../ui/Button';
 import { cx } from '../ui/context';
 import { Icon, type IconName } from '../ui/Icon';
@@ -26,7 +27,6 @@ const SECTIONS: ReadonlyArray<{ id: SettingsSection; label: string; icon: IconNa
 export function SettingsWindow({ onClose, initial = 'appearance' }: { onClose: () => void; initial?: SettingsSection }) {
   const [section, setSection] = useState<SettingsSection>(initial);
   const [minimized, setMinimized] = useState(false);
-  const current = SECTIONS.find((item) => item.id === section) ?? SECTIONS[0];
 
   if (minimized) {
     return (
@@ -50,13 +50,10 @@ export function SettingsWindow({ onClose, initial = 'appearance' }: { onClose: (
       }}
     >
       <header className="sn-settings-titlebar">
-        <span className="sn-settings-app">
-          <BrandMark small />
-          SideNotes 设置
-        </span>
+        <span className="sn-settings-app">设置</span>
         <span className="sn-spacer" />
         <IconButton icon="minus" label="最小化" size="sm" onClick={() => setMinimized(true)} />
-        <IconButton icon="x" label="关闭对话框" size="sm" shortcut="Esc" onClick={onClose} />
+        <IconButton icon="x" label="关闭设置" size="sm" shortcut="Esc" onClick={onClose} />
       </header>
       <div className="sn-settings-body">
         <nav
@@ -86,46 +83,13 @@ export function SettingsWindow({ onClose, initial = 'appearance' }: { onClose: (
           ))}
         </nav>
         <div className="sn-settings-scroll">
-          <div className="sn-settings-content">
-            <h3 className="sn-settings-heading">{current.label}</h3>
-            {section === 'appearance' ? <AppearancePanel /> : null}
-            {section === 'shortcuts' ? <ShortcutsPanel /> : null}
-            {section === 'data' ? <DataPanel /> : null}
-            {section === 'trash' ? <TrashPanel /> : null}
-            {section === 'about' ? <AboutPanel /> : null}
-          </div>
+          {section === 'appearance' ? <AppearancePanel /> : null}
+          {section === 'shortcuts' ? <ShortcutsPanel /> : null}
+          {section === 'data' ? <DataPanel /> : null}
+          {section === 'trash' ? <TrashPanel /> : null}
+          {section === 'about' ? <AboutPanel /> : null}
         </div>
       </div>
     </section>
-  );
-}
-
-/** 设置分组：标题在外，内容是一张卡片。 */
-export function SettingGroup({ title, children, aside }: { title: string; children: ReactNode; aside?: ReactNode }) {
-  return (
-    <section className="sn-setting-group">
-      <div className="sn-setting-group-head">
-        <h4 className="sn-setting-group-title">{title}</h4>
-        {aside}
-      </div>
-      <div className="sn-setting-card">{children}</div>
-    </section>
-  );
-}
-
-/** 设置行：名称在左（说明放在问号提示里，T73），取值与操作靠右。 */
-export function SettingRow({ title, help, children, stacked = false }: { title: string; help?: string; children: ReactNode; stacked?: boolean }) {
-  return (
-    <div className={cx('sn-setting-row', stacked && 'is-stacked')}>
-      <div className="sn-setting-name">
-        <span>{title}</span>
-        {help ? (
-          <span className="sn-setting-help" title={help} aria-label={help} role="img">
-            <Icon name="info" />
-          </span>
-        ) : null}
-      </div>
-      <div className="sn-setting-control">{children}</div>
-    </div>
   );
 }

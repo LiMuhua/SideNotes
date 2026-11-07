@@ -127,7 +127,6 @@ Glance 用细线分栏，它的栏目内容短而整齐；SideNotes 的记录长
 | `--sn-color-card-head-active` | `rgb(0 0 0 / 0)` | `rgb(0 0 0 / 0)` |
 | `--sn-color-editing` | `#fbfcf9` | `#1b2d28` |
 | `--sn-color-sheen` | `rgb(255 255 255 / 0)` | `rgb(255 255 255 / 0)` |
-| `--sn-color-statusbar` | `rgb(22 34 30 / 0)` | `rgb(0 0 0 / 0)` |
 | `--sn-color-bg` | `#dde3da` | `#0c1513` |
 | `--sn-color-surface` | `#eef2ec` | `#14231f` |
 | `--sn-color-surface-raised` | `#f7f9f5` | `#1b2d28` |
@@ -149,7 +148,6 @@ Glance 用细线分栏，它的栏目内容短而整齐；SideNotes 的记录长
 | `--sn-color-text-muted` | `#56645d` | `#8c9c94` |
 | `--sn-color-text-disabled` | `#a5b1aa` | `#4f615a` |
 | `--sn-color-halo` | `rgb(255 255 255 / 0)` | `rgb(0 0 0 / 0)` |
-| `--sn-color-on-statusbar` | `#56645d` | `#8c9c94` |
 | `--sn-color-syntax` | `#56645d` | `#8c9c94` |
 | `--sn-color-accent` | `#1f6b45` | `#4ecb82` |
 | `--sn-color-accent-hover` | `#185838` | `#6ad597` |

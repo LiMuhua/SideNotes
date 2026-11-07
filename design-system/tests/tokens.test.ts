@@ -149,10 +149,6 @@ describe.each(SURFACE_FILES.flatMap(({ id, file }) => THEMES.map((theme) => ({ i
       expect(ratio('--sn-color-caret', editing)).toBeGreaterThanOrEqual(3);
     });
 
-    it('状态栏上的文字不低于 4.5:1', () => {
-      expect(ratio('--sn-color-on-statusbar', ['--sn-color-panel', '--sn-color-statusbar'])).toBeGreaterThanOrEqual(4.5);
-    });
-
     it('代码文字在代码块上不低于 4.5:1', () => {
       expect(ratio('--sn-code-text', [...CARD, '--sn-code-bg'])).toBeGreaterThanOrEqual(4.5);
       expect(ratio('--sn-code-text', ['--sn-color-surface', '--sn-code-bg'])).toBeGreaterThanOrEqual(4.5);

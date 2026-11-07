@@ -135,7 +135,6 @@ Maple Mono NF CN 已随应用打包（SIL OFL 1.1）。它的汉字宽 1.2 em，
 | `--sn-color-card-head-active` | `rgb(184 108 0 / 0.17)` | `rgb(229 165 75 / 0.2)` |
 | `--sn-color-editing` | `#ffffff` | `#1b2026` |
 | `--sn-color-sheen` | `rgb(255 255 255 / 0)` | `rgb(255 255 255 / 0)` |
-| `--sn-color-statusbar` | `#262b32` | `#0a0c0f` |
 | `--sn-color-bg` | `#dfe2e6` | `#0e1114` |
 | `--sn-color-surface` | `#f5f6f8` | `#13161a` |
 | `--sn-color-surface-raised` | `#ffffff` | `#1c2026` |
@@ -157,7 +156,6 @@ Maple Mono NF CN 已随应用打包（SIL OFL 1.1）。它的汉字宽 1.2 em，
 | `--sn-color-text-muted` | `#58606a` | `#8b949e` |
 | `--sn-color-text-disabled` | `#a2a8b0` | `#4b525a` |
 | `--sn-color-halo` | `rgb(255 255 255 / 0)` | `rgb(0 0 0 / 0)` |
-| `--sn-color-on-statusbar` | `#d6dbe1` | `#a3acb6` |
 | `--sn-color-syntax` | `#94570a` | `#e0a458` |
 | `--sn-color-accent` | `#a35f00` | `#e5a54b` |
 | `--sn-color-accent-hover` | `#8a5000` | `#f0b865` |

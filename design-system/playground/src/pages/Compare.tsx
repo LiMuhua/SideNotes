@@ -22,7 +22,6 @@ const STRUCTURE: ReadonlyArray<{ label: string; value: (surface: SurfaceSpec) =>
   { label: '记录', value: (d) => ({ panes: '带标题栏的窗格', cards: '带底色的卡片', tiles: '各自独立的玻璃块' })[d.entries] },
   { label: '页签', value: (d) => (d.tabs === 'underline' ? '文字加下划线' : '分段控件') },
   { label: '透出桌面', value: (d) => (d.translucent ? '是：需要透明窗口与系统材质' : '否：实心表面') },
-  { label: '底栏', value: (d) => (d.statusLine ? '常驻状态栏与快捷键提示' : '存储状态与设置') },
   { label: '快捷键显示', value: (d) => (d.inlineShortcuts ? '直接显示在界面上' : '写在工具提示中') },
 ];
 

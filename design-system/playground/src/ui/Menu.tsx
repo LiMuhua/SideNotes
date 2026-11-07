@@ -54,14 +54,18 @@ function MenuList({ items, label, anchor, placement, focus = 'first', onClose, i
 
   const itemsIn = (): HTMLElement[] => Array.from(menu.current?.querySelectorAll<HTMLElement>('[role^="menuitem"]:not([aria-disabled="true"])') ?? []);
 
+  // 打开时聚焦一次。菜单在第一次定位之前是隐藏的（隐藏的元素不能获得焦点），所以等定位完成再聚焦。
+  const positioned = style.visibility !== 'hidden';
+  const focused = useRef(false);
   useLayoutEffect(() => {
+    if (!positioned || focused.current) return;
+    focused.current = true;
     const elements = itemsIn();
     const checkedIndex = items.filter((item) => !item.disabled).findIndex((item) => item.checked);
     const target = focus === 'last' ? elements[elements.length - 1] : elements[checkedIndex >= 0 ? checkedIndex : 0];
     target?.focus({ preventScroll: true });
-    // 只在打开时聚焦一次。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [positioned]);
 
   useEffect(() => {
     const outside = (event: PointerEvent) => {

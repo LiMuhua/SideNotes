@@ -158,19 +158,19 @@ export function PartsSection() {
 
   return (
     <PageSection id="gallery-parts" title="侧栏部件" description="页签、搜索、列表顶栏、筛选条、整理提醒、新建卡片与底栏，都是侧栏中真实的组件。">
-      <Demo title="页签" note="工作区、置顶、归档三个页签，带条数；搜索图标展开为输入框。">
+      <Demo title="页签" note="工作区、置顶、归档三个页签，带条数；放大镜展开搜索框，搜索框盖住页签。">
         <PanelSample>
           <SidebarNav view={plain} />
         </PanelSample>
       </Demo>
-      <Demo title="搜索与标签联想" note="输入 # 时以灰字联想已有标签，Tab 选用（T41）。">
+      <Demo title="搜索与标签联想" note="输入 # 时以灰字联想已有标签，Tab 选用，↑ ↓ 切换候选（T41）；再点放大镜收起并清空搜索词。">
         <PanelSample>
           <SidebarNav view={searching} />
         </PanelSample>
       </Demo>
-      <Demo title="列表顶栏与筛选条" note="搜索或按标签筛选时，列表上方出现筛选条，显示条件与条数（T67）。">
+      <Demo title="列表顶栏与筛选条" note="标签菜单列出评分最高的六个标签，可以管理标签或转到 #标签 搜索；筛选时列表上方出现筛选条（T67）。">
         <PanelSample>
-          <ListTopline view={filtered} />
+          <ListTopline view={filtered} onManageTag={noop} onSearchTags={noop} />
           <FilterBanner view={filtered} />
         </PanelSample>
       </Demo>
@@ -184,9 +184,9 @@ export function PartsSection() {
           <Composer />
         </PanelSample>
       </Demo>
-      <Demo title="底栏" note="存储状态与设置入口；终端主题改为常驻状态栏。">
+      <Demo title="底栏" note="左边是本地存储状态的小圆点（悬停显示说明），右边是设置；其余留白。">
         <PanelSample>
-          <SidebarFooter view={plain} onSettings={noop} />
+          <SidebarFooter onSettings={noop} />
         </PanelSample>
       </Demo>
     </PageSection>

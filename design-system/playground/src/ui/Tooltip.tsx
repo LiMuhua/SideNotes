@@ -91,3 +91,55 @@ export function Tooltip({ content, shortcut, placement = 'bottom', children, des
     </span>
   );
 }
+
+/**
+ * 问号说明：悬停、键盘聚焦或点击问号时立即显示，移开、失焦或按 Esc 后消失。
+ *
+ * 用于设置项（现有应用 0.7.3 的做法）与速记浮窗的标题，放补充说明与快捷键，不放唯一的信息。
+ * 显示期间问号按钮的 aria-describedby 指向说明。
+ */
+export function HelpTip({ label, children, placement = 'bottom-start' }: { label: string; children: ReactNode; placement?: Placement }) {
+  const [open, setOpen] = useState(false);
+  const button = useRef<HTMLButtonElement>(null);
+  const floating = useRef<HTMLDivElement>(null);
+  const id = useId();
+  const { style } = useAnchoredPosition(open, button, floating, placement, 6);
+
+  return (
+    <span
+      className="sn-help"
+      onPointerEnter={() => setOpen(true)}
+      onPointerLeave={() => {
+        if (document.activeElement !== button.current) setOpen(false);
+      }}
+    >
+      <button
+        ref={button}
+        type="button"
+        className="sn-help-button"
+        aria-label={`${label}说明`}
+        aria-expanded={open}
+        aria-describedby={open ? id : undefined}
+        onClick={() => setOpen(true)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape' && open) {
+            event.preventDefault();
+            event.stopPropagation();
+            setOpen(false);
+          }
+        }}
+      >
+        ?
+      </button>
+      {open ? (
+        <Layer>
+          <div ref={floating} id={id} role="tooltip" className="sn-tooltip is-help" style={style}>
+            {children}
+          </div>
+        </Layer>
+      ) : null}
+    </span>
+  );
+}

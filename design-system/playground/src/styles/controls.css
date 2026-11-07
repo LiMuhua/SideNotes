@@ -304,6 +304,65 @@
   color: var(--sn-color-text-disabled);
 }
 
+/* ---------- 可输入的组合框 ----------
+ * 外观与下拉选择框一致：输入框加右侧的展开箭头，候选列表与下拉选择框共用 .sn-listbox。 */
+.sn-combobox {
+  display: inline-flex;
+  align-items: center;
+  height: var(--sn-control-height);
+  min-width: 0;
+  border: var(--sn-border-width) solid var(--sn-color-border-strong);
+  border-radius: var(--sn-radius-control);
+  background: var(--sn-color-surface);
+  color: var(--sn-color-text);
+  transition: border-color var(--sn-duration-fast) var(--sn-ease-standard);
+}
+
+.sn-combobox.is-sm {
+  height: var(--sn-control-height-sm);
+  font-size: var(--sn-font-size-sm);
+}
+
+.sn-combobox input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 var(--sn-space-1) 0 var(--sn-space-4);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  outline: none;
+}
+
+.sn-combobox input::placeholder {
+  color: var(--sn-color-text-secondary);
+}
+
+.sn-combobox:hover:not(:focus-within) {
+  border-color: var(--sn-color-text-muted);
+}
+
+.sn-combobox:focus-within,
+.sn-combobox.is-open {
+  border-color: var(--sn-color-focus);
+  outline: var(--sn-border-width) solid var(--sn-color-focus);
+}
+
+.sn-combobox-toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--sn-control-height-sm);
+  height: 100%;
+  color: var(--sn-color-text-muted);
+}
+
+.sn-combobox-toggle .sn-icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
 .sn-listbox,
 .sn-menu {
   position: absolute;
@@ -439,6 +498,53 @@
 .sn-tooltip.is-static {
   position: static;
   animation: none;
+}
+
+/* ---------- 问号说明 ----------
+ * 设置项与速记浮窗标题旁的小问号：说明与快捷键放在这里，界面上不再常驻。 */
+.sn-help {
+  display: inline-flex;
+  flex: none;
+}
+
+.sn-help-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-full);
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-ui);
+  font-size: var(--sn-font-size-xs);
+  font-weight: var(--sn-font-weight-semibold);
+  line-height: 1;
+  cursor: help;
+}
+
+.sn-help-button:hover,
+.sn-help-button[aria-expanded='true'] {
+  border-color: var(--sn-color-accent);
+  color: var(--sn-color-accent-text);
+}
+
+.sn-tooltip.is-help {
+  display: block;
+  max-width: calc(var(--sn-dialog-width) * 0.7);
+  padding: var(--sn-space-3) var(--sn-space-4);
+  line-height: var(--sn-line-height-normal);
+  white-space: normal;
+}
+
+.sn-help-line {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+}
+
+.sn-help-line + .sn-help-line {
+  margin-top: var(--sn-space-2);
 }
 
 /* ---------- 弹窗与气泡 ---------- */

@@ -51,7 +51,6 @@
 | 表面 | `--sn-color-card-head-active` | 悬停或选中时标题栏的底色，取代标题栏底色；只有窗格式的记录（终端）使用，其余主题透明 | 是 | 各主题的令牌文件 |
 | 表面 | `--sn-color-editing` | 编辑中的卡片与速记浮窗编辑区的底色，取代卡片底色 | 是 | 各主题的令牌文件 |
 | 表面 | `--sn-color-sheen` | 玻璃块顶部的光泽，从上往下渐隐（磨砂玻璃）；不用时为透明 | 是 | 各主题的令牌文件 |
-| 表面 | `--sn-color-statusbar` | 底部状态栏的底色（终端）；没有状态栏的主题与页脚一致 | 是 | 各主题的令牌文件 |
 | 表面 | `--sn-color-bg` | 设置窗口的窗口底色与分类栏 | 是 | 各主题的令牌文件 |
 | 表面 | `--sn-color-surface` | 设置窗口的内容区、弹窗正文 | 是 | 各主题的令牌文件 |
 | 表面 | `--sn-color-surface-raised` | 浮起的表面：菜单、弹窗 | 是 | 各主题的令牌文件 |
@@ -73,7 +72,6 @@
 | 文字 | `--sn-color-text-muted` | 弱化文字：时间、计数、占位（对比度不低于 4.5:1） | 是 | 各主题的令牌文件 |
 | 文字 | `--sn-color-text-disabled` | 禁用文字（不要求对比度） | 是 | 各主题的令牌文件 |
 | 文字 | `--sn-color-halo` | 文字光晕：玻璃上为文字加一圈浅色或深色晕；不用时为透明 | 是 | 各主题的令牌文件 |
-| 文字 | `--sn-color-on-statusbar` | 状态栏上的文字（对比度不低于 4.5:1） | 是 | 各主题的令牌文件 |
 | 文字 | `--sn-color-syntax` | 编辑时 Markdown 标记（#、**、- 等）与行号的颜色（对比度不低于 4.5:1） | 是 | 各主题的令牌文件 |
 | 强调、反色与标记 | `--sn-color-accent` | 强调色填充：主要按钮、选中指示条、开关 | 是 | 各主题的令牌文件 |
 | 强调、反色与标记 | `--sn-color-accent-hover` | 强调色填充的悬停态 | 是 | 各主题的令牌文件 |
@@ -244,7 +242,6 @@
 | 主要文字 / 编辑区 | `--sn-color-text` | `--sn-color-panel` + `--sn-color-editing` | 4.5:1 |
 | Markdown 标记与行号 / 编辑区 | `--sn-color-syntax` | `--sn-color-panel` + `--sn-color-editing` | 4.5:1 |
 | 输入光标 / 编辑区 | `--sn-color-caret` | `--sn-color-panel` + `--sn-color-editing` | 3:1 |
-| 状态栏文字 / 状态栏 | `--sn-color-on-statusbar` | `--sn-color-panel` + `--sn-color-statusbar` | 4.5:1 |
 | 强调色文字 / 卡片 | `--sn-color-accent-text` | `--sn-color-panel` + `--sn-color-card` | 4.5:1 |
 | 强调色上的文字 | `--sn-color-on-accent` | `--sn-color-accent` | 4.5:1 |
 | 危险色 / 菜单 | `--sn-color-danger` | `--sn-color-surface-raised` | 4.5:1 |

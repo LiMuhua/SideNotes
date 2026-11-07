@@ -11,6 +11,7 @@
  */
 
 import { useCallback, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { resolveFontFamily } from '@/core/settings';
 import { useNotes } from '../model/notes';
 import type { SidebarViewOptions } from '../model/notes';
 import { cx, FormContext } from '../ui/context';
@@ -41,12 +42,17 @@ export interface DesktopProps {
   primary?: boolean;
 }
 
-/** 窗口：一个令牌作用域，内容按字号缩放。 */
+/**
+ * 窗口：一个令牌作用域，内容按字号缩放。
+ * 设置中选了具体字体时替换界面与正文的字体（标题与代码的字体仍跟随主题）；空值表示「跟随主题」，见 adaptation.md。
+ */
 function AppWindow({ className, style, zoom, surface, children }: { className: string; style?: CSSProperties; zoom: number; surface?: SurfaceId; children: ReactNode }) {
   const { settings } = useNotes();
   const form = useContext(FormContext);
+  const font = settings.fontFamily ? resolveFontFamily(settings.fontFamily) : null;
+  const fontStyle = font ? ({ '--sn-font-ui': font, '--sn-font-note': font } as CSSProperties) : null;
   return (
-    <TokenScope surface={surface} className={cx('sn-window', className)} style={{ ...style, zoom }} toast={settings.toastPosition} form={form}>
+    <TokenScope surface={surface} className={cx('sn-window', className)} style={{ ...style, ...fontStyle, zoom }} toast={settings.toastPosition} form={form}>
       {children}
     </TokenScope>
   );

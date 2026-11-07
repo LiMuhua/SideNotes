@@ -83,7 +83,6 @@
   --sn-color-card-head-active: rgb(0 0 0 / 0);
   --sn-color-editing: rgb(255 255 255 / 0.93);
   --sn-color-sheen: rgb(255 255 255 / 0.55);
-  --sn-color-statusbar: rgb(255 255 255 / 0.78);
   --sn-color-bg: #efeef7;
   --sn-color-surface: #f8f7fc;
   --sn-color-surface-raised: #ffffff;
@@ -107,7 +106,6 @@
   --sn-color-text-muted: rgb(0 0 0 / 0.62);
   --sn-color-text-disabled: rgb(0 0 0 / 0.34);
   --sn-color-halo: rgb(255 255 255 / 0.6);
-  --sn-color-on-statusbar: rgb(0 0 0 / 0.62);
   --sn-color-syntax: rgb(0 0 0 / 0.62);
 
   --sn-color-accent: #6236d8;
@@ -158,7 +156,6 @@
   --sn-color-card-head-active: rgb(0 0 0 / 0);
   --sn-color-editing: rgb(24 22 34 / 0.94);
   --sn-color-sheen: rgb(255 255 255 / 0.07);
-  --sn-color-statusbar: rgb(20 20 26 / 0.8);
   --sn-color-bg: #121118;
   --sn-color-surface: #1a1922;
   --sn-color-surface-raised: #23222c;
@@ -182,7 +179,6 @@
   --sn-color-text-muted: rgb(255 255 255 / 0.7);
   --sn-color-text-disabled: rgb(255 255 255 / 0.34);
   --sn-color-halo: rgb(0 0 0 / 0.5);
-  --sn-color-on-statusbar: rgb(255 255 255 / 0.7);
   --sn-color-syntax: rgb(255 255 255 / 0.7);
 
   --sn-color-accent: #a68bff;

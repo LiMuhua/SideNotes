@@ -11,8 +11,8 @@
 import { createContext, useCallback, useContext, useMemo, useReducer, useState, type ReactNode } from 'react';
 import { compareNoteOrder, createNote, inTab, matchesQuery } from '@/core/notes';
 import { DEFAULT_SETTINGS } from '@/core/settings';
-import { canonicalize, parse, tagKey } from '@/core/tags';
-import type { Note, NoteStatus, Settings, TabKey } from '@/core/types';
+import { canonicalize, compose, hasTag, parse, removeTag, tagKey } from '@/core/tags';
+import type { Note, NoteStatus, Settings, TabKey, TagUsage } from '@/core/types';
 import { createSampleNotes } from '@/debug/sample-notes';
 
 interface State {
@@ -20,6 +20,8 @@ interface State {
   /** 新建卡片与速记浮窗共用的草稿。 */
   draft: string;
   settings: Settings;
+  /** 标签筛选的访问记录，标签菜单按它评分（与现有应用的 tagUsage 一致）。 */
+  tagUsage: Record<string, TagUsage>;
 }
 
 type Action =
@@ -34,10 +36,14 @@ type Action =
   | { type: 'order'; ids: string[] }
   | { type: 'draft'; text: string }
   | { type: 'settings'; patch: Partial<Settings> }
+  | { type: 'track-tag'; tag: string; now: number }
+  | { type: 'rename-tag'; tag: string; next: string; now: number }
+  | { type: 'remove-tag'; tag: string; now: number }
   | { type: 'reset'; now: number };
 
 function initialState(now = Date.now()): State {
-  return { notes: createSampleNotes(now), draft: '', settings: DEFAULT_SETTINGS };
+  // 字体默认「跟随主题」（空值）：现有设置里的旧默认值 Maple Mono NF CN 迁移为跟随主题，见 adaptation.md。
+  return { notes: createSampleNotes(now), draft: '', settings: { ...DEFAULT_SETTINGS, fontFamily: '' }, tagUsage: {} };
 }
 
 function reduce(state: State, action: Action): State {
@@ -82,6 +88,42 @@ function reduce(state: State, action: Action): State {
       return { ...state, draft: action.text };
     case 'settings':
       return { ...state, settings: { ...state.settings, ...action.patch } };
+    case 'track-tag': {
+      const key = tagKey(action.tag);
+      const current = state.tagUsage[key] ?? { count: 0, last: 0 };
+      return { ...state, tagUsage: { ...state.tagUsage, [key]: { count: Math.min(10_000, current.count + 1), last: action.now } } };
+    }
+    case 'rename-tag': {
+      // 与现有应用的 renameTag 一致：只改标签、不动正文，新名称已存在时合并，访问记录随之迁移。
+      const oldKey = tagKey(action.tag);
+      const newKey = tagKey(action.next);
+      const tagUsage = { ...state.tagUsage };
+      if (tagUsage[oldKey]) {
+        tagUsage[newKey] = tagUsage[oldKey];
+        if (newKey !== oldKey) delete tagUsage[oldKey];
+      }
+      return {
+        ...state,
+        tagUsage,
+        notes: state.notes.map((note) => {
+          if (!hasTag(note.text, action.tag)) return note;
+          const parsed = parse(note.text);
+          const tags = parsed.tags.map((item) => (tagKey(item) === oldKey ? action.next : item));
+          return { ...note, text: compose(parsed.body, tags), updatedAt: action.now };
+        }),
+      };
+    }
+    case 'remove-tag':
+      // 与现有应用的 removeTagEverywhere 一致：只剩这个标签的空记录改用标签名作为正文。
+      return {
+        ...state,
+        notes: state.notes.map((note) => {
+          if (!hasTag(note.text, action.tag)) return note;
+          let text = removeTag(note.text, action.tag);
+          if (!text.trim() && !note.images.length) text = action.tag;
+          return { ...note, text, updatedAt: action.now };
+        }),
+      };
     case 'reset':
       return { ...initialState(action.now), settings: state.settings };
   }
@@ -102,6 +144,12 @@ export interface NotesData extends State {
   duplicate: (id: string) => Note | null;
   setDraft: (text: string) => void;
   updateSettings: (patch: Partial<Settings>) => void;
+  /** 记一次标签筛选，作为标签菜单的评分依据。 */
+  trackTagUsage: (tag: string) => void;
+  /** 在所有记录中重命名标签，新名称已存在时合并。 */
+  renameTag: (tag: string, next: string) => void;
+  /** 从所有记录中移除标签，正文与附件保留。 */
+  removeTagEverywhere: (tag: string) => void;
   reset: () => void;
 }
 
@@ -139,6 +187,9 @@ export function NotesProvider({ children }: { children: ReactNode }) {
   const reorder = useCallback((ids: string[]) => dispatch({ type: 'order', ids }), []);
   const setDraft = useCallback((text: string) => dispatch({ type: 'draft', text }), []);
   const updateSettings = useCallback((patch: Partial<Settings>) => dispatch({ type: 'settings', patch }), []);
+  const trackTagUsage = useCallback((tag: string) => dispatch({ type: 'track-tag', tag, now: Date.now() }), []);
+  const renameTag = useCallback((tag: string, next: string) => dispatch({ type: 'rename-tag', tag, next, now: Date.now() }), []);
+  const removeTagEverywhere = useCallback((tag: string) => dispatch({ type: 'remove-tag', tag, now: Date.now() }), []);
   const reset = useCallback(() => dispatch({ type: 'reset', now: Date.now() }), []);
 
   const value = useMemo<NotesData>(
@@ -157,9 +208,12 @@ export function NotesProvider({ children }: { children: ReactNode }) {
       duplicate,
       setDraft,
       updateSettings,
+      trackTagUsage,
+      renameTag,
+      removeTagEverywhere,
       reset,
     }),
-    [state, byId, create, update, setPinned, setStatus, restore, removeForever, setCollapsed, setEmoji, reorder, duplicate, setDraft, updateSettings, reset],
+    [state, byId, create, update, setPinned, setStatus, restore, removeForever, setCollapsed, setEmoji, reorder, duplicate, setDraft, updateSettings, trackTagUsage, renameTag, removeTagEverywhere, reset],
   );
   return <NotesContext.Provider value={value}>{children}</NotesContext.Provider>;
 }
@@ -181,9 +235,10 @@ export function hasTagKey(note: Note, tag: string): boolean {
   return parse(note.text).tags.some((item) => tagKey(item) === key);
 }
 
-/** 页签内的记录，按现有应用的排序规则。 */
+/** 页签内的记录，按现有应用的排序规则：置顶的在前，再按手动顺序与创建时间。 */
 export function notesInTab(notes: readonly Note[], tab: TabKey): Note[] {
-  return notes.filter((note) => inTab(note, tab)).sort(compareNoteOrder);
+  const list = notes.filter((note) => inTab(note, tab)).sort(compareNoteOrder);
+  return tab === 'pinned' ? list : [...list.filter((note) => note.pinned), ...list.filter((note) => !note.pinned)];
 }
 
 /** 页签内经过搜索与标签筛选后的记录。 */
@@ -247,6 +302,17 @@ export function useSidebarView(options: SidebarViewOptions = {}) {
     setChecked(new Set());
     setEditingId(null);
   }, []);
+  /** 按标签筛选（现有应用的 selectTag）：清空搜索词，并记一次访问作为标签菜单的评分依据。 */
+  const { trackTagUsage } = data;
+  const selectTag = useCallback(
+    (next: string) => {
+      setTag(next);
+      setQuery('');
+      trackTagUsage(next);
+    },
+    [trackTagUsage],
+  );
+  /** 「显示全部」与空状态的「清除筛选」：同时清除标签与搜索，并收起搜索框。 */
   const clearFilters = useCallback(() => {
     setQuery('');
     setTag('');
@@ -262,6 +328,7 @@ export function useSidebarView(options: SidebarViewOptions = {}) {
     setSearchOpen,
     tag,
     setTag,
+    selectTag,
     selectedId,
     select: setSelectedId,
     hoverId,

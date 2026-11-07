@@ -30,8 +30,6 @@ export interface SurfaceSpec {
   tabs: 'underline' | 'segmented';
   /** 半透明表面，背后透出桌面（需要透明窗口与系统材质，见 adaptation.md）。 */
   translucent: boolean;
-  /** 底部状态栏：存储状态、条数与常用快捷键，编辑时显示编辑状态。 */
-  statusLine: boolean;
   /** 在按钮与输入框上直接显示快捷键，而不是只写在工具提示里。 */
   inlineShortcuts: boolean;
   /** 页签前的分区色圆点（Glance 磨砂玻璃每个模块一种颜色）。 */
@@ -45,14 +43,13 @@ export const SURFACES: readonly SurfaceSpec[] = [
     id: 'terminal',
     name: '终端',
     english: 'Terminal',
-    idea: '像终端里并排的窗格：每条记录一个带标题栏的窗格，等宽字体、键盘优先，快捷键与状态始终可见，记下就走。',
-    keywords: ['等宽字体', '石墨色', '琥珀强调色', '标题栏窗格', '状态栏', '快捷键可见', '编辑时显示行号'],
+    idea: '像终端里并排的窗格：每条记录一个带标题栏的窗格，等宽字体、键盘优先，常用快捷键写在按钮旁，记下就走。',
+    keywords: ['等宽字体', '石墨色', '琥珀强调色', '标题栏窗格', '快捷键可见', '编辑时显示行号'],
     references: ['现有 SideNotes 的默认字体 Maple Mono', 'Raycast 与 Linear 的键盘模型', 'Obsidian', 'Glance 记录纸的单色墨水'],
     dock: 'flush',
     entries: 'panes',
     tabs: 'underline',
     translucent: false,
-    statusLine: true,
     inlineShortcuts: true,
     tabMarks: false,
     lineNumbers: true,
@@ -68,7 +65,6 @@ export const SURFACES: readonly SurfaceSpec[] = [
     entries: 'cards',
     tabs: 'segmented',
     translucent: false,
-    statusLine: false,
     inlineShortcuts: false,
     tabMarks: false,
     lineNumbers: false,
@@ -84,7 +80,6 @@ export const SURFACES: readonly SurfaceSpec[] = [
     entries: 'cards',
     tabs: 'underline',
     translucent: false,
-    statusLine: false,
     inlineShortcuts: false,
     tabMarks: false,
     lineNumbers: false,
@@ -100,7 +95,6 @@ export const SURFACES: readonly SurfaceSpec[] = [
     entries: 'cards',
     tabs: 'underline',
     translucent: true,
-    statusLine: false,
     inlineShortcuts: false,
     tabMarks: false,
     lineNumbers: false,
@@ -116,7 +110,6 @@ export const SURFACES: readonly SurfaceSpec[] = [
     entries: 'tiles',
     tabs: 'segmented',
     translucent: true,
-    statusLine: false,
     inlineShortcuts: false,
     tabMarks: true,
     lineNumbers: false,
