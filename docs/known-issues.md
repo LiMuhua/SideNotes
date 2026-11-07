@@ -61,11 +61,13 @@
 
 ## 设计系统（DS01）
 
-以下事项属于 `design-system` 分支的设计系统与 Playground，见 [design-system/directions/comparison.md](../design-system/directions/comparison.md)。
+以下事项属于 `design-system` 分支的设计系统与 Playground，规范见 [design-system/DESIGN.md](../design-system/DESIGN.md)。
 
-- **正式规范未编写**：`DESIGN.md` 与令牌、组件、交互、布局、适配、无障碍、设计决策各分册，等用户在 Playground 中选定方向后再写。
-- **半透明方向没有实心退路**：Linux、Android，以及 Windows 关闭透明效果或省电模式时，Windows 11 与磨砂玻璃方向需要一组不透明的面板与卡片颜色，令牌中尚未提供。
-- **半透明方向在真实窗口中的表现待验证**：需要把窗口改为透明并启用 Tauri 的窗口材质；Acrylic 在部分 Windows 版本上拖动、调整窗口大小时性能差，侧栏滑入滑出与调宽都要实测；背景亚克力在窗口失去焦点时退回纯色，侧栏由悬停唤出、不一定获得焦点。
+- **半透明主题没有不透明的退路**：Linux、Android，以及 Windows 关闭透明效果或进入节电模式时，Windows 11 与磨砂玻璃需要一组不透明的面板与卡片颜色，令牌中尚未提供。
+- **半透明主题在真实窗口中的表现待验证**：需要把窗口改为透明并启用 Tauri 的窗口材质（`acrylic`）。Acrylic 在部分 Windows 版本上移动、调整窗口大小时性能差，而侧栏的滑入滑出由后端逐帧移动窗口完成、调宽是调整窗口大小，都要实测；固定侧栏后切换到其他程序时，侧栏失去激活，背景亚克力退回纯色。
 - **磨砂玻璃的绘制问题**：Playground 中，列表底边处被裁到一半的玻璃块会漏出背后的内容，疑似 Chromium 对滚动容器裁切与 `backdrop-filter` 的绘制问题，需要在 WebView2 中复核。
-- **字体未打包**：记录纸方向的 Archivo、磨砂玻璃方向的 Inter 没有随应用打包，多数电脑上显示为系统字体；现代编辑的中文衬线标题在 Windows 上回落到宋体。
-- **Playground 的模拟限制**：全局快捷键只在页面获得焦点时生效；浏览器保留了 Ctrl+N 等组合键；附件按钮只显示提示，不读取本机文件。
+- **字体未打包**：记录纸的 Archivo、磨砂玻璃的 Inter 没有随应用打包，多数电脑上显示为系统字体；杂志的中文衬线标题在 Windows 上回落到宋体。
+- **终端的小号按钮处在 WCAG 2.5.8 的临界**：按钮 22px，靠 2px 间隙形成 24px 的中心距，两个 24px 的圆正好相切，没有余量；是否把 `--sn-control-height-sm` 提高到 24px 或加大间隙待定，见 [design-system/accessibility.md](../design-system/accessibility.md) 第四节。
+- **Windows 对比主题未处理**：强制颜色模式下，悬停、选中与编辑中的卡片与默认状态分不开，需要补 `forced-colors` 的样式，见 [design-system/adaptation.md](../design-system/adaptation.md) 第七节。
+- **手机形态未完成**：触控目标没有放大；手机上的排序方式待定。
+- **Playground 的模拟限制**：全局快捷键只在页面获得焦点时生效；浏览器保留了 Ctrl+N 等组合键；附件按钮只显示提示，不读取本机文件；拖动排序、框选与拖入文件没有模拟；「字体」设置项尚未接入主题的字体；侧栏的出入动画不受「减少动态效果」影响。
