@@ -62,7 +62,7 @@ Maple Mono NF CN 已随应用打包（SIL OFL 1.1）。它的汉字宽 1.2 em，
 | 面板内边距 | `--sn-panel-padding` | 10px |
 | 记录内边距 | `--sn-card-padding-x`、`--sn-card-padding-y` | 10px、8px |
 | 记录间隙 | `--sn-card-gap` | 6px |
-| 控件高度 | `--sn-control-height-sm`、`--sn-control-height`、`--sn-control-height-lg` | 22、26、30px |
+| 控件高度 | `--sn-control-height-sm`、`--sn-control-height`、`--sn-control-height-lg` | 24、26、30px |
 | 标题区、页签、底栏 | `--sn-header-height`、`--sn-tab-height`、`--sn-footer-height` | 36、30、26px |
 
 密度在五套中最高。
@@ -236,7 +236,7 @@ Maple Mono NF CN 已随应用打包（SIL OFL 1.1）。它的汉字宽 1.2 em，
 | `--sn-card-padding-x` | `10px` |
 | `--sn-card-padding-y` | `8px` |
 | `--sn-card-gap` | `6px` |
-| `--sn-control-height-sm` | `22px` |
+| `--sn-control-height-sm` | `24px` |
 | `--sn-control-height` | `26px` |
 | `--sn-control-height-lg` | `30px` |
 | `--sn-icon-size` | `16px` |

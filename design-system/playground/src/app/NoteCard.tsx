@@ -142,10 +142,18 @@ export function NoteCard(props: NoteCardProps) {
             </button>
           </div>
           <div className="sn-note-actions" onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
-            <IconButton icon="copy" label="复制记录与附件" size="sm" tabIndex={innerTab} onClick={props.onCopy} />
+            {/* 置顶排在最前；已置顶时保持强调色，与平时标题行右侧的置顶标记同色，悬停时不会一下子找不到它。 */}
             {note.status === 'active' ? (
-              <IconButton icon={note.pinned ? 'pin-off' : 'pin'} label={note.pinned ? '取消置顶' : '置顶记录'} size="sm" tabIndex={innerTab} onClick={props.onTogglePin} />
+              <IconButton
+                icon={note.pinned ? 'pin-off' : 'pin'}
+                label={note.pinned ? '取消置顶' : '置顶记录'}
+                size="sm"
+                tabIndex={innerTab}
+                className={cx('sn-note-pin-toggle', note.pinned && 'is-pinned')}
+                onClick={props.onTogglePin}
+              />
             ) : null}
+            <IconButton icon="copy" label="复制记录与附件" size="sm" tabIndex={innerTab} onClick={props.onCopy} />
             <IconButton
               icon={note.status === 'archived' ? 'restore' : 'archive'}
               label={note.status === 'archived' ? '恢复记录' : '归档记录'}

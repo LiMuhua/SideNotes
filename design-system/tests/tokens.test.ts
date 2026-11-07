@@ -111,6 +111,14 @@ describe.each(SURFACE_FILES.flatMap(({ id, file }) => THEMES.map((theme) => ({ i
       expect(ratio('--sn-color-on-inverse', ['--sn-color-inverse'])).toBeGreaterThanOrEqual(4.5);
     });
 
+    it('已置顶的置顶按钮在悬停与选中的卡片上不低于 3:1', () => {
+      // 置顶按钮在已置顶时保持强调色文字色（components.md「记录卡片」）；指针停在按钮上时再叠一层悬停色。
+      const active = [...CARD, '--sn-color-card-active', '--sn-color-card-head-active'];
+      [active, [...active, '--sn-color-hover']].forEach((layers) =>
+        expect(ratio('--sn-color-accent-text', layers), layers.join(' + ')).toBeGreaterThanOrEqual(3),
+      );
+    });
+
     it('状态色在表面与浅底上不低于 4.5:1', () => {
       ['--sn-color-success', '--sn-color-warning', '--sn-color-danger', '--sn-color-info'].forEach((status) => {
         expect(ratio(status, ['--sn-color-surface']), status).toBeGreaterThanOrEqual(4.5);

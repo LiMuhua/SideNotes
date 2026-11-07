@@ -57,6 +57,7 @@ Design Playground 用同一套令牌与组件运行三个窗口，见 [playgroun
 | 操作按钮与时间共用标题行右侧的位置，悬停时换下时间；标题最多两行 | 标签与操作按钮固定占卡片底部一行；标题只显示一行 | [components.md](./components.md) |
 | 底部只在有标签时显示标签 | 没有标签也保留底部一行 | [components.md](./components.md) |
 | 操作按钮的最右边增加收起按钮，位置与平时的时间相同；点时间收起的行为保留 | 只能点时间收起 | [interactions.md](./interactions.md) |
+| 置顶按钮排在操作按钮的第一个 | 依次为复制、置顶、归档、更多 | [components.md](./components.md) |
 | 悬停与选中用各主题的强调色，加外圈；终端的标题栏同时染色 | 统一的绿色边框 | [components.md](./components.md) |
 | 编辑模式按主题区分：终端显示行号，记录纸出现横线，Windows 11 编辑区底部有强调线 | 编辑中的卡片用强调色边框、外圈与投影，其余卡片变淡（T21） | [editing.md](./editing.md) |
 | ↑ ↓ 在卡片之间移动，Enter 编辑，Delete 移入回收站，Shift+F10 打开卡片菜单 | 卡片只能用鼠标操作 | [interactions.md](./interactions.md) |

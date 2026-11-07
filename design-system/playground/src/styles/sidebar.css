@@ -931,6 +931,12 @@
   opacity: 0;
 }
 
+/* 已置顶记录的置顶按钮：图标保持强调色，悬停在按钮上也不变，与平时的置顶标记同色。 */
+.sn-note-actions .sn-note-pin-toggle.is-pinned,
+.sn-note-actions .sn-note-pin-toggle.is-pinned:hover:not(:disabled) {
+  color: var(--sn-color-accent-text);
+}
+
 .sn-note-collapse .sn-icon {
   transition: transform var(--sn-duration-normal) var(--sn-ease-standard);
 }
