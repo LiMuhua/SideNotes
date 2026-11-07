@@ -50,7 +50,7 @@
   --sn-duration-slow: 250ms;
   --sn-ease-standard: cubic-bezier(0.33, 0, 0.67, 1);
   --sn-ease-enter: cubic-bezier(0.1, 0.9, 0.2, 1);
-  --sn-ease-exit: cubic-bezier(0.7, 0, 1, 0.5);
+  --sn-ease-exit: cubic-bezier(1, 0, 1, 1);
   --sn-motion-distance: 8px;
 
   --sn-header-height: 44px;

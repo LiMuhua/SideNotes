@@ -102,8 +102,10 @@ export function SidebarPanel(props: SidebarPanelProps) {
     async (notes: Note[]) => {
       if (!notes.length) return;
       const ok = await copyText(notes.map((note) => note.text).join('\n\n'));
+      // 提示文字与现有应用一致：标题超过 24 个字时省略。
+      const title = noteTitle(notes[0]);
       if (!ok) toast({ message: '复制失败，请手动选择后复制', tone: 'danger' });
-      else toast({ message: notes.length > 1 ? `已复制 ${notes.length} 条记录` : `已复制-${noteTitle(notes[0])}`, tone: 'success' });
+      else toast({ message: notes.length > 1 ? `已复制 ${notes.length} 条记录` : `已复制-${title.length > 24 ? `${title.slice(0, 24)}…` : title}`, tone: 'success' });
     },
     [toast],
   );
@@ -215,13 +217,14 @@ export function SidebarPanel(props: SidebarPanelProps) {
       return;
     }
     anchor.current = note.id;
-    if (event.ctrlKey || event.metaKey) {
+    // 已有多选时，单击与 Ctrl 单击一样切换这张卡片（现有行为）；单击空白处才清除多选。
+    if (event.ctrlKey || event.metaKey || view.checked.size) {
       const next = new Set(view.checked);
       if (!next.size && view.selectedId && view.selectedId !== note.id) next.add(view.selectedId);
       if (next.has(note.id)) next.delete(note.id);
       else next.add(note.id);
       view.setChecked(next);
-    } else if (view.checked.size) view.setChecked(new Set());
+    }
     view.select(note.id);
   };
 
@@ -258,9 +261,12 @@ export function SidebarPanel(props: SidebarPanelProps) {
     if (ctrl && key === 'f') runSidebar('search');
     else if (ctrl && key === 'n') runSidebar('new');
     else if (event.key === 'Escape') {
+      // 逐级退出：多选（本次提出）、搜索（现有：收起并清空搜索词，标签筛选保留），最后收起侧栏。
       if (view.checked.size) view.setChecked(new Set());
-      else if (view.searchOpen || view.tag) view.clearFilters();
-      else props.onHide();
+      else if (view.searchOpen) {
+        view.setSearchOpen(false);
+        view.setQuery('');
+      } else props.onHide();
     } else if (!typing && ctrl && key === 'c' && window.getSelection()?.isCollapsed !== false) void copy(targets());
     else return;
     event.preventDefault();

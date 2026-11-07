@@ -287,6 +287,32 @@
   background: var(--sn-color-surface-sunken);
 }
 
+/* 图片缩略图：不超过卡片宽度，点击打开附件弹窗；高度上限与现有应用一致。 */
+.sn-scope .markdown-body .markdown-image-button {
+  display: inline-flex;
+  max-width: 100%;
+  margin: var(--sn-space-2) 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--sn-radius-sm);
+  background: var(--sn-color-surface-sunken);
+  cursor: zoom-in;
+}
+
+.sn-scope .markdown-body .markdown-image-button:hover {
+  box-shadow: 0 0 0 var(--sn-focus-ring-width) var(--sn-color-accent-subtle);
+}
+
+.sn-scope :is(.markdown-image-button, .md-editor-image) .markdown-image {
+  display: block;
+  max-width: 100%;
+  max-height: 150px; /* 固定：缩略图高度与现有应用一致 */
+  border: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  border-radius: var(--sn-radius-sm);
+  object-fit: cover;
+}
+
 .sn-scope .md-editor-file-name {
   overflow: hidden;
   text-overflow: ellipsis;

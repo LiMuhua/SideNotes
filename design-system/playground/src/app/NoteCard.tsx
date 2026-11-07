@@ -11,6 +11,7 @@
  * 收起按钮在操作按钮的最右边，正好落在时间原来的位置。这个位置的宽度取两者中较宽的一个，
  * 所以标题的宽度在悬停前后不变，不会因为按钮出现而被挤短；标题最多显示两行。
  * 底部只在有标签时显示标签，单行记录与收起的记录只剩标题行。
+ * 列表只占一个 Tab 停靠点：只有可聚焦的那一张卡片里的按钮进入 Tab 顺序，其余卡片的按钮只响应指针。
  */
 
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
@@ -65,6 +66,7 @@ export function NoteCard(props: NoteCardProps) {
   const display = noteDisplay(note.text);
   const titleText = display.firstLine.replace(/^#{1,6}\s+/, '');
   const tags = parse(note.text).tags;
+  const innerTab = props.tabIndex === 0 ? 0 : -1;
 
   // 正文实际溢出时渐隐；图片加载、字号变化后由 ResizeObserver 复核。
   useLayoutEffect(() => {
@@ -112,6 +114,7 @@ export function NoteCard(props: NoteCardProps) {
         <button
           type="button"
           className="sn-note-emoji"
+          tabIndex={innerTab}
           aria-label="更换 Emoji"
           title="更换 Emoji"
           onClick={(event) => {
@@ -139,20 +142,22 @@ export function NoteCard(props: NoteCardProps) {
             </button>
           </div>
           <div className="sn-note-actions" onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
-            <IconButton icon="copy" label="复制记录与附件" size="sm" onClick={props.onCopy} />
+            <IconButton icon="copy" label="复制记录与附件" size="sm" tabIndex={innerTab} onClick={props.onCopy} />
             {note.status === 'active' ? (
-              <IconButton icon={note.pinned ? 'pin-off' : 'pin'} label={note.pinned ? '取消置顶' : '置顶记录'} size="sm" onClick={props.onTogglePin} />
+              <IconButton icon={note.pinned ? 'pin-off' : 'pin'} label={note.pinned ? '取消置顶' : '置顶记录'} size="sm" tabIndex={innerTab} onClick={props.onTogglePin} />
             ) : null}
             <IconButton
               icon={note.status === 'archived' ? 'restore' : 'archive'}
               label={note.status === 'archived' ? '恢复记录' : '归档记录'}
               size="sm"
+              tabIndex={innerTab}
               onClick={props.onToggleArchive}
             />
             <IconButton
               icon="more"
               label="更多操作"
               size="sm"
+              tabIndex={innerTab}
               onClick={(event) => {
                 const box = event.currentTarget.getBoundingClientRect();
                 props.onMenu({ x: box.left, y: box.bottom });
@@ -163,6 +168,7 @@ export function NoteCard(props: NoteCardProps) {
               label={note.collapsed ? '展开正文' : '收起正文'}
               aria-expanded={!note.collapsed}
               size="sm"
+              tabIndex={innerTab}
               className={cx('sn-note-collapse', note.collapsed && 'is-collapsed')}
               onClick={props.onToggleCollapse}
             />
@@ -207,6 +213,7 @@ export function NoteCard(props: NoteCardProps) {
               key={tag}
               type="button"
               className="sn-note-tag"
+              tabIndex={innerTab}
               onClick={(event) => {
                 event.stopPropagation();
                 props.onTag(tag);
@@ -260,7 +267,7 @@ function NoteEditArea({
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onSave(draft);
       }}
     >
-      <NoteEditor value={draft} onChange={setDraft} autoFocus={autoFocus} ariaLabel="编辑记录" minHeight={60} maxHeight={320} />
+      <NoteEditor value={draft} onChange={setDraft} autoFocus={autoFocus} ariaLabel="编辑记录" minHeight={100} maxHeight={300} />
       <div className="sn-note-edit-bar">
         <div className="sn-note-tools">
           <IconButton icon="image" label="添加图片" size="sm" onMouseDown={keepFocus} />

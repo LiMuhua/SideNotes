@@ -132,10 +132,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setToasts((current) => current.filter((toast) => toast.id !== id));
   }, []);
 
+  // 带操作的提示保留 9 秒，普通提示 6 秒，与现有应用一致；指针停在提示上或焦点在提示内时暂停计时（本次提出）。
   const schedule = useCallback(
     (toast: ToastEntry) => {
       window.clearTimeout(timers.current.get(toast.id));
-      timers.current.set(toast.id, window.setTimeout(() => dismiss(toast.id), toast.action ? 6000 : 4000));
+      timers.current.set(toast.id, window.setTimeout(() => dismiss(toast.id), toast.action ? 9000 : 6000));
     },
     [dismiss],
   );
@@ -164,7 +165,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               className={cx('sn-toast', toast.tone && toast.tone !== 'neutral' && `is-${toast.tone}`)}
               role={toast.tone === 'danger' ? 'alert' : undefined}
               onPointerEnter={() => window.clearTimeout(timers.current.get(toast.id))}
-              onPointerLeave={() => schedule(toast)}
+              onPointerLeave={(event) => {
+                if (!event.currentTarget.contains(document.activeElement)) schedule(toast);
+              }}
+              onFocus={() => window.clearTimeout(timers.current.get(toast.id))}
+              onBlur={(event) => {
+                const box = event.currentTarget;
+                if (!box.contains(event.relatedTarget as Node | null) && !box.matches(':hover')) schedule(toast);
+              }}
             >
               <Icon name={TONE_ICONS[toast.tone ?? 'neutral']} />
               <span className="sn-toast-message">{toast.message}</span>
