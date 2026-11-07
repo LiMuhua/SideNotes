@@ -52,7 +52,8 @@ SideNotes 的小号图标按钮之间都留 2px（`--sn-space-1`），中心距�
 - 五套主题的小号按钮都靠间距例外满足要求；终端没有余量，两个圆正好相切。
 - 卡片上的操作按钮在卡片菜单中都有对应的菜单项（菜单项高 26 至 34px），也可以算作等效例外；编辑栏与标题区的按钮没有对应的大目标。
 - 因为按钮之间的间隙决定了是否达标，所以各主题都不能取消这 2px。
-- 改进办法，二选一：把终端的 `--sn-control-height-sm` 提高到 24px，每张单行窗格增高 2px；或者把小号按钮之间的间隙加到 4px（`--sn-space-2`），卡片的操作按钮组变宽 8px。是否采用待定，见 [design-decisions.md](./design-decisions.md) 第十五节。
+- 改进办法，二选一：把终端的 `--sn-control-height-sm` 提高到 24px，每张单行窗格增高 2px；或者把小号按钮之间的间隙加到 4px（`--sn-space-2`），卡片的操作按钮组变宽 8px。是否采用待定，见 [design-decisions.md](./design-decisions.md) 第二十节。
+- 问号说明的按钮边长只有 14 至 15px（`--sn-icon-size-sm`），同样靠间距例外：它前面是名称文字，后面的控件至少隔 6px，直径 24 的圆向外只伸出 4.5 至 5px，碰不到其他目标。这 6px 不能收紧。
 
 手机上用手指操作，触控目标至少 48 × 48dp（Android 与 Material 3 的要求）。桌面的 22 至 26px 不能沿用；Playground 的手机画面尚未放大触控目标。
 
@@ -77,6 +78,8 @@ SideNotes 的小号图标按钮之间都留 2px（`--sn-space-1`），中心距�
 | 开关 | 按钮加 `role="switch"` 与 `aria-checked` |
 | 分段控件 | `radiogroup` 与 `radio` |
 | 下拉选择框 | `combobox` 与 `listbox` |
+| 组合框 | 输入框为 `combobox`，带 `aria-expanded`；当前候选用 `aria-activedescendant` 标出，焦点始终留在输入框 |
+| 问号说明 | 按钮名称为「某某说明」，带 `aria-expanded`；说明打开时用 `aria-describedby` 指向 `tooltip` |
 | 调整宽度的手柄 | `separator`，带 `aria-valuenow`、`aria-valuemin`、`aria-valuemax` |
 | 工具提示 | `tooltip`，延迟 500ms 出现，同时写入按钮的名称 |
 

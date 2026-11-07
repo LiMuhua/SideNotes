@@ -35,14 +35,14 @@ SideNotes 是贴在屏幕边缘的速记工具：鼠标移到屏幕边缘唤出�
 | [Windows 11](./themes/win11.md) | 和开始菜单一样的亚克力面板 | 离开边缘 12px | 半透明卡片 | 下划线 | 系统蓝 | 半透明 |
 | [磨砂玻璃](./themes/glass.md) | 分开的几块磨砂玻璃 | 分开的若干块 | 玻璃块 | 分段控件加色点 | 紫 | 半透明 |
 
-浅色模式下，五套主题用不同的色相与底色区分：终端是冷灰加琥珀，底部一条深色状态栏；杂志是暖白加莓红；记录纸是灰绿；Windows 11 是中性的白加蓝；磨砂玻璃透出桌面，强调色是紫。
+浅色模式下，五套主题用不同的色相与底色区分：终端是冷灰加琥珀；杂志是暖白加莓红；记录纸是灰绿；Windows 11 是中性的白加蓝；磨砂玻璃透出桌面，强调色是紫。
 
 五份主题文档使用同一套章节：定位、结构、颜色、字体与排版、形状间距与尺寸、层次与立体感、状态、编辑模式、动效、实现与平台、已知限制；最后的附录由令牌文件生成，列出这套主题的全部取值。
 
 ## 四、体系结构
 
 1. **令牌**（`tokens/`）：颜色、字体、尺寸、圆角、材质与动效，见 [design-tokens.md](./design-tokens.md)。
-2. **结构差异**（`playground/src/surfaces.ts`）：令牌表达不了的 8 项差异，即与屏幕边缘的关系、记录的组织方式、页签形态、是否半透明、是否有状态栏、快捷键是否写在界面上、页签色点、编辑时是否显示行号。
+2. **结构差异**（`playground/src/surfaces.ts`）：令牌表达不了的 7 项差异，即与屏幕边缘的关系、记录的组织方式、页签形态、是否半透明、快捷键是否写在界面上、页签色点、编辑时是否显示行号。
 3. **组件**：五套主题共用一套组件与样式（`playground/src/styles/`），只引用令牌与结构差异，见 [components.md](./components.md)。
 
 Design Playground 用同一套令牌与组件运行三个窗口，见 [playground/README.md](./playground/README.md)。
@@ -60,8 +60,9 @@ Design Playground 用同一套令牌与组件运行三个窗口，见 [playgroun
 | 悬停与选中用各主题的强调色，加外圈；终端的标题栏同时染色 | 统一的绿色边框 | [components.md](./components.md) |
 | 编辑模式按主题区分：终端显示行号，记录纸出现横线，Windows 11 编辑区底部有强调线 | 编辑中的卡片用强调色边框、外圈与投影，其余卡片变淡（T21） | [editing.md](./editing.md) |
 | ↑ ↓ 在卡片之间移动，Enter 编辑，Delete 移入回收站，Shift+F10 打开卡片菜单 | 卡片只能用鼠标操作 | [interactions.md](./interactions.md) |
-| Esc 先清除多选；搜索框有内容时，第一次 Esc 只清空 | Esc 直接收起搜索并清空 | [interactions.md](./interactions.md) |
+| Esc 在收起侧栏之前先清除多选 | 有多选时 Esc 直接收起侧栏 | [interactions.md](./interactions.md) |
 | 提示条在指针停留或获得焦点时暂停计时 | 6 秒（带撤销 9 秒）后消失 | [interactions.md](./interactions.md) |
+| 速记浮窗不显示草稿状态；快捷键与 Markdown 的说明收进标题旁的问号；字数放在附件工具右边；磨砂玻璃的浮窗分成三块玻璃 | 标题下写「Markdown · #标签」，占位文字第二行写保存与收起的按键，编辑区下方一行是草稿状态与字数 | [components.md](./components.md) |
 | 「字体」设置增加「跟随主题」，并作为默认值 | 字体作用于全部界面文字 | [adaptation.md](./adaptation.md) |
 | Windows 11 与磨砂玻璃使用透明窗口加 Acrylic | 三个窗口都不透明 | [adaptation.md](./adaptation.md) |
 | 手机形态：侧栏铺满屏幕，不显示快捷键与固定、收起按钮 | 没有移动端界面 | [layout.md](./layout.md) |
