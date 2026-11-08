@@ -196,4 +196,4 @@ SideNotes 的取舍：
 - 选区 `--sn-color-selection` 与搜索命中 `--sn-color-highlight` 分成两个令牌，与 macOS 把选区与查找高亮分开一致。令牌中没有窗口失去焦点时的弱化选区色；侧栏与速记浮窗失去焦点后可能仍然可见，可以考虑增加（推断）。
 - 占位文字没有单独的令牌，用 `--sn-color-text-muted`（4.5:1），与 shadcn/ui 用 muted 的做法相同。
 - 速记浮窗与新建卡片打开时，插入点放在末尾、不选中内容，与 Windows 文本框的默认行为一致（推断：速记以追加为主）。
-- Windows 11 主题编辑时底部有一条强调线（`--sn-color-editor-underline`），读到的 Windows 页面没有写这一细节（未核实）；Material 3 的做法是聚焦时描边加粗到 2px。
+- 输入类控件获得焦点时底边换成 2px 的强调色线（五套主题共用，取 Windows 输入框的做法），读到的 Windows 页面没有写这一细节（未核实）；Material 3 的做法是聚焦时描边加粗到 2px。此前 Windows 11 主题的编辑区底部也有这条线（`--sn-color-editor-underline`），2026-11-08 删除。

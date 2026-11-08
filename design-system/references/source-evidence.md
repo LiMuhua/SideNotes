@@ -300,7 +300,7 @@ Windows 对 Mica 与亚克力的规定见上文的 WIN1、WIN2，[adaptation.md]
 - **Windows 焦点视觉的旧页**：`design/input/guidelines-for-visualfocus` 与 `develop/input/guidelines-for-visualfocus` 都返回 404，焦点框改读 WIN13 与 WIN14。
 - **Windows 11 主题原来的退出缓动** `cubic-bezier(0.7, 0, 1, 0.5)`：在 FL13 与 WIN7、WIN8 中都没有找到出处，已改为 WIN7、WIN8 的柔和退出 `(1, 0, 1, 1)`。
 - **亚克力的具体参数**：WIN2 只列出组成（背景、模糊、排除混合、着色、噪点），没有底色、不透明度与模糊半径；Windows 11 主题的 `--sn-panel-blur`（30px）与 `--sn-panel-saturate`（1.25）取自 Glance，不是微软给出的数值。
-- **Windows 文本框聚焦时的底部强调线**：WIN16 没有写这一细节，Windows 11 主题 `--sn-color-editor-underline` 的依据未核实。
+- **Windows 文本框聚焦时的底部强调线**：WIN16 没有写这一细节，输入类控件获得焦点时底边强调线的依据未核实（原 Windows 11 主题的 `--sn-color-editor-underline` 已删除）。
 - **Segoe UI Variable 的命名字体**：WIN4 只说明 CSS 中指定 Segoe UI Variable 时光学尺寸自动调整；'Segoe UI Variable Text' 等命名字体在 WebView2 中是否同样调整，需要实测。
 - **Fluent 圆角以哪套为准**：设计站点（FL4）的 Large 8、X-Large 12 与代码令牌（FL14）的 Large 6、XLarge 8 不一致，两处原文都已核实，现行标准是哪一套无法判断。
 - **Fluent 阴影的第二层参数**：FL5 的公式附在图示旁，抽取出的文字中浅色两层参数相同，第二层的确切参数未核实；reference-matrix.md 只引用第一层的不透明度与 FL15 的几何。
