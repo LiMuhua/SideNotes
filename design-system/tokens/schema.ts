@@ -84,7 +84,7 @@ export const TOKENS: readonly TokenSpec[] = [
     ['--sn-color-accent', '强调色填充：主要按钮、选中指示条、开关'],
     ['--sn-color-accent-hover', '强调色填充的悬停态'],
     ['--sn-color-accent-text', '强调色文字与图标（对比度不低于 4.5:1）'],
-    ['--sn-color-accent-subtle', '强调色浅底：选中的标签、筛选条'],
+    ['--sn-color-accent-subtle', '强调色浅底：选中的标签、筛选条、问号说明'],
     ['--sn-color-on-accent', '强调色填充上的文字'],
     ['--sn-color-focus', '键盘焦点环'],
     ['--sn-color-caret', '输入光标（对比度不低于 3:1）'],
@@ -113,7 +113,7 @@ export const TOKENS: readonly TokenSpec[] = [
   ...themed('shadow', [
     ['--sn-shadow-sm', '小阴影：卡片、按下的分段'],
     ['--sn-shadow-md', '中阴影：菜单、下拉框、工具提示'],
-    ['--sn-shadow-lg', '大阴影：弹窗、速记浮窗、设置窗口'],
+    ['--sn-shadow-lg', '大阴影：弹窗、速记浮窗、设置窗口、问号说明'],
     ['--sn-shadow-panel', '侧栏面板与玻璃块的阴影：贴边时为朝向内容的一侧'],
     ['--sn-shadow-card-active', '悬停或选中的卡片：强调色外圈与浮起'],
     ['--sn-shadow-editing', '编辑中的卡片与获得焦点的新建卡片：浮起的投影（边框不变，不用强调色）'],

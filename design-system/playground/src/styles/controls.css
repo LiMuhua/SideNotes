@@ -521,10 +521,14 @@
   color: var(--sn-color-accent-text);
 }
 
+/* 问号说明比工具提示多一点强调：叠一层很淡的强调色，投影换成大阴影。
+ * 设置页的分组卡片同样是浮起的表面，不加区分时说明框会和卡片融在一起。 */
 .sn-tooltip.is-help {
   display: block;
   max-width: calc(var(--sn-dialog-width) * 0.7);
   padding: var(--sn-space-3) var(--sn-space-4);
+  background: linear-gradient(var(--sn-color-accent-subtle), var(--sn-color-accent-subtle)), var(--sn-color-surface-raised);
+  box-shadow: var(--sn-shadow-lg);
   line-height: var(--sn-line-height-normal);
   white-space: normal;
 }

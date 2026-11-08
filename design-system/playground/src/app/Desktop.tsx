@@ -21,7 +21,7 @@ import type { SurfaceId } from '../surfaces';
 import { CaptureWindow } from './CaptureWindow';
 import { SettingsWindow, type SettingsSection } from './SettingsWindow';
 import { SidebarPanel } from './SidebarPanel';
-import { BrandMark } from './SidebarParts';
+import { AppIcon } from './SidebarParts';
 import { WorkWindow } from './WorkWindow';
 
 export interface DesktopInitial {
@@ -180,7 +180,7 @@ export function Desktop({ form, platform, wallpaper, initial = {}, surface, prim
             <span className="sn-dock-app is-a" />
             <span className="sn-dock-app is-b" />
             <button type="button" className="sn-dock-app is-sidenotes" aria-label="SideNotes" onClick={() => setVisible((current) => !current)}>
-              <BrandMark small />
+              <AppIcon />
             </button>
           </div>
         )}
@@ -266,7 +266,7 @@ function Taskbar({ sidebarVisible, onSidebar, onCapture }: { sidebarVisible: boo
           title="SideNotes 侧栏 · Alt+Shift+S"
           onClick={onSidebar}
         >
-          <BrandMark small />
+          <AppIcon />
         </button>
         <span className="sn-tray-clock">
           14:32

@@ -9,6 +9,7 @@ import { Badge, Keys, Tag } from '../ui/Misc';
 import { Select } from '../ui/Select';
 import { Checkbox, Segmented, Switch } from '../ui/Toggle';
 import { Tooltip } from '../ui/Tooltip';
+import { AppIcon, BrandMark } from '../app/SidebarParts';
 import { Demo, DemoRow, PageSection, StateCell } from './common';
 
 const STATES: ReadonlyArray<{ key: string; label: string; props: Partial<ButtonProps> }> = [
@@ -140,6 +141,18 @@ export function ControlsSection() {
               悬停查看提示
             </Button>
           </Tooltip>
+        </DemoRow>
+      </Demo>
+      <Demo
+        title="应用图标与品牌标记"
+        note="一张黄色便签从屏幕右边缘探出头来，看着屏幕上的内容：SideNotes 平时藏在屏幕边缘，需要时才探出来。配色固定，不随主题变化；任务栏、托盘、程序坞、关于页与标题区、速记浮窗、设置窗口的品牌标记都用同一个图标，只是尺寸不同。"
+      >
+        <DemoRow>
+          {[64, 32, 24, 16].map((size) => (
+            <AppIcon key={size} size={size} />
+          ))}
+          <BrandMark />
+          <BrandMark small />
         </DemoRow>
       </Demo>
     </PageSection>

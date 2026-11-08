@@ -15,16 +15,27 @@ import { Icon, type IconName } from '../ui/Icon';
 import { Layer, useAnchoredPosition } from '../ui/layer';
 import { Keys } from '../ui/Misc';
 import { SHORTCUT_KEYS } from './shortcuts';
+import appIconUrl from '../../../assets/app-icon.svg';
 
-/** 品牌标记：三根竖条，与现有应用一致。 */
-export function BrandMark({ small = false }: { small?: boolean }) {
+/**
+ * 应用图标（`design-system/assets/app-icon.svg`，本次提出）：一张黄色便签从屏幕右边缘探出头来，看着屏幕上的内容。
+ * 配色固定，不随主题变化。任务栏、托盘、程序坞与关于页直接显示它；标题区、速记浮窗与设置窗口通过 BrandMark 显示。
+ */
+export function AppIcon({ className, size }: { className?: string; size?: number }) {
   return (
-    <span className={cx('sn-brand-mark', small && 'is-small')} aria-hidden="true">
-      <i />
-      <i />
-      <i />
-    </span>
+    <img
+      className={cx('sn-app-icon', className)}
+      src={appIconUrl}
+      alt=""
+      draggable={false}
+      style={size ? { width: size, height: size } : undefined}
+    />
   );
+}
+
+/** 品牌标记：标题区、速记浮窗与设置窗口中的应用图标，与任务栏上的完全相同，只是尺寸跟随图标令牌。 */
+export function BrandMark({ small = false }: { small?: boolean }) {
+  return <AppIcon className={cx('sn-brand-mark', small && 'is-small')} />;
 }
 
 export interface HeaderProps {
@@ -471,14 +482,14 @@ export function SidebarFooter({ update, onVersion, onSettings }: FooterProps) {
 }
 
 /**
- * 指针停在宽度手柄上这么久（毫秒）之后才高亮、换成调整宽度的指针（本次提出）：
- * 只是从桌面移进侧栏时划过手柄，不会闪一下强调色（与 Windows 默认的悬停时间相同）。
+ * 指针停在宽度手柄上这么久（毫秒）之后才高亮（本次提出）：只是从桌面移进侧栏时划过手柄，
+ * 不会闪一下强调色（与 Windows 默认的悬停时间相同）。左右箭头的指针不等待，一移上去就换。
  */
 const RESIZER_HOVER_DELAY = 400;
 
 /**
  * 拖动调整侧栏宽度的手柄，放在侧栏朝向屏幕内侧的一边。
- * 指针停留 400ms 后才高亮并换成左右箭头；按下即可拖动，不必等高亮；键盘聚焦时立即高亮。
+ * 指针一移上去就换成左右箭头，停留 400ms 后才高亮；按下即可拖动，不必等高亮；键盘聚焦时立即高亮。
  */
 export function Resizer({ edge, width, min, max, onChange }: { edge: EdgeSide; width: number; min: number; max: number; onChange: (width: number) => void }) {
   const start = useRef<{ x: number; width: number } | null>(null);

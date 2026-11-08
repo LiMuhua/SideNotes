@@ -89,6 +89,12 @@ describe.each(SURFACE_FILES.flatMap(({ id, file }) => THEMES.map((theme) => ({ i
       textSurfaces.forEach((layers) => expect(ratio(text, layers), `${text} / ${layers.join(' + ')}`).toBeGreaterThanOrEqual(4.5));
     });
 
+    it('问号说明框上的文字不低于 4.5:1', () => {
+      // 问号说明在浮起的表面上叠一层很淡的强调色（components.md「问号说明」）。
+      const help = ['--sn-color-surface-raised', '--sn-color-accent-subtle'];
+      ['--sn-color-text', '--sn-color-text-secondary'].forEach((text) => expect(ratio(text, help), text).toBeGreaterThanOrEqual(4.5));
+    });
+
     it('选中与悬停卡片上的文字不低于 4.5:1', () => {
       // 选中卡片内的弱化文字改用次要文字色（见 components.md「记录卡片」），弱化文字只要求在悬停的控件上达标。
       const active = [...CARD, '--sn-color-card-active'];

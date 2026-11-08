@@ -371,7 +371,8 @@
   font-family: var(--sn-font-meta);
   font-size: var(--sn-font-size-sm);
   font-variant-numeric: tabular-nums;
-  text-align: right;
+  /* 数值居中（本次提出）：框窄，数字居中比靠右更容易看清。 */
+  text-align: center;
 }
 
 .sn-set-number:disabled {
@@ -383,9 +384,11 @@
   width: calc(6ch + var(--sn-control-height-sm));
 }
 
+/* 数字组合框与数值输入框一样居中显示，左右内边距对称。 */
 .sn-combobox.is-number input {
+  padding: 0 var(--sn-space-2);
   font-variant-numeric: tabular-nums;
-  text-align: right;
+  text-align: center;
 }
 
 .sn-set-font {
@@ -853,12 +856,10 @@ button.sn-shortcut-key:hover {
   gap: var(--sn-space-5);
 }
 
-.sn-about-hero .sn-brand-mark {
-  height: var(--sn-control-height-lg);
-}
-
-.sn-about-hero .sn-brand-mark i {
-  width: calc(var(--sn-control-height-lg) * 0.18);
+/* 关于页显示彩色的应用图标，与现有应用的关于页一样用图标本身。 */
+.sn-about-hero .sn-app-icon {
+  width: calc(var(--sn-control-height-lg) * 1.5);
+  height: calc(var(--sn-control-height-lg) * 1.5);
 }
 
 .sn-about-text {

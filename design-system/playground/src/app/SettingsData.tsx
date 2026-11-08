@@ -24,7 +24,7 @@ import { useToast } from '../ui/Tabs';
 import { Switch } from '../ui/Toggle';
 import { HelpTip } from '../ui/Tooltip';
 import { AVAILABLE_UPDATE, UpdateDialog } from './menus';
-import { BrandMark } from './SidebarParts';
+import { AppIcon } from './SidebarParts';
 import { DataRow, Field, FieldRow, PathText, SettingsCard, SettingsPage } from './SettingsParts';
 
 const LOCATIONS: ReadonlyArray<{ value: StorageLocation; label: string; path: string }> = [
@@ -460,7 +460,7 @@ export function AboutPanel() {
   return (
     <SettingsPage title="关于">
       <div className="sn-about-hero">
-        <BrandMark />
+        <AppIcon />
         <div className="sn-about-text">
           <h3 className="sn-about-name">SideNotes</h3>
           <p className="sn-about-tagline">本地速记 · 置顶取用 · 用后归档</p>

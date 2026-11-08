@@ -117,19 +117,16 @@
 }
 
 /* ---------- 调整宽度的手柄 ----------
- * 指针停留片刻（脚本中的 RESIZER_HOVER_DELAY）才加 is-armed：这时才高亮并换成左右箭头。
- * 只是从桌面移进侧栏时划过手柄，什么都不变；按下即可拖动，键盘聚焦时立即高亮。 */
+ * 指针一移上去就换成左右箭头，表示可以拖动；高亮要等指针停留片刻（脚本中的 RESIZER_HOVER_DELAY）加上 is-armed 之后。
+ * 只是从桌面移进侧栏时划过手柄，不会闪一下强调色；按下即可拖动，键盘聚焦时立即高亮。 */
 .sn-resizer {
   position: absolute;
   top: 0;
   bottom: 0;
   z-index: var(--sn-z-sticky);
   width: var(--sn-space-3);
-  touch-action: none;
-}
-
-.sn-resizer:is(.is-armed, .is-dragging) {
   cursor: ew-resize;
+  touch-action: none;
 }
 
 .sn-resizer[data-edge='right'] {
@@ -181,36 +178,23 @@
   min-width: 0;
 }
 
-.sn-brand-mark {
-  display: inline-flex;
+/* 应用图标：任务栏、托盘、程序坞与关于页；配色固定，不随主题变化（见 SidebarParts.tsx 的 AppIcon）。 */
+.sn-app-icon {
+  display: block;
   flex: none;
-  align-items: flex-end;
-  gap: var(--sn-space-1);
+  width: var(--sn-icon-size);
   height: var(--sn-icon-size);
 }
 
-.sn-brand-mark i {
-  display: block;
-  width: calc(var(--sn-icon-size) * 0.2);
-  border-radius: var(--sn-radius-full);
-  background: var(--sn-color-accent);
-}
-
-.sn-brand-mark i:nth-child(1) {
-  height: 55%;
-}
-
-.sn-brand-mark i:nth-child(2) {
-  height: 100%;
-}
-
-.sn-brand-mark i:nth-child(3) {
-  height: 75%;
-  opacity: 0.6;
+/* 品牌标记：标题区、速记浮窗与设置窗口中的同一个应用图标，只调整尺寸；须写在 .sn-app-icon 之后才能覆盖它的尺寸。 */
+.sn-brand-mark {
+  width: calc(var(--sn-icon-size) * 1.25);
+  height: calc(var(--sn-icon-size) * 1.25);
 }
 
 .sn-brand-mark.is-small {
-  height: var(--sn-icon-size-sm);
+  width: var(--sn-icon-size);
+  height: var(--sn-icon-size);
 }
 
 .sn-side-title {
@@ -254,7 +238,7 @@
   flex: none;
   align-items: center;
   gap: var(--sn-space-1);
-  transition: opacity var(--sn-duration-fast) var(--sn-ease-standard);
+  transition: opacity var(--sn-duration-normal) var(--sn-ease-standard);
 }
 
 .sn-side-tab {
@@ -375,10 +359,11 @@
   border-radius: var(--sn-radius-control);
   background-color: transparent;
   color: var(--sn-color-text-muted);
+  /* 展开与收起比其它状态变化慢一些：用慢速的 1.25 倍（终端 200ms，与现有应用的 220ms 相近）。 */
   transition:
-    width var(--sn-duration-normal) var(--sn-ease-standard),
-    background-color var(--sn-duration-fast) var(--sn-ease-standard),
-    border-color var(--sn-duration-fast) var(--sn-ease-standard);
+    width calc(var(--sn-duration-slow) * 1.25) var(--sn-ease-standard),
+    background-color var(--sn-duration-normal) var(--sn-ease-standard),
+    border-color var(--sn-duration-normal) var(--sn-ease-standard);
 }
 
 .sn-side-search.is-open {
@@ -412,7 +397,7 @@
 
 .sn-side-search.is-open .sn-side-search-field {
   opacity: 1;
-  transition-delay: var(--sn-duration-fast);
+  transition-delay: var(--sn-duration-normal);
 }
 
 .sn-side-search-field input {
@@ -529,8 +514,14 @@
 }
 
 /* 标签筛选菜单（现有应用的 TagFilter）：候选标签右侧是条数；首位标签旁边是「管理」；底部提示与「搜索」。 */
+/* 宽度跟着内容走（本次提出）：最长的一项加上左右的内边距，条数与标签之间多留一点空。 */
 .sn-tag-menu {
-  width: calc(var(--sn-dialog-width) * 0.6);
+  width: max-content;
+  min-width: 0;
+}
+
+.sn-tag-menu .sn-tag-count {
+  margin-left: var(--sn-space-4);
 }
 
 .sn-tag-row {

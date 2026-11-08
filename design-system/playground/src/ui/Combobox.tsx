@@ -2,8 +2,8 @@
  * 可输入的组合框：输入框加候选列表，用于字体、「移出后收起」、回收站保留天数这类既有常用值、又可以自己填写的设置。
  *
  * 按 WAI-ARIA 的「可编辑组合框 + 列表框」模式：焦点始终留在输入框，用 aria-activedescendant 标出当前候选。
- * ↓ 打开列表或下移，↑ 上移，Enter 选用当前候选（列表关闭时提交输入的内容），Esc 先关闭列表；
- * 点候选即选用；失去焦点时提交输入的内容。filter 为 true 时按输入的内容筛选候选（现有应用的字体组合框）。
+ * 输入框获得焦点时打开列表（与现有应用一致），按 Esc 关闭后再点输入框重新打开；↓ 打开列表或下移，↑ 上移，
+ * Enter 选用当前候选（列表关闭时提交输入的内容），Esc 先关闭列表；点候选即选用；失去焦点时提交输入的内容。filter 为 true 时按输入的内容筛选候选（现有应用的字体组合框）。
  * 数值型的组合框可以用滚轮加减（wheel，见 wheel.ts）。
  */
 
@@ -158,6 +158,10 @@ export function Combobox({ value, options, onCommit, placeholder, filter = false
             if (filter) openList(0);
           }}
           onKeyDown={onKeyDown}
+          onFocus={() => openList()}
+          onClick={() => {
+            if (!open) openList();
+          }}
           onBlur={(event) => {
             if (listbox.current?.contains(event.relatedTarget as Node | null)) return;
             setOpen(false);

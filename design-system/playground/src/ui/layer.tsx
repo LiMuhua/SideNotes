@@ -50,6 +50,8 @@ interface Position {
   left: number;
   top: number;
   placement: Placement;
+  /** 上下都放不下时，可以滚动的浮层（候选列表、菜单）限制到这个高度，不盖住定位点。 */
+  maxHeight?: number;
 }
 
 /** 浮层根节点相对视口的位置与缩放比例。 */
@@ -61,6 +63,8 @@ function layerFrame(layer: HTMLElement): { rect: DOMRect; scale: number } {
 
 /**
  * 计算浮层位置：优先放在指定方向，空间不够时翻到另一侧，并限制在窗口之内留出 8px 边距。
+ * 上下都放不下时，可以滚动的浮层（overflow 为 auto 或 scroll）放到空间较大的一侧并限制高度，
+ * 不再被推回窗口之内、盖住定位点（例如点进组合框准备输入时，候选列表不能遮住输入框）。
  * 返回浮层根节点坐标系中的 left、top（已除以缩放比例）。
  */
 export function computePosition(
@@ -86,13 +90,19 @@ export function computePosition(
     right: toLocal(box.right, frame.left),
     bottom: toLocal(box.bottom, frame.top),
   };
+  // 量浮层本来的尺寸：先去掉上一次为了放进窗口而加的最大高度，量完立即恢复。
+  const limited = floating.style.maxHeight;
+  floating.style.maxHeight = '';
   const width = floating.offsetWidth;
   const height = floating.offsetHeight;
+  floating.style.maxHeight = limited;
+  const scrollable = /auto|scroll/.test(getComputedStyle(floating).overflowY);
   const maxLeft = layer.offsetWidth - width - 8;
-  const maxTop = layer.offsetHeight - height - 8;
+  let maxTop = layer.offsetHeight - height - 8;
   let resolved = placement;
   let left: number;
   let top: number;
+  let maxHeight: number | undefined;
 
   if (placement === 'right-start') {
     left = anchorBox.right + gap;
@@ -109,6 +119,19 @@ export function computePosition(
     } else if (!preferAbove && below > maxTop && above >= 8) {
       top = above;
       resolved = 'top';
+    } else if (scrollable && (preferAbove ? above < 8 : below > maxTop)) {
+      // 上下都放不下：放到空间较大的一侧，高度限制在这一侧的空间之内。
+      const spaceBelow = layer.offsetHeight - 8 - below;
+      const spaceAbove = anchorBox.top - gap - 8;
+      maxHeight = Math.max(0, Math.floor(Math.max(spaceBelow, spaceAbove)));
+      if (spaceBelow >= spaceAbove) {
+        top = below;
+        resolved = 'bottom';
+      } else {
+        top = anchorBox.top - gap - maxHeight;
+        resolved = 'top';
+      }
+      maxTop = layer.offsetHeight - maxHeight - 8;
     }
     if (placement.endsWith('-end')) left = anchorBox.right - width;
     else if (placement === 'bottom' || placement === 'top') left = (anchorBox.left + anchorBox.right) / 2 - width / 2;
@@ -119,6 +142,7 @@ export function computePosition(
     left: Math.max(8, Math.min(left, maxLeft)),
     top: Math.max(8, Math.min(top, maxTop)),
     placement: resolved,
+    maxHeight,
   };
 }
 
@@ -138,7 +162,7 @@ export function useAnchoredPosition(
     const next = computePosition(layer, anchor, floating.current, placement, gap);
     // 位置没有变化时保持原对象，避免无意义的重渲染。
     setPosition((current) =>
-      current && current.left === next.left && current.top === next.top && current.placement === next.placement
+      current && current.left === next.left && current.top === next.top && current.placement === next.placement && current.maxHeight === next.maxHeight
         ? current
         : next,
     );
@@ -160,7 +184,7 @@ export function useAnchoredPosition(
 
   return {
     // 第一次测量完成前先隐藏，避免浮层在左上角闪一下。
-    style: open && position ? { left: position.left, top: position.top } : { left: 0, top: 0, visibility: 'hidden' },
+    style: open && position ? { left: position.left, top: position.top, maxHeight: position.maxHeight } : { left: 0, top: 0, visibility: 'hidden' },
     placement: (open && position?.placement) || placement,
   };
 }

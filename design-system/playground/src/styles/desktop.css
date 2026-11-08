@@ -381,8 +381,9 @@
   background: rgb(128 128 128 / 0.16);
 }
 
-.sn-tray-button .sn-brand-mark i {
-  background: currentColor;
+.sn-tray-button .sn-app-icon {
+  width: 18px;
+  height: 18px;
 }
 
 .sn-tray-clock {
@@ -444,8 +445,14 @@
   background: linear-gradient(135deg, #6366f1, #0ea5e9);
 }
 
-.sn-dock-app.is-sidenotes .sn-brand-mark i {
-  background: currentColor;
+/* SideNotes 在程序坞里直接显示应用图标，图标自带圆角与底色。 */
+.sn-dock-app.is-sidenotes {
+  background: transparent;
+}
+
+.sn-dock-app.is-sidenotes .sn-app-icon {
+  width: 100%;
+  height: 100%;
 }
 
 /* ---------- Android：侧栏铺满屏幕，速记浮窗从底部弹出 ---------- */
