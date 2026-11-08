@@ -179,7 +179,7 @@ export function PartsSection() {
           <TidyNudge onArchive={noop} onSnooze={noop} onClose={noop} />
         </PanelSample>
       </Demo>
-      <Demo title="新建卡片" note="可以直接输入；Ctrl+Enter 保存，保存后焦点留在这里，可以接着记下一条。">
+      <Demo title="新建卡片" note="可以直接输入；获得焦点时与编辑中的卡片一样换成编辑底色并浮起。Ctrl+Enter 保存，保存后焦点留在这里，可以接着记下一条。">
         <PanelSample>
           <Composer />
         </PanelSample>

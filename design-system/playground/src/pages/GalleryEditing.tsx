@@ -24,7 +24,7 @@ const SAMPLE = [
 
 const PARTS: ReadonlyArray<{ token: string; label: string; note: string }> = [
   { token: '--sn-color-editing', label: '编辑底色', note: '取代卡片底色；比平时更实，半透明主题在编辑时几乎不透出背景' },
-  { token: '--sn-shadow-editing', label: '浮起', note: '编辑中的卡片浮起；边框换成一像素的强调色，不加外圈；其余卡片降到禁用透明度，悬停时恢复' },
+  { token: '--sn-shadow-editing', label: '浮起', note: '编辑中的卡片与获得焦点的新建卡片浮起；边框与平时相同，不用强调色；其余卡片降到禁用透明度，悬停时恢复' },
   { token: '--sn-color-caret', label: '输入光标', note: '对比度不低于 3:1' },
   { token: '--sn-color-selection', label: '选区', note: '与正文中的选区一致' },
   { token: '--sn-color-syntax', label: 'Markdown 标记', note: '#、**、- 等标记；终端用强调色，像代码的语法着色；对比度不低于 4.5:1' },
@@ -41,7 +41,7 @@ export function EditingSection() {
     <PageSection
       id="gallery-editing"
       title="编辑模式"
-      description="双击卡片进入编辑：卡片换成编辑底色、边框换成强调色并浮起，其余卡片变淡；Markdown 标记显示出来，图片、待办、标签照常可点。Ctrl+Enter 保存，Esc 取消，点到卡片之外即保存。"
+      description="双击卡片进入编辑：卡片换成编辑底色并浮起，边框不变，其余卡片变淡；Markdown 标记显示出来，图片、待办、标签照常可点。Ctrl+Enter 保存，Esc 取消，点到卡片之外即保存。"
     >
       <Demo
         title="编辑中的卡片"

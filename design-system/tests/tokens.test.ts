@@ -138,12 +138,12 @@ describe.each(SURFACE_FILES.flatMap(({ id, file }) => THEMES.map((theme) => ({ i
       );
     });
 
-    it('选中、多选与编辑中的强调色边框不低于 3:1', () => {
-      // 这三种状态都靠强调色边框与默认状态区分（WCAG 1.4.11），边框紧挨着卡片内的底色。
+    it('选中与多选的强调色边框不低于 3:1', () => {
+      // 这两种状态都靠强调色边框与默认状态区分（WCAG 1.4.11），边框紧挨着卡片内的底色。
+      // 编辑中的卡片边框不变，靠编辑底色、浮起与其余卡片变淡区分，不在这里检查。
       [
         [...CARD, '--sn-color-card-active'],
         [...CARD, '--sn-color-accent-subtle'],
-        ['--sn-color-panel', '--sn-color-editing'],
       ].forEach((layers) => expect(ratio('--sn-color-accent', layers), layers.join(' + ')).toBeGreaterThanOrEqual(3));
     });
 

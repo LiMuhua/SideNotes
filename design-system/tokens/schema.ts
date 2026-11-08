@@ -52,7 +52,7 @@ export const TOKENS: readonly TokenSpec[] = [
     ['--sn-color-card-head', '记录卡片标题栏的底色，叠在卡片之上；只有窗格式的记录（终端）使用，其余主题透明'],
     ['--sn-color-card-active', '悬停或选中的卡片：叠在卡片底色上的叠加色'],
     ['--sn-color-card-head-active', '悬停或选中时标题栏的底色，取代标题栏底色；只有窗格式的记录（终端）使用，其余主题透明'],
-    ['--sn-color-editing', '编辑中的卡片与速记浮窗编辑区的底色，取代卡片底色'],
+    ['--sn-color-editing', '编辑中的卡片与获得焦点的新建卡片的底色，取代卡片底色'],
     ['--sn-color-sheen', '玻璃块顶部的光泽，从上往下渐隐（磨砂玻璃）；不用时为透明'],
     ['--sn-color-bg', '设置窗口的窗口底色与分类栏'],
     ['--sn-color-surface', '设置窗口的内容区、弹窗正文'],
@@ -116,7 +116,7 @@ export const TOKENS: readonly TokenSpec[] = [
     ['--sn-shadow-lg', '大阴影：弹窗、速记浮窗、设置窗口'],
     ['--sn-shadow-panel', '侧栏面板与玻璃块的阴影：贴边时为朝向内容的一侧'],
     ['--sn-shadow-card-active', '悬停或选中的卡片：强调色外圈与浮起'],
-    ['--sn-shadow-editing', '编辑中的卡片：浮起的投影（强调色只在一像素的边框上，不加外圈）'],
+    ['--sn-shadow-editing', '编辑中的卡片与获得焦点的新建卡片：浮起的投影（边框不变，不用强调色）'],
   ]),
   ...fixed('material', [
     ['--sn-panel-blur', '面板的背景模糊半径；0 表示实心表面'],

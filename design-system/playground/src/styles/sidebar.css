@@ -641,6 +641,7 @@
 
 /* ---------- 新建卡片 ---------- */
 .sn-composer {
+  position: relative;
   flex: none;
   margin: 0 var(--sn-panel-padding) var(--sn-space-4);
   padding: var(--sn-space-3) var(--sn-space-4) var(--sn-space-3) var(--sn-card-padding-x);
@@ -648,20 +649,17 @@
   border-radius: max(var(--sn-card-radius), var(--sn-radius-md));
   background: var(--sn-color-card);
   transition:
-    border-color var(--sn-duration-fast) var(--sn-ease-standard),
+    background-color var(--sn-duration-fast) var(--sn-ease-standard),
     box-shadow var(--sn-duration-fast) var(--sn-ease-standard);
 }
 
-/* 新建卡片获得焦点：与编辑中的卡片一样，换成编辑底色，边框换成强调色，不加外圈。
- * 前面加 .sn-scope，压过磨砂玻璃块的边框与底色（.sn-sidebar.is-blocks > …）。 */
+/* 新建卡片获得焦点：与编辑中的卡片一样，换成编辑底色并浮起（令牌 --sn-shadow-editing），
+ * 边框与平时相同，不用强调色，也不加外圈；层级提到列表之上，投影不被下面的卡片盖住。
+ * 前面加 .sn-scope，压过磨砂玻璃块的底色与投影（.sn-sidebar.is-blocks > …）；玻璃块的边缘受光保留。 */
 .sn-scope .sn-composer:focus-within {
-  border-color: var(--sn-color-accent);
+  z-index: 1;
   background-color: var(--sn-color-editing);
-}
-
-/* 玻璃块获得焦点时去掉边缘受光，露出强调色边框。 */
-.sn-sidebar.is-blocks > .sn-composer:focus-within::before {
-  opacity: 0;
+  box-shadow: var(--sn-shadow-editing);
 }
 
 .sn-composer-bar {
@@ -768,22 +766,24 @@
 }
 
 /* 高亮：悬停与单击共用一种状态（T66）。强调色边框加一圈外圈（令牌 --sn-shadow-card-active），
- * 卡片叠一层选中色；窗格的标题栏换成选中色，顶部一条强调色的线，像编辑器里当前的页签。 */
-.sn-note-list .sn-note:is(:hover, .is-active) {
+ * 卡片叠一层选中色；窗格的标题栏换成选中色，顶部一条强调色的线，像编辑器里当前的页签。
+ * 编辑中的卡片（同时带 is-active，指针也常停在上面）不用这些高亮。排除写在 :where() 里，
+ * 不增加优先级，多选的叠加色仍能压过悬停。 */
+.sn-note-list .sn-note:is(:hover, .is-active):where(:not(.is-editing)) {
   --local-overlay: var(--sn-color-card-active);
   --local-shadow: var(--sn-shadow-card-active);
   border-color: var(--sn-color-accent);
 }
 
 /* 窗格标题栏顶部的强调色线画在背景层里，不用内阴影：在非整数的缩放下两侧不会留下细缝，并随圆角弯曲。 */
-.sn-note-list.is-panes .sn-note:is(:hover, .is-active, .is-checked, .is-editing) .sn-note-head {
+.sn-note-list.is-panes .sn-note:is(:hover, .is-active, .is-checked):where(:not(.is-editing)) .sn-note-head {
   background:
     linear-gradient(var(--sn-color-accent), var(--sn-color-accent)) top / 100% var(--sn-focus-ring-width) no-repeat,
     var(--sn-color-card-head-active);
 }
 
-/* 玻璃块高亮时去掉边缘受光，露出强调色边框。 */
-.sn-note-list.is-tiles .sn-note:is(:hover, .is-active, .is-checked, .is-editing)::before {
+/* 玻璃块高亮时去掉边缘受光，露出强调色边框；编辑中的玻璃块保留边缘受光。 */
+.sn-note-list.is-tiles .sn-note:is(:hover, .is-active, .is-checked):where(:not(.is-editing))::before {
   opacity: 0;
 }
 
@@ -802,13 +802,12 @@
   outline-offset: calc(var(--sn-focus-ring-width) * -1);
 }
 
-/* 编辑中的卡片是视觉焦点：编辑底色、一像素的强调色边框与浮起的投影（令牌 --sn-shadow-editing），
- * 不加外圈；其余卡片变淡，悬停恢复（T21）。 */
+/* 编辑中的卡片是视觉焦点：编辑底色与浮起的投影（令牌 --sn-shadow-editing），其余卡片变淡，悬停恢复（T21）。
+ * 边框与窗格的标题栏保持平时的样子，不用强调色，编辑的地方不被一圈颜色框住。 */
 .sn-note-list .sn-note.is-editing {
   --local-overlay: transparent;
   --local-shadow: var(--sn-shadow-editing);
   z-index: 1;
-  border-color: var(--sn-color-accent);
   background-color: var(--sn-color-editing);
 }
 
