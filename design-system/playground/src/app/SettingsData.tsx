@@ -2,7 +2,8 @@
  * 设置：数据与同步、回收站、关于。
  *
  * 分组、设置项、说明文字与操作沿用现有应用 0.7.3（`DataPanel.tsx`、`TrashPanel.tsx`、`AboutPanel.tsx`）。
- * 「数据与同步」一行一项：名称在左，取值或路径在中间，操作靠右；云端备份尚未接入，与现有应用一样只保存配置（T11）。
+ * 「数据与同步」按外观页的写法排得紧凑：名称后紧跟取值与操作，相关的两项放在同一行；云端备份的输入框较多，名称单独成列以便对齐。
+ * 云端备份尚未接入，与现有应用一样只保存配置（T11）。
  * Playground 不访问文件系统，目录、快照与附件都是示例数值，操作只给出提示。
  */
 
@@ -23,7 +24,7 @@ import { useToast } from '../ui/Tabs';
 import { Switch } from '../ui/Toggle';
 import { HelpTip } from '../ui/Tooltip';
 import { BrandMark } from './SidebarParts';
-import { DataRow, PathText, SettingsCard, SettingsPage } from './SettingsParts';
+import { DataRow, Field, FieldRow, PathText, SettingsCard, SettingsPage } from './SettingsParts';
 
 const LOCATIONS: ReadonlyArray<{ value: StorageLocation; label: string; path: string }> = [
   { value: 'appdata', label: '应用数据目录（AppData）', path: 'C:\\Users\\用户\\AppData\\Roaming\\SideNotes' },
@@ -84,68 +85,85 @@ export function DataPanel() {
 
   return (
     <SettingsPage title="数据与同步">
-      <SettingsCard title="数据目录" help="记录保存在本机，不会上传">
-        <DataRow label="存储位置" help="迁移后原目录保留作为备份">
-          <Select
-            aria-label="数据存储位置"
-            size="sm"
-            value={settings.storageLocation}
-            onChange={(storageLocation) => updateSettings({ storageLocation })}
-            options={LOCATIONS.map(({ value, label }) => ({ value, label }))}
-          />
-        </DataRow>
-        {settings.storageLocation === 'custom' ? (
-          <DataRow label="自定义目录">
-            <TextInput
-              inputSize="sm"
-              className="sn-set-data-input"
-              aria-label="自定义数据目录"
-              placeholder="例如 D:\SideNotes"
-              defaultValue={settings.customDirectory}
-              onBlur={(event) => updateSettings({ customDirectory: event.target.value.slice(0, 500) })}
+      <SettingsCard title="数据目录">
+        <FieldRow>
+          <Field label="存储位置">
+            <Select
+              aria-label="数据存储位置"
+              size="sm"
+              value={settings.storageLocation}
+              onChange={(storageLocation) => updateSettings({ storageLocation })}
+              options={LOCATIONS.map(({ value, label }) => ({ value, label }))}
             />
-            <Button size="sm" variant="secondary" icon="folder" onClick={() => demo('选择目录')}>
-              选择目录
+          </Field>
+          <Field label="附件" help="不再被任何记录引用的附件会自动清理">
+            <span className="sn-set-value">5 个 · 1.2 MB</span>
+            <Button size="sm" variant="secondary" icon="trash" onClick={() => toast({ message: '没有未引用的附件', tone: 'success' })}>
+              立即清理
             </Button>
-          </DataRow>
+          </Field>
+        </FieldRow>
+        {settings.storageLocation === 'custom' ? (
+          <FieldRow>
+            <Field label="自定义目录" grow>
+              <TextInput
+                inputSize="sm"
+                className="sn-set-data-input"
+                aria-label="自定义数据目录"
+                placeholder="例如 D:\SideNotes"
+                defaultValue={settings.customDirectory}
+                onBlur={(event) => updateSettings({ customDirectory: event.target.value.slice(0, 500) })}
+              />
+              <Button size="sm" variant="secondary" icon="folder" onClick={() => demo('选择目录')}>
+                选择目录
+              </Button>
+            </Field>
+          </FieldRow>
         ) : null}
         {settings.storageLocation !== current ? (
-          <DataRow label="迁移到" help="数据库与附件复制到这里，之后的记录保存在这里" value={<PathText label="迁移的目标目录" path={target} />}>
-            <Button
-              size="sm"
-              variant="primary"
-              icon="upload"
-              onClick={() => {
-                setCurrent(settings.storageLocation);
-                toast({ message: '已迁移到新目录，原目录保留作为备份（示例）', tone: 'success' });
-              }}
-            >
-              迁移到这里
-            </Button>
-          </DataRow>
+          <FieldRow>
+            <Field label="迁移到" help="数据库与附件复制到这里，之后的记录保存在这里；原目录保留作为备份" grow>
+              <PathText label="迁移的目标目录" path={target} />
+              <Button
+                size="sm"
+                variant="primary"
+                icon="upload"
+                onClick={() => {
+                  setCurrent(settings.storageLocation);
+                  toast({ message: '已迁移到新目录，原目录保留作为备份（示例）', tone: 'success' });
+                }}
+              >
+                迁移到这里
+              </Button>
+            </Field>
+          </FieldRow>
         ) : null}
-        <DataRow label="当前目录" value={<PathText label="当前数据目录" path={currentPath} />}>
-          <IconButton icon="folder" label="打开目录" size="sm" onClick={() => demo('打开目录')} />
-        </DataRow>
-        <DataRow label="附件" help="不再被任何记录引用的附件会自动清理" value="5 个 · 1.2 MB">
-          <Button size="sm" variant="secondary" icon="trash" onClick={() => toast({ message: '没有未引用的附件', tone: 'success' })}>
-            立即清理
-          </Button>
-        </DataRow>
+        <FieldRow>
+          <Field label="当前目录" grow>
+            <PathText label="当前数据目录" path={currentPath} />
+            <IconButton icon="folder" label="打开目录" size="sm" onClick={() => demo('打开目录')} />
+          </Field>
+        </FieldRow>
       </SettingsCard>
 
-      <SettingsCard title="快照" help="每天自动创建；导入、永久删除、迁移与恢复之前也会创建">
-        <DataRow label="快照目录" help="放到另一块硬盘，硬盘损坏时也能找回数据" value={<PathText label="快照目录" path={`${currentPath}\\snapshots`} />}>
-          <IconButton icon="folder" label="打开目录" size="sm" onClick={() => demo('打开目录')} />
-          <Button size="sm" variant="secondary" icon="edit" onClick={() => demo('更换快照目录')}>
-            更换
-          </Button>
-        </DataRow>
-        <DataRow label="已有快照" help="保留 24 小时内的全部，7 天内每天一份，4 周内每周一份" value={`${SNAPSHOTS.length} 份 · 附件 5 个，1.2 MB`}>
-          <Button size="sm" variant="secondary" icon="plus" onClick={() => toast({ message: '已创建快照（示例）', tone: 'success' })}>
-            立即创建
-          </Button>
-        </DataRow>
+      <SettingsCard title="快照" help="每天自动创建；导入、永久删除、迁移与恢复之前也会创建。保留 24 小时内的全部，7 天内每天一份，4 周内每周一份。快照目录放在另一块硬盘上，硬盘损坏时也能找回数据">
+        <FieldRow>
+          <Field label="快照目录" grow>
+            <PathText label="快照目录" path={`${currentPath}\\snapshots`} />
+            <IconButton icon="folder" label="打开目录" size="sm" onClick={() => demo('打开目录')} />
+            <Button size="sm" variant="secondary" icon="edit" onClick={() => demo('更换快照目录')}>
+              更换
+            </Button>
+          </Field>
+        </FieldRow>
+        <FieldRow>
+          <Field label="已有快照">
+            <span className="sn-set-value">{`${SNAPSHOTS.length} 份 · 附件 5 个，1.2 MB`}</span>
+            <Button size="sm" variant="secondary" icon="plus" onClick={() => toast({ message: '已创建快照（示例）', tone: 'success' })}>
+              立即创建
+            </Button>
+          </Field>
+        </FieldRow>
         <ul className="sn-snapshot-list" aria-label="快照列表">
           {SNAPSHOTS.map((snapshot) => (
             <li key={snapshot.id} className="sn-snapshot">
@@ -163,14 +181,16 @@ export function DataPanel() {
       </SettingsCard>
 
       <SettingsCard title="导入与导出">
-        <DataRow label="本地备份" help="导出为一个文件夹，含附件；导入时合并到现有记录，附件一同拷回">
-          <Button size="sm" variant="secondary" icon="download" onClick={() => demo('导出备份')}>
-            导出备份
-          </Button>
-          <Button size="sm" variant="secondary" icon="upload" onClick={() => demo('导入备份')}>
-            导入备份
-          </Button>
-        </DataRow>
+        <FieldRow>
+          <Field label="本地备份" help="导出为一个文件夹，含附件；导入时合并到现有记录，附件一同拷回">
+            <Button size="sm" variant="secondary" icon="download" onClick={() => demo('导出备份')}>
+              导出备份
+            </Button>
+            <Button size="sm" variant="secondary" icon="upload" onClick={() => demo('导入备份')}>
+              导入备份
+            </Button>
+          </Field>
+        </FieldRow>
       </SettingsCard>
 
       <SettingsCard title="云端自动备份" help="尚未接入云端服务，只保存配置，不上传数据">
@@ -206,7 +226,7 @@ export function DataPanel() {
             />
           </DataRow>
         ) : null}
-        <DataRow label="账户" help="无需密码或令牌">
+        <DataRow label="账户">
           <TextInput
             key={`account-${cloud.provider}`}
             inputSize="sm"
@@ -233,7 +253,7 @@ export function DataPanel() {
             云端备份
           </Button>
         </DataRow>
-        <DataRow label="失败通知" help="备份失败时发送系统通知">
+        <DataRow label="失败通知">
           <Button
             size="sm"
             variant="secondary"
@@ -296,6 +316,7 @@ export function TrashPanel() {
         aria-label="回收站保留天数"
         className="is-number"
         inputMode="numeric"
+        wheel={{ min: TRASH_DAYS_RANGE.min, max: TRASH_DAYS_RANGE.max, step: 1 }}
         value={String(days)}
         options={TRASH_PRESETS.map((preset) => ({ value: String(preset), label: `${preset} 天` }))}
         onCommit={(raw) => {
@@ -466,10 +487,7 @@ export function AboutPanel() {
         </div>
       </section>
       <section className="sn-about-section">
-        <h4 className="sn-set-card-title">
-          调试
-          <HelpTip label="调试">打开开发者工具，查看控制台与页面结构</HelpTip>
-        </h4>
+        <h4 className="sn-set-card-title">调试</h4>
         <div className="sn-chip-row">
           {DEBUG_WINDOWS.map((item) => (
             <LinkChip key={item.id} icon="code" label={item.label} title={`打开${item.label}的开发者工具`} onClick={() => toast({ message: `打开${item.label}的开发者工具（示例）` })} />

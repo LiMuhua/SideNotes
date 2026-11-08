@@ -74,8 +74,7 @@
   box-shadow: none;
 }
 
-.sn-sidebar.is-blocks > :is(.sn-side-top, .sn-topline, .sn-composer, .sn-nudge, .sn-filter-banner, .sn-side-foot),
-.sn-capture.is-blocks > :is(.sn-capture-head, .sn-capture-body, .sn-capture-foot) {
+.sn-sidebar.is-blocks > :is(.sn-side-top, .sn-topline, .sn-composer, .sn-nudge, .sn-filter-banner, .sn-side-foot) {
   position: relative;
   margin: 0;
   border: var(--sn-border-width) solid var(--sn-color-border-subtle);
@@ -89,7 +88,6 @@
 /* 玻璃的立体感来自边缘受光，而不是投影：一圈上亮下暗的渐变描边盖在边框上，配合顶部的光泽。
  * 投影叠在块与块之间的缝里会显得脏，磨砂玻璃的投影只保留贴近边缘的一点（令牌 --sn-shadow-panel）。 */
 .sn-sidebar.is-blocks > :is(.sn-side-top, .sn-topline, .sn-composer, .sn-nudge, .sn-filter-banner, .sn-side-foot)::before,
-.sn-capture.is-blocks > :is(.sn-capture-head, .sn-capture-body, .sn-capture-foot)::before,
 .sn-note-list.is-tiles .sn-note::before {
   content: '';
   position: absolute;

@@ -4,12 +4,14 @@
  * 按 WAI-ARIA 的「可编辑组合框 + 列表框」模式：焦点始终留在输入框，用 aria-activedescendant 标出当前候选。
  * ↓ 打开列表或下移，↑ 上移，Enter 选用当前候选（列表关闭时提交输入的内容），Esc 先关闭列表；
  * 点候选即选用；失去焦点时提交输入的内容。filter 为 true 时按输入的内容筛选候选（现有应用的字体组合框）。
+ * 数值型的组合框可以用滚轮加减（wheel，见 wheel.ts）。
  */
 
 import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { cx } from './context';
 import { Icon } from './Icon';
 import { Layer, useAnchoredPosition } from './layer';
+import { useWheelStep } from './wheel';
 
 export interface ComboboxOption {
   value: string;
@@ -34,12 +36,14 @@ export interface ComboboxProps {
   display?: string;
   size?: 'sm' | 'md';
   inputMode?: 'text' | 'numeric';
+  /** 数值型的组合框（「移出后收起」、回收站保留天数）：滚轮按步长加减，结果限制在范围之内并立即提交。 */
+  wheel?: { min: number; max: number; step: number };
   className?: string;
 }
 
 const labelOf = (option: ComboboxOption) => option.label ?? option.value;
 
-export function Combobox({ value, options, onCommit, placeholder, filter = false, display, size = 'sm', inputMode = 'text', className, ...aria }: ComboboxProps) {
+export function Combobox({ value, options, onCommit, placeholder, filter = false, display, size = 'sm', inputMode = 'text', wheel, className, ...aria }: ComboboxProps) {
   const shown = display ?? value;
   const [text, setText] = useState(shown);
   const [dirty, setDirty] = useState(false);
@@ -82,6 +86,19 @@ export function Combobox({ value, options, onCommit, placeholder, filter = false
     finish(option.value);
   };
 
+  useWheelStep(
+    field,
+    (direction, multiplier) => {
+      if (!wheel) return;
+      const typed = Number.parseInt(text, 10);
+      const base = Number.isFinite(typed) ? typed : Number.parseInt(value, 10);
+      const next = String(Math.min(wheel.max, Math.max(wheel.min, base + direction * wheel.step * multiplier)));
+      setText(next);
+      finish(next);
+    },
+    Boolean(wheel),
+  );
+
   useEffect(() => {
     if (!open) return;
     listbox.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: 'nearest' });
@@ -120,7 +137,7 @@ export function Combobox({ value, options, onCommit, placeholder, filter = false
 
   return (
     <>
-      <span ref={field} className={cx('sn-combobox', `is-${size}`, open && 'is-open', className)}>
+      <span ref={field} className={cx('sn-combobox', `is-${size}`, open && 'is-open', className)} data-wheel-step={wheel ? '' : undefined}>
         <input
           ref={input}
           type="text"

@@ -5,10 +5,11 @@
  * 一行可以放几项，名称在控件左边，说明收在名称后的问号里；滑块独占一行，右侧是可以直接输入的数值与单位。
  */
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { cx } from '../ui/context';
 import { useToast } from '../ui/Tabs';
 import { HelpTip } from '../ui/Tooltip';
+import { useWheelStep } from '../ui/wheel';
 
 /** 设置页：标题在左，右侧可以放与整页有关的操作（例如「恢复默认」）。 */
 export function SettingsPage({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
@@ -61,12 +62,12 @@ export function FieldRow({ children, spread = false }: { children: ReactNode; sp
   return <div className={cx('sn-set-row', spread && 'is-spread')}>{children}</div>;
 }
 
-/** 数据行：名称在左，取值或路径在中间，操作靠右（「数据与同步」页）。 */
+/** 数据行：名称单独成一列，取值与操作紧跟在后（云端备份的几行输入框因此对齐）。 */
 export function DataRow({ label, help, value, children }: { label: string; help?: string; value?: ReactNode; children?: ReactNode }) {
   return (
     <div className="sn-set-data">
       <SettingLabel label={label} help={help} />
-      <div className="sn-set-data-value">{value}</div>
+      {value !== undefined ? <div className="sn-set-data-value">{value}</div> : null}
       {children ? <div className="sn-set-data-actions">{children}</div> : null}
     </div>
   );
@@ -86,16 +87,35 @@ export interface NumberInputProps {
   value: number;
   min: number;
   max: number;
+  /** 滚轮每一格的增减量，默认 1。 */
+  step?: number;
   disabled?: boolean;
   /** 超出范围时的提示。 */
   invalid?: string;
   onCommit: (value: number) => void;
+  /** 滚轮改出的新值交给这里；不给时直接提交（滑块旁的数值框交给滑块，字号要等滚轮停下再应用）。 */
+  onWheelValue?: (value: number) => void;
 }
 
-/** 数值输入：回车或失去焦点时提交；不是范围内的整数时提示并恢复原值（与现有应用的 TextField 一致）。 */
-export function NumberInput({ label, value, min, max, disabled, invalid, onCommit }: NumberInputProps) {
+/**
+ * 数值输入：回车或失去焦点时提交；不是范围内的整数时提示并恢复原值（与现有应用的 TextField 一致）。
+ * 指针停在框上转动滚轮可以加减，结果限制在范围之内（见 ui/wheel.ts）。
+ */
+export function NumberInput({ label, value, min, max, step = 1, disabled, invalid, onCommit, onWheelValue }: NumberInputProps) {
   const toast = useToast();
+  const input = useRef<HTMLInputElement>(null);
   const [text, setText] = useState<string | null>(null);
+  useWheelStep(
+    input,
+    (direction, multiplier) => {
+      const typed = text === null ? value : Number(text);
+      const next = Math.min(max, Math.max(min, (Number.isFinite(typed) ? typed : value) + direction * step * multiplier));
+      setText(null);
+      if (onWheelValue) onWheelValue(next);
+      else if (next !== value) onCommit(next);
+    },
+    !disabled,
+  );
   const commit = () => {
     if (text === null) return;
     const number = Number(text);
@@ -108,11 +128,13 @@ export function NumberInput({ label, value, min, max, disabled, invalid, onCommi
   };
   return (
     <input
+      ref={input}
       type="text"
       inputMode="numeric"
       className="sn-set-number"
       aria-label={label}
       disabled={disabled}
+      data-wheel-step={disabled ? undefined : ''}
       value={text ?? String(value)}
       onChange={(event) => setText(event.target.value)}
       onBlur={commit}
@@ -135,28 +157,58 @@ export interface RangeRowProps {
   max: number;
   step: number;
   unit: string;
-  /** 松开滑块后才提交（字号：拖动途中不重排整个界面）。 */
+  /** 松开滑块后才提交（字号：拖动途中不重排整个界面）；滚轮调整时等滚轮停下再提交。 */
   commitOnRelease?: boolean;
   /** 与其他设置放在同一行（例如字号跟在字体之后），不独占一行。 */
   inline?: boolean;
   onCommit: (value: number) => void;
 }
 
-/** 滑块行：名称、占满一行的滑块、可以直接输入的数值与单位。 */
+/** 连续几条滑块：名称、滑块与数值各占一列，滑块的起点对齐，不随名称长短参差。 */
+export function RangeGroup({ children }: { children: ReactNode }) {
+  return <div className="sn-set-ranges">{children}</div>;
+}
+
+/** 滚轮停下这么久（毫秒）之后，才提交松开后才应用的滑块。 */
+const WHEEL_COMMIT_DELAY = 500;
+
+/** 滑块行：名称、占满一行的滑块、可以直接输入的数值与单位；滑块与数值框都可以用滚轮调整。 */
 export function RangeRow({ label, help, value, min, max, step, unit, commitOnRelease = false, inline = false, onCommit }: RangeRowProps) {
   const [draft, setDraft] = useState<number | null>(null);
+  const slider = useRef<HTMLInputElement>(null);
+  const timer = useRef<number | undefined>(undefined);
   const shown = draft ?? value;
+  // 直接输入或滚轮改出的数值按步长取整，与拖动滑块的结果一致。
+  const snap = (number: number) => Math.min(max, Math.max(min, min + Math.round((number - min) / step) * step));
   const release = () => {
+    window.clearTimeout(timer.current);
     if (draft !== null && draft !== value) onCommit(draft);
     setDraft(null);
   };
+  const wheelTo = (number: number) => {
+    const next = snap(number);
+    if (!commitOnRelease) {
+      if (next !== value) onCommit(next);
+      return;
+    }
+    setDraft(next);
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => {
+      setDraft(null);
+      if (next !== value) onCommit(next);
+    }, WHEEL_COMMIT_DELAY);
+  };
+  useWheelStep(slider, (direction, multiplier) => wheelTo(shown + direction * step * multiplier));
+  useEffect(() => () => window.clearTimeout(timer.current), []);
   return (
     <div className={cx('sn-set-range', inline && 'is-inline')}>
       <SettingLabel label={label} help={help} />
       <input
+        ref={slider}
         type="range"
         className="sn-range"
         aria-label={label}
+        data-wheel-step=""
         min={min}
         max={max}
         step={step}
@@ -176,9 +228,10 @@ export function RangeRow({ label, help, value, min, max, step, unit, commitOnRel
           value={shown}
           min={min}
           max={max}
+          step={step}
           invalid={`${label}可设 ${min} 至 ${max}`}
-          // 直接输入的数值按步长取整，与拖动滑块的结果一致。
-          onCommit={(number) => onCommit(min + Math.round((number - min) / step) * step)}
+          onCommit={(number) => onCommit(snap(number))}
+          onWheelValue={wheelTo}
         />
         <span className="sn-set-unit">{unit}</span>
       </span>

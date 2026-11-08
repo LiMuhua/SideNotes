@@ -6,7 +6,8 @@
  * Ctrl+Enter 保存并收起，Esc 保留草稿并收起；底栏的保存按钮保存后保持浮窗展开。
  *
  * 本次提出：草稿状态一行去掉；快捷键与 Markdown 的说明收进标题旁的问号，界面上不常驻；
- * 字数放在附件工具的右边。磨砂玻璃主题中，浮窗与侧栏一样分成几块玻璃（标题区、编辑区、底栏）。
+ * 字数放在附件工具的右边。编辑区填满标题区与底栏之间的空间，内容超出时只在编辑器里滚动。
+ * 磨砂玻璃主题中，浮窗是一整块玻璃，编辑区是嵌在里面、磨得更实的一块（见 windows.css）。
  */
 
 import { useRef } from 'react';
@@ -91,8 +92,6 @@ export function CaptureWindow({ onClose, onContinue }: CaptureWindowProps) {
           autoFocus
           ariaLabel="速记内容"
           placeholder="随手记… 支持 Markdown 与 #标签"
-          minHeight={180}
-          maxHeight={260}
           onReady={(instance) => {
             editor.current = instance;
           }}

@@ -54,11 +54,23 @@
   gap: var(--sn-space-1);
 }
 
+/* 编辑区填满标题区与底栏之间的空间；内容超出时只在编辑器里滚动，外层不出现滚动条。 */
 .sn-capture-body {
+  display: flex;
   flex: 1;
+  flex-direction: column;
   min-height: 0;
   padding: var(--sn-space-2) var(--sn-panel-padding);
-  overflow: auto;
+  overflow: hidden;
+}
+
+.sn-capture-body > .sn-editor-host {
+  flex: 1;
+  min-height: 0;
+}
+
+.sn-capture-body .live-markdown-editor {
+  height: 100%;
 }
 
 .sn-capture-foot {
@@ -84,15 +96,47 @@
   font-size: var(--sn-font-size-xs);
 }
 
-/* 磨砂玻璃：浮窗不再是一整块，而是与侧栏一样分开的几块玻璃（标题区、编辑区、底栏），
- * 每块各自磨砂，边缘受光与顶部光泽见 sidebar.css「分开的玻璃块」。 */
+/* 磨砂玻璃（dock 为 blocks）：浮窗是一整块玻璃，与侧栏的玻璃块同一种材质：边缘受光、顶部光泽、背后模糊。
+ * 编辑区是嵌在玻璃里、磨得更实的一块（编辑底色），获得焦点时与编辑中的记录一样带紫色外圈。
+ * 标题区与底栏直接放在玻璃上，不加分隔线。受光描边画在边框的位置，所以外层不裁切内容（overflow: visible）。 */
 .sn-capture.is-blocks {
-  gap: var(--sn-block-gap);
+  position: relative;
   overflow: visible;
-  border: 0;
-  background: transparent;
-  backdrop-filter: none;
-  box-shadow: none;
+  border-color: transparent;
+  border-radius: var(--sn-panel-radius);
+  background: linear-gradient(to bottom, var(--sn-color-sheen), transparent var(--sn-space-10)), var(--sn-color-card);
+}
+
+.sn-capture.is-blocks::before {
+  content: '';
+  position: absolute;
+  inset: calc(var(--sn-border-width) * -1);
+  padding: var(--sn-border-width);
+  border-radius: inherit;
+  background: linear-gradient(to bottom, var(--sn-color-rim-top), var(--sn-color-rim-bottom));
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); /* 固定：遮罩只取透明度 */
+  pointer-events: none;
+}
+
+.sn-capture.is-blocks .sn-capture-foot {
+  border-top: 0;
+  background-image: none;
+}
+
+.sn-capture.is-blocks .sn-capture-body {
+  margin: 0 var(--sn-space-4);
+  padding: var(--sn-space-3) var(--sn-space-5);
+  border: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  border-radius: var(--sn-card-radius);
+  background: var(--sn-color-editing);
+  transition:
+    border-color var(--sn-duration-fast) var(--sn-ease-standard),
+    box-shadow var(--sn-duration-fast) var(--sn-ease-standard);
+}
+
+.sn-capture.is-blocks .sn-capture-body:focus-within {
+  border-color: var(--sn-color-accent);
+  box-shadow: var(--sn-shadow-editing);
 }
 
 /* ---------- 设置窗口 ----------
@@ -263,12 +307,31 @@
   white-space: nowrap;
 }
 
-/* 一行放几项设置，放不下时折行。 */
+/* 一行放几项设置，放不下时折行。项与项之间一条很淡的竖线；
+ * 折行后，行首那一项的竖线落在行的左边界之外，被 clip-path 裁掉（上下右三边放宽，不裁焦点环）。 */
 .sn-set-row {
+  --local-gap: var(--sn-space-7);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--sn-space-4) var(--sn-space-5);
+  gap: var(--sn-space-4) var(--local-gap);
+  clip-path: inset(calc(var(--sn-space-6) * -1) calc(var(--sn-space-6) * -1) calc(var(--sn-space-6) * -1) 0);
+}
+
+.sn-set-row > * {
+  position: relative;
+}
+
+.sn-set-row > * + *::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: calc(var(--local-gap) / -2);
+  width: var(--sn-border-width);
+  height: 1.1em;
+  background: var(--sn-color-border);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
 }
 
 .sn-set-row.is-spread {
@@ -291,6 +354,21 @@
   align-items: center;
   gap: var(--sn-space-3);
   min-width: 0;
+}
+
+/* 占满剩余宽度的一项（目录路径）：路径过长时在中间省略，按钮始终可见。 */
+.sn-set-field.is-grow .sn-set-control {
+  flex: 1;
+}
+
+.sn-set-control > .sn-set-path {
+  min-width: 0;
+}
+
+.sn-set-value {
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+  white-space: nowrap;
 }
 
 .sn-set-unit {
@@ -347,6 +425,18 @@
 .sn-set-range.is-inline {
   flex: 1;
   min-width: calc(var(--sn-dialog-width) * 0.45);
+}
+
+/* 滑块组：几行共用三列，滑块起点对齐；行距与卡片内的其他行一致。 */
+.sn-set-ranges {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--sn-space-4) var(--sn-space-5);
+}
+
+.sn-set-ranges > .sn-set-range {
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
 }
 
 .sn-set-range-value {
@@ -547,12 +637,13 @@ button.sn-shortcut-key:hover {
   font-size: var(--sn-font-size-xs);
 }
 
-/* 数据行：名称、取值或路径、操作。 */
+/* 数据行（云端备份）：名称单独成一列，取值、输入框与操作紧跟在后，不推到最右边；各行的输入框因此对齐。 */
 .sn-set-data {
   display: grid;
-  grid-template-columns: minmax(calc(var(--sn-dialog-width) * 0.18), auto) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(calc(var(--sn-dialog-width) * 0.18), auto) minmax(0, auto) auto;
+  justify-content: start;
   align-items: center;
-  gap: var(--sn-space-5);
+  gap: var(--sn-space-3) var(--sn-space-4);
   min-height: var(--sn-control-height);
 }
 
@@ -561,7 +652,6 @@ button.sn-shortcut-key:hover {
   overflow: hidden;
   color: var(--sn-color-text-secondary);
   font-size: var(--sn-font-size-sm);
-  text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -579,6 +669,7 @@ button.sn-shortcut-key:hover {
 .sn-set-path {
   display: block;
   overflow: hidden;
+  color: var(--sn-color-text-secondary);
   font-family: var(--sn-font-code);
   font-size: var(--sn-font-size-xs);
   text-align: left;

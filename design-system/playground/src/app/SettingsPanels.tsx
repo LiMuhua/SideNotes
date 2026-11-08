@@ -18,7 +18,7 @@ import { cx } from '../ui/context';
 import { Select } from '../ui/Select';
 import { useToast } from '../ui/Tabs';
 import { Switch } from '../ui/Toggle';
-import { Field, FieldRow, NumberInput, RangeRow, SettingLabel, SettingsCard, SettingsPage } from './SettingsParts';
+import { Field, FieldRow, NumberInput, RangeGroup, RangeRow, SettingLabel, SettingsCard, SettingsPage } from './SettingsParts';
 import { SHORTCUTS, type ShortcutSpec } from './shortcuts';
 
 const THEMES: ReadonlyArray<{ value: ThemeMode; label: string }> = [
@@ -126,7 +126,7 @@ export function AppearancePanel() {
               </label>
             ))}
           </div>
-          <SettingLabel label="主题" help="五套主题共用同一套操作，可以随时切换；默认为终端" />
+          <SettingLabel label="主题" />
           <div className="sn-choice-grid is-five" role="radiogroup" aria-label="主题">
             {SURFACES.map((surface) => (
               <label key={surface.id} className={cx('sn-choice', playground.surface === surface.id && 'is-selected')}>
@@ -149,7 +149,6 @@ export function AppearancePanel() {
           <RangeRow
             inline
             label="字号"
-            help="界面文字随之等比缩放，松开滑块后应用"
             value={settings.fontSize}
             min={FONT_SIZE_RANGE.min}
             max={FONT_SIZE_RANGE.max}
@@ -167,11 +166,12 @@ export function AppearancePanel() {
           <Field label="显示位置">
             <Select aria-label="触发边缘" size="sm" value={settings.edge} onChange={(edge) => updateSettings({ edge })} options={EDGES} />
           </Field>
-          <Field label="移出后收起" help={`鼠标移出侧栏后多久收起，${HIDE_DELAY_RANGE.min}–${HIDE_DELAY_RANGE.max} 毫秒`}>
+          <Field label="移出后收起">
             <Combobox
               aria-label="移出后收起（毫秒）"
               className="is-number"
               inputMode="numeric"
+              wheel={{ min: HIDE_DELAY_RANGE.min, max: HIDE_DELAY_RANGE.max, step: 100 }}
               value={String(settings.hideDelay)}
               options={HIDE_DELAYS.map((delay) => ({ value: delay }))}
               onCommit={(raw) => {
@@ -185,18 +185,20 @@ export function AppearancePanel() {
             />
             <span className="sn-set-unit">ms</span>
           </Field>
-          <Field label="编辑时保持展开" help="书写时鼠标移出也不收起">
+          <Field label="编辑时保持展开">
             <Switch label="编辑时保持展开" hideLabel checked={settings.protectEditing} onChange={(protectEditing) => updateSettings({ protectEditing })} />
           </Field>
         </FieldRow>
-        <RangeRow label="宽度" help="随字号等比加宽，也可拖动侧栏边缘调整" value={settings.width} min={WIDTH_RANGE.min} max={WIDTH_RANGE.max} step={WIDTH_RANGE.step} unit="px" onCommit={(width) => updateSettings({ width })} />
-        <RangeRow label="出入动画" help="设为 0 关闭动画" value={settings.animDuration} min={ANIM_DURATION_RANGE.min} max={ANIM_DURATION_RANGE.max} step={ANIM_DURATION_RANGE.step} unit="ms" onCommit={(animDuration) => updateSettings({ animDuration })} />
-        <RangeRow label="卡片高度" help="超出部分渐隐，双击卡片查看全文" value={settings.cardMaxHeight} min={CARD_HEIGHT_RANGE.min} max={CARD_HEIGHT_RANGE.max} step={CARD_HEIGHT_RANGE.step} unit="px" onCommit={(cardMaxHeight) => updateSettings({ cardMaxHeight })} />
+        <RangeGroup>
+          <RangeRow label="宽度" help="随字号等比加宽，也可拖动侧栏边缘调整" value={settings.width} min={WIDTH_RANGE.min} max={WIDTH_RANGE.max} step={WIDTH_RANGE.step} unit="px" onCommit={(width) => updateSettings({ width })} />
+          <RangeRow label="出入动画" value={settings.animDuration} min={ANIM_DURATION_RANGE.min} max={ANIM_DURATION_RANGE.max} step={ANIM_DURATION_RANGE.step} unit="ms" onCommit={(animDuration) => updateSettings({ animDuration })} />
+          <RangeRow label="卡片高度" help="超出部分渐隐，双击卡片查看全文" value={settings.cardMaxHeight} min={CARD_HEIGHT_RANGE.min} max={CARD_HEIGHT_RANGE.max} step={CARD_HEIGHT_RANGE.step} unit="px" onCommit={(cardMaxHeight) => updateSettings({ cardMaxHeight })} />
+        </RangeGroup>
       </SettingsCard>
 
       <SettingsCard title="其它">
         <FieldRow>
-          <Field label="列表加载" help={`滚动到底部时按批加载，每批 ${PAGE_SIZE_RANGE.min}–${PAGE_SIZE_RANGE.max} 条`}>
+          <Field label="列表加载">
             <Switch label="滚动按需加载" hideLabel checked={settings.lazyLoading} onChange={(lazyLoading) => updateSettings({ lazyLoading })} />
             <NumberInput
               label="每批加载记录数"
@@ -224,7 +226,7 @@ export function AppearancePanel() {
             />
             <span className="sn-set-unit">条</span>
           </Field>
-          <Field label="通知位置" help="「已保存」等操作提示弹出的位置">
+          <Field label="通知位置">
             <Select aria-label="通知弹出位置" size="sm" value={settings.toastPosition} onChange={(toastPosition) => updateSettings({ toastPosition })} options={TOAST_POSITIONS} />
           </Field>
         </FieldRow>
@@ -255,22 +257,25 @@ function MiniSidebar({ surface, theme }: { surface: string; theme: 'light' | 'da
 /* ==================== 快捷键 ==================== */
 
 /** 快捷键页的三组（现有应用 0.7.3）：全局与应用内并排，格式占一整行，两列排列。 */
-const SHORTCUT_GROUPS: ReadonlyArray<{ title: string; help: string; ids: readonly string[]; half: boolean }> = [
+const SHORTCUT_GROUPS: ReadonlyArray<{ title: string; help?: string; ids: readonly string[]; half: boolean }> = [
   { title: '全局', help: '在任何程序中都能使用', ids: ['capture', 'sidebar'], half: true },
-  { title: '应用内', help: '在侧栏与速记浮窗中使用', ids: ['newNote', 'search', 'save'], half: true },
+  { title: '应用内', ids: ['newNote', 'search', 'save'], half: true },
   {
     title: '格式',
-    help: '只在编辑记录时生效',
     ids: ['bold', 'italic', 'underline', 'strike', 'link', 'inlineCode', 'codeBlock', 'quote', 'orderedList', 'bulletList', 'heading', 'indent', 'plainPaste'],
     half: false,
   },
 ];
 
-/** 问号中的补充说明：另外固定可用的按键，以及链接读取剪贴板的用法。 */
+/** 问号中的补充说明：只给需要额外理解的一项。 */
 const SHORTCUT_NOTES: Readonly<Record<string, string>> = {
-  strike: '也可按 Alt + Shift + 5',
-  inlineCode: '也可按 Ctrl + Shift + `',
   link: '剪贴板中是网址时直接生成链接',
+};
+
+/** 另外固定可用的按键，写在按键的悬停提示里，不占问号。 */
+const SHORTCUT_ALIASES: Readonly<Record<string, string>> = {
+  strike: 'Alt + Shift + 5',
+  inlineCode: 'Ctrl + Shift + `',
 };
 
 /** 固定快捷键占用的按键，录入时同样算作冲突。 */
@@ -401,7 +406,7 @@ export function ShortcutsPanel() {
                         type="button"
                         className={cx('sn-shortcut-key', recording === spec.id && 'is-recording')}
                         aria-label={recording === spec.id ? `正在录入「${spec.label}」的快捷键，Esc 取消` : `更换「${spec.label}」的快捷键，当前为 ${display(keys)}`}
-                        title={recording === spec.id ? 'Esc 取消' : '点击更换'}
+                        title={recording === spec.id ? 'Esc 取消' : SHORTCUT_ALIASES[spec.id] ? `点击更换；也可按 ${SHORTCUT_ALIASES[spec.id]}` : '点击更换'}
                         onClick={() => {
                           setRecording((current) => (current === spec.id ? null : spec.id));
                           setMessage(null);
