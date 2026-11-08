@@ -79,7 +79,7 @@ SideNotes 的小号图标按钮之间都留 2px（`--sn-space-1`），中心距�
 | 开关 | 按钮加 `role="switch"` 与 `aria-checked` |
 | 分段控件 | `radiogroup` 与 `radio` |
 | 下拉选择框 | `combobox` 与 `listbox` |
-| 组合框 | 输入框为 `combobox`，带 `aria-expanded`；当前候选用 `aria-activedescendant` 标出，焦点始终留在输入框 |
+| 组合框 | 输入框为 `combobox`，带 `aria-expanded`；获得焦点时展开候选，当前候选用 `aria-activedescendant` 标出，焦点始终留在输入框；候选列表不盖住输入框 |
 | 问号说明 | 按钮名称为「某某说明」，带 `aria-expanded`；说明打开时用 `aria-describedby` 指向 `tooltip` |
 | 调整宽度的手柄 | `separator`，带 `aria-valuenow`、`aria-valuemin`、`aria-valuemax` |
 | 版本号 | 按钮名称写明版本号；有新版本时写明「发现新版本 0.7.3，点击查看更新内容」，更新角标只是装饰（`aria-hidden`） |
