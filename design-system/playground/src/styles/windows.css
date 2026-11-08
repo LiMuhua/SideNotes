@@ -96,15 +96,15 @@
   font-size: var(--sn-font-size-xs);
 }
 
-/* 磨砂玻璃（dock 为 blocks）：浮窗是一整块玻璃，与侧栏的玻璃块同一种材质：边缘受光、顶部光泽、背后模糊。
- * 编辑区是嵌在玻璃里、磨得更实的一块（编辑底色），获得焦点时与编辑中的记录一样带紫色外圈。
- * 标题区与底栏直接放在玻璃上，不加分隔线。受光描边画在边框的位置，所以外层不裁切内容（overflow: visible）。 */
+/* 磨砂玻璃（dock 为 blocks）：浮窗是一整块玻璃，与侧栏的玻璃块同一种材质：背后模糊、边缘受光。
+ * 标题区、编辑区与底栏直接放在玻璃上，不加分隔线，也不再嵌一块带边框的编辑区（第七次反馈：内嵌的边框显脏）；
+ * 大面积的顶部光泽显得浮夸，浮窗不用。受光描边画在边框的位置，所以外层不裁切内容（overflow: visible）。 */
 .sn-capture.is-blocks {
   position: relative;
   overflow: visible;
   border-color: transparent;
   border-radius: var(--sn-panel-radius);
-  background: linear-gradient(to bottom, var(--sn-color-sheen), transparent var(--sn-space-10)), var(--sn-color-card);
+  background: var(--sn-color-card);
 }
 
 .sn-capture.is-blocks::before {
@@ -121,22 +121,6 @@
 .sn-capture.is-blocks .sn-capture-foot {
   border-top: 0;
   background-image: none;
-}
-
-.sn-capture.is-blocks .sn-capture-body {
-  margin: 0 var(--sn-space-4);
-  padding: var(--sn-space-3) var(--sn-space-5);
-  border: var(--sn-border-width) solid var(--sn-color-border-subtle);
-  border-radius: var(--sn-card-radius);
-  background: var(--sn-color-editing);
-  transition:
-    border-color var(--sn-duration-fast) var(--sn-ease-standard),
-    box-shadow var(--sn-duration-fast) var(--sn-ease-standard);
-}
-
-.sn-capture.is-blocks .sn-capture-body:focus-within {
-  border-color: var(--sn-color-accent);
-  box-shadow: var(--sn-shadow-editing);
 }
 
 /* ---------- 设置窗口 ----------
@@ -390,12 +374,6 @@
   text-align: right;
 }
 
-.sn-set-number:focus-visible {
-  border-color: var(--sn-color-focus);
-  outline: var(--sn-border-width) solid var(--sn-color-focus);
-  outline-offset: 0;
-}
-
 .sn-set-number:disabled {
   background: var(--sn-color-surface-sunken);
   color: var(--sn-color-text-disabled);
@@ -450,12 +428,23 @@
   accent-color: var(--sn-color-accent);
 }
 
+/* 字体预览：占满一行，保留底色，文字居中；三行分别是中文与标点、英文大小写、数字与符号（含连字符与编程连字）。 */
 .sn-font-preview {
-  padding: var(--sn-space-4) var(--sn-space-6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sn-space-2);
+  padding: var(--sn-space-5) var(--sn-space-6);
   border-radius: var(--sn-radius-sm);
   background: var(--sn-color-surface-sunken);
   font-family: var(--sn-font-note);
   font-size: var(--sn-note-size);
+  line-height: var(--sn-line-height-normal);
+  text-align: center;
+}
+
+.sn-font-preview > p {
+  margin: 0;
 }
 
 /* 显示：名称一列，选项卡片一列。 */

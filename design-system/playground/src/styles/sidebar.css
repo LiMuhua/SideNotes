@@ -397,15 +397,8 @@
   color: var(--sn-color-text-muted);
 }
 
-.sn-side-search:focus-within {
-  border-color: var(--sn-color-focus);
-  outline: var(--sn-border-width) solid var(--sn-color-focus);
-}
-
-/* 有搜索词时搜索框用强调色边框（T67）。 */
-.sn-side-search.has-query {
-  border-color: var(--sn-color-accent);
-}
+/* 获得焦点或有搜索词时，底边换成强调色线（见 components.css「输入类控件的焦点」）；
+ * 现有应用在有搜索词时把整圈边框换成强调色（T67）。 */
 
 .sn-side-search-field {
   position: relative;
@@ -659,10 +652,16 @@
     box-shadow var(--sn-duration-fast) var(--sn-ease-standard);
 }
 
-.sn-composer:focus-within {
-  border-color: var(--sn-color-focus);
+/* 新建卡片获得焦点：与编辑中的卡片一样，换成编辑底色，边框换成强调色，不加外圈。
+ * 前面加 .sn-scope，压过磨砂玻璃块的边框与底色（.sn-sidebar.is-blocks > …）。 */
+.sn-scope .sn-composer:focus-within {
+  border-color: var(--sn-color-accent);
   background-color: var(--sn-color-editing);
-  box-shadow: 0 0 0 var(--sn-border-width) var(--sn-color-focus);
+}
+
+/* 玻璃块获得焦点时去掉边缘受光，露出强调色边框。 */
+.sn-sidebar.is-blocks > .sn-composer:focus-within::before {
+  opacity: 0;
 }
 
 .sn-composer-bar {
@@ -776,9 +775,11 @@
   border-color: var(--sn-color-accent);
 }
 
+/* 窗格标题栏顶部的强调色线画在背景层里，不用内阴影：在非整数的缩放下两侧不会留下细缝，并随圆角弯曲。 */
 .sn-note-list.is-panes .sn-note:is(:hover, .is-active, .is-checked, .is-editing) .sn-note-head {
-  background: var(--sn-color-card-head-active);
-  box-shadow: inset 0 var(--sn-focus-ring-width) 0 var(--sn-color-accent);
+  background:
+    linear-gradient(var(--sn-color-accent), var(--sn-color-accent)) top / 100% var(--sn-focus-ring-width) no-repeat,
+    var(--sn-color-card-head-active);
 }
 
 /* 玻璃块高亮时去掉边缘受光，露出强调色边框。 */
@@ -801,8 +802,8 @@
   outline-offset: calc(var(--sn-focus-ring-width) * -1);
 }
 
-/* 编辑中的卡片是视觉焦点：编辑底色、强调色边框与外圈（令牌 --sn-shadow-editing），
- * 其余卡片变淡，悬停恢复（T21）。 */
+/* 编辑中的卡片是视觉焦点：编辑底色、一像素的强调色边框与浮起的投影（令牌 --sn-shadow-editing），
+ * 不加外圈；其余卡片变淡，悬停恢复（T21）。 */
 .sn-note-list .sn-note.is-editing {
   --local-overlay: transparent;
   --local-shadow: var(--sn-shadow-editing);
@@ -977,9 +978,9 @@
 }
 
 /* ---------- 编辑区（卡片编辑与速记浮窗） ----------
- * 五套主题共用一种结构，差异来自令牌：记录纸每行下方有横线（--sn-color-rule），
- * Windows 11 的编辑区获得焦点时底部有强调线（--sn-color-editor-underline）；
- * 终端在左侧显示行号（surfaces.ts 的 lineNumbers）。光标、选区与 Markdown 标记的颜色见 content.css。 */
+ * 五套主题共用一种结构，差异来自令牌：记录纸每行下方有横线（--sn-color-rule）。
+ * 编辑区里不画边框或强调线，也不显示行号（第七次反馈）。
+ * 光标、选区与 Markdown 标记的颜色见 content.css。 */
 .sn-note-editor {
   display: flex;
   flex-direction: column;
@@ -998,56 +999,12 @@
   margin-right: auto;
 }
 
-:is(.sn-note-editor, .sn-capture-body) .sn-editor-host {
-  padding-bottom: var(--sn-focus-ring-width);
-  transition: box-shadow var(--sn-duration-fast) var(--sn-ease-standard);
-}
-
-:is(.sn-note-editor, .sn-capture-body) .sn-editor-host:focus-within {
-  box-shadow: inset 0 calc(var(--sn-focus-ring-width) * -1) 0 var(--sn-color-editor-underline);
-}
-
 :is(.sn-note-editor, .sn-capture-body) .md-editor-line {
   background-image: repeating-linear-gradient(
     to bottom,
     transparent 0 calc(1lh - var(--sn-border-width)),
     var(--sn-color-rule) calc(1lh - var(--sn-border-width)) 1lh
   );
-}
-
-/* 行号：编辑区左侧留出三位数字的宽度，数字与正文第一行对齐。 */
-.sn-scope .has-line-numbers .live-markdown-editor {
-  counter-reset: sn-line;
-  padding-left: calc(3ch + var(--sn-space-4));
-}
-
-.sn-scope .has-line-numbers .md-editor-line {
-  position: relative;
-  counter-increment: sn-line;
-}
-
-.sn-scope .has-line-numbers .md-editor-line::before {
-  content: counter(sn-line);
-  position: absolute;
-  top: 0;
-  right: calc(100% + var(--sn-space-4));
-  min-width: 3ch;
-  color: var(--sn-color-syntax);
-  font-family: var(--sn-font-code);
-  font-size: var(--sn-font-size-xs);
-  font-style: normal;
-  font-weight: var(--sn-font-weight-regular);
-  line-height: calc(var(--sn-note-size) * var(--sn-note-line-height));
-  text-align: right;
-  text-decoration: none;
-  text-indent: 0;
-  pointer-events: none;
-  user-select: none;
-}
-
-/* 代码块的围栏行在光标离开时收成一条细线，这一行不显示行号（编号照常计数，像折叠后的行）。 */
-.sn-scope .has-line-numbers .md-editor-line.is-collapsed::before {
-  content: none;
 }
 
 /* ---------- 拖动排序（组件页示意） ---------- */

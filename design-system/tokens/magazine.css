@@ -99,7 +99,6 @@
   --sn-color-rim-top: rgb(255 255 255 / 0);
   --sn-color-rim-bottom: rgb(255 255 255 / 0);
   --sn-color-rule: rgb(0 0 0 / 0);
-  --sn-color-editor-underline: rgb(0 0 0 / 0);
 
   --sn-color-text: #211b16;
   --sn-color-text-secondary: #4b4038;
@@ -140,7 +139,7 @@
   --sn-shadow-lg: 0 24px 60px -16px rgb(70 45 20 / 0.3), 0 4px 12px rgb(70 45 20 / 0.06);
   --sn-shadow-panel: 0 24px 60px -18px rgb(70 45 20 / 0.34), 0 2px 8px rgb(70 45 20 / 0.08);
   --sn-shadow-card-active: 0 0 0 3px rgb(164 34 79 / 0.14), 0 10px 24px -12px rgb(70 45 20 / 0.3);
-  --sn-shadow-editing: 0 0 0 1px var(--sn-color-accent), 0 0 0 5px rgb(164 34 79 / 0.12), 0 16px 32px -14px rgb(70 45 20 / 0.34);
+  --sn-shadow-editing: 0 16px 32px -14px rgb(70 45 20 / 0.34);
 }
 
 /* ---------- 深色 ---------- */
@@ -171,7 +170,6 @@
   --sn-color-rim-top: rgb(255 255 255 / 0);
   --sn-color-rim-bottom: rgb(255 255 255 / 0);
   --sn-color-rule: rgb(0 0 0 / 0);
-  --sn-color-editor-underline: rgb(0 0 0 / 0);
 
   --sn-color-text: #efe9df;
   --sn-color-text-secondary: #c6bfb3;
@@ -212,5 +210,5 @@
   --sn-shadow-lg: 0 28px 64px -16px rgb(0 0 0 / 0.65), 0 4px 12px rgb(0 0 0 / 0.3);
   --sn-shadow-panel: 0 28px 64px -18px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 246 235 / 0.05);
   --sn-shadow-card-active: 0 0 0 3px rgb(242 138 168 / 0.16), 0 10px 24px -12px rgb(0 0 0 / 0.6);
-  --sn-shadow-editing: 0 0 0 1px var(--sn-color-accent), 0 0 0 5px rgb(242 138 168 / 0.14), 0 16px 32px -14px rgb(0 0 0 / 0.7);
+  --sn-shadow-editing: 0 16px 32px -14px rgb(0 0 0 / 0.7);
 }

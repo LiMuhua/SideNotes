@@ -167,7 +167,7 @@ export const KEY_CONTRAST_PAIRS: readonly ContrastPair[] = [
   { label: '主要文字 / 选中的标题栏', foreground: '--sn-color-text', layers: [...ACTIVE_CARD, '--sn-color-card-head-active'], minimum: 4.5 },
   { label: '次要文字 / 选中的标题栏', foreground: '--sn-color-text-secondary', layers: [...ACTIVE_CARD, '--sn-color-card-head-active'], minimum: 4.5 },
   { label: '主要文字 / 编辑区', foreground: '--sn-color-text', layers: EDITING, minimum: 4.5 },
-  { label: 'Markdown 标记与行号 / 编辑区', foreground: '--sn-color-syntax', layers: EDITING, minimum: 4.5 },
+  { label: 'Markdown 标记 / 编辑区', foreground: '--sn-color-syntax', layers: EDITING, minimum: 4.5 },
   { label: '输入光标 / 编辑区', foreground: '--sn-color-caret', layers: EDITING, minimum: 3 },
   { label: '强调色文字 / 卡片', foreground: '--sn-color-accent-text', layers: CARD, minimum: 4.5 },
   { label: '强调色上的文字', foreground: '--sn-color-on-accent', layers: ['--sn-color-accent'], minimum: 4.5 },

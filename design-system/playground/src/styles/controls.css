@@ -294,11 +294,6 @@
   border-color: var(--sn-color-text-muted);
 }
 
-.sn-select[aria-expanded='true'],
-.sn-select[data-force='focus'] {
-  border-color: var(--sn-color-focus);
-}
-
 .sn-select:disabled {
   background: var(--sn-color-surface-sunken);
   color: var(--sn-color-text-disabled);
@@ -340,12 +335,6 @@
 
 .sn-combobox:hover:not(:focus-within) {
   border-color: var(--sn-color-text-muted);
-}
-
-.sn-combobox:focus-within,
-.sn-combobox.is-open {
-  border-color: var(--sn-color-focus);
-  outline: var(--sn-border-width) solid var(--sn-color-focus);
 }
 
 .sn-combobox-toggle {
@@ -404,9 +393,9 @@
   outline: none;
 }
 
+/* 用键盘移到的菜单项：换成选中色，不加焦点环（底色已经标出当前项，再加一圈就成了多余的边框）。 */
 .sn-menu-item:focus-visible {
-  outline: var(--sn-focus-ring-width) solid var(--sn-color-focus);
-  outline-offset: calc(var(--sn-focus-ring-width) * -1);
+  background: var(--sn-color-selected);
 }
 
 .sn-option[aria-disabled='true'],

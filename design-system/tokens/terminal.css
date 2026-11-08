@@ -3,7 +3,7 @@
  * 像终端里并排的窗格：界面与正文都用等宽字体（沿用现有 SideNotes 的默认字体 Maple Mono NF CN），
  * 冷灰色的面板上是一个个白色窗格，每个窗格有标题栏，窗格之间留 6 像素的缝；琥珀色强调。
  * 悬停或选中的窗格：琥珀色边框加外圈，标题栏染成琥珀色，顶部一条琥珀色的线。
- * 编辑时左侧显示行号，Markdown 标记用琥珀色。
+ * 编辑时 Markdown 标记用琥珀色。
  * 几乎没有圆角与阴影，动效极短。
  */
 
@@ -98,7 +98,6 @@
   --sn-color-rim-top: rgb(255 255 255 / 0);
   --sn-color-rim-bottom: rgb(255 255 255 / 0);
   --sn-color-rule: rgb(0 0 0 / 0);
-  --sn-color-editor-underline: rgb(0 0 0 / 0);
 
   --sn-color-text: #1b1f24;
   --sn-color-text-secondary: #434a53;
@@ -139,7 +138,7 @@
   --sn-shadow-lg: 0 14px 32px rgb(20 24 30 / 0.18);
   --sn-shadow-panel: 0 0 0 1px #cbd0d6, 0 0 24px rgb(20 24 30 / 0.14);
   --sn-shadow-card-active: 0 0 0 1px var(--sn-color-accent), 0 2px 8px rgb(20 24 30 / 0.12);
-  --sn-shadow-editing: 0 0 0 1px var(--sn-color-accent), 0 0 0 4px rgb(184 108 0 / 0.16), 0 6px 18px rgb(20 24 30 / 0.16);
+  --sn-shadow-editing: 0 6px 18px rgb(20 24 30 / 0.16);
 }
 
 /* ---------- 深色 ---------- */
@@ -170,7 +169,6 @@
   --sn-color-rim-top: rgb(255 255 255 / 0);
   --sn-color-rim-bottom: rgb(255 255 255 / 0);
   --sn-color-rule: rgb(0 0 0 / 0);
-  --sn-color-editor-underline: rgb(0 0 0 / 0);
 
   --sn-color-text: #d8dde3;
   --sn-color-text-secondary: #a9b1ba;
@@ -211,5 +209,5 @@
   --sn-shadow-lg: 0 16px 36px rgb(0 0 0 / 0.55);
   --sn-shadow-panel: 0 0 0 1px #2a3037, 0 0 28px rgb(0 0 0 / 0.45);
   --sn-shadow-card-active: 0 0 0 1px var(--sn-color-accent), 0 2px 10px rgb(0 0 0 / 0.4);
-  --sn-shadow-editing: 0 0 0 1px var(--sn-color-accent), 0 0 0 4px rgb(229 165 75 / 0.18), 0 8px 22px rgb(0 0 0 / 0.5);
+  --sn-shadow-editing: 0 8px 22px rgb(0 0 0 / 0.5);
 }

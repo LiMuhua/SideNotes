@@ -591,14 +591,6 @@ button.sn-tag-main[data-force='hover'] {
   border-color: var(--sn-color-text-muted);
 }
 
-.sn-input:focus-visible,
-.sn-textarea:focus-visible,
-.sn-input[data-force='focus'] {
-  border-color: var(--sn-color-focus);
-  outline: var(--sn-border-width) solid var(--sn-color-focus);
-  outline-offset: 0;
-}
-
 .sn-input.is-invalid,
 .sn-textarea.is-invalid {
   border-color: var(--sn-color-danger);
@@ -656,11 +648,57 @@ button.sn-tag-main[data-force='hover'] {
   display: none;
 }
 
-.sn-search:focus-within,
-.sn-search[data-force='focus'] {
-  border-color: var(--sn-color-focus);
-  background: var(--sn-color-surface);
-  outline: var(--sn-border-width) solid var(--sn-color-focus);
+/* ---------- 输入类控件的焦点 ----------
+ * 输入框、多行文本框、搜索框、数字框、组合框获得焦点，下拉框展开或用键盘移到上面，侧栏搜索框里有搜索词时：
+ * 边框颜色不变，底边换成一条两倍边框宽的强调色线（与 Windows 的输入框相同），不加外圈。
+ * 强调色只出现在底边，不围住正在输入的文字。线画在背景层里，随控件的圆角弯曲；底边框改为透明，
+ * 让线落在边框的位置上，不会与边框错开。前面加 .sn-scope 提高优先级，悬停时也不会被边框色盖住。
+ * 输入框本身也写 :focus-within（对没有子元素的输入框与 :focus 相同），与组合框、搜索框的写法一致。 */
+.sn-scope :is(
+    .sn-input:focus-within,
+    .sn-input[data-force='focus'],
+    .sn-textarea:focus-within,
+    .sn-search:focus-within,
+    .sn-search[data-force='focus'],
+    .sn-side-search:focus-within,
+    .sn-side-search.has-query,
+    .sn-combobox:focus-within,
+    .sn-combobox.is-open,
+    .sn-set-number:focus-within,
+    .sn-select[aria-expanded='true'],
+    .sn-select:focus-visible,
+    .sn-select[data-force='focus']
+  ) {
+  border-bottom-color: transparent;
+  background-image: linear-gradient(var(--sn-color-accent), var(--sn-color-accent));
+  background-position: bottom;
+  background-repeat: no-repeat;
+  background-size: 100% calc(var(--sn-border-width) * 2);
+  background-origin: border-box;
+  outline: none;
+}
+
+/* 凹陷的搜索框获得焦点时换成表面色，与其他正在输入的输入框一致。 */
+.sn-scope :is(.sn-search:focus-within, .sn-search[data-force='focus'], .sn-side-search:focus-within) {
+  background-color: var(--sn-color-surface);
+}
+
+/* Windows 对比主题会去掉背景里的线和自定义颜色，焦点改用系统高亮色的轮廓线。 */
+@media (forced-colors: active) {
+  .sn-scope :is(
+      .sn-input:focus-within,
+      .sn-textarea:focus-within,
+      .sn-search:focus-within,
+      .sn-side-search:focus-within,
+      .sn-combobox:focus-within,
+      .sn-set-number:focus-within,
+      .sn-select[aria-expanded='true'],
+      .sn-select:focus-visible,
+      .sn-menu-item:focus-visible
+    ) {
+    outline: var(--sn-focus-ring-width) solid Highlight; /* 固定：对比主题使用系统颜色 */
+    outline-offset: calc(var(--sn-border-width) * -1);
+  }
 }
 
 .sn-search-clear {

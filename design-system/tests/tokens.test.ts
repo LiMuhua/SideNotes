@@ -147,8 +147,8 @@ describe.each(SURFACE_FILES.flatMap(({ id, file }) => THEMES.map((theme) => ({ i
       ].forEach((layers) => expect(ratio('--sn-color-accent', layers), layers.join(' + ')).toBeGreaterThanOrEqual(3));
     });
 
-    it('编辑区的文字、Markdown 标记、行号与光标清楚可辨', () => {
-      // 编辑底色取代卡片底色，直接叠在面板上；占位文字与标签补全用弱化文字色，行号用 Markdown 标记的颜色。
+    it('编辑区的文字、Markdown 标记与光标清楚可辨', () => {
+      // 编辑底色取代卡片底色，直接叠在面板上；占位文字与标签补全用弱化文字色。
       const editing = ['--sn-color-panel', '--sn-color-editing'];
       ['--sn-color-text', '--sn-color-text-secondary', '--sn-color-text-muted', '--sn-color-syntax', '--sn-color-accent-text'].forEach(
         (text) => expect(ratio(text, editing), text).toBeGreaterThanOrEqual(4.5),

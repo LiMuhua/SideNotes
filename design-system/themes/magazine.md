@@ -22,7 +22,6 @@
 | 底栏 | 存储状态与设置 | — |
 | 快捷键 | 写在工具提示中 | — |
 | 页签色点 | 无 | — |
-| 行号 | 不显示 | — |
 | 材质 | 实心 | 不需要透明窗口 |
 
 ## 三、颜色
@@ -80,7 +79,7 @@
 | 悬停与选中 | 莓红边框，外面一圈 3px 的淡莓红，卡片略微浮起；时间换成操作按钮 | `--sn-shadow-card-active`、`--sn-color-card-active` |
 | 多选 | 卡片叠一层浅莓红，莓红边框 | `--sn-color-accent-subtle` |
 | 键盘焦点 | 卡片内侧一圈 2px 的焦点环 | `--sn-color-focus` |
-| 编辑中 | 白色底，莓红边框加一圈 5px 的淡莓红外圈，明显浮起 | `--sn-color-editing`、`--sn-shadow-editing` |
+| 编辑中 | 白色底，一像素的莓红边框，明显浮起，不加外圈 | `--sn-color-editing`、`--sn-shadow-editing` |
 | 其余卡片变淡 | 有卡片在编辑时降到禁用透明度，悬停时恢复 | `--sn-opacity-disabled` |
 | 收起 | 只剩标题行 | — |
 
@@ -150,7 +149,6 @@
 | `--sn-color-rim-top` | `rgb(255 255 255 / 0)` | `rgb(255 255 255 / 0)` |
 | `--sn-color-rim-bottom` | `rgb(255 255 255 / 0)` | `rgb(255 255 255 / 0)` |
 | `--sn-color-rule` | `rgb(0 0 0 / 0)` | `rgb(0 0 0 / 0)` |
-| `--sn-color-editor-underline` | `rgb(0 0 0 / 0)` | `rgb(0 0 0 / 0)` |
 | `--sn-color-text` | `#211b16` | `#efe9df` |
 | `--sn-color-text-secondary` | `#4b4038` | `#c6bfb3` |
 | `--sn-color-text-muted` | `#665b50` | `#9e978b` |
@@ -186,7 +184,7 @@
 | `--sn-shadow-lg` | `0 24px 60px -16px rgb(70 45 20 / 0.3), 0 4px 12px rgb(70 45 20 / 0.06)` | `0 28px 64px -16px rgb(0 0 0 / 0.65), 0 4px 12px rgb(0 0 0 / 0.3)` |
 | `--sn-shadow-panel` | `0 24px 60px -18px rgb(70 45 20 / 0.34), 0 2px 8px rgb(70 45 20 / 0.08)` | `0 28px 64px -18px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 246 235 / 0.05)` |
 | `--sn-shadow-card-active` | `0 0 0 3px rgb(164 34 79 / 0.14), 0 10px 24px -12px rgb(70 45 20 / 0.3)` | `0 0 0 3px rgb(242 138 168 / 0.16), 0 10px 24px -12px rgb(0 0 0 / 0.6)` |
-| `--sn-shadow-editing` | `0 0 0 1px var(--sn-color-accent), 0 0 0 5px rgb(164 34 79 / 0.12), 0 16px 32px -14px rgb(70 45 20 / 0.34)` | `0 0 0 1px var(--sn-color-accent), 0 0 0 5px rgb(242 138 168 / 0.14), 0 16px 32px -14px rgb(0 0 0 / 0.7)` |
+| `--sn-shadow-editing` | `0 16px 32px -14px rgb(70 45 20 / 0.34)` | `0 16px 32px -14px rgb(0 0 0 / 0.7)` |
 
 ### 不随明暗变化
 

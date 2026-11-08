@@ -22,7 +22,6 @@
 | 底栏 | 存储状态与设置 | — |
 | 快捷键 | 写在工具提示中 | — |
 | 页签色点 | 无 | — |
-| 行号 | 不显示 | — |
 | 材质 | 实心 | 不需要透明窗口 |
 
 Glance 用细线分栏，它的栏目内容短而整齐；SideNotes 的记录长短不一，只用细线时边界不清楚，所以改为纸片。
@@ -78,7 +77,7 @@ Glance 用细线分栏，它的栏目内容短而整齐；SideNotes 的记录长
 | 悬停与选中 | 墨绿边框加一圈墨绿外圈，纸片略微浮起，叠一层很淡的墨绿；时间换成操作按钮 | `--sn-shadow-card-active`、`--sn-color-card-active` |
 | 多选 | 纸片叠一层浅墨绿，墨绿边框 | `--sn-color-accent-subtle` |
 | 键盘焦点 | 纸片内侧一圈 2px 的墨色焦点环 | `--sn-color-focus` |
-| 编辑中 | 纸片换成更白的编辑底色，墨绿边框加一圈 4px 的淡墨绿外圈与投影 | `--sn-color-editing`、`--sn-shadow-editing` |
+| 编辑中 | 纸片换成更白的编辑底色，一像素的墨绿边框与投影，不加外圈 | `--sn-color-editing`、`--sn-shadow-editing` |
 | 其余卡片变淡 | 有卡片在编辑时降到禁用透明度，悬停时恢复 | `--sn-opacity-disabled` |
 | 收起 | 只剩标题行 | — |
 
@@ -142,7 +141,6 @@ Glance 用细线分栏，它的栏目内容短而整齐；SideNotes 的记录长
 | `--sn-color-rim-top` | `rgb(255 255 255 / 0)` | `rgb(255 255 255 / 0)` |
 | `--sn-color-rim-bottom` | `rgb(255 255 255 / 0)` | `rgb(255 255 255 / 0)` |
 | `--sn-color-rule` | `rgb(22 34 30 / 0.1)` | `rgb(231 238 231 / 0.08)` |
-| `--sn-color-editor-underline` | `rgb(0 0 0 / 0)` | `rgb(0 0 0 / 0)` |
 | `--sn-color-text` | `#16221e` | `#e7eee7` |
 | `--sn-color-text-secondary` | `#3f4c46` | `#a1b0a8` |
 | `--sn-color-text-muted` | `#56645d` | `#8c9c94` |
@@ -178,7 +176,7 @@ Glance 用细线分栏，它的栏目内容短而整齐；SideNotes 的记录长
 | `--sn-shadow-lg` | `0 18px 40px -12px rgb(22 34 30 / 0.35), 0 2px 6px rgb(22 34 30 / 0.12)` | `0 18px 40px -12px rgb(0 0 0 / 0.6), 0 2px 6px rgb(0 0 0 / 0.3)` |
 | `--sn-shadow-panel` | `0 18px 40px -12px rgb(22 34 30 / 0.35), 0 2px 6px rgb(22 34 30 / 0.12)` | `0 18px 40px -12px rgb(0 0 0 / 0.6), 0 2px 6px rgb(0 0 0 / 0.3)` |
 | `--sn-shadow-card-active` | `0 0 0 1px var(--sn-color-accent), 0 3px 8px -2px rgb(22 34 30 / 0.16)` | `0 0 0 1px var(--sn-color-accent), 0 3px 10px -2px rgb(0 0 0 / 0.45)` |
-| `--sn-shadow-editing` | `0 0 0 1px var(--sn-color-accent), 0 0 0 4px rgb(31 107 69 / 0.12), 0 10px 24px -8px rgb(22 34 30 / 0.24)` | `0 0 0 1px var(--sn-color-accent), 0 0 0 4px rgb(78 203 130 / 0.14), 0 10px 26px -8px rgb(0 0 0 / 0.6)` |
+| `--sn-shadow-editing` | `0 10px 24px -8px rgb(22 34 30 / 0.24)` | `0 10px 26px -8px rgb(0 0 0 / 0.6)` |
 
 ### 不随明暗变化
 

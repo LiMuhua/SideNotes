@@ -8,7 +8,7 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 关键词 | 亚克力、系统强调色、Segoe UI Variable、分层卡片、浮动面板、输入框底部强调线 |
+| 关键词 | 亚克力、系统强调色、Segoe UI Variable、分层卡片、浮动面板 |
 | 适合 | 希望 SideNotes 看起来像 Windows 自带工具的用户 |
 | 参考 | Glance Windows 11 外观（`theme.rs`、`skins.rs`）；Fluent 2；微软的 Mica 与 Acrylic 文档，见 [adaptation.md](../adaptation.md) |
 
@@ -22,7 +22,6 @@
 | 底栏 | 存储状态与设置 | 底栏比面板稍暗 |
 | 快捷键 | 写在工具提示中 | — |
 | 页签色点 | 无 | — |
-| 行号 | 不显示 | — |
 | 材质 | 半透明 | 面板模糊 30px、饱和度 1.25，需要透明窗口与窗口材质 |
 
 ## 三、颜色
@@ -38,7 +37,6 @@
 | 弱化文字 | `--sn-color-text-muted` | 黑色 62% | 白色 62% |
 | 强调色 | `--sn-color-accent` | `#005fb8` | `#60cdff` |
 | 编辑底色 | `--sn-color-editing` | 白色 94% | `#2d2d2d` |
-| 编辑区底部的强调线 | `--sn-color-editor-underline` | `#005fb8` | `#60cdff` |
 | 焦点环 | `--sn-color-focus` | 黑色 90% | `#ffffff` |
 
 全部取值见附录。
@@ -78,7 +76,7 @@
 | 悬停与选中 | 强调色边框加一圈强调色外圈，叠一层很淡的强调色；时间换成操作按钮 | `--sn-shadow-card-active`、`--sn-color-card-active` |
 | 多选 | 卡片叠一层浅强调色，强调色边框 | `--sn-color-accent-subtle` |
 | 键盘焦点 | 卡片内侧一圈 2px 的黑色（深色为白色）焦点环，与 Windows 11 一致 | `--sn-color-focus` |
-| 编辑中 | 卡片换成几乎不透明的白色，强调色边框与外圈，略微浮起 | `--sn-color-editing`、`--sn-shadow-editing` |
+| 编辑中 | 卡片换成几乎不透明的白色，一像素的强调色边框，略微浮起 | `--sn-color-editing`、`--sn-shadow-editing` |
 | 其余卡片变淡 | 有卡片在编辑时降到禁用透明度，悬停时恢复 | `--sn-opacity-disabled` |
 | 收起 | 只剩标题行 | — |
 
@@ -86,7 +84,7 @@
 
 | 部位 | 表现 |
 | --- | --- |
-| 编辑区 | 卡片换成几乎不透明的白色，背后的桌面几乎不透出来；获得焦点时编辑区底部一条 2px 的强调线，与 Windows 11 的输入框一致 |
+| 编辑区 | 卡片换成几乎不透明的白色，背后的桌面几乎不透出来；编辑区里不画强调线（2026-11-08 去掉，输入框获得焦点时的底边强调线改为五套主题共用） |
 | Markdown 标记 | 弱化文字色 |
 | 光标 | 与文字同色 |
 | 编辑栏 | 附件工具、取消、保存；快捷键写在按钮的工具提示中 |
@@ -145,7 +143,6 @@
 | `--sn-color-rim-top` | `rgb(255 255 255 / 0)` | `rgb(255 255 255 / 0)` |
 | `--sn-color-rim-bottom` | `rgb(255 255 255 / 0)` | `rgb(255 255 255 / 0)` |
 | `--sn-color-rule` | `rgb(0 0 0 / 0)` | `rgb(0 0 0 / 0)` |
-| `--sn-color-editor-underline` | `#005fb8` | `#60cdff` |
 | `--sn-color-text` | `rgb(0 0 0 / 0.9)` | `#ffffff` |
 | `--sn-color-text-secondary` | `rgb(0 0 0 / 0.72)` | `rgb(255 255 255 / 0.79)` |
 | `--sn-color-text-muted` | `rgb(0 0 0 / 0.62)` | `rgb(255 255 255 / 0.62)` |
@@ -181,7 +178,7 @@
 | `--sn-shadow-lg` | `0 32px 64px rgb(0 0 0 / 0.19), 0 2px 21px rgb(0 0 0 / 0.15)` | `0 32px 64px rgb(0 0 0 / 0.37), 0 2px 21px rgb(0 0 0 / 0.37)` |
 | `--sn-shadow-panel` | `0 8px 32px rgb(0 0 0 / 0.18), 0 2px 8px rgb(0 0 0 / 0.08)` | `0 8px 32px rgb(0 0 0 / 0.4), 0 2px 8px rgb(0 0 0 / 0.25)` |
 | `--sn-shadow-card-active` | `0 0 0 1px var(--sn-color-accent), 0 2px 4px rgb(0 0 0 / 0.08)` | `0 0 0 1px var(--sn-color-accent), 0 2px 6px rgb(0 0 0 / 0.3)` |
-| `--sn-shadow-editing` | `0 0 0 1px var(--sn-color-accent), 0 8px 16px rgb(0 0 0 / 0.14)` | `0 0 0 1px var(--sn-color-accent), 0 8px 16px rgb(0 0 0 / 0.3)` |
+| `--sn-shadow-editing` | `0 8px 16px rgb(0 0 0 / 0.14)` | `0 8px 16px rgb(0 0 0 / 0.3)` |
 
 ### 不随明暗变化
 

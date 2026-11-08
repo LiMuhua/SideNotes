@@ -189,7 +189,6 @@ export function NoteCard(props: NoteCardProps) {
           text={note.text}
           autoFocus={props.editAutoFocus ?? true}
           inlineShortcuts={surface.inlineShortcuts}
-          lineNumbers={surface.lineNumbers}
           onSave={props.onSave}
           onCancel={props.onCancel}
         />
@@ -245,14 +244,12 @@ function NoteEditArea({
   text,
   autoFocus,
   inlineShortcuts,
-  lineNumbers,
   onSave,
   onCancel,
 }: {
   text: string;
   autoFocus: boolean;
   inlineShortcuts: boolean;
-  lineNumbers: boolean;
   onSave: (text: string) => void;
   onCancel: () => void;
 }) {
@@ -260,7 +257,7 @@ function NoteEditArea({
   const keepFocus = (event: MouseEvent) => event.preventDefault();
   return (
     <div
-      className={cx('sn-note-editor', lineNumbers && 'has-line-numbers')}
+      className="sn-note-editor"
       onKeyDown={(event) => {
         if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
           event.preventDefault();

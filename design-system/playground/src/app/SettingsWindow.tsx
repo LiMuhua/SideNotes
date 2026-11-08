@@ -49,7 +49,8 @@ export function SettingsWindow({ onClose, initial = 'appearance' }: { onClose: (
         }
       }}
     >
-      <header className="sn-settings-titlebar">
+      {/* 标题栏是拖动区域，与现有应用的 data-tauri-drag-region 一致。 */}
+      <header className="sn-settings-titlebar" data-drag-region="">
         <span className="sn-settings-app">设置</span>
         <span className="sn-spacer" />
         <IconButton icon="minus" label="最小化" size="sm" onClick={() => setMinimized(true)} />

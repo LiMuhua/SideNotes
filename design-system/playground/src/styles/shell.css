@@ -59,14 +59,11 @@ body,
   font: inherit;
 }
 
-.pg-shell :focus-visible {
+/* 外壳自己的焦点环。用 :where() 压低优先级：设计系统作用域（.sn-scope）里的元素沿用 base.css 与各组件的焦点样式，
+ * 不被这条规则盖成离开元素 2px 的外圈（此前输入框因此出现两层边框，圆角也对不上）。 */
+.pg-shell :where(:focus-visible) {
   outline: 2px solid var(--pg-text);
   outline-offset: 2px;
-}
-
-.pg-shell .sn-scope :focus-visible {
-  outline: var(--sn-focus-ring-width) solid var(--sn-color-focus);
-  outline-offset: var(--sn-focus-ring-offset);
 }
 
 /* ---------- 顶栏 ---------- */

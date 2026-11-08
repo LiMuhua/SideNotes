@@ -66,13 +66,12 @@
 | 边框 | `--sn-color-rim-top` | 玻璃边缘受光：上缘的亮边，与下缘之间渐变（磨砂玻璃）；不用时为透明 | 是 | 各主题的令牌文件 |
 | 边框 | `--sn-color-rim-bottom` | 玻璃边缘受光：下缘的弱光（磨砂玻璃）；不用时为透明 | 是 | 各主题的令牌文件 |
 | 边框 | `--sn-color-rule` | 编辑时每行下方的横线（记录纸）；不用时为透明 | 是 | 各主题的令牌文件 |
-| 边框 | `--sn-color-editor-underline` | 编辑区底部的强调线（Windows 11 的输入框）；不用时为透明 | 是 | 各主题的令牌文件 |
 | 文字 | `--sn-color-text` | 主要文字：标题、正文 | 是 | 各主题的令牌文件 |
 | 文字 | `--sn-color-text-secondary` | 次要文字：说明、正文预览中的弱化内容 | 是 | 各主题的令牌文件 |
 | 文字 | `--sn-color-text-muted` | 弱化文字：时间、计数、占位（对比度不低于 4.5:1） | 是 | 各主题的令牌文件 |
 | 文字 | `--sn-color-text-disabled` | 禁用文字（不要求对比度） | 是 | 各主题的令牌文件 |
 | 文字 | `--sn-color-halo` | 文字光晕：玻璃上为文字加一圈浅色或深色晕；不用时为透明 | 是 | 各主题的令牌文件 |
-| 文字 | `--sn-color-syntax` | 编辑时 Markdown 标记（#、**、- 等）与行号的颜色（对比度不低于 4.5:1） | 是 | 各主题的令牌文件 |
+| 文字 | `--sn-color-syntax` | 编辑时 Markdown 标记（#、**、- 等）的颜色（对比度不低于 4.5:1） | 是 | 各主题的令牌文件 |
 | 强调、反色与标记 | `--sn-color-accent` | 强调色填充：主要按钮、选中指示条、开关 | 是 | 各主题的令牌文件 |
 | 强调、反色与标记 | `--sn-color-accent-hover` | 强调色填充的悬停态 | 是 | 各主题的令牌文件 |
 | 强调、反色与标记 | `--sn-color-accent-text` | 强调色文字与图标（对比度不低于 4.5:1） | 是 | 各主题的令牌文件 |
@@ -102,7 +101,7 @@
 | 阴影 | `--sn-shadow-lg` | 大阴影：弹窗、速记浮窗、设置窗口 | 是 | 各主题的令牌文件 |
 | 阴影 | `--sn-shadow-panel` | 侧栏面板与玻璃块的阴影：贴边时为朝向内容的一侧 | 是 | 各主题的令牌文件 |
 | 阴影 | `--sn-shadow-card-active` | 悬停或选中的卡片：强调色外圈与浮起 | 是 | 各主题的令牌文件 |
-| 阴影 | `--sn-shadow-editing` | 编辑中的卡片：强调色外圈与浮起 | 是 | 各主题的令牌文件 |
+| 阴影 | `--sn-shadow-editing` | 编辑中的卡片：浮起的投影（强调色只在一像素的边框上，不加外圈） | 是 | 各主题的令牌文件 |
 | 材质 | `--sn-panel-blur` | 面板的背景模糊半径；0 表示实心表面 | 否 | 各主题的令牌文件 |
 | 材质 | `--sn-panel-saturate` | 背景模糊时的饱和度倍数 | 否 | 各主题的令牌文件 |
 | 材质 | `--sn-panel-inset` | 侧栏离屏幕边缘的距离；0 表示贴边 | 否 | 各主题的令牌文件 |
@@ -240,7 +239,7 @@
 | 主要文字 / 选中的标题栏 | `--sn-color-text` | `--sn-color-panel` + `--sn-color-card` + `--sn-color-card-active` + `--sn-color-card-head-active` | 4.5:1 |
 | 次要文字 / 选中的标题栏 | `--sn-color-text-secondary` | `--sn-color-panel` + `--sn-color-card` + `--sn-color-card-active` + `--sn-color-card-head-active` | 4.5:1 |
 | 主要文字 / 编辑区 | `--sn-color-text` | `--sn-color-panel` + `--sn-color-editing` | 4.5:1 |
-| Markdown 标记与行号 / 编辑区 | `--sn-color-syntax` | `--sn-color-panel` + `--sn-color-editing` | 4.5:1 |
+| Markdown 标记 / 编辑区 | `--sn-color-syntax` | `--sn-color-panel` + `--sn-color-editing` | 4.5:1 |
 | 输入光标 / 编辑区 | `--sn-color-caret` | `--sn-color-panel` + `--sn-color-editing` | 3:1 |
 | 强调色文字 / 卡片 | `--sn-color-accent-text` | `--sn-color-panel` + `--sn-color-card` | 4.5:1 |
 | 强调色上的文字 | `--sn-color-on-accent` | `--sn-color-accent` | 4.5:1 |

@@ -8,7 +8,7 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 关键词 | 等宽字体、石墨色、琥珀强调色、标题栏窗格、快捷键可见、编辑时显示行号 |
+| 关键词 | 等宽字体、石墨色、琥珀强调色、标题栏窗格、快捷键可见 |
 | 适合 | 习惯用键盘、喜欢等宽字体与高信息密度的用户；现有 SideNotes 的默认字体就是等宽字体，换到这套主题的成本最低 |
 | 参考 | 现有 SideNotes 的默认字体 Maple Mono NF CN；终端与编辑器的窗格；Raycast 与 Linear 的键盘模型 |
 
@@ -22,7 +22,6 @@
 | 底栏 | 与其他主题相同 | 左边是存储状态的小圆点，右边是设置按钮，其余留白 |
 | 快捷键 | 显示在界面上 | 新建卡片与编辑栏写出 Ctrl+Enter，带快捷键的文字按钮在按钮上写出按键；速记浮窗的快捷键与其他主题一样收在标题旁的问号里 |
 | 页签色点 | 无 | — |
-| 行号 | 编辑时显示 | 卡片编辑区与速记浮窗的编辑区左侧 |
 | 材质 | 实心 | 不需要透明窗口 |
 
 ## 三、颜色
@@ -38,7 +37,7 @@
 | 主要文字 | `--sn-color-text` | `#1b1f24` | `#d8dde3` |
 | 弱化文字 | `--sn-color-text-muted` | `#58606a` | `#8b949e` |
 | 强调色 | `--sn-color-accent` | `#a35f00` | `#e5a54b` |
-| Markdown 标记与行号 | `--sn-color-syntax` | `#94570a` | `#e0a458` |
+| Markdown 标记 | `--sn-color-syntax` | `#94570a` | `#e0a458` |
 
 全部取值见附录。
 
@@ -79,7 +78,7 @@ Maple Mono NF CN 已随应用打包（SIL OFL 1.1）。它的汉字宽 1.2 em，
 | 悬停与选中 | 琥珀色边框加一圈琥珀色外圈；标题栏染成琥珀色，顶部一条 2px 的琥珀色线，像编辑器里当前的页签；时间换成操作按钮 | `--sn-shadow-card-active`、`--sn-color-card-head-active` |
 | 多选 | 窗格叠一层浅琥珀色，琥珀色边框，标题栏同选中 | `--sn-color-accent-subtle` |
 | 键盘焦点 | 窗格内侧一圈 2px 的焦点环 | `--sn-color-focus` |
-| 编辑中 | 琥珀色边框加一圈 4px 的浅琥珀色外圈与投影，标题栏同选中 | `--sn-color-editing`、`--sn-shadow-editing` |
+| 编辑中 | 一像素的琥珀色边框与投影，不加外圈；标题栏同选中 | `--sn-color-editing`、`--sn-shadow-editing` |
 | 其余卡片变淡 | 有卡片在编辑时降到禁用透明度，悬停时恢复 | `--sn-opacity-disabled` |
 | 收起 | 只剩标题栏 | — |
 
@@ -89,7 +88,7 @@ Maple Mono NF CN 已随应用打包（SIL OFL 1.1）。它的汉字宽 1.2 em，
 
 | 部位 | 表现 |
 | --- | --- |
-| 编辑区 | 底色与窗格相同（深色为 `#1b2026`），左侧显示行号；代码块的围栏行收起时不显示行号 |
+| 编辑区 | 底色与窗格相同（深色为 `#1b2026`）；不显示行号（2026-11-08 去掉：速记浮窗为空时行号与占位文字重叠） |
 | Markdown 标记 | 琥珀色，像代码的语法着色 |
 | 光标 | 琥珀色 |
 | 编辑栏 | 附件工具、Ctrl+Enter 按键提示、取消、保存 |
@@ -148,7 +147,6 @@ Maple Mono NF CN 已随应用打包（SIL OFL 1.1）。它的汉字宽 1.2 em，
 | `--sn-color-rim-top` | `rgb(255 255 255 / 0)` | `rgb(255 255 255 / 0)` |
 | `--sn-color-rim-bottom` | `rgb(255 255 255 / 0)` | `rgb(255 255 255 / 0)` |
 | `--sn-color-rule` | `rgb(0 0 0 / 0)` | `rgb(0 0 0 / 0)` |
-| `--sn-color-editor-underline` | `rgb(0 0 0 / 0)` | `rgb(0 0 0 / 0)` |
 | `--sn-color-text` | `#1b1f24` | `#d8dde3` |
 | `--sn-color-text-secondary` | `#434a53` | `#a9b1ba` |
 | `--sn-color-text-muted` | `#58606a` | `#8b949e` |
@@ -184,7 +182,7 @@ Maple Mono NF CN 已随应用打包（SIL OFL 1.1）。它的汉字宽 1.2 em，
 | `--sn-shadow-lg` | `0 14px 32px rgb(20 24 30 / 0.18)` | `0 16px 36px rgb(0 0 0 / 0.55)` |
 | `--sn-shadow-panel` | `0 0 0 1px #cbd0d6, 0 0 24px rgb(20 24 30 / 0.14)` | `0 0 0 1px #2a3037, 0 0 28px rgb(0 0 0 / 0.45)` |
 | `--sn-shadow-card-active` | `0 0 0 1px var(--sn-color-accent), 0 2px 8px rgb(20 24 30 / 0.12)` | `0 0 0 1px var(--sn-color-accent), 0 2px 10px rgb(0 0 0 / 0.4)` |
-| `--sn-shadow-editing` | `0 0 0 1px var(--sn-color-accent), 0 0 0 4px rgb(184 108 0 / 0.16), 0 6px 18px rgb(20 24 30 / 0.16)` | `0 0 0 1px var(--sn-color-accent), 0 0 0 4px rgb(229 165 75 / 0.18), 0 8px 22px rgb(0 0 0 / 0.5)` |
+| `--sn-shadow-editing` | `0 6px 18px rgb(20 24 30 / 0.16)` | `0 8px 22px rgb(0 0 0 / 0.5)` |
 
 ### 不随明暗变化
 

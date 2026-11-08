@@ -71,7 +71,6 @@ export const TOKENS: readonly TokenSpec[] = [
     ['--sn-color-rim-top', '玻璃边缘受光：上缘的亮边，与下缘之间渐变（磨砂玻璃）；不用时为透明'],
     ['--sn-color-rim-bottom', '玻璃边缘受光：下缘的弱光（磨砂玻璃）；不用时为透明'],
     ['--sn-color-rule', '编辑时每行下方的横线（记录纸）；不用时为透明'],
-    ['--sn-color-editor-underline', '编辑区底部的强调线（Windows 11 的输入框）；不用时为透明'],
   ]),
   ...themed('text', [
     ['--sn-color-text', '主要文字：标题、正文'],
@@ -79,7 +78,7 @@ export const TOKENS: readonly TokenSpec[] = [
     ['--sn-color-text-muted', '弱化文字：时间、计数、占位（对比度不低于 4.5:1）'],
     ['--sn-color-text-disabled', '禁用文字（不要求对比度）'],
     ['--sn-color-halo', '文字光晕：玻璃上为文字加一圈浅色或深色晕；不用时为透明'],
-    ['--sn-color-syntax', '编辑时 Markdown 标记（#、**、- 等）与行号的颜色（对比度不低于 4.5:1）'],
+    ['--sn-color-syntax', '编辑时 Markdown 标记（#、**、- 等）的颜色（对比度不低于 4.5:1）'],
   ]),
   ...themed('accent', [
     ['--sn-color-accent', '强调色填充：主要按钮、选中指示条、开关'],
@@ -117,7 +116,7 @@ export const TOKENS: readonly TokenSpec[] = [
     ['--sn-shadow-lg', '大阴影：弹窗、速记浮窗、设置窗口'],
     ['--sn-shadow-panel', '侧栏面板与玻璃块的阴影：贴边时为朝向内容的一侧'],
     ['--sn-shadow-card-active', '悬停或选中的卡片：强调色外圈与浮起'],
-    ['--sn-shadow-editing', '编辑中的卡片：强调色外圈与浮起'],
+    ['--sn-shadow-editing', '编辑中的卡片：浮起的投影（强调色只在一像素的边框上，不加外圈）'],
   ]),
   ...fixed('material', [
     ['--sn-panel-blur', '面板的背景模糊半径；0 表示实心表面'],

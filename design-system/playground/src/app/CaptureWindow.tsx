@@ -6,8 +6,10 @@
  * Ctrl+Enter 保存并收起，Esc 保留草稿并收起；底栏的保存按钮保存后保持浮窗展开。
  *
  * 本次提出：草稿状态一行去掉；快捷键与 Markdown 的说明收进标题旁的问号，界面上不常驻；
- * 字数放在附件工具的右边。编辑区填满标题区与底栏之间的空间，内容超出时只在编辑器里滚动。
- * 磨砂玻璃主题中，浮窗是一整块玻璃，编辑区是嵌在里面、磨得更实的一块（见 windows.css）。
+ * 字数放在附件工具的右边。编辑区填满标题区与底栏之间的空间，内容超出时只在编辑器里滚动，编辑区里不画边框或强调线。
+ * 磨砂玻璃主题中，浮窗是一整块玻璃，编辑器直接写在玻璃上（见 windows.css）。
+ * 标题区标为拖动区域（data-drag-region）：Playground 中按住标题区可以移动浮窗，便于把它放到不同的背景上检查材质；
+ * 现有应用的速记浮窗不能拖动。
  */
 
 import { useRef } from 'react';
@@ -62,7 +64,7 @@ export function CaptureWindow({ onClose, onContinue }: CaptureWindowProps) {
         }
       }}
     >
-      <header className="sn-capture-head">
+      <header className="sn-capture-head" data-drag-region="">
         <div className="sn-capture-heading">
           <BrandMark small />
           <h2 className="sn-capture-title">速记</h2>
@@ -85,7 +87,7 @@ export function CaptureWindow({ onClose, onContinue }: CaptureWindowProps) {
           <IconButton icon="x" label="保留草稿并收起" shortcut="Esc" onClick={onClose} />
         </div>
       </header>
-      <div className={cx('sn-capture-body', surface.lineNumbers && 'has-line-numbers')}>
+      <div className="sn-capture-body">
         <NoteEditor
           value={data.draft}
           onChange={data.setDraft}

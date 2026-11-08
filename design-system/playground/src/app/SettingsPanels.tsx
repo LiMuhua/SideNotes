@@ -158,7 +158,11 @@ export function AppearancePanel() {
             onCommit={(fontSize) => updateSettings({ fontSize })}
           />
         </FieldRow>
-        <p className="sn-font-preview">随手记录。 The quick brown fox · 0123456789</p>
+        <div className="sn-font-preview">
+          <p>随手记下一句话，不打断手头的工作；支持 Markdown 与 #标签。</p>
+          <p>The Quick Brown Fox Jumps Over the Lazy Dog.</p>
+          <p>{'0123456789 · ¥$€ @#%&*?! · 2026-11-08 · -> => != <= >= === //'}</p>
+        </div>
       </SettingsCard>
 
       <SettingsCard title="侧栏">

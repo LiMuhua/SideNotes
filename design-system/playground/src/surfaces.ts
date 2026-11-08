@@ -34,8 +34,6 @@ export interface SurfaceSpec {
   inlineShortcuts: boolean;
   /** 页签前的分区色圆点（Glance 磨砂玻璃每个模块一种颜色）。 */
   tabMarks: boolean;
-  /** 编辑记录与速记时，编辑区左侧显示行号。 */
-  lineNumbers: boolean;
 }
 
 export const SURFACES: readonly SurfaceSpec[] = [
@@ -44,7 +42,7 @@ export const SURFACES: readonly SurfaceSpec[] = [
     name: '终端',
     english: 'Terminal',
     idea: '像终端里并排的窗格：每条记录一个带标题栏的窗格，等宽字体、键盘优先，常用快捷键写在按钮旁，记下就走。',
-    keywords: ['等宽字体', '石墨色', '琥珀强调色', '标题栏窗格', '快捷键可见', '编辑时显示行号'],
+    keywords: ['等宽字体', '石墨色', '琥珀强调色', '标题栏窗格', '快捷键可见'],
     references: ['现有 SideNotes 的默认字体 Maple Mono', 'Raycast 与 Linear 的键盘模型', 'Obsidian', 'Glance 记录纸的单色墨水'],
     dock: 'flush',
     entries: 'panes',
@@ -52,7 +50,6 @@ export const SURFACES: readonly SurfaceSpec[] = [
     translucent: false,
     inlineShortcuts: true,
     tabMarks: false,
-    lineNumbers: true,
   },
   {
     id: 'magazine',
@@ -67,7 +64,6 @@ export const SURFACES: readonly SurfaceSpec[] = [
     translucent: false,
     inlineShortcuts: false,
     tabMarks: false,
-    lineNumbers: false,
   },
   {
     id: 'paper',
@@ -82,7 +78,6 @@ export const SURFACES: readonly SurfaceSpec[] = [
     translucent: false,
     inlineShortcuts: false,
     tabMarks: false,
-    lineNumbers: false,
   },
   {
     id: 'win11',
@@ -97,14 +92,13 @@ export const SURFACES: readonly SurfaceSpec[] = [
     translucent: true,
     inlineShortcuts: false,
     tabMarks: false,
-    lineNumbers: false,
   },
   {
     id: 'glass',
     name: '磨砂玻璃',
     english: 'Frosted Glass',
     idea: '分开的几块磨砂玻璃，在边缘透出桌面：立体感来自玻璃边缘的受光，而不是投影；文字在任何背景上都清楚。',
-    keywords: ['分块玻璃', '边缘受光', '大圆角', '分区色', '紫色强调色', '文字光晕'],
+    keywords: ['分块玻璃', '边缘受光', '大圆角', '分区色', '青色强调色', '文字光晕'],
     references: ['Glance 磨砂玻璃外观（theme.rs、skins.rs）', '现有 SideNotes 的玻璃材质'],
     dock: 'blocks',
     entries: 'tiles',
@@ -112,7 +106,6 @@ export const SURFACES: readonly SurfaceSpec[] = [
     translucent: true,
     inlineShortcuts: false,
     tabMarks: true,
-    lineNumbers: false,
   },
 ];
 

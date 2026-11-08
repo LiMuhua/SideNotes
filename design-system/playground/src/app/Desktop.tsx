@@ -3,14 +3,15 @@
  *
  * - 侧栏贴在屏幕边缘，宽度取设置中的宽度，并随字号等比加宽（T45）；鼠标移到边缘唤出，
  *   移出后按「移出后收起」的延迟收起；固定、编辑中（「编辑时保持展开」）或设置窗口打开期间保持展开。
- * - 速记浮窗 560 × 420、设置窗口 960 × 720 居中弹出，窗口尺寸不随字号变化，内容按字号缩放（T33）。
+ * - 速记浮窗 560 × 420、设置窗口 960 × 720 居中弹出，窗口尺寸不随字号变化，内容按字号缩放（T33）；
+ *   按住标题区可以拖动，便于把浮窗移到不同的背景上检查材质。
  * - 字号设置是整页缩放：每个窗口的内容放大「字号 ÷ 13」倍，与现有应用的 WebView 缩放一致。
  * - Alt+Shift+S 呼出侧栏、Ctrl+Shift+Space 呼出速记（全局快捷键，在场景获得焦点时模拟）。
  *
  * 壁纸、工作窗口与任务栏是场景的一部分，不属于 SideNotes 的设计，不使用设计令牌。
  */
 
-import { useCallback, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { resolveFontFamily } from '@/core/settings';
 import { useNotes } from '../model/notes';
 import type { SidebarViewOptions } from '../model/notes';
@@ -147,29 +148,25 @@ export function Desktop({ form, platform, wallpaper, initial = {}, surface, prim
           </div>
 
           {capture ? (
-            <div className="sn-floating-frame is-capture">
-              <div className="sn-window-box">
-                <AppWindow className="sn-capture-window" zoom={zoom} surface={surface}>
-                  <CaptureWindow
-                    onClose={() => setCapture(false)}
-                    onContinue={() => {
-                      setCapture(false);
-                      setVisible(true);
-                    }}
-                  />
-                </AppWindow>
-              </div>
-            </div>
+            <FloatingWindow kind="capture" draggable={!phone}>
+              <AppWindow className="sn-capture-window" zoom={zoom} surface={surface}>
+                <CaptureWindow
+                  onClose={() => setCapture(false)}
+                  onContinue={() => {
+                    setCapture(false);
+                    setVisible(true);
+                  }}
+                />
+              </AppWindow>
+            </FloatingWindow>
           ) : null}
 
           {settingsWindow ? (
-            <div className="sn-floating-frame is-settings">
-              <div className="sn-window-box">
-                <AppWindow className="sn-settings-window" zoom={zoom} surface={surface}>
-                  <SettingsWindow initial={settingsWindow} onClose={() => setSettingsWindow(null)} />
-                </AppWindow>
-              </div>
-            </div>
+            <FloatingWindow kind="settings" draggable={!phone}>
+              <AppWindow className="sn-settings-window" zoom={zoom} surface={surface}>
+                <SettingsWindow initial={settingsWindow} onClose={() => setSettingsWindow(null)} />
+              </AppWindow>
+            </FloatingWindow>
           ) : null}
         </div>
         {phone ? (
@@ -189,6 +186,62 @@ export function Desktop({ form, platform, wallpaper, initial = {}, surface, prim
         )}
       </div>
     </FormContext.Provider>
+  );
+}
+
+/** 按住标题区拖动时，从这些控件上按下不算拖动。 */
+const INTERACTIVE = 'button, input, textarea, select, a, [role="button"], [contenteditable="true"]';
+
+/**
+ * 浮动窗口（速记浮窗、设置窗口）：居中弹出；按住标题区（data-drag-region）可以拖动，位置限制在桌面区域之内，
+ * 关闭后再打开回到正中。拖动用来把浮窗移到不同的背景上检查材质，例如磨砂玻璃。
+ * 舞台缩小显示时，指针的位移按缩放比例换算；按下时取消默认动作，编辑区的焦点不会因此丢失。
+ */
+function FloatingWindow({ kind, draggable, children }: { kind: 'capture' | 'settings'; draggable: boolean; children: ReactNode }) {
+  const drag = useRef<{ pointer: number; x: number; y: number; from: { x: number; y: number }; scale: number } | null>(null);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+
+  const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!draggable || event.button !== 0 || !target?.closest('[data-drag-region]') || target.closest(INTERACTIVE)) return;
+    const element = event.currentTarget;
+    const scale = element.getBoundingClientRect().width / element.offsetWidth || 1;
+    drag.current = { pointer: event.pointerId, x: event.clientX, y: event.clientY, from: offset, scale };
+    element.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  };
+
+  const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const current = drag.current;
+    const element = event.currentTarget;
+    const frame = element.parentElement;
+    if (!current || current.pointer !== event.pointerId || !frame) return;
+    const limitX = Math.max(0, (frame.clientWidth - element.offsetWidth) / 2);
+    const limitY = Math.max(0, (frame.clientHeight - element.offsetHeight) / 2);
+    const clamp = (value: number, limit: number) => Math.min(limit, Math.max(-limit, value));
+    setOffset({
+      x: clamp(current.from.x + (event.clientX - current.x) / current.scale, limitX),
+      y: clamp(current.from.y + (event.clientY - current.y) / current.scale, limitY),
+    });
+  };
+
+  const onPointerEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (drag.current?.pointer === event.pointerId) drag.current = null;
+  };
+
+  return (
+    <div className={cx('sn-floating-frame', `is-${kind}`)}>
+      <div
+        className="sn-window-box"
+        style={offset.x || offset.y ? { transform: `translate(${offset.x}px, ${offset.y}px)` } : undefined}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerEnd}
+        onPointerCancel={onPointerEnd}
+      >
+        {children}
+      </div>
+    </div>
   );
 }
 
