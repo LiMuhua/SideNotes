@@ -10,7 +10,7 @@ SideNotes 是贴在屏幕边缘的速记工具：鼠标移到屏幕边缘唤出�
 | --- | --- | --- |
 | 侧栏 | 宽 416px（设置中可调，360 至 720），高度铺满屏幕 | 浏览、新建、编辑、整理记录 |
 | 速记浮窗 | 560 × 420 | 全局快捷键呼出，记一条就收起 |
-| 设置 | 880 × 720 | 外观与交互、快捷键、数据与同步、回收站、关于 |
+| 设置 | 960 × 720 | 外观与交互、快捷键、数据与同步、回收站、关于 |
 
 现有功能的完整清单见 [references/sidenote-current-state.md](./references/sidenote-current-state.md)。
 
@@ -63,7 +63,8 @@ Design Playground 用同一套令牌与组件运行三个窗口，见 [playgroun
 | ↑ ↓ 在卡片之间移动，Enter 编辑，Delete 移入回收站，Shift+F10 打开卡片菜单 | 卡片只能用鼠标操作 | [interactions.md](./interactions.md) |
 | Esc 在收起侧栏之前先清除多选 | 有多选时 Esc 直接收起侧栏 | [interactions.md](./interactions.md) |
 | 提示条在指针停留或获得焦点时暂停计时 | 6 秒（带撤销 9 秒）后消失 | [interactions.md](./interactions.md) |
-| 速记浮窗不显示草稿状态；快捷键与 Markdown 的说明收进标题旁的问号；字数放在附件工具右边；磨砂玻璃的浮窗分成三块玻璃 | 标题下写「Markdown · #标签」，占位文字第二行写保存与收起的按键，编辑区下方一行是草稿状态与字数 | [components.md](./components.md) |
+| 速记浮窗不显示草稿状态；快捷键与 Markdown 的说明收进标题旁的问号；字数放在附件工具右边；磨砂玻璃的浮窗是一整块玻璃，编辑区是嵌在里面的实底 | 标题下写「Markdown · #标签」，占位文字第二行写保存与收起的按键，编辑区下方一行是草稿状态与字数 | [components.md](./components.md) |
+| 设置窗口加宽到 960，同一行的设置项之间有竖线分隔，问号说明只留给需要额外理解的 12 项；滑块、数值输入框与数字组合框可以用滚轮调整 | 880 × 720，名称后多数带问号，只能拖动或输入 | [components.md](./components.md) |
 | 「字体」设置增加「跟随主题」，并作为默认值 | 字体作用于全部界面文字 | [adaptation.md](./adaptation.md) |
 | Windows 11 与磨砂玻璃使用透明窗口加 Acrylic | 三个窗口都不透明 | [adaptation.md](./adaptation.md) |
 | 手机形态：侧栏铺满屏幕，不显示快捷键与固定、收起按钮 | 没有移动端界面 | [layout.md](./layout.md) |
