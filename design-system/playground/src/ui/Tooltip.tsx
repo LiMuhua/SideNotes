@@ -84,7 +84,7 @@ export function Tooltip({ content, shortcut, placement = 'bottom', children, des
         <Layer>
           <div ref={floating} id={id} role="tooltip" className="sn-tooltip" style={style}>
             <span>{content}</span>
-            {shortcut ? <Keys combo={shortcut} tone="inverse" /> : null}
+            {shortcut ? <Keys combo={shortcut} /> : null}
           </div>
         </Layer>
       ) : null}

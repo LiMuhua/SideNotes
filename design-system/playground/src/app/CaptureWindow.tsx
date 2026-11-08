@@ -72,10 +72,10 @@ export function CaptureWindow({ onClose, onContinue }: CaptureWindowProps) {
             {phone ? null : (
               <>
                 <span className="sn-help-line">
-                  <Keys combo={SHORTCUT_KEYS.save} tone="inverse" /> 保存并收起
+                  <Keys combo={SHORTCUT_KEYS.save} /> 保存并收起
                 </span>
                 <span className="sn-help-line">
-                  <Keys combo="Esc" tone="inverse" /> 收起，草稿保留
+                  <Keys combo="Esc" /> 收起，草稿保留
                 </span>
               </>
             )}

@@ -23,6 +23,7 @@ import { Select } from '../ui/Select';
 import { useToast } from '../ui/Tabs';
 import { Switch } from '../ui/Toggle';
 import { HelpTip } from '../ui/Tooltip';
+import { AVAILABLE_UPDATE, UpdateDialog } from './menus';
 import { BrandMark } from './SidebarParts';
 import { DataRow, Field, FieldRow, PathText, SettingsCard, SettingsPage } from './SettingsParts';
 
@@ -146,7 +147,7 @@ export function DataPanel() {
         </FieldRow>
       </SettingsCard>
 
-      <SettingsCard title="快照" help="每天自动创建；导入、永久删除、迁移与恢复之前也会创建。保留 24 小时内的全部，7 天内每天一份，4 周内每周一份。快照目录放在另一块硬盘上，硬盘损坏时也能找回数据">
+      <SettingsCard title="快照" help="每天自动创建一份；导入、永久删除、迁移与恢复之前各创建一份。保留 24 小时内的全部，7 天内每天一份，4 周内每周一份">
         <FieldRow>
           <Field label="快照目录" grow>
             <PathText label="快照目录" path={`${currentPath}\\snapshots`} />
@@ -193,7 +194,7 @@ export function DataPanel() {
         </FieldRow>
       </SettingsCard>
 
-      <SettingsCard title="云端自动备份" help="尚未接入云端服务，只保存配置，不上传数据">
+      <SettingsCard title="云端自动备份">
         <DataRow label="自动备份">
           <Switch label="启用云端自动备份" hideLabel checked={cloud.enabled} onChange={(enabled) => saveCloud({ enabled })} />
         </DataRow>
@@ -329,14 +330,15 @@ export function TrashPanel() {
         }}
       />
       <span className="sn-set-unit">天</span>
-      <HelpTip label="保留策略" placement="bottom-end">
+      <HelpTip label="保留策略">
         到期后提示清理，确认前仍可恢复
       </HelpTip>
     </span>
   );
 
+  // 保留天数紧跟在条数之后（本次提出）：两者都在说回收站里的记录，放在一起读；页面标题的右侧不再放控件。
   return (
-    <SettingsPage title="回收站" aside={retention}>
+    <SettingsPage title="回收站">
       <div className="sn-trash-toolbar">
         <SearchInput value={query} onValueChange={setQuery} placeholder="搜索回收站" aria-label="搜索回收站" inputSize="sm" />
         <Select aria-label="回收站标签筛选" size="sm" value={activeTag} onChange={setTag} options={[{ value: '', label: '全部标签' }, ...tagOptions.map((item) => ({ value: item, label: `#${item}` }))]} />
@@ -355,6 +357,7 @@ export function TrashPanel() {
         <span>
           {visible.length} / {all.length} 条
         </span>
+        {retention}
         <span className="sn-spacer" />
         <Button size="sm" variant="secondary" icon="restore" disabled={!visible.length} onClick={() => setConfirm({ kind: 'restore', notes: visible })}>
           恢复筛选结果
@@ -434,12 +437,6 @@ const CREDITS: ReadonlyArray<{ name: string; glyph: string; note: string }> = [
   { name: 'Maple Mono', glyph: 'Aa', note: '内置默认字体 Maple Mono NF CN，SIL Open Font License 1.1' },
 ];
 
-const DEBUG_WINDOWS: ReadonlyArray<{ id: string; label: string }> = [
-  { id: 'main', label: '侧栏' },
-  { id: 'capture', label: '速记浮窗' },
-  { id: 'settings', label: '设置' },
-];
-
 /** 小块按钮：项目链接、开源致谢与调试共用；外部链接带一个斜箭头。 */
 function LinkChip({ icon, glyph, label, title, external = false, onClick }: { icon?: IconName; glyph?: string; label: string; title?: string; external?: boolean; onClick: () => void }) {
   return (
@@ -458,6 +455,7 @@ function LinkChip({ icon, glyph, label, title, external = false, onClick }: { ic
 
 export function AboutPanel() {
   const toast = useToast();
+  const [update, setUpdate] = useState(false);
   const open = (label: string) => toast({ message: `打开${label}（示例）` });
   return (
     <SettingsPage title="关于">
@@ -475,7 +473,8 @@ export function AboutPanel() {
           <LinkChip icon="code" label="GitHub" external onClick={() => open('GitHub')} />
           <LinkChip icon="globe" label="官方网站" external onClick={() => open('官方网站')} />
           <LinkChip icon="heart" label="支持项目" onClick={() => toast({ message: '赞助入口暂未开放，欢迎通过反馈与代码贡献支持项目' })} />
-          <LinkChip icon="restore" label="检查更新" onClick={() => toast({ message: '更新服务待桌面端接入' })} />
+          {/* 检查到新版本时打开与底栏版本号相同的「发现新版本」弹窗，没有新版本时提示已是最新版本；Playground 模拟检查到 0.7.3。 */}
+          <LinkChip icon="restore" label="检查更新" onClick={() => (AVAILABLE_UPDATE ? setUpdate(true) : toast({ message: '已是最新版本' }))} />
         </div>
       </section>
       <section className="sn-about-section">
@@ -486,14 +485,14 @@ export function AboutPanel() {
           ))}
         </div>
       </section>
+      {/* 调试只有一个按钮（本次提出）：桌面端打开侧栏窗口的开发者工具。网页不能自己打开浏览器的开发者工具，Playground 中提示按 F12。 */}
       <section className="sn-about-section">
         <h4 className="sn-set-card-title">调试</h4>
         <div className="sn-chip-row">
-          {DEBUG_WINDOWS.map((item) => (
-            <LinkChip key={item.id} icon="code" label={item.label} title={`打开${item.label}的开发者工具`} onClick={() => toast({ message: `打开${item.label}的开发者工具（示例）` })} />
-          ))}
+          <LinkChip icon="code" label="打开开发者工具" onClick={() => toast({ message: '浏览器不允许网页打开开发者工具，请按 F12（桌面端会直接打开）' })} />
         </div>
       </section>
+      <UpdateDialog update={AVAILABLE_UPDATE} open={update} onClose={() => setUpdate(false)} />
     </SettingsPage>
   );
 }

@@ -660,7 +660,7 @@ button.sn-tag-main[data-force='hover'] {
     .sn-textarea:focus-within,
     .sn-search:focus-within,
     .sn-search[data-force='focus'],
-    .sn-side-search:focus-within,
+    .sn-side-search.is-open:focus-within,
     .sn-side-search.has-query,
     .sn-combobox:focus-within,
     .sn-combobox.is-open,
@@ -679,8 +679,15 @@ button.sn-tag-main[data-force='hover'] {
 }
 
 /* 凹陷的搜索框获得焦点时换成表面色，与其他正在输入的输入框一致。 */
-.sn-scope :is(.sn-search:focus-within, .sn-search[data-force='focus'], .sn-side-search:focus-within) {
+.sn-scope :is(.sn-search:focus-within, .sn-search[data-force='focus'], .sn-side-search.is-open:focus-within) {
   background-color: var(--sn-color-surface);
+}
+
+/* 复合控件（搜索框、侧栏搜索框、组合框）里的原生输入框不画焦点环。文字输入框获得焦点时总是匹配 :focus-visible，
+ * base.css 中统一的焦点环（离开 2px）会在外层控件里再画一圈，与底边的强调线重复，圆角也对不上；
+ * 焦点由外层控件的底边强调线表示。优先级（0,3,1）高于统一的焦点环（0,2,0）。 */
+.sn-scope :is(.sn-search, .sn-side-search, .sn-combobox) input:focus-visible {
+  outline: none;
 }
 
 /* Windows 对比主题会去掉背景里的线和自定义颜色，焦点改用系统高亮色的轮廓线。 */
@@ -689,12 +696,13 @@ button.sn-tag-main[data-force='hover'] {
       .sn-input:focus-within,
       .sn-textarea:focus-within,
       .sn-search:focus-within,
-      .sn-side-search:focus-within,
+      .sn-side-search.is-open:focus-within,
       .sn-combobox:focus-within,
       .sn-set-number:focus-within,
       .sn-select[aria-expanded='true'],
       .sn-select:focus-visible,
-      .sn-menu-item:focus-visible
+      .sn-menu-item:focus-visible,
+      .sn-shortcut-key.is-recording
     ) {
     outline: var(--sn-focus-ring-width) solid Highlight; /* 固定：对比主题使用系统颜色 */
     outline-offset: calc(var(--sn-border-width) * -1);

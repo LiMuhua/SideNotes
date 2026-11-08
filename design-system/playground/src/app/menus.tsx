@@ -6,7 +6,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { CHANGELOG } from '@/core/changelog';
+import { CHANGELOG, type ChangelogEntry } from '@/core/changelog';
 import { EMOJI_GROUPS, searchEmoji } from '@/core/emoji';
 import { formatFullTime, noteTitle } from '@/core/notes';
 import { isValidTag, parse } from '@/core/tags';
@@ -81,7 +81,7 @@ export function sidebarMenuItems(
       icon: state.edge === 'left' ? 'arrow-right' : 'arrow-left',
       onSelect: () => run('edge'),
     },
-    { id: 'settings', label: '设置', icon: 'settings', onSelect: () => run('settings') },
+    { id: 'settings', label: '设置', icon: 'settings', shortcut: SHORTCUT_KEYS.settings, onSelect: () => run('settings') },
     { id: 'guide', label: '使用指南', icon: 'info', onSelect: () => run('guide') },
     {
       id: 'hide',
@@ -112,10 +112,17 @@ export function TrashConfirm({ notes, onCancel, onConfirm }: { notes: Note[] | n
   );
 }
 
+/** 把一段更新日志按分号拆成要点。 */
+const pointsOf = (summary: string) =>
+  summary
+    .split(/[；;]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
 /** 版本与更新：只列当前版本，按分号拆成要点。 */
 export function ChangelogDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const current = CHANGELOG[0];
-  const points = current.summary.split(/[；;]/).map((item) => item.trim()).filter(Boolean);
+  const points = pointsOf(current.summary);
   return (
     <Dialog
       open={open}
@@ -131,6 +138,60 @@ export function ChangelogDialog({ open, onClose }: { open: boolean; onClose: () 
       <p className="sn-changelog-version">{current.version} 预览版</p>
       <ul className="sn-changelog-list">
         {points.map((point) => (
+          <li key={point}>{point}</li>
+        ))}
+      </ul>
+    </Dialog>
+  );
+}
+
+/**
+ * Playground 模拟检查到的新版本：本工作树的代码是 0.7.2，取现有应用 0.7.3 的更新日志（`src/core/changelog.ts`）
+ * 作为即将更新的内容。桌面端接入更新服务后，版本号与更新内容来自检查结果。
+ */
+export const AVAILABLE_UPDATE: ChangelogEntry | null = {
+  version: '0.7.3',
+  summary:
+    '快捷键可以重新绑定：在设置中点击按键后按下新组合即可，与其它快捷键冲突时说明原因，呼出速记与呼出侧栏被其他程序占用时提示并保持原来的按键，录入时不会误触发任何全局快捷键；导出备份时附件一并导出，导入时附件一同拷回；设置页字号与侧栏正文一致，说明放进问号；「数据与同步」页改为一行一项的整齐布局；以加粗等格式开头的列表项中，Home、End 按正文跳转。',
+};
+
+/**
+ * 发现新版本（本次提出）：底栏的版本号带着更新角标时点开，列出这次即将更新的内容；
+ * 「立即更新」下载并安装，「稍后」关闭弹窗，角标保留。现有应用的「检查更新」只提示更新服务待接入。
+ */
+export function UpdateDialog({ update, open, onClose }: { update: ChangelogEntry | null; open: boolean; onClose: () => void }) {
+  const toast = useToast();
+  if (!update) return null;
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title="发现新版本"
+      size="sm"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            稍后
+          </Button>
+          <Button
+            variant="primary"
+            icon="download"
+            onClick={() => {
+              onClose();
+              toast({ message: 'Playground 不会下载更新（示例）' });
+            }}
+          >
+            立即更新
+          </Button>
+        </>
+      }
+    >
+      <p className="sn-changelog-version">
+        {update.version} 预览版
+        <span className="sn-changelog-current">当前 {__APP_VERSION__}</span>
+      </p>
+      <ul className="sn-changelog-list">
+        {pointsOf(update.summary).map((point) => (
           <li key={point}>{point}</li>
         ))}
       </ul>

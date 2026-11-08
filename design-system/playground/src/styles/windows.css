@@ -611,10 +611,17 @@ button.sn-shortcut-key:hover {
   border-color: var(--sn-color-border-strong);
 }
 
+/* 录入中：与输入框获得焦点时一样，边框不变，底边换成强调色线；浅强调色底表示正在等待按键。 */
 .sn-shortcut-key.is-recording {
-  border-color: var(--sn-color-accent);
-  background: var(--sn-color-accent-subtle);
+  border-bottom-color: transparent;
+  background-color: var(--sn-color-accent-subtle);
+  background-image: linear-gradient(var(--sn-color-accent), var(--sn-color-accent));
+  background-position: bottom;
+  background-repeat: no-repeat;
+  background-size: 100% calc(var(--sn-border-width) * 2);
+  background-origin: border-box;
   color: var(--sn-color-accent-text);
+  outline: none;
 }
 
 .sn-shortcut-key.is-fixed {
@@ -743,11 +750,13 @@ button.sn-shortcut-key:hover {
   font-size: var(--sn-font-size-xs);
 }
 
-/* 回收站 */
+/* 回收站：保留天数跟在条数之后，中间多留一点距离。 */
 .sn-trash-retention {
   display: inline-flex;
   align-items: center;
   gap: var(--sn-space-3);
+  margin-left: var(--sn-space-3);
+  color: var(--sn-color-text-secondary);
 }
 
 .sn-trash-toolbar {
@@ -937,6 +946,12 @@ button.sn-shortcut-key:hover {
   color: var(--sn-color-text-secondary);
   font-family: var(--sn-font-meta);
   font-size: var(--sn-font-size-sm);
+}
+
+/* 发现新版本：新版本号之后用弱化文字写出当前版本。 */
+.sn-changelog-current {
+  margin-left: var(--sn-space-4);
+  color: var(--sn-color-text-muted);
 }
 
 .sn-changelog-list,

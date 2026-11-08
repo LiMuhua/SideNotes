@@ -196,7 +196,7 @@ export function AppearancePanel() {
         <RangeGroup>
           <RangeRow label="宽度" help="随字号等比加宽，也可拖动侧栏边缘调整" value={settings.width} min={WIDTH_RANGE.min} max={WIDTH_RANGE.max} step={WIDTH_RANGE.step} unit="px" onCommit={(width) => updateSettings({ width })} />
           <RangeRow label="出入动画" value={settings.animDuration} min={ANIM_DURATION_RANGE.min} max={ANIM_DURATION_RANGE.max} step={ANIM_DURATION_RANGE.step} unit="ms" onCommit={(animDuration) => updateSettings({ animDuration })} />
-          <RangeRow label="卡片高度" help="超出部分渐隐，双击卡片查看全文" value={settings.cardMaxHeight} min={CARD_HEIGHT_RANGE.min} max={CARD_HEIGHT_RANGE.max} step={CARD_HEIGHT_RANGE.step} unit="px" onCommit={(cardMaxHeight) => updateSettings({ cardMaxHeight })} />
+          <RangeRow label="卡片高度" help="卡片正文的最大高度，按 13px 字号计。超出的部分渐隐，双击卡片查看全文；调低时一屏能放下更多卡片" value={settings.cardMaxHeight} min={CARD_HEIGHT_RANGE.min} max={CARD_HEIGHT_RANGE.max} step={CARD_HEIGHT_RANGE.step} unit="px" onCommit={(cardMaxHeight) => updateSettings({ cardMaxHeight })} />
         </RangeGroup>
       </SettingsCard>
 
@@ -263,7 +263,7 @@ function MiniSidebar({ surface, theme }: { surface: string; theme: 'light' | 'da
 /** 快捷键页的三组（现有应用 0.7.3）：全局与应用内并排，格式占一整行，两列排列。 */
 const SHORTCUT_GROUPS: ReadonlyArray<{ title: string; help?: string; ids: readonly string[]; half: boolean }> = [
   { title: '全局', help: '在任何程序中都能使用', ids: ['capture', 'sidebar'], half: true },
-  { title: '应用内', ids: ['newNote', 'search', 'save'], half: true },
+  { title: '应用内', ids: ['newNote', 'search', 'settings', 'save'], half: true },
   {
     title: '格式',
     ids: ['bold', 'italic', 'underline', 'strike', 'link', 'inlineCode', 'codeBlock', 'quote', 'orderedList', 'bulletList', 'heading', 'indent', 'plainPaste'],

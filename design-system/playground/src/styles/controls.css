@@ -461,7 +461,9 @@
   background: var(--sn-color-border-subtle);
 }
 
-/* ---------- 工具提示 ---------- */
+/* ---------- 工具提示 ----------
+ * 工具提示与问号说明用这套主题的浮层表面（与菜单相同）：浅色模式下是浅色，深色模式下是深色，
+ * 不用反色，深色模式下不会突然出现一块白底黑字。提示条仍为反色，与卡片明显区分。 */
 .sn-tooltip-anchor {
   display: inline-flex;
 }
@@ -474,9 +476,10 @@
   gap: var(--sn-space-4);
   max-width: calc(var(--sn-dialog-width) * 0.75);
   padding: var(--sn-space-2) var(--sn-space-4);
+  border: var(--sn-border-width) solid var(--sn-color-border);
   border-radius: var(--sn-radius-sm);
-  background: var(--sn-color-inverse);
-  color: var(--sn-color-on-inverse);
+  background: var(--sn-color-surface-raised);
+  color: var(--sn-color-text);
   box-shadow: var(--sn-shadow-md);
   font-size: var(--sn-font-size-sm);
   line-height: var(--sn-line-height-tight);

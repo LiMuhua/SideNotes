@@ -4,7 +4,7 @@
  * 结构与文字沿用现有应用（`src/components/Sidebar.tsx`）；外观由主题的令牌与结构说明决定。
  */
 
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { rankTags, suggestTags } from '@/core/notes';
 import { tagKey } from '@/core/tags';
 import type { EdgeSide, TabKey } from '@/core/types';
@@ -34,22 +34,17 @@ export interface HeaderProps {
   edge: EdgeSide;
   onTogglePinned: () => void;
   onHide: () => void;
-  onVersion: () => void;
 }
 
-export function SidebarHeader({ pinned, linked, edge, onTogglePinned, onHide, onVersion }: HeaderProps) {
+/** 标题区：品牌与窗口操作。版本号移到底栏左下角（本次提出），标题区只留品牌名。 */
+export function SidebarHeader({ pinned, linked, edge, onTogglePinned, onHide }: HeaderProps) {
   // 手机上侧栏就是整个应用，没有屏幕边缘可以收起，也就不需要固定与收起。
   const phone = useFormFactor() === 'phone';
   return (
     <header className="sn-side-head">
       <div className="sn-side-brand">
         <BrandMark />
-        <div className="sn-side-brand-text">
-          <h2 className="sn-side-title">SideNotes</h2>
-          <button type="button" className="sn-side-version" aria-label="版本与更新" title="版本与更新日志" onClick={onVersion}>
-            {__APP_VERSION__} PREVIEW
-          </button>
-        </div>
+        <h2 className="sn-side-title">SideNotes</h2>
       </div>
       {phone ? null : (
         <div className="sn-side-actions">
@@ -73,7 +68,7 @@ export function SidebarNav({ view, onSearchInput }: { view: SidebarView; onSearc
   const surface = useSurface();
   return (
     <div className={cx('sn-side-nav', view.searchOpen && 'is-searching')}>
-      <div className={cx('sn-tabs-row', `is-${surface.tabs}`, surface.tabMarks && 'has-marks')} role="tablist" aria-label="记录列表">
+      <div className={cx('sn-tabs-row', `is-${surface.tabs}`, surface.tabMarks && 'has-marks')} role="tablist" aria-label="记录列表" inert={view.searchOpen}>
         {TAB_ORDER.map((tab) => {
           const icon = TAB_ICONS[tab];
           return (
@@ -100,13 +95,28 @@ export function SidebarNav({ view, onSearchInput }: { view: SidebarView; onSearc
 }
 
 /**
- * 搜索（沿用现有应用）：放大镜按钮展开搜索框，搜索框盖住页签；再点放大镜收起并清空搜索词，标签筛选保留。
+ * 搜索（沿用现有应用）：放大镜在页签行的最右边，点击后搜索框从右向左展开，盖住页签；再点放大镜收起并清空搜索词，标签筛选保留。
  * 末尾正在输入 #标签 时以灰字联想已有标签，Tab 选用，↑ ↓ 切换候选，Esc 先关闭联想，再按 Esc 收起搜索框并清空搜索词；
  * 清空按钮同时清除搜索词与标签筛选；失焦且没有内容时自动收起。
+ * 搜索框一直在页面里，展开与收起靠宽度的过渡（与现有应用一样有动画）；收起时输入框不可聚焦，展开后自动获得焦点。
  */
 function SearchBox({ view, onInput }: { view: SidebarView; onInput?: (element: HTMLInputElement | null) => void }) {
   const data = useNotes();
   const toggleRef = useRef<HTMLButtonElement>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const open = view.searchOpen;
+  const setInput = useCallback(
+    (element: HTMLInputElement | null) => {
+      inputRef.current = element;
+      onInput?.(element);
+    },
+    [onInput],
+  );
+
+  // 展开时把焦点放进输入框；输入框在收起时不可聚焦，所以等展开之后再聚焦。
+  useEffect(() => {
+    if (open && document.activeElement !== inputRef.current) inputRef.current?.focus({ preventScroll: true });
+  }, [open]);
   // 关闭过联想的标签开头：Esc 关闭、Tab 选用之后，同一个开头不再提示。
   const [dismissed, setDismissed] = useState('');
   const [cycle, setCycle] = useState({ prefix: '', index: 0 });
@@ -143,35 +153,25 @@ function SearchBox({ view, onInput }: { view: SidebarView; onInput?: (element: H
     }
   };
 
-  const toggle = (
-    <IconButton
-      ref={toggleRef}
-      icon="search"
-      label={view.searchOpen ? '收起搜索' : '搜索记录与标签'}
-      shortcut={SHORTCUT_KEYS.search}
-      size={view.searchOpen ? 'sm' : 'md'}
-      pressed={view.searchOpen}
-      className="sn-search-toggle"
-      onClick={() => (view.searchOpen ? close() : view.setSearchOpen(true))}
-    />
-  );
-
-  if (!view.searchOpen) return toggle;
-
   return (
-    <div className={cx('sn-side-search', view.query && 'has-query')}>
-      {toggle}
-      <div className="sn-side-search-field">
-        {ghost ? (
+    <div className={cx('sn-side-search', open && 'is-open', open && view.query && 'has-query')}>
+      <IconButton
+        ref={toggleRef}
+        icon="search"
+        label={open ? '收起搜索' : '搜索记录与标签'}
+        shortcut={SHORTCUT_KEYS.search}
+        className="sn-search-toggle"
+        onClick={() => (open ? close() : view.setSearchOpen(true))}
+      />
+      <div className="sn-side-search-field" inert={!open} aria-hidden={open ? undefined : true}>
+        {open && ghost ? (
           <span className="sn-side-search-ghost" aria-hidden="true">
             <span className="sn-side-search-typed">{view.query}</span>
             {ghost}
           </span>
         ) : null}
         <input
-          ref={onInput}
-          // 由用户展开搜索时挂载，挂载即聚焦。
-          autoFocus
+          ref={setInput}
           type="search"
           value={view.query}
           placeholder="搜索记录、#标签…"
@@ -185,8 +185,8 @@ function SearchBox({ view, onInput }: { view: SidebarView; onInput?: (element: H
           }}
         />
       </div>
-      {ghost ? <Keys combo="Tab" /> : null}
-      {view.query ? (
+      {open && ghost ? <Keys combo="Tab" /> : null}
+      {open && view.query ? (
         <IconButton
           icon="x"
           label="清空搜索"
@@ -279,7 +279,7 @@ export function ListTopline({ view, onManageTag, onSearchTags }: ListToplineProp
 
 /**
  * 标签筛选菜单（沿用现有应用的 TagFilter）：「全部标签」清除筛选；随后是评分最高的六个标签，点击即按该标签筛选；
- * 排在首位且命中搜索或已被选中的标签移到最上方，旁边是「管理」；底部提示剩余标签数，可以转到 #标签 搜索。
+ * 排在首位且命中搜索或已被选中的标签移到最上方，旁边是「管理」；底部是「搜索标签」，转到 #标签 搜索，右边写剩余的标签数。
  * 键盘按 WAI-ARIA 菜单模式：↑ ↓ 移动，Esc 关闭并回到触发按钮，Tab 关闭。
  */
 function TagMenu({
@@ -397,20 +397,21 @@ function TagMenu({
           </div>
         ))}
         {candidates.length === 0 ? <p className="sn-tag-menu-empty">{view.query ? '没有匹配的标签' : '输入 #标签 创建分组'}</p> : null}
+        {/* 底部只有「搜索标签」一项（本次提出）：现有应用在按钮旁写一句提示，文字太长，会把菜单撑宽；剩余的个数写在右边，与条数同一列。 */}
         <div role="none" className="sn-tag-menu-foot">
-          <span>{candidates.length > MAX_TAG_CANDIDATES ? `另有 ${candidates.length - MAX_TAG_CANDIDATES} 个标签，使用搜索查找` : '搜索 #标签 可快速定位'}</span>
           <button
             type="button"
             role="menuitem"
             tabIndex={-1}
-            className="sn-tag-menu-search"
+            className="sn-menu-item sn-tag-menu-search"
             onClick={() => {
               onClose(false);
               onSearch();
             }}
           >
             <Icon name="search" />
-            搜索
+            <span className="sn-menu-label">搜索标签</span>
+            {candidates.length > MAX_TAG_CANDIDATES ? <span className="sn-tag-count">另有 {candidates.length - MAX_TAG_CANDIDATES} 个</span> : null}
           </button>
         </div>
       </div>
@@ -439,28 +440,55 @@ export function FilterBanner({ view }: { view: SidebarView }) {
   );
 }
 
+export interface FooterProps {
+  /** 检查到的新版本号；没有新版本时为 null。 */
+  update: string | null;
+  /** 点版本号：有新版本时打开「发现新版本」，否则打开当前版本的更新日志。 */
+  onVersion: () => void;
+  onSettings: () => void;
+}
+
 /**
- * 底栏（沿用现有应用）：左边一个表示本地存储状态的小圆点，悬停显示说明；右边是设置。
- * 不放条数与快捷键，其余留白；存储出错时圆点换成警告图标（Playground 不会出错）。
+ * 底栏（本次提出）：左下角是缩小的版本号，检查到新版本时右上角带一个更新角标；右边是设置。
+ * 现有应用在这里放一个表示本地存储状态的绿色圆点，版本号在标题区；圆点取消，改为更新提示。
+ * 存储出错时版本号左边出现警告图标（现有行为保留，Playground 不会出错）。
  */
-export function SidebarFooter({ onSettings }: { onSettings: () => void }) {
+export function SidebarFooter({ update, onVersion, onSettings }: FooterProps) {
+  const label = update ? `发现新版本 ${update}，点击查看更新内容` : `版本 ${__APP_VERSION__} 预览版，点击查看更新日志`;
   return (
     <footer className="sn-side-foot">
-      <span className="sn-storage" role="img" aria-label="本地已保存" title="本地已保存">
-        <span className="sn-status-dot" />
-      </span>
-      <IconButton icon="settings" label="偏好设置与数据" size="sm" onClick={onSettings} />
+      <button type="button" className={cx('sn-side-version', update && 'has-update')} aria-label={label} title={label} onClick={onVersion}>
+        v{__APP_VERSION__}
+        {update ? (
+          <span className="sn-update-badge" aria-hidden="true">
+            <Icon name="arrow-up" />
+          </span>
+        ) : null}
+      </button>
+      <IconButton icon="settings" label="偏好设置与数据" shortcut={SHORTCUT_KEYS.settings} size="sm" onClick={onSettings} />
     </footer>
   );
 }
 
-/** 拖动调整侧栏宽度的手柄，放在侧栏朝向屏幕内侧的一边。 */
+/**
+ * 指针停在宽度手柄上这么久（毫秒）之后才高亮、换成调整宽度的指针（本次提出）：
+ * 只是从桌面移进侧栏时划过手柄，不会闪一下强调色（与 Windows 默认的悬停时间相同）。
+ */
+const RESIZER_HOVER_DELAY = 400;
+
+/**
+ * 拖动调整侧栏宽度的手柄，放在侧栏朝向屏幕内侧的一边。
+ * 指针停留 400ms 后才高亮并换成左右箭头；按下即可拖动，不必等高亮；键盘聚焦时立即高亮。
+ */
 export function Resizer({ edge, width, min, max, onChange }: { edge: EdgeSide; width: number; min: number; max: number; onChange: (width: number) => void }) {
   const start = useRef<{ x: number; width: number } | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [armed, setArmed] = useState(false);
+  const timer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
   return (
     <div
-      className={cx('sn-resizer', dragging && 'is-dragging')}
+      className={cx('sn-resizer', armed && 'is-armed', dragging && 'is-dragging')}
       data-edge={edge}
       role="separator"
       aria-orientation="vertical"
@@ -469,6 +497,14 @@ export function Resizer({ edge, width, min, max, onChange }: { edge: EdgeSide; w
       aria-valuemin={min}
       aria-valuemax={max}
       tabIndex={0}
+      onPointerEnter={() => {
+        window.clearTimeout(timer.current);
+        timer.current = window.setTimeout(() => setArmed(true), RESIZER_HOVER_DELAY);
+      }}
+      onPointerLeave={() => {
+        window.clearTimeout(timer.current);
+        setArmed(false);
+      }}
       onPointerDown={(event) => {
         event.currentTarget.setPointerCapture(event.pointerId);
         start.current = { x: event.clientX, width };

@@ -116,15 +116,20 @@
   border-top: var(--sn-border-width) solid var(--sn-color-border-subtle);
 }
 
-/* ---------- 调整宽度的手柄 ---------- */
+/* ---------- 调整宽度的手柄 ----------
+ * 指针停留片刻（脚本中的 RESIZER_HOVER_DELAY）才加 is-armed：这时才高亮并换成左右箭头。
+ * 只是从桌面移进侧栏时划过手柄，什么都不变；按下即可拖动，键盘聚焦时立即高亮。 */
 .sn-resizer {
   position: absolute;
   top: 0;
   bottom: 0;
   z-index: var(--sn-z-sticky);
   width: var(--sn-space-3);
-  cursor: ew-resize;
   touch-action: none;
+}
+
+.sn-resizer:is(.is-armed, .is-dragging) {
+  cursor: ew-resize;
 }
 
 .sn-resizer[data-edge='right'] {
@@ -146,7 +151,7 @@
   transition: background-color var(--sn-duration-fast) var(--sn-ease-standard);
 }
 
-.sn-resizer:hover::after,
+.sn-resizer.is-armed::after,
 .sn-resizer.is-dragging::after,
 .sn-resizer:focus-visible::after {
   background: var(--sn-color-accent);
@@ -208,33 +213,12 @@
   height: var(--sn-icon-size-sm);
 }
 
-.sn-side-brand-text {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sn-space-3);
-  min-width: 0;
-}
-
 .sn-side-title {
   font-family: var(--sn-font-title);
   font-size: var(--sn-font-size-md);
   font-weight: var(--sn-title-weight);
   letter-spacing: var(--sn-title-tracking);
   white-space: nowrap;
-}
-
-.sn-side-version {
-  padding: 0 var(--sn-space-2);
-  border-radius: var(--sn-radius-xs);
-  color: var(--sn-color-text-muted);
-  font-family: var(--sn-font-meta);
-  font-size: var(--sn-font-size-xs);
-  white-space: nowrap;
-}
-
-.sn-side-version:hover {
-  background: var(--sn-color-hover);
-  color: var(--sn-color-text);
 }
 
 .sn-side-actions {
@@ -248,13 +232,16 @@
   outline-offset: calc(var(--sn-space-2) * -1);
 }
 
-/* ---------- 页签与搜索 ---------- */
+/* ---------- 页签与搜索 ----------
+ * 放大镜固定在这一行的最右边（与现有应用一致），叠在页签行之上；右侧内边距给它留出位置，页签不会钻到它下面。 */
 .sn-side-nav {
+  --local-search-size: calc(var(--sn-control-height) + var(--sn-border-width) * 2);
+  position: relative;
   display: flex;
   align-items: stretch;
   gap: var(--sn-space-3);
   height: calc(var(--sn-tab-height) + var(--sn-space-4));
-  padding: 0 var(--sn-space-3) var(--sn-space-2) var(--sn-panel-padding);
+  padding: 0 calc(var(--sn-space-3) * 2 + var(--local-search-size)) var(--sn-space-2) var(--sn-panel-padding);
   border-bottom: var(--sn-border-width) solid var(--sn-color-border-subtle);
 }
 
@@ -267,6 +254,7 @@
   flex: none;
   align-items: center;
   gap: var(--sn-space-1);
+  transition: opacity var(--sn-duration-fast) var(--sn-ease-standard);
 }
 
 .sn-side-tab {
@@ -368,33 +356,46 @@
   box-shadow: var(--sn-shadow-sm);
 }
 
-.sn-search-toggle {
-  align-self: center;
-  margin-left: auto;
-}
-
-/* 搜索时搜索框盖住页签（与现有应用一致），放大镜留在搜索框最左边，再点一次收起。 */
-.sn-side-nav.is-searching .sn-tabs-row {
-  display: none;
-}
-
-.sn-side-search .sn-search-toggle {
-  margin-left: 0;
-}
-
+/* 搜索框（与现有应用一样有展开与收起的动画）：收起时只是最右边的放大镜，边框与底色透明；
+ * 展开时宽度从右向左铺满这一行，盖住页签，页签淡出；输入框在宽度展开一段之后淡入，收起时先淡出。
+ * 盒子比控件高度多出两条边框，放大镜（常规尺寸的图标按钮）正好放在边框之内。 */
 .sn-side-search {
+  position: absolute;
+  top: 0;
+  right: var(--sn-space-3);
+  bottom: var(--sn-space-2);
   display: flex;
-  flex: 1;
-  align-self: center;
   align-items: center;
-  gap: var(--sn-space-3);
-  min-width: 0;
-  height: var(--sn-control-height);
-  padding: 0 var(--sn-space-1);
-  border: var(--sn-border-width) solid var(--sn-color-border);
+  gap: var(--sn-space-2);
+  width: var(--local-search-size);
+  height: var(--local-search-size);
+  margin: auto 0;
+  overflow: hidden;
+  border: var(--sn-border-width) solid transparent;
   border-radius: var(--sn-radius-control);
-  background: var(--sn-color-surface-sunken);
+  background-color: transparent;
   color: var(--sn-color-text-muted);
+  transition:
+    width var(--sn-duration-normal) var(--sn-ease-standard),
+    background-color var(--sn-duration-fast) var(--sn-ease-standard),
+    border-color var(--sn-duration-fast) var(--sn-ease-standard);
+}
+
+.sn-side-search.is-open {
+  width: calc(100% - var(--sn-panel-padding) - var(--sn-space-3));
+  padding-right: var(--sn-space-1);
+  border-color: var(--sn-color-border);
+  background-color: var(--sn-color-surface-sunken);
+}
+
+/* 放大镜不随搜索框收窄。 */
+.sn-side-search > .sn-tooltip-anchor {
+  flex: none;
+}
+
+.sn-side-nav.is-searching .sn-tabs-row {
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* 获得焦点或有搜索词时，底边换成强调色线（见 components.css「输入类控件的焦点」）；
@@ -405,6 +406,13 @@
   flex: 1;
   min-width: 0;
   height: 100%;
+  opacity: 0;
+  transition: opacity var(--sn-duration-fast) var(--sn-ease-standard);
+}
+
+.sn-side-search.is-open .sn-side-search-field {
+  opacity: 1;
+  transition-delay: var(--sn-duration-fast);
 }
 
 .sn-side-search-field input {
@@ -562,37 +570,20 @@
   font-size: var(--sn-font-size-sm);
 }
 
+/* 底部只有「搜索标签」一项，与上面的标签之间一条分隔线；剩余的标签数写在右边，与条数同一列。 */
 .sn-tag-menu-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sn-space-4);
   margin-top: var(--sn-space-2);
-  padding: var(--sn-space-3) var(--sn-space-2) var(--sn-space-1) var(--sn-space-4);
+  padding-top: var(--sn-space-2);
   border-top: var(--sn-border-width) solid var(--sn-color-border-subtle);
-  color: var(--sn-color-text-muted);
-  font-size: var(--sn-font-size-xs);
 }
 
 .sn-tag-menu-search {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: var(--sn-space-2);
-  height: var(--sn-control-height-sm);
-  padding: 0 var(--sn-space-3);
-  border-radius: var(--sn-radius-control);
   color: var(--sn-color-accent-text);
 }
 
 .sn-tag-menu-search .sn-icon {
   width: var(--sn-icon-size-sm);
   height: var(--sn-icon-size-sm);
-}
-
-.sn-tag-menu-search:hover,
-.sn-tag-menu-search:focus-visible {
-  background: var(--sn-color-hover);
 }
 
 .sn-filter-banner {
@@ -1050,11 +1041,13 @@
 }
 
 /* ---------- 底栏 ----------
- * 与现有应用一致：左边一个存储状态的小圆点，右边是设置，其余留白。 */
+ * 左下角是缩小的版本号，检查到新版本时右上角带更新角标；右边是设置，其余留白（本次提出）。
+ * 现有应用在这里放存储状态的绿色圆点，版本号在标题区。 */
 .sn-side-foot {
   display: flex;
   flex: none;
   align-items: center;
+  justify-content: space-between;
   gap: var(--sn-space-4);
   height: var(--sn-footer-height);
   padding: 0 var(--sn-space-3) 0 var(--sn-panel-padding);
@@ -1065,19 +1058,51 @@
   user-select: none;
 }
 
-.sn-storage {
+/* 版本号：弱化文字色的小号字，与时间、条数同一种字体；左侧不留内边距，与面板内容左对齐。 */
+.sn-side-version {
+  position: relative;
   display: inline-flex;
-  flex: 1;
   align-items: center;
-  min-width: 0;
-  height: 100%;
+  height: var(--sn-control-height-sm);
+  margin-left: calc(var(--sn-space-2) * -1);
+  padding: 0 var(--sn-space-2);
+  border-radius: var(--sn-radius-xs);
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.sn-status-dot {
-  display: inline-block;
-  flex: none;
-  width: var(--sn-space-3);
-  height: var(--sn-space-3);
+.sn-side-version:hover {
+  background: var(--sn-color-hover);
+  color: var(--sn-color-text);
+}
+
+/* 有新版本时版本号右侧多留出角标的位置。 */
+.sn-side-version.has-update {
+  padding-right: calc(var(--sn-space-2) + var(--sn-space-5));
+}
+
+/* 更新角标：强调色的小圆点里一个向上的箭头，压在版本号的右上角。 */
+.sn-update-badge {
+  position: absolute;
+  top: calc(var(--sn-space-1) * -1);
+  right: var(--sn-space-1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--sn-space-5);
+  height: var(--sn-space-5);
   border-radius: var(--sn-radius-full);
-  background: var(--sn-color-success);
+  background: var(--sn-color-accent);
+  box-shadow: 0 0 0 var(--sn-border-width) var(--sn-color-panel);
+  color: var(--sn-color-on-accent);
+}
+
+/* 箭头缩到 8px，描边按比例加粗才看得清。 */
+.sn-update-badge .sn-icon {
+  width: var(--sn-space-4);
+  height: var(--sn-space-4);
+  stroke-width: calc(var(--sn-icon-stroke) * 1.6);
 }

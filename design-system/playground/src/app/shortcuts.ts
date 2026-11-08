@@ -2,7 +2,7 @@
  * 快捷键表：侧栏、速记浮窗、设置页与文档共用同一份定义。
  *
  * 默认按键取自现有应用 0.7.3（`src/core/shortcuts.ts`，可在设置中重新绑定）；
- * `proposed` 标出的是本次设计提出的补充（键盘在卡片之间移动、Enter 编辑、Delete 移入回收站），尚未实现。
+ * `proposed` 标出的是本次设计提出的补充（键盘在卡片之间移动、Enter 编辑、Delete 移入回收站、Ctrl+, 打开设置），尚未实现。
  */
 
 export type ShortcutGroup = '全局' | '侧栏' | '编辑' | '格式';
@@ -23,6 +23,7 @@ export const SHORTCUTS: readonly ShortcutSpec[] = [
   { id: 'sidebar', label: '呼出侧栏', keys: 'Alt+Shift+S', group: '全局', rebindable: true },
   { id: 'newNote', label: '新建记录', keys: 'Ctrl+N', group: '侧栏', rebindable: true },
   { id: 'search', label: '搜索记录与标签', keys: 'Ctrl+F', group: '侧栏', rebindable: true },
+  { id: 'settings', label: '打开设置', keys: 'Ctrl+,', group: '侧栏', rebindable: true, proposed: true },
   { id: 'copy', label: '复制选中的记录', keys: 'Ctrl+C', group: '侧栏' },
   { id: 'hide', label: '收起侧栏', keys: 'Esc', group: '侧栏' },
   { id: 'move', label: '在卡片之间移动', keys: '↑ / ↓', group: '侧栏', proposed: true },
@@ -50,5 +51,6 @@ export const SHORTCUT_KEYS = {
   capture: 'Ctrl+Shift+Space',
   newNote: 'Ctrl+N',
   search: 'Ctrl+F',
+  settings: 'Ctrl+,',
   save: 'Ctrl+Enter',
 } as const;

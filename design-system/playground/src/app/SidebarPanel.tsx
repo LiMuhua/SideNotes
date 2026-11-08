@@ -25,7 +25,20 @@ import { EmptyState } from '../ui/Misc';
 import { useToast } from '../ui/Tabs';
 import { Composer } from './Composer';
 import { SHORTCUT_KEYS } from './shortcuts';
-import { ChangelogDialog, EmojiDialog, GuideDialog, NoteInfoDialog, noteMenuItems, sidebarMenuItems, TagManageDialog, TrashConfirm, type NoteCommand, type SidebarCommand } from './menus';
+import {
+  AVAILABLE_UPDATE,
+  ChangelogDialog,
+  EmojiDialog,
+  GuideDialog,
+  NoteInfoDialog,
+  noteMenuItems,
+  sidebarMenuItems,
+  TagManageDialog,
+  TrashConfirm,
+  UpdateDialog,
+  type NoteCommand,
+  type SidebarCommand,
+} from './menus';
 import { NoteCard } from './NoteCard';
 import { FilterBanner, ListTopline, Resizer, SidebarFooter, SidebarHeader, SidebarNav, TidyNudge } from './SidebarParts';
 
@@ -74,11 +87,12 @@ export function SidebarPanel(props: SidebarPanelProps) {
   const [managingTag, setManagingTag] = useState<string | null>(null);
   const [guide, setGuide] = useState(false);
   const [changelog, setChangelog] = useState(false);
+  const [updating, setUpdating] = useState(false);
   const [nudgeClosed, setNudgeClosed] = useState(false);
 
   const { settings } = data;
   const edge: EdgeSide = settings.edge;
-  const busy = Boolean(view.editingId || menu || trashing || infoNote || emojiNote || managingTag || guide || changelog);
+  const busy = Boolean(view.editingId || menu || trashing || infoNote || emojiNote || managingTag || guide || changelog || updating);
   const { onBusyChange } = props;
 
   useEffect(() => {
@@ -262,6 +276,8 @@ export function SidebarPanel(props: SidebarPanelProps) {
     const typing = (event.target as HTMLElement).closest('input, textarea, [contenteditable="true"]');
     if (ctrl && key === 'f') runSidebar('search');
     else if (ctrl && key === 'n') runSidebar('new');
+    // 打开设置（本次提出）：应用内快捷键，侧栏获得焦点时响应，编辑中同样可用。
+    else if (ctrl && key === ',') runSidebar('settings');
     else if (event.key === 'Escape') {
       // 逐级退出：多选（本次提出）、搜索（现有：收起并清空搜索词，标签筛选保留），最后收起侧栏。
       if (view.checked.size) view.setChecked(new Set());
@@ -340,7 +356,6 @@ export function SidebarPanel(props: SidebarPanelProps) {
           edge={edge}
           onTogglePinned={props.onTogglePinned}
           onHide={props.onHide}
-          onVersion={() => setChangelog(true)}
         />
         <SidebarNav view={view} onSearchInput={setSearchInput} />
       </div>
@@ -444,7 +459,11 @@ export function SidebarPanel(props: SidebarPanelProps) {
           />
         )}
       </div>
-      <SidebarFooter onSettings={props.onOpenSettings} />
+      <SidebarFooter
+        update={AVAILABLE_UPDATE?.version ?? null}
+        onVersion={() => (AVAILABLE_UPDATE ? setUpdating(true) : setChangelog(true))}
+        onSettings={props.onOpenSettings}
+      />
 
       {menu && menuItems.length ? (
         <ContextMenu label={menu.type === 'note' ? '记录操作' : '侧栏操作'} items={menuItems} point={menu.point} onClose={() => setMenu(null)} />
@@ -473,6 +492,7 @@ export function SidebarPanel(props: SidebarPanelProps) {
       />
       <GuideDialog open={guide} onClose={() => setGuide(false)} />
       <ChangelogDialog open={changelog} onClose={() => setChangelog(false)} />
+      <UpdateDialog update={AVAILABLE_UPDATE} open={updating} onClose={() => setUpdating(false)} />
     </aside>
   );
 }

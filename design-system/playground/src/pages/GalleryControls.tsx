@@ -133,7 +133,7 @@ export function ControlsSection() {
           <Tag label="常用" selected onClick={() => {}} />
           <div className="sn-tooltip is-static" role="presentation">
             <span>收起侧栏</span>
-            <Keys combo="Esc" tone="inverse" />
+            <Keys combo="Esc" />
           </div>
           <Tooltip content="固定侧栏保持展开">
             <Button size="sm" variant="secondary">

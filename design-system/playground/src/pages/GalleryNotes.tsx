@@ -6,7 +6,7 @@ import { useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 're
 import type { Note } from '@/core/types';
 import { notesInTab, useNotes, useSidebarView } from '../model/notes';
 import { Composer } from '../app/Composer';
-import { ChangelogDialog, EmojiDialog, GuideDialog, NoteInfoDialog, noteMenuItems, sidebarMenuItems, TrashConfirm } from '../app/menus';
+import { AVAILABLE_UPDATE, ChangelogDialog, EmojiDialog, GuideDialog, NoteInfoDialog, noteMenuItems, sidebarMenuItems, TrashConfirm, UpdateDialog } from '../app/menus';
 import { NoteCard, type NoteCardProps } from '../app/NoteCard';
 import { FilterBanner, ListTopline, SidebarFooter, SidebarNav, TidyNudge } from '../app/SidebarParts';
 import { Button } from '../ui/Button';
@@ -184,10 +184,19 @@ export function PartsSection() {
           <Composer />
         </PanelSample>
       </Demo>
-      <Demo title="底栏" note="左边是本地存储状态的小圆点（悬停显示说明），右边是设置；其余留白。">
-        <PanelSample>
-          <SidebarFooter onSettings={noop} />
-        </PanelSample>
+      <Demo title="底栏" note="左下角是缩小的版本号，检查到新版本时右上角带一个更新角标，点开列出即将更新的内容；右边是设置（Ctrl+,）。">
+        <div className="sn-card-matrix">
+          <StateCell label="发现新版本">
+            <PanelSample>
+              <SidebarFooter update={AVAILABLE_UPDATE?.version ?? null} onVersion={noop} onSettings={noop} />
+            </PanelSample>
+          </StateCell>
+          <StateCell label="已是最新版本">
+            <PanelSample>
+              <SidebarFooter update={null} onVersion={noop} onSettings={noop} />
+            </PanelSample>
+          </StateCell>
+        </div>
       </Demo>
     </PageSection>
   );
@@ -198,7 +207,7 @@ export function OverlaySection() {
   const toast = useToast();
   const note = notesInTab(data.notes, 'workspace')[0] ?? null;
   const [menu, setMenu] = useState<{ type: 'note' | 'sidebar'; point: { x: number; y: number } } | null>(null);
-  const [dialog, setDialog] = useState<'trash' | 'changelog' | 'info' | 'guide' | 'emoji' | null>(null);
+  const [dialog, setDialog] = useState<'trash' | 'changelog' | 'update' | 'info' | 'guide' | 'emoji' | null>(null);
   const open = (type: 'note' | 'sidebar') => (event: ReactMouseEvent<HTMLButtonElement>) => {
     const box = event.currentTarget.getBoundingClientRect();
     setMenu({ type, point: { x: box.left, y: box.bottom + 4 } });
@@ -232,6 +241,9 @@ export function OverlaySection() {
           <Button variant="secondary" onClick={() => setDialog('changelog')}>
             版本与更新
           </Button>
+          <Button variant="secondary" onClick={() => setDialog('update')}>
+            发现新版本
+          </Button>
           <Button variant="secondary" onClick={() => setDialog('info')}>
             记录信息
           </Button>
@@ -244,6 +256,7 @@ export function OverlaySection() {
         </DemoRow>
         <TrashConfirm notes={dialog === 'trash' && note ? [note] : null} onCancel={() => setDialog(null)} onConfirm={() => setDialog(null)} />
         <ChangelogDialog open={dialog === 'changelog'} onClose={() => setDialog(null)} />
+        <UpdateDialog update={AVAILABLE_UPDATE} open={dialog === 'update'} onClose={() => setDialog(null)} />
         <NoteInfoDialog note={dialog === 'info' ? note : null} onClose={() => setDialog(null)} />
         <EmojiDialog note={dialog === 'emoji' ? note : null} onPick={() => setDialog(null)} onClose={() => setDialog(null)} />
         <GuideDialog open={dialog === 'guide'} onClose={() => setDialog(null)} />
