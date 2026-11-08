@@ -79,7 +79,7 @@
 | 悬停与选中 | 莓红边框，外面一圈 3px 的淡莓红，卡片略微浮起；时间换成操作按钮 | `--sn-shadow-card-active`、`--sn-color-card-active` |
 | 多选 | 卡片叠一层浅莓红，莓红边框 | `--sn-color-accent-subtle` |
 | 键盘焦点 | 卡片内侧一圈 2px 的焦点环 | `--sn-color-focus` |
-| 编辑中 | 白色底，一像素的莓红边框，明显浮起，不加外圈 | `--sn-color-editing`、`--sn-shadow-editing` |
+| 编辑中 | 白色底，明显浮起；边框不变，不用莓红 | `--sn-color-editing`、`--sn-shadow-editing` |
 | 其余卡片变淡 | 有卡片在编辑时降到禁用透明度，悬停时恢复 | `--sn-opacity-disabled` |
 | 收起 | 只剩标题行 | — |
 

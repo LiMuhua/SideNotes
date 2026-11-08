@@ -77,7 +77,7 @@ Glance 用细线分栏，它的栏目内容短而整齐；SideNotes 的记录长
 | 悬停与选中 | 墨绿边框加一圈墨绿外圈，纸片略微浮起，叠一层很淡的墨绿；时间换成操作按钮 | `--sn-shadow-card-active`、`--sn-color-card-active` |
 | 多选 | 纸片叠一层浅墨绿，墨绿边框 | `--sn-color-accent-subtle` |
 | 键盘焦点 | 纸片内侧一圈 2px 的墨色焦点环 | `--sn-color-focus` |
-| 编辑中 | 纸片换成更白的编辑底色，一像素的墨绿边框与投影，不加外圈 | `--sn-color-editing`、`--sn-shadow-editing` |
+| 编辑中 | 纸片换成更白的编辑底色并加投影；边框不变，不用墨绿 | `--sn-color-editing`、`--sn-shadow-editing` |
 | 其余卡片变淡 | 有卡片在编辑时降到禁用透明度，悬停时恢复 | `--sn-opacity-disabled` |
 | 收起 | 只剩标题行 | — |
 

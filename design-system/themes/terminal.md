@@ -78,7 +78,7 @@ Maple Mono NF CN 已随应用打包（SIL OFL 1.1）。它的汉字宽 1.2 em，
 | 悬停与选中 | 琥珀色边框加一圈琥珀色外圈；标题栏染成琥珀色，顶部一条 2px 的琥珀色线，像编辑器里当前的页签；时间换成操作按钮 | `--sn-shadow-card-active`、`--sn-color-card-head-active` |
 | 多选 | 窗格叠一层浅琥珀色，琥珀色边框，标题栏同选中 | `--sn-color-accent-subtle` |
 | 键盘焦点 | 窗格内侧一圈 2px 的焦点环 | `--sn-color-focus` |
-| 编辑中 | 一像素的琥珀色边框与投影，不加外圈；标题栏同选中 | `--sn-color-editing`、`--sn-shadow-editing` |
+| 编辑中 | 只加浮起的投影；边框与标题栏保持平时的样子，不用琥珀色 | `--sn-color-editing`、`--sn-shadow-editing` |
 | 其余卡片变淡 | 有卡片在编辑时降到禁用透明度，悬停时恢复 | `--sn-opacity-disabled` |
 | 收起 | 只剩标题栏 | — |
 
@@ -92,7 +92,7 @@ Maple Mono NF CN 已随应用打包（SIL OFL 1.1）。它的汉字宽 1.2 em，
 | Markdown 标记 | 琥珀色，像代码的语法着色 |
 | 光标 | 琥珀色 |
 | 编辑栏 | 附件工具、Ctrl+Enter 按键提示、取消、保存 |
-| 标题栏 | 染成琥珀色，与选中时相同 |
+| 标题栏 | 保持平时的浅灰，不染色，顶部也没有强调色线（2026-11-08 去掉：编辑的地方不被强调色框住） |
 
 五套主题共用的编辑模式规则见 [editing.md](../editing.md)。
 

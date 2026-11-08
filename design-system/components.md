@@ -64,7 +64,7 @@
 ### 1.6 新建卡片
 
 - 平时只有一个编辑区，占位文字两行：「记一条… 支持 Markdown、#标签」与保存方式。获得焦点或有内容时，底部出现工具栏：添加图片、引用文件、字数（终端为 Ctrl+Enter 按键提示）、收起、保存。
-- 获得焦点时与编辑中的卡片一样：边框换成强调色，底色换成编辑底色 `--sn-color-editing`，不加外圈；磨砂玻璃同时去掉边缘受光。
+- 获得焦点时与编辑中的卡片一样：底色换成编辑底色 `--sn-color-editing` 并浮起，层级提到列表之上；边框不变，不用强调色，磨砂玻璃保留边缘受光。
 - 草稿与速记浮窗共用。
 
 ### 1.7 底栏
@@ -112,10 +112,10 @@ Emoji、时间与按钮对齐标题的第一行。单行记录与收起的记录
 | 状态 | 表现 | 令牌 |
 | --- | --- | --- |
 | 默认 | 卡片底色、浅边框，右侧显示时间 | `--sn-color-card`、`--sn-color-border-subtle` |
-| 悬停与选中 | 强调色边框加一像素外圈，叠一层选中色；终端的标题栏换成选中色，顶部一条 2px 的强调色线（画在背景层里，两侧不留细缝）；玻璃块去掉边缘受光，不加光晕 | `--sn-shadow-card-active`、`--sn-color-card-active`、`--sn-color-card-head-active` |
+| 悬停与选中 | 强调色边框加一像素外圈，叠一层选中色；终端的标题栏换成选中色，顶部一条 2px 的强调色线（画在背景层里，两侧不留细缝）；玻璃块去掉边缘受光，不加光晕；编辑中的卡片不用这些高亮 | `--sn-shadow-card-active`、`--sn-color-card-active`、`--sn-color-card-head-active` |
 | 多选 | 叠一层强调色浅底，强调色边框 | `--sn-color-accent-subtle` |
 | 键盘焦点 | 卡片内侧一圈焦点环 | `--sn-color-focus`、`--sn-focus-ring-width` |
-| 编辑中 | 编辑底色，一像素的强调色边框并浮起，不加外圈，见 [editing.md](./editing.md) | `--sn-color-editing`、`--sn-shadow-editing` |
+| 编辑中 | 编辑底色并浮起；边框与终端的标题栏保持平时的样子，不用强调色，见 [editing.md](./editing.md) | `--sn-color-editing`、`--sn-shadow-editing` |
 | 其余卡片变淡 | 有卡片在编辑时降到禁用透明度，悬停时恢复 | `--sn-opacity-disabled` |
 | 收起 | 只剩标题行 | — |
 

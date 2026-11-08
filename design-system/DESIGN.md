@@ -59,7 +59,7 @@ Design Playground 用同一套令牌与组件运行三个窗口，见 [playgroun
 | 操作按钮的最右边增加收起按钮，位置与平时的时间相同；点时间收起的行为保留 | 只能点时间收起 | [interactions.md](./interactions.md) |
 | 置顶按钮排在操作按钮的第一个 | 依次为复制、置顶、归档、更多 | [components.md](./components.md) |
 | 悬停与选中用各主题的强调色，加一像素外圈；终端的标题栏同时染色 | 统一的绿色边框 | [components.md](./components.md) |
-| 编辑中的卡片只把边框换成强调色并浮起，不加外圈；编辑区里不画边框、强调线与行号；记录纸出现横线 | 编辑中的卡片用强调色边框、外圈与投影，其余卡片变淡（T21） | [editing.md](./editing.md) |
+| 编辑中的卡片与获得焦点的新建卡片只换成编辑底色并浮起，边框不用强调色；编辑区里不画边框、强调线与行号；记录纸出现横线 | 编辑中的卡片用强调色边框、外圈与投影，其余卡片变淡（T21） | [editing.md](./editing.md) |
 | 输入框、搜索框、下拉框等获得焦点时，底边换成强调色线，不加外圈 | 强调色边框 | [components.md](./components.md) |
 | ↑ ↓ 在卡片之间移动，Enter 编辑，Delete 移入回收站，Shift+F10 打开卡片菜单 | 卡片只能用鼠标操作 | [interactions.md](./interactions.md) |
 | Esc 在收起侧栏之前先清除多选 | 有多选时 Esc 直接收起侧栏 | [interactions.md](./interactions.md) |

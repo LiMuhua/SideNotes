@@ -76,7 +76,7 @@
 | 悬停与选中 | 强调色边框加一圈强调色外圈，叠一层很淡的强调色；时间换成操作按钮 | `--sn-shadow-card-active`、`--sn-color-card-active` |
 | 多选 | 卡片叠一层浅强调色，强调色边框 | `--sn-color-accent-subtle` |
 | 键盘焦点 | 卡片内侧一圈 2px 的黑色（深色为白色）焦点环，与 Windows 11 一致 | `--sn-color-focus` |
-| 编辑中 | 卡片换成几乎不透明的白色，一像素的强调色边框，略微浮起 | `--sn-color-editing`、`--sn-shadow-editing` |
+| 编辑中 | 卡片换成几乎不透明的白色，略微浮起；边框不变，不用强调色 | `--sn-color-editing`、`--sn-shadow-editing` |
 | 其余卡片变淡 | 有卡片在编辑时降到禁用透明度，悬停时恢复 | `--sn-opacity-disabled` |
 | 收起 | 只剩标题行 | — |
 
