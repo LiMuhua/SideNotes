@@ -31,5 +31,5 @@
       "@/*": ["src/*"]
     }
   },
-  "include": ["src", "design-system", "vite.config.ts", "eslint.config.js"]
+  "include": ["src", "docs/design-system", "vite.config.ts", "eslint.config.js"]
 }

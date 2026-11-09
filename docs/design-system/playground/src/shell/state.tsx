@@ -38,7 +38,7 @@ export const PAGES: ReadonlyArray<{ id: PageId; label: string; group: 'app' | 's
   { id: 'components', label: '组件', group: 'system' },
   { id: 'tokens', label: '令牌', group: 'system' },
   { id: 'compare', label: '五套对比', group: 'system' },
-  // 临时入口：应用图标选定后连同 design-system/icon-candidates/ 一起删除。
+  // 临时入口：应用图标选定后连同 docs/design-system/icon-candidates/ 一起删除。
   { id: 'icons', label: '图标候选', group: 'system' },
 ];
 

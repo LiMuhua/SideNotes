@@ -3,7 +3,7 @@
  *
  * - 声明里不写死颜色、像素、rem 与时长；确需固定的数值在同一行行尾注明「固定：原因」。
  * - 引用的变量必须是令牌表中的令牌，或者是组件内部（--local-*）、Markdown 编辑器运行时（--md-*）的变量。
- * - 产品样式不定义 --sn-* 变量：令牌只在 design-system/tokens 中定义，避免两处取值。
+ * - 产品样式不定义 --sn-* 变量：令牌只在 docs/design-system/tokens 中定义，避免两处取值。
  *
  * 桌面场景（desktop.css）、组件页（pages.css）与 Playground 外壳（shell.css）不属于 SideNotes 的设计，不在检查范围内。
  */

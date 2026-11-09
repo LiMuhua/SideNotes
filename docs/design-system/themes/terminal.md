@@ -118,7 +118,7 @@ Maple Mono NF CN 已随应用打包（SIL OFL 1.1）。它的汉字宽 1.2 em，
 
 ## 附录：令牌取值
 
-以下是 [tokens/terminal.css](../tokens/terminal.css) 中的全部取值，由令牌文件生成，`design-system/tests/docs.test.ts` 检查两者一致。共享令牌（间距、字重、描边宽度、层级等）所有主题相同，见 [design-tokens.md](../design-tokens.md)。
+以下是 [tokens/terminal.css](../tokens/terminal.css) 中的全部取值，由令牌文件生成，`docs/design-system/tests/docs.test.ts` 检查两者一致。共享令牌（间距、字重、描边宽度、层级等）所有主题相同，见 [design-tokens.md](../design-tokens.md)。
 
 ### 随明暗变化
 

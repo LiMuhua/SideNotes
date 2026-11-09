@@ -81,14 +81,14 @@ Playground 有独立的入口 `design-playground.html`，不改动 `src/main.tsx
 pnpm test
 ```
 
-- `design-system/tests/tokens.test.ts`：每套主题、每种明暗的令牌齐全，关键颜色组合在最差背景上达到 4.5:1 或 3:1。
-- `design-system/tests/styles.test.ts`：产品样式不写死颜色、像素、rem 与时长，只引用令牌表中的令牌。
-- `design-system/tests/docs.test.ts`：设计令牌文档与主题文档附录中的表与令牌文件一致，主题文档的章节统一，文档中的相对链接有效。
+- `docs/design-system/tests/tokens.test.ts`：每套主题、每种明暗的令牌齐全，关键颜色组合在最差背景上达到 4.5:1 或 3:1。
+- `docs/design-system/tests/styles.test.ts`：产品样式不写死颜色、像素、rem 与时长，只引用令牌表中的令牌。
+- `docs/design-system/tests/docs.test.ts`：设计令牌文档与主题文档附录中的表与令牌文件一致，主题文档的章节统一，文档中的相对链接有效。
 
 修改令牌后，在 Git Bash 或 Linux 终端中运行下面的命令，重新生成文档中的表：
 
 ```bash
-SN_UPDATE_DOCS=1 pnpm exec vitest run design-system/tests/docs.test.ts
+SN_UPDATE_DOCS=1 pnpm exec vitest run docs/design-system/tests/docs.test.ts
 ```
 
 `pnpm lint` 与 `pnpm typecheck` 同样覆盖 Playground 的代码。

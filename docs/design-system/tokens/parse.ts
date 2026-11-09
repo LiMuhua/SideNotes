@@ -1,7 +1,7 @@
 /**
  * 令牌文件的解析、层叠与颜色计算。
  *
- * 不依赖 Node 或浏览器接口：设计系统测试（`design-system/tests`）从磁盘读取 CSS 后调用，
+ * 不依赖 Node 或浏览器接口：设计系统测试（`docs/design-system/tests`）从磁盘读取 CSS 后调用，
  * Playground 的令牌页用 Vite 的 `?raw` 导入同样的 CSS 后调用，两边看到的是同一组数值。
  *
  * 令牌文件只有顶层规则、没有嵌套，按「选择器 { 声明 }」切分即可；

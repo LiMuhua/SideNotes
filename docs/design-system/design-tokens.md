@@ -255,9 +255,9 @@
 
 `pnpm test` 包含三项设计系统检查：
 
-- `design-system/tests/tokens.test.ts`：每套主题、每种明暗都定义了全部令牌，引用都能展开，对比度达标。
-- `design-system/tests/styles.test.ts`：产品样式不写死颜色、像素、rem 与时长，只引用令牌清单中的令牌；确需固定的数值在行尾注明「固定：原因」。
-- `design-system/tests/docs.test.ts`：本文与主题文档附录中的表与代码一致，主题文档的章节统一，文档中的相对链接有效。
+- `docs/design-system/tests/tokens.test.ts`：每套主题、每种明暗都定义了全部令牌，引用都能展开，对比度达标。
+- `docs/design-system/tests/styles.test.ts`：产品样式不写死颜色、像素、rem 与时长，只引用令牌清单中的令牌；确需固定的数值在行尾注明「固定：原因」。
+- `docs/design-system/tests/docs.test.ts`：本文与主题文档附录中的表与代码一致，主题文档的章节统一，文档中的相对链接有效。
 
 新增或修改令牌的步骤：
 
@@ -267,5 +267,5 @@
 4. 在 Git Bash 或 Linux 终端中运行下面的命令，重新生成本文与主题文档中的表，检查差异后再运行 `pnpm test`。
 
 ```bash
-SN_UPDATE_DOCS=1 pnpm exec vitest run design-system/tests/docs.test.ts
+SN_UPDATE_DOCS=1 pnpm exec vitest run docs/design-system/tests/docs.test.ts
 ```

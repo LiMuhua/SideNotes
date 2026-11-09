@@ -5,7 +5,7 @@
  * - `base.css`：与主题无关的共享令牌（间距、描边宽度、字重、层级等）。
  * - 各主题的令牌文件：随主题变化的令牌，按 `data-sn-surface` 与 `data-sn-theme` 分组。
  *
- * 这份清单同时供 Playground 的令牌页展示、`design-system/tests` 检查各主题是否定义完整、
+ * 这份清单同时供 Playground 的令牌页展示、`docs/design-system/tests` 检查各主题是否定义完整、
  * 组件样式是否只引用清单中的令牌，以及 `design-tokens.md` 与 CSS 是否一致。
  */
 

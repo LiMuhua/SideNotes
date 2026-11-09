@@ -114,7 +114,7 @@
 
 ## 附录：令牌取值
 
-以下是 [tokens/win11.css](../tokens/win11.css) 中的全部取值，由令牌文件生成，`design-system/tests/docs.test.ts` 检查两者一致。共享令牌（间距、字重、描边宽度、层级等）所有主题相同，见 [design-tokens.md](../design-tokens.md)。
+以下是 [tokens/win11.css](../tokens/win11.css) 中的全部取值，由令牌文件生成，`docs/design-system/tests/docs.test.ts` 检查两者一致。共享令牌（间距、字重、描边宽度、层级等）所有主题相同，见 [design-tokens.md](../design-tokens.md)。
 
 ### 随明暗变化
 

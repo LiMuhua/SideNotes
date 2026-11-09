@@ -2,7 +2,7 @@
  *
  * 只作用于 .sn-scope 之内（应用窗口、组件页与令牌页），不影响外壳。
  * 本文件与 components.css、content.css、app.css 只引用令牌，不直接写颜色、长度与时长；
- * 确需固定的数值在行尾注明「固定：原因」，由 design-system/tests/styles.test.ts 检查。
+ * 确需固定的数值在行尾注明「固定：原因」，由 docs/design-system/tests/styles.test.ts 检查。
  */
 
 .sn-scope {

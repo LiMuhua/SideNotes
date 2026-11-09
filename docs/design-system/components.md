@@ -232,4 +232,4 @@ Emoji、时间与按钮对齐标题的第一行。单行记录与收起的记录
 
 配色固定，不随主题变化。任务栏、托盘、程序坞、关于页、Playground 的网页图标，以及侧栏标题区、速记浮窗与设置窗口的品牌标记，都用同一个图标，只是尺寸不同：标题区为图标尺寸的 1.25 倍，速记浮窗与设置窗口最小化后的按钮与图标尺寸相同，关于页为大号控件高度的 1.5 倍。16px 时眼睛只剩两个小点，仍然认得出靛蓝底上探头的黄便签。组件页的「基础控件」一节列出 64、32、24、16px 的图标与两种尺寸的品牌标记。
 
-现有应用的图标是灰绿色的两张纸片（`src/assets/favicon.svg`），标题区的品牌标记是三根竖条。本分支只在设计系统中使用新图标，桌面应用的图标文件尚未替换；替换时运行 `pnpm exec tauri icon design-system/assets/app-icon.svg` 生成 `src-tauri/icons` 中的各尺寸图标，并把 `src/assets/favicon.svg` 换成同一个文件。
+现有应用的图标是灰绿色的两张纸片（`src/assets/favicon.svg`），标题区的品牌标记是三根竖条。本分支只在设计系统中使用新图标，桌面应用的图标文件尚未替换；替换时运行 `pnpm exec tauri icon docs/design-system/assets/app-icon.svg` 生成 `src-tauri/icons` 中的各尺寸图标，并把 `src/assets/favicon.svg` 换成同一个文件。

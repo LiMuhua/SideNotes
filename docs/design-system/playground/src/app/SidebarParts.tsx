@@ -18,7 +18,7 @@ import { SHORTCUT_KEYS } from './shortcuts';
 import appIconUrl from '../../../assets/app-icon.svg';
 
 /**
- * 应用图标（`design-system/assets/app-icon.svg`，本次提出）：一张黄色便签从屏幕右边缘探出头来，看着屏幕上的内容。
+ * 应用图标（`docs/design-system/assets/app-icon.svg`，本次提出）：一张黄色便签从屏幕右边缘探出头来，看着屏幕上的内容。
  * 配色固定，不随主题变化。任务栏、托盘、程序坞与关于页直接显示它；标题区、速记浮窗与设置窗口通过 BrandMark 显示。
  */
 export function AppIcon({ className, size }: { className?: string; size?: number }) {

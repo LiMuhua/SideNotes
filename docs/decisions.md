@@ -320,7 +320,7 @@
 
 ## DS-1. Playground 使用独立入口与端口
 
-**决定**：设计系统与 Playground 放在 `design-system/`，开发入口为 `design-playground.html`（`/design-playground`），`pnpm playground` 固定使用 1430 端口（`--strictPort`）。Playground 不改动 `src/main.tsx`，不进入 `vite build`，只使用内存中的示例数据，不调用桌面接口。
+**决定**：设计系统与 Playground 放在 `docs/design-system/`，开发入口为 `design-playground.html`（`/design-playground`），`pnpm playground` 固定使用 1430 端口（`--strictPort`）。Playground 不改动 `src/main.tsx`，不进入 `vite build`，只使用内存中的示例数据，不调用桌面接口。
 
 **原因**：原仓库只读，设计工作不能影响应用的启动逻辑与构建；Playground 要能与应用的开发服务器（1420）同时运行，方便对照；固定端口便于在文档与预览配置中写明地址。
 
@@ -328,7 +328,7 @@
 
 ## DS-2. 令牌用 CSS 自定义属性，对比度按最差背景检查
 
-**决定**：令牌统一以 `--sn-*` 命名，`design-system/tokens/schema.ts` 列出全部令牌与含义；主题令牌按 `[data-sn-surface]` 与 `[data-sn-theme='dark']` 分组。半透明表面分别叠在纯黑与纯白背景上计算对比度，取较差的一个。产品样式只引用令牌，确需固定的数值在行尾注明原因，由测试检查。
+**决定**：令牌统一以 `--sn-*` 命名，`docs/design-system/tokens/schema.ts` 列出全部令牌与含义；主题令牌按 `[data-sn-surface]` 与 `[data-sn-theme='dark']` 分组。半透明表面分别叠在纯黑与纯白背景上计算对比度，取较差的一个。产品样式只引用令牌，确需固定的数值在行尾注明原因，由测试检查。
 
 **原因**：现有样式中颜色与尺寸大量直接写在选择器里，调整一处要改很多地方；半透明表面背后是什么无法预知，只能按最坏情况保证文字可读。
 
@@ -336,8 +336,16 @@
 
 ## DS-3. 五套主题都实现，代码名称沿用设置字段 surface
 
-**决定**：终端、杂志、记录纸、Windows 11、磨砂玻璃五套主题都实现，在设置中切换，默认为终端（2026-11-07 用户确认）。代码中称为 surface，取值 `terminal`、`magazine`、`paper`、`win11`、`glass`；现有设置的 `standard` 迁移为 `terminal`，其余三个同名取值沿用。结构差异写在 `design-system/playground/src/surfaces.ts`，主题文档在 `design-system/themes/`，使用统一的章节。卡片外观、编辑模式等设计决策见 [design-system/design-decisions.md](../design-system/design-decisions.md)。
+**决定**：终端、杂志、记录纸、Windows 11、磨砂玻璃五套主题都实现，在设置中切换，默认为终端（2026-11-07 用户确认）。代码中称为 surface，取值 `terminal`、`magazine`、`paper`、`win11`、`glass`；现有设置的 `standard` 迁移为 `terminal`，其余三个同名取值沿用。结构差异写在 `docs/design-system/playground/src/surfaces.ts`，主题文档在 `docs/design-system/themes/`，使用统一的章节。卡片外观、编辑模式等设计决策见 [docs/design-system/design-decisions.md](./design-system/design-decisions.md)。
 
 **原因**：用户不再从中选一套，而是全部实现、在设置中切换；沿用现有的 `surface` 字段，迁移只需改一个取值。
 
 **代价**：五套主题都要维护浅色与深色两组令牌并通过检查；`theme` 已经用于明暗模式，主题只能叫 surface，读代码时要注意区分。
+
+## DS-4. 设计系统迁入 docs/design-system
+
+**决定**：2026-11-09 用 `git mv` 把根目录的 `design-system/` 整体迁到 `docs/design-system/`，保留历史。Playground 的命令、地址与端口不变（`pnpm playground`、`/design-playground`、1430）；入口 `design-playground.html` 仍在仓库根目录，只改其中的资源路径；设计系统测试随目录迁移，由 `vite.config.ts` 的 `test.include` 收录。
+
+**原因**：设计系统是规范文档与参考实现，和交互原型 `docs/prototype/` 一样属于文档；两者并列放在 `docs/` 下，原型可以用相对路径直接引用令牌文件，不必复制一份。
+
+**代价**：以仓库根为基准的路径写法都要加上 `docs/` 前缀，其它会话与旧记录中的路径要改用新位置；`docs/design-system/` 下的文档链接到 `docs/` 的文件时少一层 `../`。

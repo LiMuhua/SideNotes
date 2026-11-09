@@ -47,7 +47,7 @@ export function themeAppendix(id: string, file: string): string {
   const rows = [
     APPENDIX_HEADING,
     '',
-    `以下是 [${file}](../${file}) 中的全部取值，由令牌文件生成，\`design-system/tests/docs.test.ts\` 检查两者一致。` +
+    `以下是 [${file}](../${file}) 中的全部取值，由令牌文件生成，\`docs/design-system/tests/docs.test.ts\` 检查两者一致。` +
       '共享令牌（间距、字重、描边宽度、层级等）所有主题相同，见 [design-tokens.md](../design-tokens.md)。',
     '',
     '### 随明暗变化',
