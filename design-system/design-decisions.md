@@ -327,4 +327,4 @@
 | Archivo 与 Inter 是否随应用打包 | 打包，或回落到系统字体 | 记录纸与磨砂玻璃能否还原设计；安装包变大 |
 | 手机上的排序方式 | 拖动手柄、菜单中的移动命令，或不提供 | 长按已经用于打开卡片菜单 |
 | 半透明主题的不透明退路颜色 | 由面板与卡片颜色推算，或单独设计 | Linux、Android 与节电模式下的观感 |
-| 应用图标定稿 | 沿用第三十七节的「探头的便签」，或从 `design-system/icon-candidates/` 的 163–209（在 00、10、15、21 上深化、结合、调整表情与细化的新版）中选一个 | 选定后替换 `design-system/assets/app-icon.svg`，品牌标记与网页图标随之更换，再运行 `pnpm exec tauri icon` 生成桌面图标；候选目录与 Playground 的「图标候选」页一并删除 |
+| 应用图标定稿 | 沿用第三十七节的「探头的便签」，或从 `design-system/icon-candidates/` 的 210–214（第六轮的五个候选，更早的 163–209 作对照）中选一个 | 选定后替换 `design-system/assets/app-icon.svg`，品牌标记与网页图标随之更换，再运行 `pnpm exec tauri icon` 生成桌面图标；候选目录与 Playground 的「图标候选」页一并删除 |
