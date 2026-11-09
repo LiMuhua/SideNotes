@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- 167 探头 · 灵光（00 点缀）：灵感一闪，便签马上探出头来看。 -->
+  <defs>
+    <linearGradient id="screen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4150b0"/><stop offset="1" stop-color="#232c6c"/></linearGradient>
+    <linearGradient id="note" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe36e"/><stop offset="1" stop-color="#ffc53a"/></linearGradient>
+    <linearGradient id="fold" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff8d6"/><stop offset="1" stop-color="#f1c24a"/></linearGradient>
+    <filter id="glow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="1.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <clipPath id="c"><rect width="64" height="64" rx="14"/></clipPath>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#screen)"/>
+  <g fill="#fff" opacity=".16">
+    <rect x="9" y="28.5" width="20" height="3.6" rx="1.8"/>
+    <rect x="9" y="37" width="15" height="3.6" rx="1.8"/>
+    <rect x="9" y="45.5" width="11" height="3.6" rx="1.8"/>
+  </g>
+  <g filter="url(#glow)" fill="#ffe680">
+    <path d="M24 9.5C24.6 13.4 26.1 14.9 30 15.5C26.1 16.1 24.6 17.6 24 21.5C23.4 17.6 21.9 16.1 18 15.5C21.9 14.9 23.4 13.4 24 9.5Z"/>
+    <circle cx="32.5" cy="9.5" r="1.1"/>
+  </g>
+  <g clip-path="url(#c)">
+    <g transform="translate(56 39) rotate(-15)">
+      <path d="M-15.5 -15H18.5V19H-8.5L-15.5 12z" fill="#000" opacity=".3"/>
+      <path d="M-13.5 -17H13.5A3.5 3.5 0 0 1 17 -13.5V13.5A3.5 3.5 0 0 1 13.5 17H-10L-17 10V-13.5A3.5 3.5 0 0 1 -13.5 -17z" fill="url(#note)"/>
+      <path d="M-17 10L-10 17V10z" fill="url(#fold)"/>
+      <g fill="#2b1d06"><ellipse cx="-10" cy="-4.5" rx="3" ry="3.9"/><ellipse cx="-1.2" cy="-4.5" rx="3" ry="3.9"/></g>
+      <g fill="#fff"><circle cx="-11.2" cy="-6.6" r="1.25"/><circle cx="-2.4" cy="-6.6" r="1.25"/></g>
+      <ellipse cx="-5.6" cy="3.6" rx="1.5" ry="1.8" fill="#2b1d06"/>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- 171 叠纸里的小家伙（10 + 00）：叠起来的便签后面，有个小家伙探出眼睛看你刚记下什么。 -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#14605a"/><stop offset="1" stop-color="#0b3b38"/></linearGradient>
+    <filter id="sh" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="-1" dy="2" stdDeviation="1.8" flood-color="#032421" flood-opacity=".6"/></filter>
+    <clipPath id="c"><rect width="64" height="64" rx="14"/></clipPath>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+  <g clip-path="url(#c)">
+    <g transform="translate(64 56)">
+      <rect x="-46" y="-36" width="32" height="32" rx="4" fill="#9fe3c5" filter="url(#sh)" transform="rotate(46)"/>
+      <g transform="rotate(23)">
+        <rect x="-46" y="-36" width="32" height="32" rx="4" fill="#ffd97a" filter="url(#sh)"/>
+        <g fill="#2b1d06"><ellipse cx="-34.6" cy="-29.6" rx="2.5" ry="3.2"/><ellipse cx="-27.4" cy="-29.6" rx="2.5" ry="3.2"/></g>
+        <g fill="#fff"><circle cx="-35.4" cy="-30.9" r=".95"/><circle cx="-28.2" cy="-30.9" r=".95"/></g>
+      </g>
+      <rect x="-46" y="-36" width="32" height="32" rx="4" fill="#fffaf0" filter="url(#sh)"/>
+      <g stroke="#3d6b66" stroke-width="2.6" stroke-linecap="round">
+        <path d="M-40 -27H-26M-40 -20H-22M-40 -13H-30"/>
+      </g>
+    </g>
+  </g>
+</svg>
