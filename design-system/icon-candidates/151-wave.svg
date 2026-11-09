@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- 151 浪：浪花扑到岸边，轻轻一碰就退回海里——记下一笔，马上回到原来的节奏。 -->
+  <defs>
+    <linearGradient id="sea" x1="0" y1="80" x2="205" y2="146" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0b5675"/>
+      <stop offset=".45" stop-color="#15909f"/>
+      <stop offset=".8" stop-color="#47c3bd"/>
+      <stop offset="1" stop-color="#a6e6d6"/>
+    </linearGradient>
+    <linearGradient id="sand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7e5c5"/>
+      <stop offset="1" stop-color="#e8c695"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset=".25" stop-color="#fff" stop-opacity="0"/><stop offset=".8" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".25"/></linearGradient>
+    <filter id="lace" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency=".06" numOctaves="2" seed="7"/>
+      <feDisplacementMap in="SourceGraphic" scale="9" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="lace2" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency=".09" numOctaves="2" seed="3"/>
+      <feDisplacementMap in="SourceGraphic" scale="12" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="b2" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="2"/></filter>
+    <clipPath id="tile"><rect width="256" height="256" rx="56"/></clipPath>
+    <path id="foam" d="M198 -10C188 40 206 80 182 120C160 156 142 198 112 266"/>
+  </defs>
+  <g clip-path="url(#tile)">
+    <rect width="256" height="256" fill="url(#sand)"/>
+    <path d="M214 -10C204 40 222 82 198 122C176 158 160 200 132 266H-10V-10Z" fill="#cfa877" fill-opacity=".55"/>
+    <path d="M198 -10C188 40 206 80 182 120C160 156 142 198 112 266H-10V-10Z" fill="url(#sea)"/>
+    <g fill="none" stroke="#fff" stroke-linecap="round">
+      <use href="#foam" transform="translate(-26 -4)" stroke-opacity=".35" stroke-width="2.5" stroke-dasharray="18 10 6 12" filter="url(#lace2)"/>
+      <use href="#foam" transform="translate(-12 -2)" stroke-opacity=".55" stroke-width="3" filter="url(#lace2)"/>
+      <use href="#foam" stroke-opacity=".95" stroke-width="8" filter="url(#lace)"/>
+    </g>
+    <use href="#foam" transform="translate(9 3)" fill="none" stroke="#fff" stroke-opacity=".28" stroke-width="5" filter="url(#b2)"/>
+    <g fill="#fff" fill-opacity=".8">
+      <circle cx="170" cy="150" r="1.6"/><circle cx="160" cy="166" r="1.2"/><circle cx="188" cy="96" r="1.4"/><circle cx="176" cy="60" r="1.2"/><circle cx="140" cy="210" r="1.4"/>
+    </g>
+  </g>
+  <rect x="1" y="1" width="254" height="254" rx="55" fill="none" stroke="url(#rim)" stroke-width="2"/>
+</svg>

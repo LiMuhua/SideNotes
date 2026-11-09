@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>SideNotes 应用图标候选</title>
+<style>
+  body { margin: 0; padding: 32px 36px 64px; background: #ebecef; color: #1d2025; font: 14px/1.65 "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
+  h1 { margin: 0 0 6px; font-size: 24px; }
+  .lead { max-width: 72em; margin: 0 0 6px; color: #555b64; }
+  .pick { margin: 0 0 20px; color: #3a3f47; }
+  .bar { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; padding: 8px 14px; overflow-x: auto; border-radius: 10px; }
+  .bar.light { background: #f3f3f3; }
+  .bar.dark { background: #1f1f1f; color: #ccc; }
+  .bar .label { flex: none; width: 92px; font-size: 12px; opacity: .65; }
+  .bar img { flex: none; }
+  .bar .sep { flex: none; width: 1px; height: 20px; margin: 0 6px; background: currentColor; opacity: .25; }
+  h2 { margin: 36px 0 4px; font-size: 18px; }
+  .note { max-width: 72em; margin: 0 0 14px; color: #5b616b; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(296px, 1fr)); gap: 18px; }
+  .card { display: flex; flex-direction: column; overflow: hidden; border-radius: 16px; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .06), 0 4px 16px rgb(0 0 0 / .05); }
+  .hero { display: flex; justify-content: center; padding: 22px 0 18px; background: linear-gradient(#f5f6f8, #e4e7eb); }
+  .hero img { filter: drop-shadow(0 6px 14px rgb(0 0 0 / .18)); }
+  .meta { display: flex; align-items: baseline; gap: 8px; margin: 14px 18px 2px; }
+  .meta .n { color: #8a8f98; font-variant-numeric: tabular-nums; }
+  .meta h3 { margin: 0; font-size: 17px; }
+  .meta .tag { margin-left: auto; padding: 0 8px; border-radius: 99px; background: #eef0f3; color: #646a73; font-size: 12px; white-space: nowrap; }
+  .idea { flex: 1; margin: 2px 18px 8px; color: #3f444c; }
+  .score { margin: 0 18px 12px; color: #8a8f98; font-size: 12px; }
+  .score b { color: #1d2025; font-size: 14px; }
+  .small { display: flex; }
+  .small > div { display: flex; flex: 1; align-items: center; justify-content: center; gap: 14px; padding: 10px 0; }
+  .small .l { background: #f3f3f3; }
+  .small .d { background: #1f1f1f; }
+  /* 16px 实际像素放大 4 倍：高分屏上画出来的 16px 比真实托盘清楚，这里还原 100% 缩放时的样子 */
+  canvas.px { width: 64px; height: 64px; image-rendering: pixelated; }
+  .kept .hero { padding: 16px 0 12px; }
+  details { max-width: 72em; margin-top: 8px; color: #4a4f57; }
+  summary { cursor: pointer; color: #1d2025; font-weight: 600; }
+  details ul { margin: 8px 0 0; padding-left: 1.2em; }
+  details li { margin: 2px 0; }
+</style>
+</head>
+<body>
+<h1>SideNotes 应用图标 · 候选成品（151–162）</h1>
+<p class="lead">这一轮先研究了 Apptorium SideNotes、Raycast、Arc、Linear、Things、Tot 等图标的做法，再从缝隙、伴随、流动、轻触几个隐喻出发，构思了三十多个方向。画出二十多版自审后淘汰一半，留下 12 个成品。每张卡片有 256px 主图，以及浅色、深色背景上的 32px 和 16px 实际像素（放大 4 倍）预览；评分按独特性 30%、美感 30%、契合度 20%、小尺寸 10%、延展性 10% 加权，卡片按分数排序。顶部四条是任务栏与托盘尺寸的横向对照。</p>
+<p class="pick">我的推荐：<b>151 浪</b>、<b>152 鲸尾</b>、<b>153 一线天</b>。</p>
+<div id="bars"></div>
+<h2>候选成品</h2>
+<p class="note">都不含笔记本、纸张、便签、笔这类符号；源文件是同目录下的独立 SVG，可以直接导出 PNG 和 Windows ICO。</p>
+<main class="grid" id="cards"></main>
+<h2>保留的对照</h2>
+<p class="note">00 是设计系统现在用的图标，只作对照；10、15、21 是之前保留下来的候选。</p>
+<section class="grid kept" id="kept"></section>
+<h2>淘汰的构思</h2>
+<details id="dropped"><summary>其余构思与淘汰原因</summary><ul></ul></details>
+<script>
+  // 候选清单：新增或删除只改这里，页面按清单生成。dims 依次是独特性、美感、契合度、小尺寸、延展性。
+  const CANDIDATES = [
+    { n: '151', file: '151-wave.svg', name: '浪', tag: '运动与流动', dims: [8, 9, 9, 8, 7], idea: '浪花扑到岸边，轻轻一碰就退回海里。记下一笔，马上回到原来的节奏。' },
+    { n: '152', file: '152-whale-tail.svg', name: '鲸尾', tag: '运动与流动', dims: [8, 8.5, 9, 8, 7], idea: '鲸浮上来换一口气，尾巴一摆又潜回深处。记完就回到专注里，心流没有断。' },
+    { n: '153', file: '153-sky-slit.svg', name: '一线天', tag: '空间隐喻', dims: [7.5, 9, 8.5, 8, 7], idea: '两面峭壁之间漏下一线天光，燕子正从缝里穿过。SideNotes 就待在你的工作和屏幕边缘之间那道窄缝里。' },
+    { n: '154', file: '154-peek.svg', name: '边边', tag: '性格与拟物', dims: [8, 7.5, 8, 8.5, 9], idea: '住在屏幕边上的小家伙，探出半个脑袋看你在忙什么；你不找它，它就安静待着。' },
+    { n: '155', file: '155-lotus-bead.svg', name: '荷珠', tag: '宇宙与自然', dims: [7.5, 9, 8, 6.5, 6.5], idea: '水珠在荷叶边上滚来滚去，却从不沾湿叶面。来去轻盈，不留打扰的痕迹。' },
+    { n: '156', file: '156-moon-gate.svg', name: '月洞门', tag: '空间隐喻', dims: [8, 8, 8, 7, 7], idea: '园林的月洞门开在墙的一侧，一步就走进另一处安静天地，回头还是原来的路。' },
+    { n: '157', file: '157-companion.svg', name: '伴星', tag: '宇宙与自然', dims: [7, 8, 8, 8, 7.5], idea: '小卫星从行星面前经过，只投下一个小小的影子。一直陪在旁边，几乎不打扰。' },
+    { n: '158', file: '158-side-window.svg', name: '侧窗', tag: '空间隐喻', dims: [7, 8, 8, 6.5, 6.5], idea: '飞行时不用离座，往侧窗一瞥就是整片天；遮光板拉下，它就安静退场。' },
+    { n: '159', file: '159-dragonfly.svg', name: '蜻蜓', tag: '原创 · 诗意', dims: [7, 7.5, 8.5, 6, 7], idea: '小荷才露尖尖角，早有蜻蜓立上头。念头刚冒尖，SideNotes 已经在旁边接住。' },
+    { n: '160', file: '160-dandelion.svg', name: '蒲公英', tag: '宇宙与自然', dims: [6.5, 8, 8, 6.5, 6.5], idea: '风一吹，念头就像种子一样飘起来；随手接住一颗，别让它飞走。' },
+    { n: '161', file: '161-amber.svg', name: '琥珀', tag: '原创 · 封存', dims: [7, 8, 6.5, 8, 6], idea: '一滴松脂恰好裹住一朵小花。一闪而过的念头，就这样被轻轻留住。' },
+    { n: '162', file: '162-winding-stream.svg', name: '曲水', tag: '原创 · 典故', dims: [7, 6.5, 8, 7.5, 7], idea: '曲水流觞：酒杯漂到谁面前，谁就即兴作诗。灵感顺流而来，随手接住；缩小后溪流恰好是个 S。' },
+  ];
+  const KEPT = [
+    { n: '00', file: '00.svg', name: '探头的便签', tag: '现用', idea: '设计系统现在用的应用图标：黄色便签从靛蓝色屏幕的右边缘探出头来。' },
+    { n: '10', file: '10-paper-fan.svg', name: '叠纸', tag: '第一批', idea: '你的评价：还行，但更像普通笔记，没有体现不打断心流。' },
+    { n: '15', file: '15-door-light.svg', name: '门缝的光', tag: '第二批', idea: '你的评价：第二批里最中意，但太单调。153 一线天沿着它往前走了一步。' },
+    { n: '21', file: '21-note-moon.svg', name: '月相便签', tag: '第二批', idea: '你的评价：不错，但像哄睡读物相关的应用。' },
+  ];
+  const DROPPED = [
+    '结绳：丝绳打一个结，代表记下一件事。成稿像一截香肠，质感廉价，已否掉。',
+    '打水漂：石子在水面轻点三下。涟漪像雷达和靶心，看不出是水，改成了「浪」。',
+    '泊舟：小船停在栈桥边。画面像儿童插画，缩小后认不出是船。',
+    '浮石：一块石头浮在自己的影子上方。像一颗灰色的蛋，没有记忆点。',
+    '液滴：一小滴液体从整体里分出去。轮廓像气球，也容易引起不雅联想。',
+    '沙脊：沙丘的明暗分界线。画了两版都像纸页卷边，又回到「纸」的联想。',
+    '石中霞：推开石头的盖子，里面是一片晚霞。缩小后像粉饼盒。',
+    '掠燕：燕子从侧边掠过。和 Swift 语言的燕子标志太像。',
+    '雾窗：起雾的玻璃上抹开一道。竖条构图和 Apptorium SideNotes 的图标撞车。',
+    '切片球：球被切开，一片滑出来。和 Linear 的斜切球太近。',
+    '飘带：一条丝带在侧边翻面。和 Arc 的彩带语言太近，也偏通用。',
+    '暗格：实心方块里拉出一层薄抽屉。像文件柜，又回到文档。',
+    '侧门方块：方块侧面开一扇亮着的门。像小房子，容易被当成家居应用。',
+    '翅果：枫树翅果打着旋落下。轮廓像羽毛笔，碰到了禁区。',
+    '泡泡：贴在边上的肥皂泡。和荷珠同一类，而且偏装饰。',
+    '回旋镖：扔出去又飞回来。V 形像勾号或小于号，玩具感重。',
+    '手边的茶：桌角一杯茶陪着你。容易被看成茶饮或咖啡应用。',
+    '猫爪：一只猫爪从边上伸进来。和「边边」的构图重复。',
+    '门后的海：沙地上立着一扇门，门里是海。和一线天、月洞门是同一个意思。',
+    '拱桥倒影：半圆拱桥和倒影合成一个圆。和产品的联系太绕。',
+    '鸟巢：给零碎想法一个窝。容易联想到智能家居品牌。',
+    '水黾：靠表面张力站在水面上。虫子形象接受度低。',
+    '挎斗：摩托车旁边的挎斗。像出行或配送应用。',
+    '风筝：自由，但有一根线牵着。偏童趣，辨识度不够。',
+    '火柴盒：抽出内盒，里面有一点火星。缩小后像电池。',
+    '冰山一角：平时只露出一角。寓意偏沉重。',
+  ];
+
+  const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const img = (file, size, alt = '') => `<img src="${file}" width="${size}" height="${size}" alt="${esc(alt)}">`;
+  const WEIGHTS = [0.3, 0.3, 0.2, 0.1, 0.1];
+  const LABELS = ['独特', '美感', '契合', '小尺寸', '延展'];
+  const total = (dims) => (Math.round(dims.reduce((s, v, i) => s + v * WEIGHTS[i], 0) * 10 + 1e-6) / 10).toFixed(1);
+
+  function bar(tone, size, label) {
+    const icons = (list) => list.map((it) => img(it.file, size, it.n)).join('');
+    return `<div class="bar ${tone}"><span class="label">${label}</span>${icons(CANDIDATES)}<span class="sep"></span>${icons(KEPT)}</div>`;
+  }
+
+  function small(file) {
+    const panel = (tone) => `<div class="${tone}">${img(file, 32)}<canvas class="px" width="16" height="16" data-src="${file}" title="16px 实际像素，放大 4 倍"></canvas></div>`;
+    return `<div class="small">${panel('l')}${panel('d')}</div>`;
+  }
+
+  function card(it, hero) {
+    const score = it.dims
+      ? `<p class="score">评分 <b>${total(it.dims)}</b>　${it.dims.map((v, i) => `${LABELS[i]} ${v}`).join(' · ')}</p>`
+      : '';
+    return `<article class="card" id="v${it.n}">
+      <div class="hero">${img(it.file, hero, `第 ${it.n} 版：${it.name}`)}</div>
+      <div class="meta"><span class="n">${it.n}</span><h3>${esc(it.name)}</h3><span class="tag">${esc(it.tag)}</span></div>
+      <p class="idea">${esc(it.idea)}</p>
+      ${score}
+      ${small(it.file)}
+    </article>`;
+  }
+
+  document.getElementById('bars').innerHTML =
+    bar('light', 32, '任务栏 32px') + bar('dark', 32, '任务栏 32px') + bar('light', 16, '托盘 16px') + bar('dark', 16, '托盘 16px');
+  document.getElementById('cards').innerHTML = CANDIDATES.map((it) => card(it, 256)).join('');
+  document.getElementById('kept').innerHTML = KEPT.map((it) => card(it, 128)).join('');
+  document.querySelector('#dropped ul').innerHTML = DROPPED.map((s) => `<li>${esc(s)}</li>`).join('');
+
+  // 把 SVG 直接栅格化成 16×16：给根元素补上宽高，避免没有固有尺寸的 SVG 被按 300×150 拉伸。
+  const rasters = new Map();
+  function raster(file) {
+    if (!rasters.has(file)) {
+      rasters.set(file, fetch(file)
+        .then((r) => r.text())
+        .then((text) => new Promise((resolve, reject) => {
+          const url = URL.createObjectURL(new Blob([text.replace('<svg ', '<svg width="16" height="16" ')], { type: 'image/svg+xml' }));
+          const image = new Image();
+          image.onload = () => resolve(image);
+          image.onerror = reject;
+          image.src = url;
+        })));
+    }
+    return rasters.get(file);
+  }
+  for (const canvas of document.querySelectorAll('canvas.px')) {
+    raster(canvas.dataset.src).then((image) => canvas.getContext('2d').drawImage(image, 0, 0, 16, 16)).catch(() => canvas.remove());
+  }
+</script>
+</body>
+</html>

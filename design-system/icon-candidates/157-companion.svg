@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- 157 伴星：小卫星从行星面前经过，只投下一个小小的影子。 -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3a5cf0"/>
+      <stop offset="1" stop-color="#1a2b9c"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="1" cy="0" r=".9">
+      <stop offset="0" stop-color="#7b96ff" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#7b96ff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="planet" cx=".64" cy=".3" r=".78" fx=".72" fy=".22">
+      <stop offset="0" stop-color="#ffd9a1"/>
+      <stop offset=".3" stop-color="#ffa55c"/>
+      <stop offset=".65" stop-color="#f06b2e"/>
+      <stop offset=".9" stop-color="#b3401e"/>
+      <stop offset="1" stop-color="#8a2d17"/>
+    </radialGradient>
+    <linearGradient id="limb" x1="40" y1="250" x2="215" y2="55" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffe6c2" stop-opacity="0"/>
+      <stop offset=".62" stop-color="#ffe6c2" stop-opacity="0"/>
+      <stop offset="1" stop-color="#ffe6c2" stop-opacity=".95"/>
+    </linearGradient>
+    <radialGradient id="moon" cx=".62" cy=".34" r=".75" fx=".7" fy=".26">
+      <stop offset="0" stop-color="#fffdf8"/>
+      <stop offset=".55" stop-color="#fbead2"/>
+      <stop offset="1" stop-color="#d4b791"/>
+    </radialGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset=".25" stop-color="#fff" stop-opacity="0"/><stop offset=".8" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".25"/></linearGradient>
+    <filter id="pen" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.4"/></filter>
+    <radialGradient id="night" cx=".74" cy=".22" r="1.02"><stop offset=".55" stop-color="#4a1406" stop-opacity="0"/><stop offset="1" stop-color="#4a1406" stop-opacity=".5"/></radialGradient>
+    <filter id="haze" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="3"/></filter>
+    <clipPath id="tile"><rect width="256" height="256" rx="56"/></clipPath>
+    <clipPath id="ball"><circle cx="96" cy="176" r="136"/></clipPath>
+  </defs>
+  <g clip-path="url(#tile)">
+    <rect width="256" height="256" fill="url(#bg)"/>
+    <rect width="256" height="256" fill="url(#sun)"/>
+    <circle cx="96" cy="176" r="136" fill="url(#planet)"/>
+    <g clip-path="url(#ball)" fill="none" transform="rotate(-16 96 176)">
+      <path d="M-60 70Q96 100 252 70" stroke="#ffe3b6" stroke-opacity=".32" stroke-width="6"/>
+      <path d="M-60 95Q96 128 252 95" stroke="#e5602b" stroke-opacity=".3" stroke-width="11"/>
+      <path d="M-60 120Q96 155 252 120" stroke="#ffcb96" stroke-opacity=".26" stroke-width="4"/>
+      <path d="M-60 147Q96 184 252 147" stroke="#c4471f" stroke-opacity=".26" stroke-width="15"/>
+      <path d="M-60 182Q96 220 252 182" stroke="#ffb67f" stroke-opacity=".22" stroke-width="5"/>
+      <path d="M-60 210Q96 248 252 210" stroke="#b3421e" stroke-opacity=".22" stroke-width="9"/>
+    </g>
+    <circle cx="96" cy="176" r="136" fill="url(#night)"/>
+    <circle cx="96" cy="176" r="139" fill="none" stroke="url(#limb)" stroke-opacity=".5" stroke-width="6" filter="url(#haze)"/>
+    <circle cx="96" cy="176" r="134.5" fill="none" stroke="url(#limb)" stroke-width="3"/>
+    <ellipse cx="156" cy="113" rx="17" ry="13.5" transform="rotate(-38 156 113)" fill="#4d170b" fill-opacity=".6" filter="url(#pen)"/>
+    <circle cx="179" cy="95" r="20" fill="url(#moon)"/>
+    <circle cx="179" cy="95" r="20" fill="none" stroke="#6b230f" stroke-opacity=".25" stroke-width="1.5"/>
+  </g>
+  <rect x="1" y="1" width="254" height="254" rx="55" fill="none" stroke="url(#rim)" stroke-width="2"/>
+</svg>

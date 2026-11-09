@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- 152 鲸尾：鲸浮上来换一口气，尾巴一摆又潜回深处——记完就回到专注里。 -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f3c9a8"/>
+      <stop offset="1" stop-color="#fbe6cc"/>
+    </linearGradient>
+    <linearGradient id="sea" x1="0" y1="112" x2="0" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4f8aa0"/>
+      <stop offset=".3" stop-color="#2a6380"/>
+      <stop offset="1" stop-color="#123650"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="58" cy="108" r="70" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff4e0" stop-opacity=".95"/>
+      <stop offset="1" stop-color="#fff4e0" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="whale" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a6282"/>
+      <stop offset=".45" stop-color="#2c3d56"/>
+      <stop offset="1" stop-color="#1c2a3e"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset=".25" stop-color="#fff" stop-opacity="0"/><stop offset=".8" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".25"/></linearGradient>
+    <filter id="lace" x="-20%" y="-60%" width="140%" height="220%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency=".12" numOctaves="2" seed="4"/>
+      <feDisplacementMap in="SourceGraphic" scale="6" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="b1" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="1"/></filter>
+    <filter id="b4" x="-30%" y="-60%" width="160%" height="220%"><feGaussianBlur stdDeviation="4"/></filter>
+    <clipPath id="tile"><rect width="256" height="256" rx="56"/></clipPath>
+    <clipPath id="above"><rect width="256" height="161"/></clipPath>
+    <path id="tail" d="M0 -28C8 -32 14 -36 22 -38C28 -36 32 -42 40 -44C46 -42 52 -48 60 -50C64 -52 66 -53 68 -54C66 -40 52 -22 30 -14C22 -11 16 -9 13 -6C10 10 12 34 16 62L-16 62C-12 34 -10 10 -13 -6C-16 -9 -22 -11 -30 -14C-52 -22 -66 -40 -68 -54C-66 -53 -64 -52 -60 -50C-52 -48 -46 -42 -40 -44C-32 -42 -28 -36 -22 -38C-14 -36 -8 -32 0 -28Z"/>
+  </defs>
+  <g clip-path="url(#tile)">
+    <rect width="256" height="256" fill="url(#sky)"/>
+    <rect y="112" width="256" height="144" fill="url(#sea)"/>
+    <rect width="256" height="256" fill="url(#sun)"/>
+    <g fill="#ffe2b8" fill-opacity=".5">
+      <rect x="40" y="116" width="36" height="2.5" rx="1.25"/><rect x="34" y="124" width="46" height="2.5" rx="1.25"/><rect x="44" y="133" width="30" height="2" rx="1"/><rect x="38" y="143" width="40" height="2" rx="1"/><rect x="48" y="156" width="22" height="2" rx="1"/>
+    </g>
+    <rect y="111" width="256" height="1.5" fill="#fff4e4" fill-opacity=".8"/>
+    <ellipse cx="160" cy="170" rx="34" ry="7" fill="#0b2133" fill-opacity=".35" filter="url(#b4)"/>
+    <g clip-path="url(#above)">
+      <g transform="translate(160 104) scale(1.25)">
+        <use href="#tail" fill="url(#whale)"/>
+        <path d="M-68 -54C-66 -40 -52 -22 -30 -14" fill="none" stroke="#ffd8ae" stroke-opacity=".75" stroke-width="1.6"/>
+        <path d="M-68 -54C-60 -50 -46 -42 -40 -44C-32 -42 -14 -36 0 -28" fill="none" stroke="#ffd8ae" stroke-opacity=".45" stroke-width="1.2"/>
+        <path d="M-13 -6C-10 10 -12 34 -16 62" fill="none" stroke="#ffd8ae" stroke-opacity=".35" stroke-width="1.4"/>
+        <g fill="#7e93ac" fill-opacity=".5">
+          <ellipse cx="-34" cy="-30" rx="9" ry="4" transform="rotate(18 -34 -30)"/>
+          <ellipse cx="36" cy="-31" rx="7" ry="3.4" transform="rotate(-18 36 -31)"/>
+          <ellipse cx="-50" cy="-42" rx="4" ry="2" transform="rotate(22 -50 -42)"/>
+        </g>
+        <g stroke="#eef6ff" stroke-linecap="round" fill="none" filter="url(#b1)">
+          <path d="M-54 -44V-10" stroke-opacity=".5" stroke-width="1.4"/>
+          <path d="M-38 -38V4" stroke-opacity=".45" stroke-width="1.2"/>
+          <path d="M44 -40V-6" stroke-opacity=".5" stroke-width="1.4"/>
+          <path d="M60 -48V-18" stroke-opacity=".4" stroke-width="1.1"/>
+        </g>
+        <g fill="#f4fbff" fill-opacity=".85">
+          <ellipse cx="-54" cy="-4" rx="1.3" ry="2"/><ellipse cx="-38" cy="10" rx="1.2" ry="1.9"/><ellipse cx="44" cy="0" rx="1.3" ry="2"/><ellipse cx="60" cy="-12" rx="1.1" ry="1.7"/>
+        </g>
+      </g>
+    </g>
+    <ellipse cx="160" cy="161" rx="28" ry="5.5" fill="#fff" fill-opacity=".92" filter="url(#lace)"/>
+    <ellipse cx="160" cy="163.5" rx="44" ry="8.5" fill="none" stroke="#fff" stroke-opacity=".38" stroke-width="1.6" filter="url(#lace)"/>
+    <g fill="#fff" fill-opacity=".85">
+      <circle cx="138" cy="152" r="1.6"/><circle cx="182" cy="150" r="1.4"/><circle cx="148" cy="146" r="1.1"/><circle cx="174" cy="144" r="1"/>
+    </g>
+  </g>
+  <rect x="1" y="1" width="254" height="254" rx="55" fill="none" stroke="url(#rim)" stroke-width="2"/>
+</svg>

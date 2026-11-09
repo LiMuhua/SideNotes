@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- 161 琥珀：一滴松脂恰好裹住一朵小花，一闪而过的念头就这样被留住。 -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a3170"/>
+      <stop offset="1" stop-color="#141838"/>
+    </linearGradient>
+    <radialGradient id="lift" cx=".2" cy=".12" r=".9">
+      <stop offset="0" stop-color="#4a54a6" stop-opacity=".6"/>
+      <stop offset="1" stop-color="#4a54a6" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="amber" cx=".5" cy=".64" r=".64" fx=".55" fy=".74">
+      <stop offset="0" stop-color="#ffdc78"/>
+      <stop offset=".35" stop-color="#f8a72f"/>
+      <stop offset=".72" stop-color="#d86c18"/>
+      <stop offset=".93" stop-color="#a4440f"/>
+      <stop offset="1" stop-color="#772d09"/>
+    </radialGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset=".25" stop-color="#fff" stop-opacity="0"/><stop offset=".8" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".25"/></linearGradient>
+    <filter id="b10" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="10"/></filter>
+    <filter id="b6" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="6"/></filter>
+    <filter id="b3" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3"/></filter>
+    <filter id="b1" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation=".7"/></filter>
+    <clipPath id="tile"><rect width="256" height="256" rx="56"/></clipPath>
+    <path id="a" d="M190 52C214 56 220 90 210 124C198 168 168 212 122 212C80 212 52 182 58 142C64 100 104 84 140 70C162 62 174 50 190 52Z"/>
+    <clipPath id="ac"><use href="#a"/></clipPath>
+  </defs>
+  <g clip-path="url(#tile)">
+    <rect width="256" height="256" fill="url(#bg)"/>
+    <rect width="256" height="256" fill="url(#lift)"/>
+    <use href="#a" fill="#05071a" fill-opacity=".6" filter="url(#b10)" transform="translate(12 16)"/>
+    <ellipse cx="160" cy="218" rx="44" ry="12" fill="#ffad3d" fill-opacity=".42" filter="url(#b6)"/>
+    <use href="#a" fill="url(#amber)"/>
+    <g clip-path="url(#ac)">
+      <ellipse cx="140" cy="168" rx="52" ry="36" fill="#ffe7a3" fill-opacity=".5" filter="url(#b10)"/>
+      <g transform="translate(122 140) rotate(-18)" fill="#7e360b" fill-opacity=".72" filter="url(#b1)">
+        <ellipse cx="0" cy="-9" rx="5" ry="8.5"/>
+        <ellipse cx="0" cy="-9" rx="5" ry="8.5" transform="rotate(72)"/>
+        <ellipse cx="0" cy="-9" rx="5" ry="8.5" transform="rotate(144)"/>
+        <ellipse cx="0" cy="-9" rx="5" ry="8.5" transform="rotate(216)"/>
+        <ellipse cx="0" cy="-9" rx="5" ry="8.5" transform="rotate(288)"/>
+        <circle r="4" fill="#5a2306"/>
+        <path d="M2 4C8 18 10 30 6 44" fill="none" stroke="#7e360b" stroke-width="1.6"/>
+      </g>
+      <circle cx="176" cy="92" r="2.8" fill="#fff4c9" fill-opacity=".8"/>
+      <circle cx="184" cy="102" r="1.8" fill="#fff4c9" fill-opacity=".65"/>
+      <circle cx="96" cy="178" r="1.5" fill="#fff4c9" fill-opacity=".55"/>
+      <use href="#a" fill="none" stroke="#5e2306" stroke-opacity=".55" stroke-width="7" filter="url(#b3)"/>
+    </g>
+    <path d="M86 112C98 94 120 82 142 74" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="7" stroke-linecap="round" filter="url(#b3)"/>
+    <ellipse cx="96" cy="104" rx="9" ry="4" transform="rotate(-40 96 104)" fill="#fff" fill-opacity=".92"/>
+    <ellipse cx="190" cy="64" rx="5" ry="2.5" transform="rotate(-50 190 64)" fill="#fff" fill-opacity=".85"/>
+    <path d="M206 112C204 146 186 182 156 202" fill="none" stroke="#ffe9b0" stroke-opacity=".55" stroke-width="2.5" stroke-linecap="round" filter="url(#b1)"/>
+  </g>
+  <rect x="1" y="1" width="254" height="254" rx="55" fill="none" stroke="url(#rim)" stroke-width="2"/>
+</svg>

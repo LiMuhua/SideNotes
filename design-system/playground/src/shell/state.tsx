@@ -8,7 +8,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { DEFAULT_SURFACE, SURFACE_IDS, type SurfaceId } from '../surfaces';
 
-export type PageId = 'sidebar' | 'capture' | 'settings' | 'components' | 'tokens' | 'compare';
+export type PageId = 'sidebar' | 'capture' | 'settings' | 'components' | 'tokens' | 'compare' | 'icons';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 export type Platform = 'windows' | 'linux';
@@ -38,6 +38,8 @@ export const PAGES: ReadonlyArray<{ id: PageId; label: string; group: 'app' | 's
   { id: 'components', label: '组件', group: 'system' },
   { id: 'tokens', label: '令牌', group: 'system' },
   { id: 'compare', label: '五套对比', group: 'system' },
+  // 临时入口：应用图标选定后连同 design-system/icon-candidates/ 一起删除。
+  { id: 'icons', label: '图标候选', group: 'system' },
 ];
 
 export const WALLPAPERS: ReadonlyArray<{ id: Wallpaper; label: string }> = [
