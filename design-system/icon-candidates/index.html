@@ -42,9 +42,9 @@
 </style>
 </head>
 <body>
-<h1>SideNotes 应用图标 · 第三轮：结合与修正（173–179）</h1>
-<p class="lead">这一轮按你的反馈，把 168 的叠纸和 166、167 的表情、点缀结合起来，再把 163、164 的门缝场景与这些变体结合（你写的 161 我按 167 理解）。门缝便签同时修正了光影：门缝整条画在便签后面、被便签挡住，便签靠门缝的一端最亮，往左渐暗，边缘透出一圈光；不再画墙上那块方向不对的影子，地上的光调暗一些。上一轮的 163–172 与四个原稿保留在下面作对照。每张卡片有 256px 主图，以及浅色、深色背景上的 32px 和 16px 实际像素（放大 4 倍）预览。</p>
-<p class="pick">我的推荐：<b>178 门缝一叠</b>、<b>173 一叠探头 · 灵光</b>。</p>
+<h1>SideNotes 应用图标 · 第四轮：表情往中间靠（193–202）</h1>
+<p class="lead">上一轮你选中 173、177、176，想加更多表情。先试了两端：生动方向（187–192）太浮夸、有点幼态，克制方向（180–186）又太死板。最上面这一组取中间：眼睛比圆点大一点，只留一个小高光，接近现用的 00；表情靠浅笑、抬眼、微挑的眉、眯眼、眨眼这些细节，腮红很淡，灵光缩小。同一套表情配到一叠、门缝靛蓝、门缝暖色和 00 四个场景，方便交叉挑选。两端的版本留在下面作对照，174、175、178、179 已撤下。每张卡片有 256px 主图，以及浅色、深色背景上的 32px 和 16px 实际像素（放大 4 倍）预览。</p>
+<p class="pick">我的推荐：<b>193 一叠 · 浅笑</b>、<b>197 门缝 · 好奇</b>、<b>200 门缝 · 平静</b>。</p>
 <div id="bars"></div>
 <main id="groups"></main>
 <h2>试过但没留下</h2>
@@ -53,24 +53,57 @@
   // 候选清单：新增或删除只改这里，页面按清单生成。每组的 base 是原稿，items 是在它基础上的新版。
   const LATEST = [
     {
-      title: '一叠探头 × 表情与点缀',
-      change: '168 的叠纸，配上 166 的腮红与双高光、167 的灵光与惊讶表情。',
-      base: { n: '168', file: '168-peek-stack.svg', name: '一叠探头', tag: '上一轮', idea: '一叠便签从屏幕边上探出来，最前面那张看着你。' },
+      title: '居中 · 有神但不浮夸',
+      change: '介于两端之间：眼睛比圆点大、只留一个小高光，表情靠细节，腮红很淡，灵光缩小，不加问号与爱心。',
+      base: null,
       items: [
-        { n: '173', file: '173-stack-spark.svg', name: '一叠探头 · 灵光', tag: '168 + 167 + 166', idea: '灵感一闪，最前面那张便签抬眼去看，嘴巴微张，脸上带着腮红。' },
-        { n: '174', file: '174-stack-family.svg', name: '一叠探头 · 一家', tag: '168 + 166', idea: '后面那张也从前一张身后探出眼睛，一叠便签成了一家子。' },
-        { n: '175', file: '175-stack-close.svg', name: '一叠探头 · 近景', tag: '168 + 166 + 167', idea: '便签放大、笑着，灵光缩小放在角落；脸在任务栏和托盘尺寸下更清楚。' },
+        { n: '193', file: '193-mid-stack-smile.svg', name: '一叠 · 浅笑', tag: '居中 · 基于 173', idea: '一笔浅笑和很淡的腮红，灵光缩小。' },
+        { n: '194', file: '194-mid-stack-curious.svg', name: '一叠 · 好奇', tag: '居中 · 基于 173', idea: '抬眼看灵光，一边眉毛微微挑起。' },
+        { n: '195', file: '195-mid-stack-content.svg', name: '一叠 · 眯眼', tag: '居中 · 基于 173', idea: '眼睛弯成两道细弧，满足而安静。' },
+        { n: '196', file: '196-mid-peek-smile.svg', name: '探头 · 浅笑', tag: '居中 · 基于 00', idea: '现用图标加一笔浅笑与很淡的腮红。' },
+        { n: '197', file: '197-mid-door-curious.svg', name: '门缝 · 好奇', tag: '居中 · 基于 177', idea: '从门缝探出来，抬眼看暗处的一点灵光。' },
+        { n: '198', file: '198-mid-door-smile.svg', name: '门缝 · 浅笑', tag: '居中 · 基于 177', idea: '靛蓝暗房里，便签浅浅一笑。' },
+        { n: '199', file: '199-mid-door-wink.svg', name: '门缝 · 眨眼', tag: '居中 · 基于 177', idea: '眨一只眼，嘴角一笔浅笑，不吐舌头。' },
+        { n: '200', file: '200-mid-door-calm.svg', name: '门缝 · 平静', tag: '居中 · 基于 176', idea: '只有一双带小高光的眼睛，安静但有神。' },
+        { n: '201', file: '201-mid-door-content.svg', name: '门缝 · 眯眼', tag: '居中 · 基于 176', idea: '暖光里眯着眼，像刚记完一件事。' },
+        { n: '202', file: '202-mid-door-smile-warm.svg', name: '门缝 · 浅笑（暖）', tag: '居中 · 基于 176', idea: '暖色暗房里的浅笑版。' },
       ],
     },
     {
-      title: '门缝 × 一叠与表情（修正光影）',
-      change: '163、164 的门缝场景，配上一叠便签与新表情。光影按门缝的光重新安排，便签像是真的从门缝里递出来。',
-      base: { n: '163', file: '163-door-note.svg', name: '门缝便签', tag: '上一轮', idea: '旧版：门缝画在便签前面，墙上的影子方向不对，所以看着别扭。' },
+      title: '一端：克制（偏死板）',
+      change: '去掉腮红、高光和点缀，眼睛只用小圆点、竖线或闭眼的一笔，颜色压平，门缝的光收一点。',
+      base: null,
       items: [
-        { n: '176', file: '176-door-note-lit.svg', name: '门缝便签 · 光影修正', tag: '163 + 166', idea: '门缝被便签挡住，便签靠门缝的一端透亮，边缘一圈亮边；配上 166 的腮红与双高光。' },
+        { n: '180', file: '180-calm-dots.svg', name: '探头 · 圆点', tag: '克制 · 基于 00', idea: '两个小圆点就够了，不加腮红和高光，安静地看着屏幕。' },
+        { n: '181', file: '181-calm-pills.svg', name: '探头 · 竖线眼', tag: '克制 · 基于 00', idea: '眼睛换成两道竖线，更利落，带一点冷静的幽默。' },
+        { n: '182', file: '182-calm-light.svg', name: '探头 · 浅色', tag: '克制 · 基于 00', idea: '屏幕换成浅色，整体更清爽；放在深色任务栏里是一块亮色。' },
+        { n: '183', file: '183-calm-stack.svg', name: '一叠 · 浅笑', tag: '克制 · 基于 173', idea: '还是一叠便签，最前面那张只用两个圆点和一笔浅笑。' },
+        { n: '184', file: '184-calm-door-dots.svg', name: '门缝 · 圆点', tag: '克制 · 基于 176', idea: '门缝的暖光里，便签只露出两个小圆点。' },
+        { n: '185', file: '185-calm-door-closed.svg', name: '门缝 · 闭眼', tag: '克制 · 基于 176', idea: '闭着眼，安安静静地待在门缝边，不打扰。' },
+        { n: '186', file: '186-calm-door-pills.svg', name: '门缝 · 竖线眼', tag: '克制 · 基于 177', idea: '靛蓝暗房里，便签用两道竖线眼看着你。' },
+      ],
+    },
+    {
+      title: '另一端：生动（偏浮夸）',
+      change: '在 173、177、176 上换表情，点缀跟着表情换成感叹号、灵光、问号或爱心。这个方向偏萌，只留了六种不重复的表情。',
+      base: null,
+      items: [
+        { n: '187', file: '187-lively-aha.svg', name: '一叠 · 啊哈', tag: '生动 · 基于 173', idea: '灵感一来，眉毛一挑，旁边一个感叹号。' },
+        { n: '188', file: '188-lively-stars.svg', name: '一叠 · 闪亮眼', tag: '生动 · 基于 173', idea: '眼里闪着星光，张嘴笑。' },
+        { n: '189', file: '189-lively-curious.svg', name: '门缝 · 好奇', tag: '生动 · 基于 177', idea: '一边眉毛挑起，眼睛一大一小，旁边飘着问号。' },
+        { n: '190', file: '190-lively-shy.svg', name: '门缝 · 害羞', tag: '生动 · 基于 177', idea: '眯成「> <」，脸更红，旁边一颗小爱心。' },
+        { n: '191', file: '191-lively-wink.svg', name: '门缝 · 眨眼', tag: '生动 · 基于 176', idea: '眨一只眼，露一点舌头。' },
+        { n: '192', file: '192-lively-giggle.svg', name: '门缝 · 偷笑', tag: '生动 · 基于 176', idea: '眯眼偷笑，嘴巴是个 ω。' },
+      ],
+    },
+    {
+      title: '上一轮选中的三版',
+      change: '这一轮的基础：一叠探头的灵光版，以及门缝便签的灵光版与光影修正版。',
+      base: null,
+      items: [
+        { n: '173', file: '173-stack-spark.svg', name: '一叠探头 · 灵光', tag: '168 + 167 + 166', idea: '灵感一闪，最前面那张便签抬眼去看，嘴巴微张，脸上带着腮红。' },
         { n: '177', file: '177-door-spark.svg', name: '门缝便签 · 灵光', tag: '164 + 167 + 166', idea: '便签从门缝里探出来，抬眼看着暗处闪出的灵感。' },
-        { n: '178', file: '178-door-stack.svg', name: '门缝一叠', tag: '164 + 168 + 166', idea: '一叠便签从门缝里递出来，最前面那张笑着看你。' },
-        { n: '179', file: '179-door-stack-warm.svg', name: '门缝一叠 · 暖', tag: '163 + 168 + 166', idea: '178 换成 15 的暖色暗房。' },
+        { n: '176', file: '176-door-note-lit.svg', name: '门缝便签 · 光影修正', tag: '163 + 166', idea: '门缝被便签挡住，便签靠门缝的一端透亮，边缘一圈亮边。' },
       ],
     },
   ];
@@ -127,7 +160,7 @@
 
   function bar(tone, size, label) {
     const seen = new Set();
-    const groups = [...LATEST, ...GROUPS].map((g) => [g.base, ...g.items].filter((it) => !seen.has(it.n) && seen.add(it.n)).map((it) => img(it.file, size, it.n)).join(''));
+    const groups = [...LATEST, ...GROUPS].map((g) => [g.base, ...g.items].filter(Boolean).filter((it) => !seen.has(it.n) && seen.add(it.n)).map((it) => img(it.file, size, it.n)).join(''));
     return `<div class="bar ${tone}"><span class="label">${label}</span>${groups.join('<span class="sep"></span>')}</div>`;
   }
 
@@ -150,11 +183,11 @@
   const section = (g) => `<section>
       <h2>${esc(g.title)}</h2>
       <p class="note">${esc(g.change)}</p>
-      <div class="grid">${card(g.base, true)}${g.items.map((it) => card(it, false)).join('')}</div>
+      <div class="grid">${g.base ? card(g.base, true) : ''}${g.items.map((it) => card(it, false)).join('')}</div>
     </section>`;
   document.getElementById('groups').innerHTML =
     LATEST.map(section).join('') +
-    '<h2 class="round">上一轮：在 00、10、15、21 上深化（163–172）</h2><p class="note">每组先放原稿，后面是在它基础上点缀、变体或结合的新版。</p>' +
+    '<h2 class="round">更早一轮：在 00、10、15、21 上深化（163–172）</h2><p class="note">每组先放原稿，后面是在它基础上点缀、变体或结合的新版。</p>' +
     GROUPS.map(section).join('');
   document.querySelector('#dropped ul').innerHTML = DROPPED.map((s) => `<li>${esc(s)}</li>`).join('');
 

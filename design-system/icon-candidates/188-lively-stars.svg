@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- 188 一叠 · 闪亮眼（生动，基于 173）：眼里闪着星光，张嘴笑。 -->
+  <defs>
+    <linearGradient id="screen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a5ac2"/><stop offset="1" stop-color="#20286a"/></linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".12"/><stop offset=".4" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    <linearGradient id="note" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff07e"/><stop offset=".6" stop-color="#ffd54a"/><stop offset="1" stop-color="#ffbf33"/></linearGradient>
+    <linearGradient id="fold" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fffbe2"/><stop offset="1" stop-color="#efbf45"/></linearGradient>
+    <filter id="sh" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="-1" dy="1.4" stdDeviation="1.3" flood-color="#0b0f33" flood-opacity=".55"/></filter>
+    <filter id="glow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="1.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="blush" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation=".6"/></filter>
+    <clipPath id="c"><rect width="64" height="64" rx="14"/></clipPath>
+    <filter id="spk" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="1.3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#screen)"/>
+  <rect width="64" height="64" rx="14" fill="url(#sheen)"/>
+  <g fill="#fff" opacity=".16">
+    <rect x="9" y="28.5" width="20" height="3.6" rx="1.8"/>
+    <rect x="9" y="37" width="15" height="3.6" rx="1.8"/>
+    <rect x="9" y="45.5" width="11" height="3.6" rx="1.8"/>
+  </g>
+    <g filter="url(#spk)" fill="#ffe680"><path d="M22 9C22.6 12.9 24.1 14.4 28 15C24.1 15.6 22.6 17.1 22 21C21.4 17.1 19.9 15.6 16 15C19.9 14.4 21.4 12.9 22 9Z"/><circle cx="30.5" cy="9.5" r="1.05"/></g>
+  
+  <g clip-path="url(#c)">
+    <g transform="translate(80 68) rotate(9) translate(-15.7 -34.2)"><rect x="-17" y="-17" width="34" height="34" rx="3.5" fill="#9fe3c5" filter="url(#sh)"/></g>
+    <g transform="translate(80 68) rotate(-3) translate(-15.7 -34.2)"><rect x="-17" y="-17" width="34" height="34" rx="3.5" fill="#fffaf0" filter="url(#sh)"/></g>
+    <g transform="translate(80 68) rotate(-15) translate(-15.7 -34.2)">
+      <path d="M-13.5 -17H13.5A3.5 3.5 0 0 1 17 -13.5V13.5A3.5 3.5 0 0 1 13.5 17H-10L-17 10V-13.5A3.5 3.5 0 0 1 -13.5 -17z" fill="url(#note)" filter="url(#sh)"/>
+      <path d="M-17 10L-10 17V10z" fill="url(#fold)"/>
+      <path d="M-13.5 -17H13.5" stroke="#fff" stroke-opacity=".6" stroke-width=".8"/>
+      <g fill="#ff8f5e" opacity="0.5" filter="url(#blush)"><ellipse cx="-12.8" cy="2.4" rx="2.3" ry="1.3"/><ellipse cx="0.6" cy="2.4" rx="2.3" ry="1.3"/></g><g fill="#2b1d06"><ellipse cx="-10" cy="-4.6" rx="3.4" ry="4.3"/><ellipse cx="-1.2" cy="-4.6" rx="3.4" ry="4.3"/></g><g fill="#fff"><path d="M-11 -8.5L-10.356 -6.844L-8.7 -6.2L-10.356 -5.556L-11 -3.9000000000000004L-11.644 -5.556L-13.3 -6.2L-11.644 -6.844Z"/><path d="M-2.2 -8.5L-1.556 -6.844L0.09999999999999964 -6.2L-1.556 -5.556L-2.2 -3.9000000000000004L-2.8440000000000003 -5.556L-4.5 -6.2L-2.8440000000000003 -6.844Z"/><circle cx="-8.7" cy="-2.3" r=".55"/><circle cx=".1" cy="-2.3" r=".55"/></g><path d="M-8.4 2.2H-2.8Q-2.8 6.9 -5.6 6.9Q-8.4 6.9 -8.4 2.2Z" fill="#2b1d06"/><ellipse cx="-5.6" cy="5.6" rx="1.5" ry=".9" fill="#ff6f61"/>
+    </g>
+  </g>
+</svg>
