@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- 179 门缝一叠 · 暖（163 + 168 + 166）：178 换成 15 的暖色暗房。 -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2c2521"/><stop offset="1" stop-color="#16110e"/></linearGradient>
+    <radialGradient id="spill" cx="50" cy="30" r="26" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#ffd590" stop-opacity=".22"/><stop offset="1" stop-color="#ffd590" stop-opacity="0"/></radialGradient>
+    <linearGradient id="beam" x1="50" y1="51" x2="22" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#ffd590" stop-opacity=".55"/><stop offset="1" stop-color="#ffd590" stop-opacity="0"/></linearGradient>
+    <linearGradient id="yel" x1="9" y1="0" x2="-17" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff6c0"/><stop offset=".25" stop-color="#ffdc63"/><stop offset="1" stop-color="#e3a032"/></linearGradient>
+    <linearGradient id="cream" x1="9" y1="0" x2="-17" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fffef4"/><stop offset=".3" stop-color="#f6efdc"/><stop offset="1" stop-color="#c9bb98"/></linearGradient>
+    <linearGradient id="mint" x1="9" y1="0" x2="-17" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#e4fff4"/><stop offset=".3" stop-color="#a9e8cc"/><stop offset="1" stop-color="#5fae8f"/></linearGradient>
+    <linearGradient id="fold" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f3dc9a"/><stop offset="1" stop-color="#c98a26"/></linearGradient>
+    <linearGradient id="rimL" x1="9" y1="0" x2="-6" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fffbe6"/><stop offset="1" stop-color="#fffbe6" stop-opacity="0"/></linearGradient>
+    <filter id="glow" x="-300%" y="-50%" width="700%" height="200%"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="halo" x="-300%" y="-20%" width="700%" height="140%"><feGaussianBlur stdDeviation="2.4"/></filter>
+    <filter id="sep" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="-.6" dy="1" stdDeviation=".9" flood-color="#0d0806" flood-opacity=".5"/></filter>
+    <filter id="blush" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation=".6"/></filter>
+    <clipPath id="c"><rect width="64" height="64" rx="14"/></clipPath>
+    <clipPath id="room"><rect width="51.4" height="64"/></clipPath>
+    <path id="n" d="M-13.5 -17H13.5A3.5 3.5 0 0 1 17 -13.5V13.5A3.5 3.5 0 0 1 13.5 17H-13.5A3.5 3.5 0 0 1 -17 13.5V-13.5A3.5 3.5 0 0 1 -13.5 -17z"/>
+    <path id="r" d="M-13.5 -17H13.5A3.5 3.5 0 0 1 17 -13.5V13.5A3.5 3.5 0 0 1 13.5 17H-10" fill="none"/>
+  </defs>
+  <g clip-path="url(#c)">
+    <rect width="64" height="64" fill="url(#bg)"/>
+    <rect width="64" height="64" fill="url(#spill)"/>
+    <path d="M48.6 51H51.4L44 64H12Z" fill="url(#beam)"/>
+    <rect x="48.6" y="5" width="2.8" height="46" fill="#ffe2a8" filter="url(#halo)"/>
+    <rect x="48.6" y="5" width="2.8" height="46" rx="1" fill="#ffe2a8" filter="url(#glow)"/>
+    <g clip-path="url(#room)">
+      <g transform="translate(45 23) rotate(4)"><g transform="translate(-3.5 .5) scale(.85)">
+        <use href="#n" fill="url(#mint)" filter="url(#sep)"/><use href="#r" stroke="url(#rimL)" stroke-width="1"/>
+      </g></g>
+      <g transform="translate(45.5 28) rotate(-3)"><g transform="translate(-3.5 .5) scale(.85)">
+        <use href="#n" fill="url(#cream)" filter="url(#sep)"/><use href="#r" stroke="url(#rimL)" stroke-width="1"/>
+      </g></g>
+      <g transform="translate(46 34) rotate(-9)"><g transform="translate(-3.5 .5) scale(.85)">
+        <path d="M-13.5 -17H13.5A3.5 3.5 0 0 1 17 -13.5V13.5A3.5 3.5 0 0 1 13.5 17H-10L-17 10V-13.5A3.5 3.5 0 0 1 -13.5 -17z" fill="url(#yel)" filter="url(#sep)"/>
+        <path d="M-17 10L-10 17V10z" fill="url(#fold)"/>
+        <use href="#r" stroke="url(#rimL)" stroke-width="1"/>
+        <g fill="#ff8f5e" opacity=".5" filter="url(#blush)"><ellipse cx="-12.6" cy="2.2" rx="2.3" ry="1.3"/><ellipse cx="0.4" cy="2.2" rx="2.3" ry="1.3"/></g>
+        <g fill="#2b1d06"><ellipse cx="-10" cy="-3.5" rx="3.1" ry="4"/><ellipse cx="-1.2" cy="-3.5" rx="3.1" ry="4"/></g>
+        <g fill="#fff"><circle cx="-11" cy="-5" r="1.2"/><circle cx="-2.2" cy="-5" r="1.2"/><circle cx="-9" cy="-1.9" r=".5"/><circle cx="-.2" cy="-1.9" r=".5"/></g>
+        <path d="M-7.4 3.6Q-5.6 5.4 -3.8 3.6" fill="none" stroke="#2b1d06" stroke-width="1.1" stroke-linecap="round"/>
+      </g></g>
+    </g>
+  </g>
+</svg>

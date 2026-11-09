@@ -15,6 +15,7 @@
   .bar img { flex: none; }
   .bar .sep { flex: none; width: 1px; height: 20px; margin: 0 6px; background: currentColor; opacity: .25; }
   h2 { display: flex; align-items: baseline; gap: 10px; margin: 36px 0 2px; font-size: 18px; }
+  h2.round { margin-top: 48px; padding-top: 14px; border-top: 1px solid #d3d6dc; font-size: 21px; }
   .note { max-width: 72em; margin: 0 0 14px; color: #5b616b; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(296px, 1fr)); gap: 18px; }
   .card { display: flex; flex-direction: column; overflow: hidden; border-radius: 16px; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .06), 0 4px 16px rgb(0 0 0 / .05); }
@@ -41,15 +42,38 @@
 </style>
 </head>
 <body>
-<h1>SideNotes 应用图标 · 在 00、10、15、21 上深化（163–172）</h1>
-<p class="lead">按你的意思回到 00、10、15、21 四个原稿，用点缀、变体与结合三种做法往下走，画风保持原稿的简洁。每组先放原稿，后面是在它基础上的新版；结合了别的原稿会在标签里注明。每张卡片有 256px 主图，以及浅色、深色背景上的 32px 和 16px 实际像素（放大 4 倍）预览。顶部四条是任务栏与托盘尺寸的横向对照。</p>
-<p class="pick">我的推荐：<b>163 门缝便签</b>、<b>168 一叠探头</b>、<b>171 叠纸里的小家伙</b>。</p>
+<h1>SideNotes 应用图标 · 第三轮：结合与修正（173–179）</h1>
+<p class="lead">这一轮按你的反馈，把 168 的叠纸和 166、167 的表情、点缀结合起来，再把 163、164 的门缝场景与这些变体结合（你写的 161 我按 167 理解）。门缝便签同时修正了光影：门缝整条画在便签后面、被便签挡住，便签靠门缝的一端最亮，往左渐暗，边缘透出一圈光；不再画墙上那块方向不对的影子，地上的光调暗一些。上一轮的 163–172 与四个原稿保留在下面作对照。每张卡片有 256px 主图，以及浅色、深色背景上的 32px 和 16px 实际像素（放大 4 倍）预览。</p>
+<p class="pick">我的推荐：<b>178 门缝一叠</b>、<b>173 一叠探头 · 灵光</b>。</p>
 <div id="bars"></div>
 <main id="groups"></main>
 <h2>试过但没留下</h2>
 <details id="dropped"><summary>几版草稿与放弃的原因</summary><ul></ul></details>
 <script>
   // 候选清单：新增或删除只改这里，页面按清单生成。每组的 base 是原稿，items 是在它基础上的新版。
+  const LATEST = [
+    {
+      title: '一叠探头 × 表情与点缀',
+      change: '168 的叠纸，配上 166 的腮红与双高光、167 的灵光与惊讶表情。',
+      base: { n: '168', file: '168-peek-stack.svg', name: '一叠探头', tag: '上一轮', idea: '一叠便签从屏幕边上探出来，最前面那张看着你。' },
+      items: [
+        { n: '173', file: '173-stack-spark.svg', name: '一叠探头 · 灵光', tag: '168 + 167 + 166', idea: '灵感一闪，最前面那张便签抬眼去看，嘴巴微张，脸上带着腮红。' },
+        { n: '174', file: '174-stack-family.svg', name: '一叠探头 · 一家', tag: '168 + 166', idea: '后面那张也从前一张身后探出眼睛，一叠便签成了一家子。' },
+        { n: '175', file: '175-stack-close.svg', name: '一叠探头 · 近景', tag: '168 + 166 + 167', idea: '便签放大、笑着，灵光缩小放在角落；脸在任务栏和托盘尺寸下更清楚。' },
+      ],
+    },
+    {
+      title: '门缝 × 一叠与表情（修正光影）',
+      change: '163、164 的门缝场景，配上一叠便签与新表情。光影按门缝的光重新安排，便签像是真的从门缝里递出来。',
+      base: { n: '163', file: '163-door-note.svg', name: '门缝便签', tag: '上一轮', idea: '旧版：门缝画在便签前面，墙上的影子方向不对，所以看着别扭。' },
+      items: [
+        { n: '176', file: '176-door-note-lit.svg', name: '门缝便签 · 光影修正', tag: '163 + 166', idea: '门缝被便签挡住，便签靠门缝的一端透亮，边缘一圈亮边；配上 166 的腮红与双高光。' },
+        { n: '177', file: '177-door-spark.svg', name: '门缝便签 · 灵光', tag: '164 + 167 + 166', idea: '便签从门缝里探出来，抬眼看着暗处闪出的灵感。' },
+        { n: '178', file: '178-door-stack.svg', name: '门缝一叠', tag: '164 + 168 + 166', idea: '一叠便签从门缝里递出来，最前面那张笑着看你。' },
+        { n: '179', file: '179-door-stack-warm.svg', name: '门缝一叠 · 暖', tag: '163 + 168 + 166', idea: '178 换成 15 的暖色暗房。' },
+      ],
+    },
+  ];
   const GROUPS = [
     {
       title: '15 门缝的光',
@@ -102,7 +126,8 @@
   const img = (file, size, alt = '') => `<img src="${file}" width="${size}" height="${size}" alt="${esc(alt)}">`;
 
   function bar(tone, size, label) {
-    const groups = GROUPS.map((g) => [g.base, ...g.items].map((it) => img(it.file, size, it.n)).join(''));
+    const seen = new Set();
+    const groups = [...LATEST, ...GROUPS].map((g) => [g.base, ...g.items].filter((it) => !seen.has(it.n) && seen.add(it.n)).map((it) => img(it.file, size, it.n)).join(''));
     return `<div class="bar ${tone}"><span class="label">${label}</span>${groups.join('<span class="sep"></span>')}</div>`;
   }
 
@@ -122,11 +147,15 @@
 
   document.getElementById('bars').innerHTML =
     bar('light', 32, '任务栏 32px') + bar('dark', 32, '任务栏 32px') + bar('light', 16, '托盘 16px') + bar('dark', 16, '托盘 16px');
-  document.getElementById('groups').innerHTML = GROUPS.map((g) => `<section>
+  const section = (g) => `<section>
       <h2>${esc(g.title)}</h2>
       <p class="note">${esc(g.change)}</p>
       <div class="grid">${card(g.base, true)}${g.items.map((it) => card(it, false)).join('')}</div>
-    </section>`).join('');
+    </section>`;
+  document.getElementById('groups').innerHTML =
+    LATEST.map(section).join('') +
+    '<h2 class="round">上一轮：在 00、10、15、21 上深化（163–172）</h2><p class="note">每组先放原稿，后面是在它基础上点缀、变体或结合的新版。</p>' +
+    GROUPS.map(section).join('');
   document.querySelector('#dropped ul').innerHTML = DROPPED.map((s) => `<li>${esc(s)}</li>`).join('');
 
   // 把 SVG 直接栅格化成 16×16：给根元素补上宽高，避免没有固有尺寸的 SVG 被按 300×150 拉伸。
