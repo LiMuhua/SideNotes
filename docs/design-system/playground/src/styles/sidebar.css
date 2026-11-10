@@ -689,6 +689,38 @@
   overflow: visible auto;
 }
 
+/* 新建卡片与下面的卡片同宽（本次提出）：列表始终留出滚动条的位置，滚动条细到 --sn-space-3，放进右侧的内边距里，
+ * 卡片右边缘与新建卡片对齐。Chromium 用 ::-webkit-scrollbar 定宽，同时把标准属性设回 auto，否则这些样式不生效。 */
+.sn-note-list {
+  padding-right: calc(var(--sn-panel-padding) - var(--sn-space-3));
+  scrollbar-gutter: stable;
+}
+
+.sn-sidebar.is-blocks .sn-note-list {
+  margin-right: calc(var(--sn-space-3) * -1);
+  padding-right: 0;
+}
+
+@supports selector(::-webkit-scrollbar) {
+  .sn-note-list {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+}
+
+.sn-note-list::-webkit-scrollbar {
+  width: var(--sn-space-3);
+}
+
+.sn-note-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sn-note-list::-webkit-scrollbar-thumb {
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-border-strong);
+}
+
 .sn-note-list > .sn-state {
   margin: auto 0;
 }
@@ -784,13 +816,24 @@
   outline-offset: calc(var(--sn-focus-ring-width) * -1);
 }
 
-/* 编辑中的卡片是视觉焦点：编辑底色与浮起的投影（令牌 --sn-shadow-editing），其余卡片变淡，悬停恢复（T21）。
- * 边框与窗格的标题栏保持平时的样子，不用强调色，编辑的地方不被一圈颜色框住。 */
+/* 编辑中的卡片是视觉焦点：保留与悬停、选中相同的高亮（强调色边框与外圈，窗格的标题栏顶部一条强调色线），
+ * 换成编辑底色并浮起（令牌 --sn-shadow-editing），其余卡片变淡，悬停恢复（T21）。编辑区里的输入面不加框（本次提出：此前编辑中去掉了高亮）。 */
 .sn-note-list .sn-note.is-editing {
   --local-overlay: transparent;
-  --local-shadow: var(--sn-shadow-editing);
+  --local-shadow: var(--sn-shadow-card-active), var(--sn-shadow-editing);
   z-index: 1;
+  border-color: var(--sn-color-accent);
   background-color: var(--sn-color-editing);
+}
+
+.sn-note-list.is-panes .sn-note.is-editing .sn-note-head {
+  background:
+    linear-gradient(var(--sn-color-accent), var(--sn-color-accent)) top / 100% var(--sn-focus-ring-width) no-repeat,
+    var(--sn-color-card-head-active);
+}
+
+.sn-note-list.is-tiles .sn-note.is-editing::before {
+  opacity: 0;
 }
 
 .sn-note.is-dimmed {

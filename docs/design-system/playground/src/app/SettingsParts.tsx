@@ -76,7 +76,7 @@ export function DataRow({ label, help, value, children }: { label: string; help?
 /** 目录路径：等宽字体，过长时在中间省略，悬停显示全文。 */
 export function PathText({ label, path }: { label: string; path: string }) {
   return (
-    <code className="sn-set-path" aria-label={label} title={path}>
+    <code className="sn-set-path" aria-label={label}>
       {path}
     </code>
   );

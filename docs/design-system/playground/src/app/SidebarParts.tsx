@@ -242,7 +242,6 @@ export function TidyNudge({ onArchive, onSnooze, onClose }: { onArchive: () => v
 /** 标签菜单中最多列出的候选数，与现有应用一致。 */
 const MAX_TAG_CANDIDATES = 6;
 /** 候选标签的悬停说明：评分权重与现有应用一致。 */
-const TAG_SCORE_HINT = '访问频率 40 · 近期访问 30 · 条数 4 · 置顶 3';
 
 export interface ListToplineProps {
   view: SidebarView;
@@ -368,7 +367,7 @@ function TagMenu({
   };
 
   const option = (tag: string, count: number) => (
-    <button type="button" role="menuitem" tabIndex={-1} className="sn-menu-item sn-tag-option" title={TAG_SCORE_HINT} onClick={() => choose(tag)}>
+    <button type="button" role="menuitem" tabIndex={-1} className="sn-menu-item sn-tag-option" onClick={() => choose(tag)}>
       <span className="sn-menu-label">#{tag}</span>
       <span className="sn-tag-count">{count}</span>
     </button>
@@ -386,7 +385,6 @@ function TagMenu({
               tabIndex={-1}
               className="sn-menu-item sn-tag-manage"
               aria-label={`管理 #${priority.tag}`}
-              title={`管理 #${priority.tag}`}
               onClick={() => {
                 onClose(false);
                 onManage(priority.tag);
@@ -475,7 +473,7 @@ export function SidebarFooter({ update, onVersion, onSettings }: FooterProps) {
   const label = update ? `发现新版本 ${update}，点击查看更新内容` : `版本 ${__APP_VERSION__} 预览版，点击查看更新日志`;
   return (
     <footer className="sn-side-foot">
-      <button type="button" className={cx('sn-side-version', update && 'has-update')} aria-label={label} title={label} onClick={onVersion}>
+      <button type="button" className={cx('sn-side-version', update && 'has-update')} aria-label={label} onClick={onVersion}>
         v{__APP_VERSION__}
         {update ? (
           <span className="sn-update-badge" aria-hidden="true">

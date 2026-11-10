@@ -2,7 +2,7 @@
  * 按钮与图标按钮。
  *
  * 四种外观：主要（每个区域最多一个）、次要、幽灵（工具栏）、危险。
- * 图标按钮必须有名称（aria-label），悬停或聚焦时以工具提示显示名称与快捷键。
+ * 图标按钮必须有名称（aria-label），不加悬停提示：悬停说明只跟问号绑定（HelpTip，本次提出）。
  * `force` 只用于组件页静态展示某个状态。
  */
 
@@ -10,8 +10,6 @@ import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { cx, useSurface } from './context';
 import { Icon, type IconName } from './Icon';
 import { Keys, Spinner } from './Misc';
-import { Tooltip } from './Tooltip';
-import type { Placement } from './layer';
 
 export type ForcedState = 'hover' | 'active' | 'focus';
 
@@ -21,7 +19,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: IconName;
   trailingIcon?: IconName;
   loading?: boolean;
-  /** 快捷键：终端主题直接显示在按钮上，其它主题写入 aria-keyshortcuts 与工具提示。 */
+  /** 快捷键：终端主题直接显示在按钮上，其它主题只写入 aria-keyshortcuts。 */
   shortcut?: string;
   force?: ForcedState;
   children?: ReactNode;
@@ -32,7 +30,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   ref,
 ) {
   const surface = useSurface();
-  const button = (
+  return (
     <button
       ref={ref}
       type="button"
@@ -49,18 +47,11 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       {shortcut && surface.inlineShortcuts ? <Keys combo={shortcut} tone={variant === 'primary' ? 'accent' : 'default'} /> : null}
     </button>
   );
-  return shortcut && !surface.inlineShortcuts && children ? (
-    <Tooltip content={children} shortcut={shortcut}>
-      {button}
-    </Tooltip>
-  ) : (
-    button
-  );
 });
 
 export interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   icon: IconName;
-  /** 按钮的名称，同时作为工具提示。 */
+  /** 按钮的名称（aria-label）。 */
   label: string;
   shortcut?: string;
   size?: 'sm' | 'md';
@@ -70,9 +61,6 @@ export interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>
   /** 图标在按下状态下填充（收藏星标）。 */
   fillWhenPressed?: boolean;
   force?: ForcedState;
-  tooltip?: boolean;
-  /** 工具提示的位置；竖排的图标栏中放在右侧。 */
-  tooltipPlacement?: Placement;
 }
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(
@@ -85,14 +73,12 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
     pressed,
     fillWhenPressed = false,
     force,
-    tooltip = true,
-    tooltipPlacement = 'bottom',
     className,
     ...rest
   },
   ref,
 ) {
-  const button = (
+  return (
     <button
       ref={ref}
       type="button"
@@ -105,12 +91,5 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
     >
       <Icon name={icon} filled={Boolean(pressed && fillWhenPressed)} />
     </button>
-  );
-  return tooltip ? (
-    <Tooltip content={label} shortcut={shortcut} placement={tooltipPlacement}>
-      {button}
-    </Tooltip>
-  ) : (
-    button
   );
 });

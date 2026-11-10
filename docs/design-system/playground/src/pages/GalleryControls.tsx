@@ -8,7 +8,7 @@ import { SearchInput, TextInput } from '../ui/Field';
 import { Badge, Keys, Tag } from '../ui/Misc';
 import { Select } from '../ui/Select';
 import { Checkbox, Segmented, Switch } from '../ui/Toggle';
-import { Tooltip } from '../ui/Tooltip';
+import { HelpTip } from '../ui/Tooltip';
 import { AppIconPicker } from '../app/AppIconPicker';
 import { AppIcon, BrandMark } from '../app/SidebarParts';
 import { Demo, DemoRow, PageSection, StateCell } from './common';
@@ -59,16 +59,16 @@ export function ControlsSection() {
           ))}
         </div>
       </Demo>
-      <Demo title="图标按钮" note="必须有名称，悬停或聚焦时以工具提示显示名称与快捷键。">
+      <Demo title="图标按钮" note="必须有名称（aria-label），不加悬停提示；需要说明的设置项用问号。">
         <DemoRow>
           <StateCell label="默认">
             <IconButton icon="copy" label="复制记录与附件" />
           </StateCell>
           <StateCell label="悬停">
-            <IconButton icon="copy" label="复制" force="hover" tooltip={false} />
+            <IconButton icon="copy" label="复制" force="hover" />
           </StateCell>
           <StateCell label="键盘焦点">
-            <IconButton icon="copy" label="复制" force="focus" tooltip={false} />
+            <IconButton icon="copy" label="复制" force="focus" />
           </StateCell>
           <StateCell label="已开启">
             <IconButton icon="pin" label="取消固定侧栏" pressed />
@@ -77,7 +77,7 @@ export function ControlsSection() {
             <IconButton icon="check" label="保存 · Ctrl+Enter" variant="primary" />
           </StateCell>
           <StateCell label="禁用">
-            <IconButton icon="check" label="保存" variant="primary" disabled tooltip={false} />
+            <IconButton icon="check" label="保存" variant="primary" disabled />
           </StateCell>
         </DemoRow>
       </Demo>
@@ -124,7 +124,7 @@ export function ControlsSection() {
           />
         </DemoRow>
       </Demo>
-      <Demo title="快捷键、徽标、标签与工具提示">
+      <Demo title="快捷键、徽标、标签与问号说明">
         <DemoRow>
           <Keys combo="Ctrl+Shift+Space" />
           <Keys combo="Ctrl+Enter" />
@@ -133,15 +133,10 @@ export function ControlsSection() {
           <Badge tone="accent">新</Badge>
           <Tag label="工作" onClick={() => {}} />
           <Tag label="常用" selected onClick={() => {}} />
-          <div className="sn-tooltip is-static" role="presentation">
-            <span>收起侧栏</span>
-            <Keys combo="Esc" />
-          </div>
-          <Tooltip content="固定侧栏保持展开">
-            <Button size="sm" variant="secondary">
-              悬停查看提示
-            </Button>
-          </Tooltip>
+          <span className="sn-set-label">
+            整理提醒
+            <HelpTip label="整理提醒">工作区记录超过这个数时提醒整理</HelpTip>
+          </span>
         </DemoRow>
       </Demo>
       <Demo

@@ -2,7 +2,7 @@
  * 桌面场景：在模拟的桌面上运行 SideNotes 的三个窗口。
  *
  * - 侧栏贴在屏幕边缘，宽度取设置中的宽度，并随字号等比加宽（T45）；鼠标移到边缘唤出，
- *   移出后按「移出后收起」的延迟收起；固定、编辑中（「编辑时保持展开」）或设置窗口打开期间保持展开。
+ *   移出后按「移出后收起」的延迟收起；固定、编辑中或设置窗口打开期间保持展开。
  * - 速记浮窗 560 × 420、设置窗口 960 × 720 居中弹出，窗口尺寸不随字号变化，内容按字号缩放（T33）；
  *   按住标题区可以拖动，便于把浮窗移到不同的背景上检查材质。
  * - 字号设置是整页缩放：每个窗口的内容放大「字号 ÷ 13」倍，与现有应用的 WebView 缩放一致。
@@ -74,10 +74,10 @@ export function Desktop({ form, platform, wallpaper, initial = {}, surface, prim
   const cancelHide = useCallback(() => window.clearTimeout(hideTimer.current), []);
   const scheduleHide = useCallback(() => {
     window.clearTimeout(hideTimer.current);
-    // 固定、设置窗口打开期间（T15）、编辑中且开启了「编辑时保持展开」时不收起。
-    if (pinned || settingsWindow || phone || (busy && settings.protectEditing)) return;
+    // 固定、设置窗口打开期间（T15）、编辑中时不收起（「编辑时保持展开」已去掉，编辑期间一律保持展开）。
+    if (pinned || settingsWindow || phone || busy) return;
     hideTimer.current = window.setTimeout(() => setVisible(false), settings.hideDelay);
-  }, [pinned, settingsWindow, phone, busy, settings.protectEditing, settings.hideDelay]);
+  }, [pinned, settingsWindow, phone, busy, settings.hideDelay]);
 
   useEffect(() => () => window.clearTimeout(hideTimer.current), []);
 

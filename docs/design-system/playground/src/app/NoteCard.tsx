@@ -17,7 +17,7 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { Markdown, MarkdownInline } from '@/components/Markdown';
 import { noteDisplay, sourceOffset } from '@/core/display';
-import { formatFullTime, formatTime, noteTitle } from '@/core/notes';
+import { formatTime, noteTitle } from '@/core/notes';
 import { parse } from '@/core/tags';
 import type { Note, TabKey } from '@/core/types';
 import { NoteEditor } from '../content/NoteEditor';
@@ -116,7 +116,6 @@ export function NoteCard(props: NoteCardProps) {
           className="sn-note-emoji"
           tabIndex={innerTab}
           aria-label="更换 Emoji"
-          title="更换 Emoji"
           onClick={(event) => {
             event.stopPropagation();
             props.onEmoji();
@@ -132,7 +131,6 @@ export function NoteCard(props: NoteCardProps) {
               type="button"
               className="sn-note-time"
               tabIndex={-1}
-              title={`创建：${formatFullTime(note.createdAt)}\n修改：${formatFullTime(note.updatedAt)}`}
               onClick={(event) => {
                 event.stopPropagation();
                 props.onToggleCollapse();
@@ -197,7 +195,6 @@ export function NoteCard(props: NoteCardProps) {
           ref={content}
           className="sn-note-body"
           style={{ maxHeight }}
-          title={truncated ? '内容较长，双击卡片查看全文' : undefined}
         >
           <Markdown
             text={display.body}

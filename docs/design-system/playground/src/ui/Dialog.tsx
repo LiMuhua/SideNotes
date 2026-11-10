@@ -99,7 +99,7 @@ export function Dialog({
             <h2 id={titleId} className="sn-dialog-title">
               {title}
             </h2>
-            <IconButton icon="x" label="关闭" size="sm" onClick={onClose} tooltip={false} />
+            <IconButton icon="x" label="关闭" size="sm" onClick={onClose} />
           </header>
           {description ? (
             <p id={descriptionId} className="sn-dialog-description">

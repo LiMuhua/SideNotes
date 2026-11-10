@@ -438,9 +438,9 @@ const CREDITS: ReadonlyArray<{ name: string; glyph: string; note: string }> = [
 ];
 
 /** 小块按钮：项目链接、开源致谢与调试共用；外部链接带一个斜箭头。 */
-function LinkChip({ icon, glyph, label, title, external = false, onClick }: { icon?: IconName; glyph?: string; label: string; title?: string; external?: boolean; onClick: () => void }) {
+function LinkChip({ icon, glyph, label, external = false, onClick }: { icon?: IconName; glyph?: string; label: string; external?: boolean; onClick: () => void }) {
   return (
-    <button type="button" className="sn-link-chip" title={title ?? label} onClick={onClick}>
+    <button type="button" className="sn-link-chip" onClick={onClick}>
       {icon ? <Icon name={icon} /> : null}
       {glyph ? (
         <span className="sn-link-glyph" aria-hidden="true">
@@ -463,7 +463,7 @@ export function AboutPanel() {
         <AppIcon />
         <div className="sn-about-text">
           <h3 className="sn-about-name">SideNotes</h3>
-          <p className="sn-about-tagline">本地速记 · 置顶取用 · 用后归档</p>
+          <p className="sn-about-tagline">藏在屏幕边上的速记本</p>
         </div>
         <span className="sn-about-version">桌面预览版 {__APP_VERSION__}</span>
       </div>
@@ -481,7 +481,7 @@ export function AboutPanel() {
         <h4 className="sn-set-card-title">开源致谢</h4>
         <div className="sn-chip-row">
           {CREDITS.map((credit) => (
-            <LinkChip key={credit.name} glyph={credit.glyph} label={credit.name} title={credit.note} external onClick={() => open(credit.name)} />
+            <LinkChip key={credit.name} glyph={credit.glyph} label={credit.name} external onClick={() => open(credit.name)} />
           ))}
         </div>
       </section>

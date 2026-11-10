@@ -159,7 +159,6 @@ export function Segmented<T extends string>({ label, value, options, onChange, s
             role="radio"
             aria-checked={selected}
             aria-label={iconOnly ? option.label : undefined}
-            title={iconOnly ? option.label : undefined}
             tabIndex={selected ? 0 : -1}
             disabled={option.disabled}
             className="sn-segment"

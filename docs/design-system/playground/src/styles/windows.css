@@ -459,9 +459,10 @@
 }
 
 /* 选项卡片：明暗模式与主题，预览用所示主题与明暗模式的令牌绘制。 */
+/* 明暗模式的三张卡片与主题卡片同宽（排在五列的前三列），不把这一行撑满（本次提出）。 */
 .sn-choice-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: var(--sn-space-4);
 }
 

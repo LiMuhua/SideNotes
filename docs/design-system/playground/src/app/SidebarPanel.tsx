@@ -49,7 +49,7 @@ export interface SidebarPanelProps {
   onTogglePinned: () => void;
   onHide: () => void;
   onOpenSettings: () => void;
-  /** 编辑中或菜单、弹窗打开时为 true，场景据此暂停自动收起（「编辑时保持展开」）。 */
+  /** 编辑中或菜单、弹窗打开时为 true，场景据此暂停自动收起。 */
   onBusyChange?: (busy: boolean) => void;
   /** 单窗口页面：焦点在页面本身时也响应 Ctrl+C 等快捷键。 */
   primary?: boolean;

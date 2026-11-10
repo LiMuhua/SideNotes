@@ -487,6 +487,13 @@
   animation: sn-fade-in var(--sn-duration-fast) var(--sn-ease-enter);
 }
 
+/* 应用图标的大图预览：工具提示里只有图片，不写名称（本次提出）。 */
+.sn-tooltip .sn-icon-preview {
+  display: block;
+  width: calc(var(--sn-control-height-lg) * 3);
+  height: calc(var(--sn-control-height-lg) * 3);
+}
+
 .sn-tooltip.is-static {
   position: static;
   animation: none;

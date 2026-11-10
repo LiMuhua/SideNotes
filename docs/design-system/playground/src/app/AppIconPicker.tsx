@@ -132,7 +132,7 @@ export function AppIconPicker() {
       {APP_ICONS.map((icon) => {
         const label = icon.id === DEFAULT_APP_ICON ? `${icon.name}（默认）` : icon.name;
         return (
-          <Tooltip key={icon.id} content={label}>
+          <Tooltip key={icon.id} placement="top" content={<img className="sn-icon-preview" src={icon.svg} alt="" />}>
             <label className={cx('sn-icon-choice', appIcon === icon.id && 'is-selected')}>
               <input type="radio" name={group} className="sn-sr-only" aria-label={label} checked={appIcon === icon.id} onChange={() => setAppIcon(icon.id)} />
               <img src={icon.svg} alt="" draggable={false} />
@@ -142,7 +142,7 @@ export function AppIconPicker() {
       })}
       {customIcon ? (
         <span className="sn-icon-custom">
-          <Tooltip content="自定义图标">
+          <Tooltip placement="top" content={<img className="sn-icon-preview" src={customIcon} alt="" />}>
             <label className={cx('sn-icon-choice', appIcon === CUSTOM_APP_ICON && 'is-selected')}>
               <input
                 type="radio"
@@ -162,18 +162,16 @@ export function AppIconPicker() {
               { id: 'remove', label: '移除', icon: 'trash', danger: true, separatorBefore: true, onSelect: remove },
             ]}
             trigger={(props) => (
-              <button {...props} type="button" className="sn-icon-edit" aria-label="更换或移除自定义图标" title="更换或移除">
+              <button {...props} type="button" className="sn-icon-edit" aria-label="更换或移除自定义图标">
                 <Icon name="edit" />
               </button>
             )}
           />
         </span>
       ) : (
-        <Tooltip content="上传图片">
-          <button type="button" className="sn-icon-choice is-add" aria-label="上传图片作为应用图标" onClick={pick}>
-            <Icon name="plus" />
-          </button>
-        </Tooltip>
+        <button type="button" className="sn-icon-choice is-add" aria-label="上传图片作为应用图标" onClick={pick}>
+          <Icon name="plus" />
+        </button>
       )}
       <input
         ref={input}

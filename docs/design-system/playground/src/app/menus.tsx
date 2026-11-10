@@ -249,7 +249,6 @@ export function EmojiDialog({ note, onPick, onClose }: { note: Note | null; onPi
               type="button"
               className={cx('sn-emoji-cell', note?.emoji === item.emoji && 'is-current')}
               aria-label={item.label}
-              title={item.label}
               onClick={() => onPick(item.emoji)}
             >
               {item.emoji}

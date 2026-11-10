@@ -101,6 +101,8 @@ export function AppearancePanel() {
   const { settings, updateSettings } = useNotes();
   // 关闭整理提醒时记住原来的阈值，再次打开时恢复（与现有应用一致）。
   const [tidyLimit, setTidyLimit] = useState(settings.tidyLimit || 50);
+  // 编辑时滚到顶部（本次提出，默认打开）：Playground 的设置模型沿用现有应用，这一项只在页面上演示。
+  const [scrollOnEdit, setScrollOnEdit] = useState(true);
 
   return (
     <SettingsPage title="外观与交互">
@@ -140,7 +142,7 @@ export function AppearancePanel() {
               </label>
             ))}
           </div>
-          <SettingLabel label="应用图标" help="任务栏、托盘、桌面快捷方式与窗口标题区都换成选中的图标；上传的图片先裁成正方形" />
+          <SettingLabel label="应用图标" help="任务栏、托盘、桌面快捷方式与窗口标题区都换成选中的图标" />
           <AppIconPicker />
         </div>
       </SettingsCard>
@@ -193,14 +195,14 @@ export function AppearancePanel() {
             />
             <span className="sn-set-unit">ms</span>
           </Field>
-          <Field label="编辑时保持展开">
-            <Switch label="编辑时保持展开" hideLabel checked={settings.protectEditing} onChange={(protectEditing) => updateSettings({ protectEditing })} />
+          <Field label="编辑时滚到顶部">
+            <Switch label="编辑时滚到顶部" hideLabel checked={scrollOnEdit} onChange={setScrollOnEdit} />
           </Field>
         </FieldRow>
         <RangeGroup>
           <RangeRow label="宽度" help="随字号等比加宽，也可拖动侧栏边缘调整" value={settings.width} min={WIDTH_RANGE.min} max={WIDTH_RANGE.max} step={WIDTH_RANGE.step} unit="px" onCommit={(width) => updateSettings({ width })} />
           <RangeRow label="出入动画" value={settings.animDuration} min={ANIM_DURATION_RANGE.min} max={ANIM_DURATION_RANGE.max} step={ANIM_DURATION_RANGE.step} unit="ms" onCommit={(animDuration) => updateSettings({ animDuration })} />
-          <RangeRow label="卡片高度" help="卡片正文的最大高度，按 13px 字号计。超出的部分渐隐，双击卡片查看全文；调低时一屏能放下更多卡片" value={settings.cardMaxHeight} min={CARD_HEIGHT_RANGE.min} max={CARD_HEIGHT_RANGE.max} step={CARD_HEIGHT_RANGE.step} unit="px" onCommit={(cardMaxHeight) => updateSettings({ cardMaxHeight })} />
+          <RangeRow label="卡片高度" help="超出的部分渐隐；点「展开全文」或把卡片拖出侧栏，在窗口中查看全文" value={settings.cardMaxHeight} min={CARD_HEIGHT_RANGE.min} max={CARD_HEIGHT_RANGE.max} step={CARD_HEIGHT_RANGE.step} unit="px" onCommit={(cardMaxHeight) => updateSettings({ cardMaxHeight })} />
         </RangeGroup>
       </SettingsCard>
 
@@ -275,15 +277,11 @@ const SHORTCUT_GROUPS: ReadonlyArray<{ title: string; help?: string; ids: readon
   },
 ];
 
-/** 问号中的补充说明：只给需要额外理解的一项。 */
+/** 问号中的补充说明：另外固定可用的按键，以及链接读取剪贴板的用法（与现有应用一致；按键上不加悬停提示）。 */
 const SHORTCUT_NOTES: Readonly<Record<string, string>> = {
+  strike: '也可按 Alt + Shift + 5',
+  inlineCode: '也可按 Ctrl + Shift + `',
   link: '剪贴板中是网址时直接生成链接',
-};
-
-/** 另外固定可用的按键，写在按键的悬停提示里，不占问号。 */
-const SHORTCUT_ALIASES: Readonly<Record<string, string>> = {
-  strike: 'Alt + Shift + 5',
-  inlineCode: 'Ctrl + Shift + `',
 };
 
 /** 固定快捷键占用的按键，录入时同样算作冲突。 */
@@ -373,7 +371,6 @@ export function ShortcutsPanel() {
           variant="secondary"
           icon="restore"
           disabled={!changed}
-          title={changed ? '全部快捷键改回默认按键' : '快捷键都是默认按键'}
           onClick={() => {
             setBindings({});
             toast({ message: '已恢复默认快捷键', tone: 'success' });
@@ -414,7 +411,6 @@ export function ShortcutsPanel() {
                         type="button"
                         className={cx('sn-shortcut-key', recording === spec.id && 'is-recording')}
                         aria-label={recording === spec.id ? `正在录入「${spec.label}」的快捷键，Esc 取消` : `更换「${spec.label}」的快捷键，当前为 ${display(keys)}`}
-                        title={recording === spec.id ? 'Esc 取消' : SHORTCUT_ALIASES[spec.id] ? `点击更换；也可按 ${SHORTCUT_ALIASES[spec.id]}` : '点击更换'}
                         onClick={() => {
                           setRecording((current) => (current === spec.id ? null : spec.id));
                           setMessage(null);
@@ -425,7 +421,7 @@ export function ShortcutsPanel() {
                         {recording === spec.id ? '按下新的快捷键…' : display(keys)}
                       </button>
                     ) : (
-                      <kbd className="sn-shortcut-key is-fixed" title="固定快捷键，不能更换">
+                      <kbd className="sn-shortcut-key is-fixed">
                         {spec.keys.split(' / ').map(display).join(' / ')}
                       </kbd>
                     )}
