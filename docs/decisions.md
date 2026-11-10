@@ -349,3 +349,11 @@
 **原因**：设计系统是规范文档与参考实现，和交互原型 `docs/prototype/` 一样属于文档；两者并列放在 `docs/` 下，原型可以用相对路径直接引用令牌文件，不必复制一份。
 
 **代价**：以仓库根为基准的路径写法都要加上 `docs/` 前缀，其它会话与旧记录中的路径要改用新位置；`docs/design-system/` 下的文档链接到 `docs/` 的文件时少一层 `../`。
+
+## DS-5. 内置应用图标随应用打包，由脚本生成
+
+**决定**：内置图标的母版与生成的资源放在 `src-tauri/icons/builtin/`，`src-tauri/tauri.conf.json` 用 `bundle.resources` 把整个目录打包到安装目录的 `app-icons/`；Playground 直接引用这些文件。`pnpm icons`（`scripts/app-icons.mjs`）用 Tauri CLI 的渲染器逐个尺寸渲染 PNG，自己拼出 14 个尺寸的 ICO，并按默认图标重新生成 `src-tauri/icons/` 与两份母版副本（`docs/design-system/assets/app-icon.svg`、`src/assets/favicon.svg`）。旧的 `scripts/make-icon.py` 与它生成的 `source.png` 删除。设计上的取舍见 [docs/design-system/design-decisions.md](./design-system/design-decisions.md) 第三十九节。
+
+**原因**：图标要能在运行时更换，窗口、托盘与快捷方式都要按路径读到 PNG 或 ICO，放进打包资源最直接；Playground 与安装包共用一份文件，设计与实际不会走样。渲染用 Tauri CLI，与生成桌面图标是同一个渲染器（resvg），不另外引入依赖；ICO 自己拼，是因为 `tauri icon` 只生成 6 个尺寸，Windows 在 125%、175% 等缩放下要从相邻尺寸缩放。
+
+**代价**：安装包多约 1 MB。`builtin/` 中的 PNG 与 ICO 是生成物但必须提交（打包需要），改了母版要重新生成，由 `docs/design-system/tests/app-icons.test.ts` 兜底。macOS 用的 `icon.icns` 每次生成字节都不同，重新生成后会多出一处无关的改动。
