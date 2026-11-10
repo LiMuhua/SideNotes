@@ -128,7 +128,7 @@
 | [app.js](app.js) | 状态、存储、列表、标签、焦点、编辑事务、快捷键、附件弹窗与速记。 |
 | [layer.js](layer.js) | 浮层：问号说明、下拉列表与图标预览挂在 body 下，按视口定位。 |
 | [note-window.js](note-window.js) | 记录窗口：拖出侧栏或展开全文时打开，可以移动、缩放与置顶。 |
-| [shortcuts.js](shortcuts.js)、[markdown-commands.js](markdown-commands.js) | 由现有应用的 `src/core/shortcuts.ts`、`src/core/markdown-commands.ts` 转译：快捷键的绑定与冲突检查、Markdown 编辑命令。 |
+| [shortcuts.js](shortcuts.js)、[markdown-commands.js](markdown-commands.js) | 由现有应用的 `src/core/shortcuts.ts`、`src/core/markdown-commands.ts` 转译：快捷键的绑定与冲突检查、Markdown 编辑命令。应用更新这些模块后，在仓库根目录执行 `node docs/prototype/tools/sync-core.mjs <现有应用仓库的根目录>` 重新生成（[tools/sync-core.mjs](tools/sync-core.mjs)）。 |
 | [interactions.js](interactions.js)、[note-menu.js](note-menu.js) | 排序、框选、多选与上下文菜单。 |
 | [editor.js](editor.js)、[content.js](content.js)、[emoji.js](emoji.js) | 实时编辑、Markdown 与标签解析、Emoji。 |
 | [drop.js](drop.js)、[clipboard.js](clipboard.js) | 附件拖入与多格式剪贴板。 |
