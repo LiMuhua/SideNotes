@@ -1,6 +1,6 @@
 # 平台适配
 
-本文说明五套主题在 Windows、Linux、Android 上的实现条件：字体、半透明材质、透明窗口、缩放、明暗与高对比度，以及从现有设置迁移的规则。现有应用的情况取自 0.7.3 的源码，Tauri 与 Windows 的说法取自官方文档，出处见 [references/source-evidence.md](./references/source-evidence.md)。
+本文说明五套主题在 Windows、Linux、Android 上的实现条件：字体、半透明材质、透明窗口、缩放、明暗与高对比度、从现有设置迁移的规则，以及应用图标的更换。现有应用的情况取自 0.7.3 的源码，Tauri 与 Windows 的说法取自官方文档，出处见 [references/source-evidence.md](./references/source-evidence.md)。
 
 ## 一、平台
 
@@ -125,6 +125,7 @@ Windows 开启对比主题后，WebView2 进入强制颜色模式（`forced-colo
 | `surface`（界面材质，改称「主题」） | `standard`、`paper`、`glass`、`win11`，默认 `standard` | `terminal`、`magazine`、`paper`、`win11`、`glass`，默认 `terminal`；`standard` 改为 `terminal`，其余三个沿用同名取值，外观换成新的样式；无法识别的取值按默认处理 |
 | `theme`（明暗模式） | `light`、`dark`、`system` | 不变 |
 | `fontFamily`（字体） | 任意字体名，默认 Maple Mono NF CN | 增加「跟随主题」，规则见第二节 |
+| `appIcon`（应用图标，新增） | — | 默认 `door-smile-indigo`（211），规则见第十节 |
 | 其余设置 | — | 不变；数据模型不变 |
 
 迁移随设置的结构版本（`SETTINGS_VERSION`）从 2 升到 3 一次完成，读取设置时由 `normalizeSettings` 统一处理。
@@ -141,3 +142,25 @@ Windows 开启对比主题后，WebView2 进入强制颜色模式（`forced-colo
 | 可以按桌面背景的亮度自动切换明暗 | 不做：WebView 读不到桌面画面 |
 | 内置 Archivo 与 Inter 字体 | 尚未打包，回落到系统字体 |
 | 只支持 Windows | 覆盖 Windows、Linux、Android，半透明主题在 Linux 与 Android 上退回不透明的颜色 |
+
+## 十、应用图标
+
+设计见 [components.md](./components.md) 第七节。桌面应用尚未实现切换，下面是实现时的做法（本次提出）。
+
+**资源**：内置图标在 `src-tauri/icons/builtin/<编号>-<id>/`，有 `icon.svg`、`icon.ico` 与 `png/<尺寸>.png`，清单是 `manifest.json`；`tauri.conf.json` 的 `bundle.resources` 把整个目录打包到安装目录的 `app-icons/`，运行时用 `resolveResource('app-icons/...')` 取得路径。默认图标同时是 `src-tauri/icons/` 中的桌面图标。改了母版或清单后运行 `pnpm icons` 重新生成；`docs/design-system/tests/app-icons.test.ts` 检查资源齐全、尺寸正确。
+
+**设置**：新增 `appIcon`，取值为内置图标的 id，或 `custom` 表示使用上传的图片；默认 `door-smile-indigo`。取值在清单中找不到时（例如以后删掉了某个图标）按默认处理。
+
+**上传的图片**：裁好后保存到应用数据目录的 `app-icon/custom.png`（512 × 512），并按清单的 ICO 尺寸生成 `custom.ico`；移除时删除这两个文件。图片只在本机，不进入导出备份。
+
+**各处的图标**：
+
+| 位置 | 图标来源 | 更换后 |
+| --- | --- | --- |
+| 窗口图标、设置窗口的任务栏按钮 | 窗口的 `set_icon` | 立即生效。按当前缩放比例从 PNG 中取最接近的尺寸 |
+| 托盘 | 托盘的 `set_icon`（现在用 `default_window_icon`） | 立即生效。Windows 托盘按 16px 乘以缩放比例取图 |
+| 关于页、各窗口的品牌标记 | 前端按设置显示 | 立即生效 |
+| 开始菜单与桌面快捷方式 | 安装时指向 exe 的图标 | 把快捷方式的图标位置改到 `app-icons/<目录>/icon.ico` 或 `custom.ico`；资源管理器可能要等图标缓存刷新 |
+| exe 文件、安装程序 | 打包时的默认图标 | 不变 |
+| Linux 程序坞与应用列表 | 打包时 `.desktop` 文件的图标 | 只能换窗口图标，程序坞是否跟随取决于桌面环境 |
+| Android 启动图标 | 打包时的 mipmap | 不变：运行时更换需要为每个图标准备 activity-alias，暂不做 |

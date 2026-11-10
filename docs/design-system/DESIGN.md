@@ -65,10 +65,10 @@ Design Playground 用同一套令牌与组件运行三个窗口，见 [playgroun
 | Esc 在收起侧栏之前先清除多选 | 有多选时 Esc 直接收起侧栏 | [interactions.md](./interactions.md) |
 | 提示条在指针停留或获得焦点时暂停计时 | 6 秒（带撤销 9 秒）后消失 | [interactions.md](./interactions.md) |
 | 速记浮窗不显示草稿状态；快捷键与 Markdown 的说明收进标题旁的问号；字数放在附件工具右边；磨砂玻璃的浮窗是一整块玻璃，编辑器直接写在玻璃上 | 标题下写「Markdown · #标签」，占位文字第二行写保存与收起的按键，编辑区下方一行是草稿状态与字数 | [components.md](./components.md) |
-| 设置窗口加宽到 960，同一行的设置项之间有竖线分隔，问号说明只留给需要额外理解的 11 项；滑块、数值输入框与数字组合框可以用滚轮调整 | 880 × 720，名称后多数带问号，只能拖动或输入 | [components.md](./components.md) |
+| 设置窗口加宽到 960，同一行的设置项之间有竖线分隔，问号说明只留给需要额外理解的 12 项；滑块、数值输入框与数字组合框可以用滚轮调整 | 880 × 720，名称后多数带问号，只能拖动或输入 | [components.md](./components.md) |
 | 版本号移到底栏左下角并缩小，检查到新版本时带更新角标，点开列出即将更新的内容；底栏不再显示存储状态的绿色圆点（出错时仍显示警告） | 版本号在标题区，点击查看更新日志；底栏左边是存储状态的绿色圆点 | [components.md](./components.md) |
 | 调整宽度的手柄在指针停留 400ms 后才高亮，指针仍然立即变为左右箭头 | 指针移上去立即高亮 | [interactions.md](./interactions.md) |
-| 新的应用图标：一张黄色便签从靛蓝色屏幕的右边缘探出头来；标题区的品牌标记用同一个图标，配色固定，不随主题变化 | 灰绿色的两张纸片；品牌标记是三根竖条 | [components.md](./components.md) |
+| 新的应用图标：六个内置图标，默认 211「门缝浅笑 · 靛蓝」，设置中可以切换或换成上传的图片；标题区的品牌标记用同一个图标，配色固定，不随主题变化 | 灰绿色的两张纸片，不能更换；品牌标记是三根竖条 | [components.md](./components.md) |
 | Ctrl+, 打开设置 | 只能点设置按钮或侧栏菜单 | [interactions.md](./interactions.md) |
 | 回收站的保留天数紧跟在条数之后；调试只留一个「打开开发者工具」按钮；标签菜单底部只有「搜索标签」一项 | 保留天数在页面标题右侧；侧栏、速记浮窗、设置各一个按钮；标签菜单底部是一句提示加「搜索」按钮 | [components.md](./components.md) |
 | 「字体」设置增加「跟随主题」，并作为默认值 | 字体作用于全部界面文字 | [adaptation.md](./adaptation.md) |
@@ -82,6 +82,7 @@ Design Playground 用同一套令牌与组件运行三个窗口，见 [playgroun
 3. 编辑模式（[editing.md](./editing.md)）与键盘操作（[interactions.md](./interactions.md)）。
 4. 速记浮窗与设置窗口。
 5. 三套实心主题完成后，再做两套半透明主题的窗口材质：先实测 Acrylic 在侧栏滑入滑出时的表现，并补上不透明的退路颜色。
+6. 应用图标的切换：设置项 `appIcon`、窗口与托盘图标的替换、快捷方式的图标，见 [adaptation.md](./adaptation.md) 第十节；资源已随应用打包。
 
 ## 七、文档索引
 
@@ -92,7 +93,7 @@ Design Playground 用同一套令牌与组件运行三个窗口，见 [playgroun
 | [editing.md](./editing.md) | 编辑模式：结构、Markdown 元素、五套主题的差异 |
 | [interactions.md](./interactions.md) | 鼠标、键盘与触屏操作，动效 |
 | [layout.md](./layout.md) | 窗口尺寸、侧栏布局、间距与密度、窄宽度与手机 |
-| [adaptation.md](./adaptation.md) | 平台、字体、半透明材质、从现有设置迁移 |
+| [adaptation.md](./adaptation.md) | 平台、字体、半透明材质、从现有设置迁移、应用图标的更换 |
 | [accessibility.md](./accessibility.md) | 对比度、焦点、键盘、目标尺寸、减少动态效果 |
 | [design-decisions.md](./design-decisions.md) | 设计决策与原因 |
 | [themes/](./themes/terminal.md) | 五套主题，各一份 |
