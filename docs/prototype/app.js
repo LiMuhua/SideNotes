@@ -108,6 +108,10 @@ function normalizeSettings(value = {}) {
     appIcon: window.SideNotesAppIcons.normalize(value.appIcon),
     fontSize: Math.max(12,Math.min(20,Number(value.fontSize)||16)),
     edge: value.edge === 'left' ? 'left' : 'right', width: Math.min(720,Math.max(360,Number(value.width)||416)),
+    // 出入动画、卡片高度与通知位置：取值范围与默认值同现有应用（src/core/settings.ts）。
+    animDuration: Number.isFinite(Number(value.animDuration)) && value.animDuration !== null && value.animDuration !== '' ? Math.max(0,Math.min(600,Math.round(Number(value.animDuration)))) : 260,
+    cardMaxHeight: Number.isFinite(Number(value.cardMaxHeight)) && value.cardMaxHeight !== null && value.cardMaxHeight !== '' ? Math.max(120,Math.min(600,Math.round(Number(value.cardMaxHeight)))) : 220,
+    toastPosition: ['top-center','top-right','bottom-center'].includes(value.toastPosition) ? value.toastPosition : 'top-center',
     hideDelay: [300,600,1000].includes(Number(value.hideDelay)) ? Number(value.hideDelay) : 600,
     protectEditing: value.protectEditing !== false,
     lazyLoading: value.lazyLoading !== false,
@@ -569,7 +573,7 @@ function openModal(title, className = '') {
   ui.modal = className || 'dialog';
   // 设置打开期间侧栏保持展开，固定按钮显示虚线圈，表示「临时固定」（T31）。
   if (className === 'settings-modal') document.getElementById('sidebar-lock').classList.add('is-linked');
-  window.setTimeout(function focusModal() { const focusable = modal.querySelector('[autofocus],input,textarea,select,button'); (focusable || modal).focus(); }, 30);
+  window.setTimeout(function focusModal() { const focusable = modal.querySelector('[autofocus]') || modal.querySelector('input,textarea,select,button'); (focusable || modal).focus(); }, 30);
   return { modal: modal, body: body, footer: footer };
 }
 
@@ -577,7 +581,9 @@ function openModal(title, className = '') {
 function confirmAction(options) {
   const dialog = openModal(options.title, 'confirm-modal');
   dialog.body.append(el('p', 'confirm-description', options.description));
+  // 初始焦点在「取消」上（与 Playground 相同），误按 Enter 不会直接执行。
   const cancel = button('取消', 'close-modal', '', 'button secondary');
+  cancel.autofocus = true;
   const confirm = button(options.confirmLabel || '确认', '', '', 'button danger');
   confirm.addEventListener('click', function applyConfirmation() {
     if (options.run() !== false) closeModal();

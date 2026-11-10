@@ -314,7 +314,8 @@ window.SideNotesSettings = (function createSettingsController() {
     node.target = '_blank';
     node.rel = 'noopener noreferrer';
     node.title = description || label;
-    const symbol = el('span', 'resource-icon', glyph);
+    // 以「i:」开头的是雪碧图中的图标（项目链接），其余是文字符号（开源致谢）。
+    const symbol = glyph.startsWith('i:') ? icon(glyph.slice(2)) : el('span', 'resource-icon', glyph);
     symbol.setAttribute('aria-hidden', 'true');
     node.append(symbol, el('span', '', label), icon('arrow-up-right'));
     return node;
@@ -343,6 +344,10 @@ window.SideNotesSettings = (function createSettingsController() {
     // 字号是整页缩放：界面按 13px 设计，缩放到「字号 ÷ 13」倍后正文正好是所选字号（layout.md 第一节）。
     root.style.setProperty('--app-zoom', String((settings.fontSize || 16) / 13));
     root.style.setProperty('--sidebar-width', settings.width + 'px');
+    // 侧栏滑出与收起的时长、卡片正文的最大高度（按 13px 字号计，随整页缩放）与通知位置。
+    root.style.setProperty('--sidebar-motion', settings.animDuration + 'ms');
+    root.style.setProperty('--card-max-height', settings.cardMaxHeight + 'px');
+    root.dataset.snToast = settings.toastPosition;
     if (elements.sidebar) {
       elements.sidebar.style.width = 'min(' + settings.width + 'px, 100vw)';
       elements.sidebar.dataset.edge = settings.edge;
@@ -749,7 +754,15 @@ window.SideNotesSettings = (function createSettingsController() {
   function miniSidebar(surface, theme) {
     const mini = el('span', 'mini-sidebar');
     window.SideNotesSurfaces.applyTo(mini, surface, theme);
-    mini.append(el('span', 'mini-head'), el('span', 'mini-tab'), el('span', 'mini-card is-active'), el('span', 'mini-card'));
+    const panel = el('span', 'mini-panel');
+    /** @brief 迷你卡片：两条线，第二条是短线或强调色线。 @param {boolean} active 是否当前卡片。 @param {string} second 第二条线的样式。 @return {HTMLElement} 卡片。 */
+    function miniCard(active, second) {
+      const card = el('span', 'mini-card' + (active ? ' is-active' : ''));
+      card.append(el('span', 'mini-line'), el('span', 'mini-line ' + second));
+      return card;
+    }
+    panel.append(el('span', 'mini-line is-title'), miniCard(true, 'is-short'), miniCard(false, 'is-accent'));
+    mini.append(panel);
     return mini;
   }
 
@@ -792,7 +805,9 @@ window.SideNotesSettings = (function createSettingsController() {
       const preview = el('span', 'theme-preview');
       preview.setAttribute('aria-hidden', 'true');
       (item[0] === 'system' ? ['light', 'dark'] : [item[0]]).forEach(function half(theme) { preview.append(miniSidebar(state.settings.surface, theme)); });
-      node.prepend(preview);
+      const name = el('span', 'choice-label', item[1]);
+      if (item[0] === 'system') name.append(el('span', 'choice-hint', '当前为' + (surfaces.resolveTheme('system') === 'dark' ? '深色' : '浅色')));
+      node.replaceChildren(preview, name);
       themes.append(node);
     });
     radioKeyboard(themes, '明暗模式');
@@ -812,14 +827,14 @@ window.SideNotesSettings = (function createSettingsController() {
       const preview = el('span', 'theme-preview surface-preview');
       preview.setAttribute('aria-hidden', 'true');
       preview.append(miniSidebar(item.id, resolved));
-      node.prepend(preview);
+      node.replaceChildren(preview, el('span', 'choice-label', item.name));
       choices.append(node);
     });
     radioKeyboard(choices, '主题');
     materials.append(row('主题', '', choices));
     // 应用图标排在主题之后（components.md 7.2）。
     const appIcons = el('div', 'settings-option-block');
-    appIcons.append(row('应用图标', '', appIconPicker()));
+    appIcons.append(row('应用图标', '标题区、速记浮窗、关于页与网页图标都换成选中的图标；上传的图片先裁成正方形。桌面应用还会换掉任务栏、托盘与快捷方式的图标（待原生实现）。', appIconPicker()));
     options.append(modes, materials, appIcons);
     target.append(options);
   }
@@ -1031,7 +1046,11 @@ window.SideNotesSettings = (function createSettingsController() {
     tidyControls.append(tidyToggle, tidyValue);
     tidy.append(tidyName, tidyControls);
 
-    grid.append(loading, tidy);
+    const toastField = el('div', 'settings-runtime-field');
+    const toastControls = el('div', 'settings-runtime-controls');
+    toastControls.append(select('通知弹出位置', [['top-center', '顶部正中'], ['top-right', '右上角'], ['bottom-center', '底部正中']], state.settings.toastPosition, function toastPosition(value) { return save({ toastPosition: value }); }));
+    toastField.append(el('div', 'settings-runtime-name', '通知位置'), toastControls);
+    grid.append(loading, tidy, toastField);
     card.append(grid);
     return card;
   }
@@ -1048,7 +1067,9 @@ window.SideNotesSettings = (function createSettingsController() {
     typography.classList.add('settings-wide');
     const fontRow = el('div', 'settings-field-grid settings-typography');
     fontRow.append(row('字体', '默认跟随主题；选了具体字体时替换界面与正文的字体，标题与代码的字体仍跟随主题。', fontPicker()), row('字号', '', range('字号', 'fontSize', 12, 20, 1, ' px')));
-    typography.append(fontRow, el('div', 'settings-font-preview', '随手记录。 The quick brown fox · 0123456789'));
+    const preview = el('div', 'settings-font-preview');
+    ['随手记下一句话，不打断手头的工作；支持 Markdown 与 #标签。', 'The Quick Brown Fox Jumps Over the Lazy Dog.', '0123456789 · ¥$€ @#%&*?! · 2026-11-08 · -> => != <= >= === //'].forEach(function previewLine(text) { preview.append(el('p', '', text)); });
+    typography.append(fontRow, preview);
     layout.append(typography);
 
     const behavior = group('侧栏');
@@ -1062,7 +1083,11 @@ window.SideNotesSettings = (function createSettingsController() {
     );
     const widthRow = row('宽度', '按 13px 字号计；窗口实际宽度是「宽度 × 字号 ÷ 13」。也可以拖动侧栏朝屏幕内侧的边调整，按 4px 取整。', range('侧栏宽度', 'width', 360, 720, 4, ' px'));
     widthRow.classList.add('sidebar-width-row');
-    fields.append(primary, widthRow);
+    const motionRow = row('出入动画', '', range('出入动画', 'animDuration', 0, 600, 20, ' ms'));
+    motionRow.classList.add('sidebar-width-row');
+    const heightRow = row('卡片高度', '卡片正文的最大高度，按 13px 字号计。超出的部分渐隐，点「展开全文」查看；调低时一屏能放下更多卡片。', range('卡片高度', 'cardMaxHeight', 120, 600, 10, ' px'));
+    heightRow.classList.add('sidebar-width-row');
+    fields.append(primary, widthRow, motionRow, heightRow);
     behavior.append(fields);
     layout.append(behavior);
     layout.append(runtimeSettings());
@@ -1073,19 +1098,18 @@ window.SideNotesSettings = (function createSettingsController() {
   /** @brief 分栏呈现记录与浏览快捷键，动作和按键左右对齐。 @param {HTMLElement} panel 设置容器。 */
   function renderShortcuts(panel) {
     const layout = el('div', 'settings-dashboard shortcuts-dashboard');
-    const editing = group('记录');
-    const browse = group('浏览');
-    editing.classList.add('shortcut-section');
-    browse.classList.add('shortcut-section');
-    const actions = el('div', 'shortcut-grid');
-    const navigation = el('div', 'shortcut-grid');
-    // 全局快捷键带说明适用范围的问号：桌面端在任何程序中生效，浏览器原型只在页面获得焦点时生效（模拟）。
-    const globalScope = '全局快捷键：桌面端注册为系统热键，在任何程序中生效；浏览器原型中只在页面获得焦点时生效。';
-    [['新建记录', 'Ctrl + N', ''], ['呼出速记', 'Ctrl + Shift + Space', globalScope], ['保存并退出编辑', 'Ctrl + Enter', '']].forEach(function entry(item) { actions.append(row(item[0], item[2], el('kbd', '', item[1]))); });
-    [['搜索记录与标签', 'Ctrl + F', ''], ['呼出侧栏', 'Alt + Shift + S', globalScope], ['打开设置', 'Ctrl + ,', '']].forEach(function entry(item) { navigation.append(row(item[0], item[2], el('kbd', '', item[1]))); });
-    editing.append(actions);
-    browse.append(navigation);
-    layout.append(editing, browse);
+    // 全局快捷键的问号说明适用范围：桌面端在任何程序中生效，浏览器原型只在页面获得焦点时生效（模拟）。
+    const global = group('全局', '桌面端注册为系统热键，在任何程序中生效；浏览器原型中只在页面获得焦点时生效。');
+    const inApp = group('应用内');
+    global.classList.add('shortcut-section');
+    inApp.classList.add('shortcut-section');
+    const globalKeys = el('div', 'shortcut-grid');
+    const appKeys = el('div', 'shortcut-grid');
+    [['呼出速记', 'Ctrl + Shift + Space'], ['呼出侧栏', 'Alt + Shift + S']].forEach(function entry(item) { globalKeys.append(row(item[0], '', el('kbd', '', item[1]))); });
+    [['新建记录', 'Ctrl + N'], ['搜索记录与标签', 'Ctrl + F'], ['打开设置', 'Ctrl + ,'], ['保存记录', 'Ctrl + Enter']].forEach(function entry(item) { appKeys.append(row(item[0], '', el('kbd', '', item[1]))); });
+    global.append(globalKeys);
+    inApp.append(appKeys);
+    layout.append(global, inApp);
     panel.append(layout, el('p', 'settings-notice', '所列快捷键固定生效，无需额外配置；中文选词期间不触发。'));
   }
 
@@ -1253,7 +1277,7 @@ window.SideNotesSettings = (function createSettingsController() {
     const path = el('div', 'settings-inline current-directory');
     const output = el('code', 'settings-path directory-field', dataDirectory());
     output.setAttribute('aria-label', '当前目标数据目录');
-    path.append(output, action('打开目录', openDirectory, 'folder', 'icon-button'));
+    path.append(el('span', 'settings-row-label setting-label', '当前目录'), output, action('打开目录', openDirectory, 'folder', 'icon-button'));
     directory.append(path);
     dashboard.append(directory);
     const cloud = group('云端自动备份');cloud.classList.add('settings-wide');
@@ -1302,9 +1326,9 @@ window.SideNotesSettings = (function createSettingsController() {
     const backup = group('导入与导出');backup.classList.add('settings-wide');
     const localActions = el('div', 'settings-actions data-actions');
     localActions.append(button('导出备份', 'export-data', 'download', 'button secondary compact'), button('导入备份', 'import-data', 'upload', 'button secondary compact'));
-    backup.append(localActions);
+    backup.append(row('本地备份', '', localActions));
     if (ui.storageError) backup.append(el('p', 'settings-notice is-error', '本地存储受限，请先导出备份。'), button('重试本地保存', 'retry-storage', 'restore', 'button secondary compact'));
-    dashboard.prepend(backup);
+    directory.after(backup);
   }
 
   /* ==================== 回收站 ==================== */
@@ -1529,7 +1553,9 @@ window.SideNotesSettings = (function createSettingsController() {
     const toolbar = el('div', 'settings-trash-toolbar settings-search-row');
     const filter = select('回收站标签筛选', [['', '全部标签'], ...tagOptions.map(function tagOption(tag) { return [tag, '#' + tag]; })], trashTag, function filterTag(value) { trashTag = value; renderList(); return true; });
     const view = select('回收站到期筛选', [['all', '全部'], ['expired', '已到期']], trashView, function filterExpiry(value) { trashView = value; renderList(); return true; });
-    toolbar.append(query, filter, view);
+    const search = el('label', 'settings-search');
+    search.append(icon('search'), query);
+    toolbar.append(search, filter, view);
     panel.append(toolbar);
     const bulk = el('div', 'trash-toolbar settings-inline');
     const summary = el('span', 'settings-trash-summary setting-description');
@@ -1589,22 +1615,18 @@ window.SideNotesSettings = (function createSettingsController() {
     panel.append(hero);
     const project = group('项目');
     const addresses = el('div', 'resource-links about-links settings-about-links');
-    addresses.append(externalLink('GitHub', 'https://github.com/', '⌘', '项目地址占位：GitHub 首页'), externalLink('官方网站', 'https://example.com/', '🌐', '官网地址占位：example.com'));
+    addresses.append(externalLink('GitHub', 'https://github.com/', 'i:code', '项目地址占位：GitHub 首页'), externalLink('官方网站', 'https://example.com/', 'i:globe', '官网地址占位：example.com'));
     const sponsor = action('支持项目', function showSponsor() {
       const previous = project.querySelector('.sponsor-note');
       if (previous) { previous.remove(); return; }
       project.append(el('p', 'setting-description sponsor-note', '赞助入口暂未开放，也欢迎通过反馈与代码贡献支持项目。'));
-    }, '', 'resource-link sponsor-button');
-    const heart = el('span', 'resource-icon', '♡');
-    heart.setAttribute('aria-hidden', 'true');
-    sponsor.prepend(heart);
+    }, 'heart', 'resource-link sponsor-button');
     addresses.append(sponsor, action('检查更新', function checkAboutUpdate() { checkForUpdates(); }, 'restore', 'resource-link settings-update-button'));
     project.append(addresses);
     panel.append(project);
     const credits = group('开源致谢');
-    credits.append(el('p', 'setting-description', '感谢开源项目与社区的支持。'));
     const list = el('div', 'resource-links settings-credits');
-    [['Tauri', 'https://tauri.app/', '◈', '桌面与跨平台运行时'], ['React', 'https://react.dev/', '⚛', '界面方案参考'], ['Vite', 'https://vite.dev/', 'ϟ', '开发与构建工具'], ['SQLite', 'https://sqlite.org/', '▱', '本地数据方案参考'], ['Filee', 'https://github.com/KnifeLemon/Filee', '▣', '桌面外观与交互参考']].forEach(function credit(item) {
+    [['Tauri', 'https://tauri.app/', '◈', '桌面与跨平台运行时'], ['React', 'https://react.dev/', '⚛', '界面方案参考'], ['Vite', 'https://vite.dev/', 'ϟ', '开发与构建工具'], ['SQLite', 'https://sqlite.org/', '▱', '本地数据方案参考'], ['Filee', 'https://github.com/KnifeLemon/Filee', '▣', '桌面外观与交互参考'], ['Maple Mono', 'https://github.com/subframe7536/maple-font', 'Aa', '内置默认字体 Maple Mono NF CN，SIL Open Font License 1.1']].forEach(function credit(item) {
       list.append(externalLink(item[0], item[1], item[2], item[3]));
     });
     credits.append(list);
@@ -1646,6 +1668,8 @@ window.SideNotesSettings = (function createSettingsController() {
     currentSection = SECTIONS.some(function knownSection(item) { return item[0] === section; }) ? section : 'appearance';
     activeDialog = openModal('设置', 'settings-modal');
     initializeWheel(activeDialog.modal);
+    const close = activeDialog.modal.querySelector('.modal-header [data-action="close-modal"]');
+    if (close) close.before(button('最小化（原型中与关闭相同）', 'close-modal', 'minus', 'icon-button settings-minimize'));
     const layout = el('div', 'settings-layout');
     const nav = el('nav', 'settings-nav');
     nav.setAttribute('aria-label', '设置分类');

@@ -24,7 +24,7 @@
 .settings-modal .settings-range-value:hover{border-color:var(--line);background:var(--soft)}
 .settings-modal .settings-range-value:focus{border-color:var(--accent);background:var(--card);outline:2px solid var(--accent-soft)}
 .settings-modal .settings-range-unit{font-size:10px;color:var(--muted);line-height:1}
-.settings-modal .settings-range input[type=range]{min-width:24px!important}
+.settings-modal .settings-range input[type=range]{min-width:24px}
 
 /* 记录与浏览各占一栏；组内每行动作在左、快捷键在右。 */
 .settings-modal .shortcuts-dashboard{grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch}

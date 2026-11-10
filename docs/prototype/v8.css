@@ -24,7 +24,7 @@ body.is-sorting-cards .drag-trash-zone{opacity:1;visibility:visible;transform:no
 .drag-trash-zone.is-target .drag-trash-label{opacity:1;transform:none}
 
 /* 交互分类末尾：加载与整理紧贴排列，数值框与单位共用同一控件外壳。 */
-.settings-modal .settings-runtime-card{margin-bottom:0!important;padding:11px 13px!important}
+.settings-modal .settings-runtime-card{margin-bottom:0;padding:11px 13px}
 .settings-modal .settings-runtime-row{display:flex;align-items:center;flex-wrap:wrap;gap:9px 18px}
 .settings-modal .settings-runtime-field{display:flex;align-items:center;gap:8px;min-width:0;padding:0}
 .settings-modal .settings-runtime-field+.settings-runtime-field{border-left:1px solid var(--line);padding-left:18px}
@@ -32,30 +32,30 @@ body.is-sorting-cards .drag-trash-zone{opacity:1;visibility:visible;transform:no
 .settings-modal .settings-runtime-controls{display:flex;align-items:center;gap:6px;min-width:0}
 .settings-modal .settings-runtime-controls .settings-toggle{flex:0 0 auto}
 .settings-modal .settings-runtime-value{display:flex;align-items:center;height:28px;min-width:0;overflow:hidden;border:1px solid var(--line);border-radius:6px;background:var(--paper)}
-.settings-modal .settings-runtime-value input[type=number]{width:48px!important;min-width:48px!important;height:26px!important;padding:2px 4px 2px 6px!important;border:0!important;border-radius:0!important;background:transparent!important;text-align:right;box-shadow:none!important}
+.settings-modal .settings-runtime-value input[type=number]{width:48px;min-width:48px;height:26px;padding:2px 4px 2px 6px;border:0;border-radius:0;background:transparent;text-align:right;box-shadow:none}
 .settings-modal .settings-runtime-suffix{padding:0 6px 0 3px;border-left:1px solid var(--line);font-size:9px;line-height:26px;color:var(--muted);white-space:nowrap}
 
 /* 侧栏设置：前三项同排，宽度独立占第二行。 */
 .settings-modal .sidebar-settings-layout{display:flex;flex-direction:column;gap:8px}
 .settings-modal .sidebar-settings-primary{display:grid;grid-template-columns:minmax(0,1.06fr) minmax(0,.94fr) minmax(0,1.04fr);gap:10px}
 .settings-modal .sidebar-settings-layout .settings-row,
-.settings-modal .sidebar-settings-layout .settings-row:has(input[type=checkbox]){display:grid!important;grid-template-columns:auto minmax(0,1fr)!important;grid-template-rows:auto!important;align-items:center!important;gap:7px!important;min-height:32px!important;margin:0!important;padding:0!important;border:0!important}
-.settings-modal .sidebar-settings-layout .settings-row-info{min-height:0!important;display:flex!important;align-items:center!important;gap:3px!important}
-.settings-modal .sidebar-settings-layout .settings-row-label{font:500 var(--sn-font-ui)!important;letter-spacing:0!important;font-stretch:normal!important;color:var(--ink)!important;white-space:nowrap}
-.settings-modal .sidebar-settings-layout .settings-control{display:flex;align-items:center;width:auto!important;max-width:none!important;min-width:0!important}
+.settings-modal .sidebar-settings-layout .settings-row:has(input[type=checkbox]){display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto;align-items:center;gap:7px;min-height:32px;margin:0;padding:0;border:0}
+.settings-modal .sidebar-settings-layout .settings-row-info{min-height:0;display:flex;align-items:center;gap:3px}
+.settings-modal .sidebar-settings-layout .settings-row-label{font:500 var(--sn-font-ui);letter-spacing:0;font-stretch:normal;color:var(--ink);white-space:nowrap}
+.settings-modal .sidebar-settings-layout .settings-control{display:flex;align-items:center;width:auto;max-width:none;min-width:0}
 .settings-modal .sidebar-settings-primary .settings-control{justify-content:flex-end}
-.settings-modal .sidebar-settings-primary select.form-control{width:100%;min-width:0!important;height:31px!important;padding:5px 24px 5px 8px!important;font-size:10px!important}
+.settings-modal .sidebar-settings-primary select.form-control{width:100%;min-width:0;height:31px;padding:5px 24px 5px 8px;font-size:10px}
 .settings-modal .sidebar-settings-primary .settings-row:has(input[type=checkbox]) .settings-control{justify-content:flex-start}
-.settings-modal .sidebar-width-row{grid-template-columns:64px minmax(0,1fr)!important;min-height:31px!important}
+.settings-modal .sidebar-width-row{grid-template-columns:64px minmax(0,1fr);min-height:31px}
 .settings-modal .sidebar-width-row .settings-range{min-width:0;width:100%;gap:9px}
-.settings-modal .sidebar-width-row .settings-range input[type=range]{min-width:60px!important}
+.settings-modal .sidebar-width-row .settings-range input[type=range]{min-width:60px}
 .settings-modal .sidebar-width-row .settings-range output{font-size:10px;min-width:38px}
 
 /* 备份开关紧跟说明按钮；来源使用各服务品牌标识。 */
 .settings-modal .settings-inline-toggle,
-.settings-modal .data-dashboard .settings-group>.settings-inline-toggle{display:flex!important;flex-direction:row!important;align-items:center!important;justify-content:flex-start!important;grid-template-columns:none!important;gap:7px!important;min-height:32px!important;padding:3px 0!important}
-.settings-modal .settings-inline-toggle .settings-row-info{display:flex!important;align-items:center!important;flex:0 0 auto!important;gap:4px!important;min-height:0!important}
-.settings-modal .settings-inline-toggle .settings-control{display:flex!important;align-items:center!important;flex:0 0 auto!important;width:auto!important}
+.settings-modal .data-dashboard .settings-group>.settings-inline-toggle{display:flex;flex-direction:row;align-items:center;justify-content:flex-start;grid-template-columns:none;gap:7px;min-height:32px;padding:3px 0}
+.settings-modal .settings-inline-toggle .settings-row-info{display:flex;align-items:center;flex:0 0 auto;gap:4px;min-height:0}
+.settings-modal .settings-inline-toggle .settings-control{display:flex;align-items:center;flex:0 0 auto;width:auto}
 .sync-provider .sync-provider-mark{display:block;width:18px;height:18px;flex:0 0 18px;pointer-events:none}
 .sync-provider .sync-provider-name{font-size:10px;line-height:1.35;color:inherit;font-weight:500}
 .sync-provider[data-provider=google] .sync-provider-mark{width:19px;height:17px}
@@ -63,8 +63,8 @@ body.is-sorting-cards .drag-trash-zone{opacity:1;visibility:visible;transform:no
 
 /* 新建卡片通过完整矩形粘性底板固定在顶部，遮住圆角外滚动中的内容。 */
 #note-list>.composer-sticky-slot{position:sticky;top:0;z-index:12;background:var(--paper);box-shadow:var(--sn-shadow-md);isolation:isolate}
-#note-list>.composer-sticky-slot>#quick-composer.sidebar-composer{position:relative;top:auto;z-index:1;background:color-mix(in srgb,var(--card) 96%,var(--paper))!important;box-shadow:0 0 0 var(--sn-focus-ring-width) var(--sn-color-accent-subtle)}
-#note-list>.composer-sticky-slot>#quick-composer.sidebar-composer:focus-within{background:var(--card)!important;box-shadow:0 0 0 var(--sn-focus-ring-width) var(--sn-color-accent-subtle)}
+#note-list>.composer-sticky-slot>#quick-composer.sidebar-composer{position:relative;top:auto;z-index:1;background:color-mix(in srgb,var(--card) 96%,var(--paper));box-shadow:0 0 0 var(--sn-focus-ring-width) var(--sn-color-accent-subtle)}
+#note-list>.composer-sticky-slot>#quick-composer.sidebar-composer:focus-within{background:var(--card);box-shadow:0 0 0 var(--sn-focus-ring-width) var(--sn-color-accent-subtle)}
 
 @media(max-width:680px){
   .settings-modal .settings-runtime-row{align-items:flex-start;flex-direction:column;gap:8px}

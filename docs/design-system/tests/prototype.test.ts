@@ -28,8 +28,8 @@ const STYLESHEETS = readdirSync(PROTOTYPE_ROOT).filter((name) => name.endsWith('
 const LEGACY_STYLESHEETS = STYLESHEETS.filter((name) => name !== 'theme.css');
 
 const TOKEN_NAMES = new Set(TOKENS.map((token) => token.name));
-/** 脚本写在元素上的运行时变量：settings.js 的整页缩放（字号 ÷ 13）与侧栏宽度，app.js 的搜索框收起宽度。 */
-const RUNTIME_VARIABLES = new Set(['--app-zoom', '--sidebar-width', '--search-collapsed-width']);
+/** 脚本写在元素上的运行时变量：settings.js 的整页缩放（字号 ÷ 13）、侧栏宽度、出入动画与卡片高度，app.js 的搜索框收起宽度。 */
+const RUNTIME_VARIABLES = new Set(['--app-zoom', '--sidebar-width', '--sidebar-motion', '--card-max-height', '--search-collapsed-width']);
 
 interface PrototypeSurfaces {
   SURFACES: ReadonlyArray<Record<string, unknown>>;

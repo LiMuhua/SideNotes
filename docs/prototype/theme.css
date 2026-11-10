@@ -234,6 +234,8 @@ img.brand-mark.is-small {
   box-shadow: none;
   text-shadow: 0 0 var(--sn-space-3) var(--sn-color-halo);
   isolation: isolate;
+  /* 滑出与收起的时长是设置中的「出入动画」（settings.js 写在根节点上的 --sidebar-motion）。 */
+  transition-duration: var(--sidebar-motion, var(--sn-duration-slow));
 }
 
 .sidebar::before {
@@ -771,9 +773,12 @@ img.brand-mark.is-small {
 
 /* 标签菜单：宽度跟着内容走（本次提出），浮起的表面，候选右侧是条数，底部只有「搜索标签」。 */
 .tag-dropdown {
+  right: 0;
+  left: auto;
   width: max-content;
   min-width: 0;
-  max-width: calc(100% - var(--sn-panel-padding) * 2);
+  max-width: none;
+  white-space: nowrap;
   padding: var(--sn-space-1);
   border: var(--sn-border-width) solid var(--sn-color-border);
   border-radius: var(--sn-radius-md);
@@ -1265,6 +1270,11 @@ img.brand-mark.is-small {
   line-height: var(--sn-note-line-height);
 }
 
+/* 正文的最大高度是设置中的「卡片高度」（按 13px 字号计，随整页缩放）。 */
+.note-list .note-card .note-content.markdown-body {
+  max-height: var(--card-max-height);
+}
+
 /* 正文超过最大高度时底部渐隐；遮罩只用透明度，颜色本身不显示。 */
 .note-card.is-truncated .note-content.markdown-body {
   mask-image: linear-gradient(to bottom, #000 calc(100% - 2.6em), transparent); /* 固定：遮罩只取透明度 */
@@ -1539,26 +1549,27 @@ mark {
   visibility: hidden;
 }
 
-/* ---------- 编辑区（卡片编辑、新建卡片与速记浮窗） ----------
- * 编辑区里不画边框、强调线与行号（第七、八次反馈）；记录纸每行下方有横线（--sn-color-rule），其余主题为透明。 */
+/* ---------- 编辑区（卡片编辑、新建卡片与速记浮窗；与 Playground 的 content.css「实时编辑器」相同） ----------
+ * 编辑区里不画边框、强调线与行号（第七、八次反馈）；记录纸的卡片编辑与速记浮窗每行下方有横线（--sn-color-rule），新建卡片没有。
+ * 编辑器的结构与类名沿用现有应用（editor.js），光标、Markdown 标记与代码块的颜色来自令牌。 */
 .live-markdown-editor,
 .note-card .note-edit-input,
 .sidebar-draft-input,
 .capture-body textarea {
+  position: relative;
+  margin: 0;
+  padding: 0;
   border: 0;
+  border-radius: 0;
   outline: none;
   background-color: transparent;
+  box-shadow: none;
   color: var(--sn-color-text);
   caret-color: var(--sn-color-caret);
   font-family: var(--sn-font-note);
   font-size: var(--sn-note-size);
   line-height: var(--sn-note-line-height);
-  box-shadow: none;
-}
-
-/* 新建卡片的编辑区不留内边距，占位文字与卡片内容左对齐。 */
-#quick-composer .live-markdown-editor {
-  padding: 0;
+  cursor: text;
 }
 
 .live-markdown-editor:focus,
@@ -1570,13 +1581,20 @@ mark {
 }
 
 .live-markdown-editor.is-empty::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  inset-inline: 0;
   color: var(--sn-color-text-muted);
+  white-space: pre-wrap;
+  pointer-events: none;
 }
 
 .live-markdown-editor .md-editor-line {
   display: block;
   min-height: calc(var(--sn-note-line-height) * 1em);
   margin: 0;
+  padding-block: 0;
+  border: 0;
   line-height: inherit;
   white-space: pre-wrap;
 }
@@ -1589,9 +1607,16 @@ mark {
   );
 }
 
+/* Markdown 标记（#、**、- 等）：终端用强调色，像代码的语法着色；其余主题用弱化文字色。 */
 .live-markdown-editor .md-syntax {
   color: var(--sn-color-syntax);
   font-weight: var(--sn-font-weight-regular);
+  font-style: normal;
+  text-decoration: none;
+}
+
+.live-markdown-editor .md-syntax.is-hidden {
+  display: none;
 }
 
 .live-markdown-editor .md-heading {
@@ -1600,30 +1625,116 @@ mark {
 }
 
 .live-markdown-editor .md-quote {
+  padding-left: var(--sn-space-5);
   border-left: var(--sn-focus-ring-width) solid var(--sn-color-border-strong);
   color: var(--sn-color-text-secondary);
 }
 
-.live-markdown-editor .md-list-bullet {
-  color: var(--sn-color-syntax);
+.live-markdown-editor .md-list-item {
+  --md-list-hang: max(1.6em, 3ch);
+  padding-left: calc(var(--md-list-hang) + var(--md-list-indent, 0) * 0.5em);
+  text-indent: calc(var(--md-list-hang) * -1);
 }
 
-.live-markdown-editor .md-fenced-code {
+.live-markdown-editor :is(.md-list-bullet, .md-list-marker.is-revealed) {
+  display: inline-block;
+  min-width: var(--md-list-hang);
+  color: var(--sn-color-syntax);
+  text-indent: 0;
+  white-space: pre;
+}
+
+/* 代码块：围栏与代码行连成一块代码底色；收起的围栏只剩一条细边，代码块上下各留一点空。 */
+.live-markdown-editor :is(.md-fenced-code, .md-fence-marker) {
+  padding: 0 var(--sn-space-4);
+  border: 0;
   background: var(--sn-code-bg);
   color: var(--sn-code-text);
   font-family: var(--sn-font-code);
   font-size: var(--sn-code-size);
 }
 
-.live-markdown-editor .md-rule {
-  border-top-color: var(--sn-color-border);
+.live-markdown-editor .md-fenced-code code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
 }
 
+.live-markdown-editor .md-fence-marker.is-collapsed {
+  min-height: var(--sn-space-2);
+  line-height: var(--sn-space-2);
+  border-radius: var(--sn-radius-xs);
+}
+
+.live-markdown-editor .md-inline-code {
+  padding: 0.08em 0.35em;
+  border: 0;
+  border-radius: var(--sn-radius-xs);
+  background: var(--sn-code-bg);
+  color: var(--sn-code-text);
+  font-family: var(--sn-font-code);
+  font-size: 0.9em;
+}
+
+.live-markdown-editor .md-rule {
+  display: flex;
+  align-items: center;
+  border: 0;
+}
+
+.live-markdown-editor .md-rule-line {
+  flex: 1;
+  height: var(--sn-border-width);
+  background: var(--sn-color-border);
+}
+
+/* 编辑区里的待办方框（编辑区的根元素同时带 markdown-body，选择器写到编辑区之内，才能盖过正文中待办按钮的样式）。 */
+.live-markdown-editor .md-task-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  margin-right: var(--sn-space-3);
+  padding: 0;
+  border: var(--sn-border-width) solid var(--sn-color-border-strong);
+  border-radius: var(--sn-radius-xs);
+  background: transparent;
+  color: var(--sn-color-accent-text);
+  font-size: 0.8em;
+  line-height: 1;
+  text-indent: 0;
+  vertical-align: -0.12em;
+}
+
+.live-markdown-editor .md-task-checkbox[aria-checked='true'] {
+  border-color: var(--sn-color-accent);
+  background: var(--sn-color-accent-subtle);
+}
+
+.live-markdown-editor .md-tag-ghost {
+  color: var(--sn-color-text-muted);
+  pointer-events: none;
+  user-select: none;
+}
+
+.live-markdown-editor .md-editor-image {
+  display: inline-flex;
+  margin: var(--sn-space-2) 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--sn-radius-sm);
+  background: var(--sn-color-surface-sunken);
+}
+
+/* 卡片编辑：编辑区与底部的工具栏之间留一点空。 */
 .note-card .note-edit-actions {
   display: flex;
   align-items: center;
   gap: var(--sn-space-1);
   margin: 0;
+  padding: 0;
+  border: 0;
 }
 
 .note-card .note-edit-actions .composer-tools {
@@ -1992,8 +2103,15 @@ mark {
   animation-duration: var(--sn-duration-normal);
 }
 
+/* 弹窗（与 Playground 的 sn-dialog 相同）：一整块浮起的表面，标题、说明与按钮之间不画分隔线；
+ * 标题行右侧是小号的关闭按钮，说明用次要文字色，按钮靠右。确认类弹窗用窄一些的宽度。 */
 .modal {
+  display: flex;
+  flex-direction: column;
   width: var(--sn-dialog-width);
+  max-width: calc((100vw - var(--sn-space-6)) / var(--app-zoom, 1));
+  padding: 0;
+  overflow: hidden;
   border: var(--sn-border-width) solid var(--sn-color-border);
   border-radius: var(--sn-radius-lg);
   background: var(--sn-color-surface-raised);
@@ -2002,34 +2120,98 @@ mark {
   animation-duration: var(--sn-duration-slow);
 }
 
+.modal.confirm-modal {
+  width: calc(var(--sn-dialog-width) * 0.82);
+}
+
 .modal .modal-header {
-  padding: var(--sn-space-5) var(--sn-space-5) var(--sn-space-4);
-  border-bottom: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-4);
+  min-height: 0;
+  margin: 0;
+  padding: var(--sn-space-6) var(--sn-space-5) var(--sn-space-2) var(--sn-space-8);
+  border: 0;
+  background: transparent;
 }
 
 .modal .modal-header h2 {
+  flex: 1;
+  margin: 0;
   font-family: var(--sn-font-title);
-  font-size: var(--sn-font-size-xl);
+  font-size: var(--sn-font-size-lg);
   font-weight: var(--sn-title-weight);
+  letter-spacing: var(--sn-title-tracking);
+  line-height: inherit;
+}
+
+.modal:not(.settings-modal) .modal-header .icon-button {
+  width: var(--sn-control-height-sm);
+  height: var(--sn-control-height-sm);
+}
+
+.modal:not(.settings-modal) .modal-header .icon-button .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
 }
 
 .modal .modal-body {
-  padding: var(--sn-space-4) var(--sn-space-5) var(--sn-space-5);
-  background: var(--sn-color-surface);
+  min-height: 0;
+  margin: 0;
+  padding: var(--sn-space-2) var(--sn-space-8) var(--sn-space-2);
+  overflow: auto;
+  border: 0;
+  background: transparent;
   color: var(--sn-color-text);
   font-size: var(--sn-font-size-md);
 }
 
 .modal .modal-body > p {
+  margin: 0;
   color: var(--sn-color-text-secondary);
-  font-size: var(--sn-font-size-md);
+  font-size: var(--sn-font-size-sm);
+  line-height: var(--sn-line-height-relaxed);
 }
 
 .modal .modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sn-space-4);
+  margin: 0;
+  padding: var(--sn-space-8) var(--sn-space-8) var(--sn-space-6);
+  border: 0;
+  background: transparent;
+}
+
+.modal .modal-footer:empty {
+  display: none;
+}
+
+/* 弹窗底部的按钮是常规尺寸；与 Playground 的实际显示一样不加粗、沿用正文字号。 */
+.modal:not(.settings-modal) .modal-footer .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   gap: var(--sn-space-3);
-  padding: var(--sn-space-4) var(--sn-space-5);
-  border-top: var(--sn-border-width) solid var(--sn-color-border-subtle);
-  background: var(--sn-color-surface-raised);
+  height: var(--sn-control-height);
+  min-height: 0;
+  padding: 0 var(--sn-space-5);
+  border: var(--sn-border-width) solid transparent;
+  border-radius: var(--sn-radius-control);
+  font: inherit;
+  white-space: nowrap;
+}
+
+.modal:not(.settings-modal) .modal-footer .button.secondary {
+  border-color: var(--sn-color-border);
+  background-color: var(--sn-color-surface-raised);
+  box-shadow: var(--sn-shadow-sm);
+  color: var(--sn-color-text);
+}
+
+.modal:not(.settings-modal) .modal-footer .button.danger {
+  background-color: var(--sn-color-danger-subtle);
+  color: var(--sn-color-danger);
 }
 
 .modal .form-control,
@@ -2075,40 +2257,121 @@ mark {
 }
 
 /* ---------- 设置窗口 ----------
- * 窗口 960 × 720，不随字号变化，内容按字号缩放（components.md 第五节）；分类栏当前项浮起，图标用强调色。 */
+ * 与 Playground 的设置窗口相同（windows.css 与 controls.css），布局沿用现有应用 0.7.3：
+ * 窗口 960 × 720，不随字号变化，内容按字号缩放；窄的分类栏，当前项浮起、图标用强调色；
+ * 页面由分组卡片组成，相关的设置放在同一张卡片里，一行可以放几项，项与项之间一条很淡的竖线，说明收在名称后的问号里。 */
 .modal.settings-modal {
+  display: flex;
+  flex-direction: column;
   width: min(calc(960px / var(--app-zoom, 1)), calc((100vw - var(--sn-space-6)) / var(--app-zoom, 1))); /* 固定：设置窗口的窗口尺寸 */
   height: min(calc(720px / var(--app-zoom, 1)), calc((100dvh - var(--sn-space-6)) / var(--app-zoom, 1))); /* 固定：设置窗口的窗口尺寸 */
   max-width: none;
   max-height: none;
+  padding: 0;
+  overflow: hidden;
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-lg);
   background: var(--sn-color-bg);
+  box-shadow: var(--sn-shadow-lg);
+  color: var(--sn-color-text);
 }
 
+/* 标题栏：「设置」与最小化、关闭两个小号图标按钮。 */
 .settings-modal .modal-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--sn-space-2);
   height: var(--sn-header-height);
+  min-height: 0;
+  margin: 0;
   padding: 0 var(--sn-space-3) 0 var(--sn-space-6);
-  border-bottom: 0;
-  background: var(--sn-color-bg);
+  border: 0;
+  background: transparent;
+  user-select: none;
 }
 
 .settings-modal .modal-header h2 {
+  margin: 0 auto 0 0;
+  color: var(--sn-color-text);
+  font-family: var(--sn-font-title);
   font-size: var(--sn-font-size-md);
+  font-weight: var(--sn-title-weight);
+  letter-spacing: normal;
+  line-height: inherit;
+}
+
+.settings-modal .modal-header .icon-button {
+  width: var(--sn-control-height-sm);
+  height: var(--sn-control-height-sm);
+}
+
+.settings-modal .modal-header .icon-button .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
 }
 
 .settings-modal .modal-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
   padding: 0;
-  background: var(--sn-color-bg);
+  overflow: hidden;
+  background: transparent;
+  font-size: inherit;
 }
 
+.settings-modal .settings-layout {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: auto;
+  gap: 0;
+}
+
+/* 分类栏 */
 .settings-modal .settings-nav {
-  background: var(--sn-color-bg);
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--sn-space-1);
+  width: calc(var(--sn-dialog-width) * 0.32);
+  min-width: 0;
+  padding: var(--sn-space-3);
+  overflow: visible;
+  border: 0;
+  background: transparent;
 }
 
 .settings-modal .settings-nav-button {
-  border-radius: var(--sn-radius-md);
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--sn-space-4);
+  width: 100%;
+  height: var(--sn-control-height);
+  min-height: 0;
+  margin: 0;
+  padding: 0 var(--sn-space-4);
+  border: 0;
+  border-radius: var(--sn-radius-control);
   background: transparent;
+  box-shadow: none;
   color: var(--sn-color-text-secondary);
-  font-size: var(--sn-font-size-md);
+  font-size: inherit;
+  font-weight: var(--sn-body-weight);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.settings-modal .settings-nav-button .icon {
+  flex: none;
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  color: inherit;
 }
 
 .settings-modal .settings-nav-button:hover {
@@ -2120,26 +2383,79 @@ mark {
   background: var(--sn-color-surface-raised);
   box-shadow: var(--sn-shadow-sm);
   color: var(--sn-color-text);
+  font-weight: var(--sn-font-weight-medium);
 }
 
 .settings-modal .settings-nav-button.active .icon {
   color: var(--sn-color-accent-text);
 }
 
+.settings-modal .settings-nav-button:focus-visible {
+  outline-offset: calc(var(--sn-focus-ring-width) * -1);
+}
+
+/* 页面：表面色的一块，左上角圆角，与分类栏之间一条淡分隔线。 */
 .settings-modal .settings-panel {
-  border-top-left-radius: var(--sn-radius-lg);
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: var(--sn-space-5) var(--sn-space-5) var(--sn-space-8);
+  overflow: auto;
+  border: 0;
+  border-top: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  border-left: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  border-radius: var(--sn-radius-lg) 0 0 0;
   background: var(--sn-color-surface);
-  scrollbar-color: var(--sn-color-border) transparent;
+  box-shadow: none;
+  scrollbar-color: var(--sn-color-border-strong) transparent;
+}
+
+.settings-modal .settings-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sn-space-5);
+  min-height: var(--sn-control-height);
+  margin: 0 0 var(--sn-space-5);
+  padding: 0;
+  border: 0;
 }
 
 .settings-modal .settings-panel-heading h3 {
+  margin: 0;
   color: var(--sn-color-text);
   font-family: var(--sn-font-title);
   font-size: var(--sn-font-size-xl);
   font-weight: var(--sn-title-weight);
+  letter-spacing: var(--sn-title-tracking);
+  line-height: var(--sn-line-height-tight);
+}
+
+/* 卡片网格：默认占满一行，快捷键页的两张卡片并排。 */
+.settings-modal .settings-dashboard {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sn-space-5);
+  margin: 0;
+  padding: 0;
+}
+
+.settings-modal .settings-dashboard > * {
+  grid-column: 1 / -1;
+}
+
+.settings-modal .settings-dashboard > .shortcut-section {
+  grid-column: auto;
 }
 
 .settings-modal :is(.settings-group, .settings-card) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sn-space-4);
+  min-width: 0;
+  margin: 0;
+  padding: var(--sn-space-5);
   border: var(--sn-border-width) solid var(--sn-color-border-subtle);
   border-radius: var(--sn-radius-md);
   background: var(--sn-color-surface-raised);
@@ -2147,73 +2463,312 @@ mark {
 }
 
 .settings-modal .settings-group-title {
-  color: var(--sn-color-text-secondary);
-  font-size: var(--sn-font-size-sm);
-  font-weight: var(--sn-font-weight-semibold);
-}
-
-.settings-modal :is(.settings-row-label, .setting-label, .settings-runtime-name) {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  margin: 0;
+  padding: 0;
   color: var(--sn-color-text);
   font-size: var(--sn-font-size-md);
+  font-weight: var(--sn-font-weight-semibold);
+  letter-spacing: normal;
+  line-height: inherit;
+  text-transform: none;
 }
 
-.settings-modal :is(.setting-description, .settings-note, .settings-range-unit, .settings-runtime-suffix) {
-  color: var(--sn-color-text-muted);
+/* 设置项：名称（可带问号）与控件；名称是小号字，不折行。 */
+.settings-modal .settings-row {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--sn-space-3);
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
-/* 名称后面可能跟问号说明：名称不折行，标签列按内容取宽，避免「字体」被挤成竖排。 */
 .settings-modal .settings-row-info {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sn-space-2);
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
   white-space: nowrap;
 }
 
-.settings-modal .appearance-dashboard .settings-typography .settings-row {
-  grid-template-columns: auto minmax(0, 1fr);
+.settings-modal :is(.settings-row-label, .setting-label, .settings-runtime-name) {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-2);
+  margin: 0;
+  color: var(--sn-color-text);
+  font: inherit;
+  font-size: var(--sn-font-size-sm);
+  font-weight: var(--sn-body-weight);
+  letter-spacing: normal;
+  white-space: nowrap;
 }
 
-/* 同一行的两项之间是一条竖线（高约一个字），位于间距正中；折行后每行开头不画竖线（本次提出）。 */
-.settings-modal :is(.sidebar-settings-primary, .settings-typography, .settings-runtime-row) > :not(:first-child) {
+.settings-modal .settings-control {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+}
+
+.settings-modal :is(.setting-description, .settings-range-unit, .settings-runtime-suffix) {
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-sm);
+}
+
+/* 一行放几项：放不下时折行；项与项之间一条很淡的竖线，折行后行首那一项的竖线落在左边界之外，被裁掉。 */
+.settings-modal :is(.settings-field-grid, .sidebar-settings-primary, .settings-runtime-row) {
+  --local-gap: var(--sn-space-7);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sn-space-4) var(--local-gap);
+  margin: 0;
+  clip-path: inset(calc(var(--sn-space-6) * -1) calc(var(--sn-space-6) * -1) calc(var(--sn-space-6) * -1) 0);
+}
+
+.settings-modal :is(.settings-field-grid, .sidebar-settings-primary, .settings-runtime-row) > * {
   position: relative;
 }
 
-.settings-modal :is(.sidebar-settings-primary, .settings-typography, .settings-runtime-row) > :not(:first-child)::before {
+.settings-modal :is(.settings-field-grid, .sidebar-settings-primary, .settings-runtime-row) > * + *::before {
   content: '';
   position: absolute;
   top: 50%;
-  left: calc(var(--sn-space-7) / -2);
+  left: calc(var(--local-gap) / -2);
   width: var(--sn-border-width);
-  height: 1em;
+  height: 1.1em;
   background: var(--sn-color-border);
-  transform: translateY(-50%);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
 }
 
-.settings-modal :is(.sidebar-settings-primary, .settings-typography, .settings-runtime-row) {
-  column-gap: var(--sn-space-7);
+/* 显示：名称一列，选项卡片一列（两层容器用 display: contents 让名称与控件进入同一个网格）。 */
+.settings-modal .appearance-display-grid {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sn-space-5) var(--sn-space-6);
 }
 
-/* 开关是 role="switch" 的复选框：选中为强调色。 */
-:is(.settings-modal, .settings-confirm-dialog) :is(.toggle, .settings-toggle) {
-  background: var(--sn-color-border-strong);
+.settings-modal .appearance-display-grid > .settings-option-block,
+.settings-modal .appearance-display-grid .settings-row {
+  display: contents;
+}
+
+.settings-modal .appearance-display-grid .settings-control {
+  display: block;
+}
+
+/* 选项卡片：明暗模式三列，主题五列；预览用所示主题与明暗模式的令牌绘制。 */
+.settings-modal .theme-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sn-space-4);
+}
+
+.settings-modal .surface-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--sn-space-4);
+}
+
+.settings-modal :is(.theme-option, .surface-choice, .settings-choice) {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: var(--sn-space-2);
+  width: auto;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: var(--sn-space-2);
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-md);
+  background: transparent;
   box-shadow: none;
+  color: var(--sn-color-text);
+  cursor: pointer;
 }
 
-:is(.settings-modal, .settings-confirm-dialog) :is(.toggle, .settings-toggle):checked {
+.settings-modal :is(.theme-option, .surface-choice, .settings-choice)::before,
+.settings-modal :is(.theme-option, .surface-choice, .settings-choice)::after {
+  content: none;
+}
+
+.settings-modal :is(.theme-option, .surface-choice, .settings-choice):hover {
+  border-color: var(--sn-color-border-strong);
+  background: transparent;
+}
+
+.settings-modal :is(.theme-option, .surface-choice, .settings-choice):is(.selected, .active) {
+  border-color: var(--sn-color-accent);
+  background: transparent;
+  box-shadow: 0 0 0 var(--sn-border-width) var(--sn-color-accent);
+}
+
+.settings-modal .theme-preview {
+  display: flex;
+  gap: var(--sn-space-2);
+  width: auto;
+  height: calc(var(--sn-control-height) * 1.75);
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.settings-modal .choice-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sn-space-1);
+  font-size: var(--sn-font-size-sm);
+  font-weight: var(--sn-font-weight-medium);
+  text-align: center;
+}
+
+.settings-modal .choice-hint {
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-xs);
+  font-weight: var(--sn-font-weight-regular);
+}
+
+/* 迷你侧栏：颜色全部来自所示主题与明暗模式的令牌（settings.js 在元素上写入 data-sn-*）。 */
+.mini-sidebar {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  padding: var(--sn-space-2);
+  border: 0;
+  border-radius: var(--sn-radius-sm);
+  background: var(--sn-color-bg);
+}
+
+.mini-sidebar .mini-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--sn-space-2);
+  padding: var(--sn-space-2);
+  border-radius: min(var(--sn-panel-radius), var(--sn-radius-sm));
+  background: linear-gradient(var(--sn-color-card), var(--sn-color-card)), var(--sn-color-panel);
+}
+
+.mini-sidebar .mini-card {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--sn-space-1);
+  padding: var(--sn-space-2);
+  border: 0;
+  border-radius: min(var(--sn-card-radius), var(--sn-radius-xs));
+  background: var(--sn-color-surface-raised);
+}
+
+.mini-sidebar .mini-card.is-active {
+  box-shadow: inset var(--sn-focus-ring-width) 0 0 var(--sn-color-accent);
+}
+
+.mini-sidebar .mini-line {
+  display: block;
+  height: var(--sn-space-2);
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-text-disabled);
+}
+
+.mini-sidebar .mini-line.is-title {
+  width: 60%;
+  background: var(--sn-color-text);
+}
+
+.mini-sidebar .mini-line.is-short {
+  width: 55%;
+}
+
+.mini-sidebar .mini-line.is-accent {
+  width: 35%;
   background: var(--sn-color-accent);
 }
 
-:is(.settings-modal, .settings-confirm-dialog) :is(.toggle, .settings-toggle)::after {
-  background: var(--sn-color-surface-raised);
-  box-shadow: var(--sn-shadow-sm);
+/* 文字：字体是可输入的组合框；字号是占满剩余宽度的滑块与可以直接输入的数值。 */
+.settings-modal .font-combobox {
+  position: relative;
+  width: calc(var(--sn-dialog-width) * 0.42);
+  min-width: 0;
 }
 
-.settings-modal input[type='range'] {
-  accent-color: var(--sn-color-accent);
+.settings-modal .font-combobox-field {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: var(--sn-control-height-sm);
+  min-height: 0;
+  padding: 0;
+  border: var(--sn-border-width) solid var(--sn-color-border-strong);
+  border-radius: var(--sn-radius-control);
+  background-color: var(--sn-color-surface);
+  box-shadow: none;
+  color: var(--sn-color-text);
+  font-size: var(--sn-font-size-sm);
+  transition: border-color var(--sn-duration-fast) var(--sn-ease-standard);
 }
 
-/* 滑块右侧的数值居中显示（本次提出）。 */
-.settings-modal .settings-range-value,
-.settings-modal .settings-runtime-value input,
-.settings-modal .trash-retention-days {
-  text-align: center;
+.settings-modal .font-combobox-field:hover:not(:focus-within) {
+  border-color: var(--sn-color-text-muted);
+}
+
+.settings-modal .font-combobox-field > .form-control,
+.settings-modal .font-combobox-field > .form-control:focus {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  padding: 0 var(--sn-space-1) 0 var(--sn-space-4);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  outline: none;
+}
+
+.settings-modal .font-combobox-field > .form-control::placeholder {
+  color: var(--sn-color-text-secondary);
+}
+
+.settings-modal .font-combobox-toggle.icon-button {
+  position: static;
+  flex: none;
+  width: var(--sn-control-height-sm);
+  height: 100%;
+  border-radius: 0 var(--sn-radius-control) var(--sn-radius-control) 0;
+  background: transparent;
+  color: var(--sn-color-text-muted);
+}
+
+.settings-modal .font-combobox-toggle .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
 }
 
 .settings-modal .font-combobox-list {
@@ -2247,94 +2802,767 @@ mark {
   font-size: var(--sn-font-size-xs);
 }
 
-.settings-modal .settings-font-preview {
-  background: var(--sn-color-surface-sunken);
-  color: var(--sn-color-text);
-  font-family: var(--sn-font-note);
+.settings-modal .font-combobox-status:empty {
+  display: none;
 }
 
-.settings-modal .settings-notice {
-  border-color: var(--sn-color-border-subtle);
-  background: var(--sn-color-surface-sunken);
-  color: var(--sn-color-text-secondary);
+/* 滑块行：滑块占满剩余宽度，右边是数值框与单位；名称、滑块与数值之间留得宽一些。 */
+.settings-modal .settings-row:has(.settings-range) {
+  flex: 1;
+  gap: var(--sn-space-5);
+  min-width: calc(var(--sn-dialog-width) * 0.45);
 }
 
-/* 明暗模式与主题：选项卡片，选中的卡片为强调色边框；预览是用对应主题与明暗的令牌画出的迷你侧栏。 */
-.settings-modal :is(.theme-option, .surface-choice, .settings-choice) {
-  border: var(--sn-border-width) solid var(--sn-color-border);
-  border-radius: var(--sn-radius-md);
-  background: var(--sn-color-surface-raised);
-  color: var(--sn-color-text);
-  box-shadow: none;
+.settings-modal .settings-row:has(.settings-range) > .settings-control {
+  flex: 1;
 }
 
-.settings-modal :is(.theme-option, .surface-choice, .settings-choice):hover {
-  border-color: var(--sn-color-border-strong);
+.settings-modal .settings-range {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sn-space-5);
+  width: auto;
+  min-width: 0;
 }
 
-.settings-modal :is(.theme-option, .surface-choice, .settings-choice).selected,
-.settings-modal :is(.theme-option, .surface-choice, .settings-choice).active {
-  border-color: var(--sn-color-accent);
-  box-shadow: 0 0 0 var(--sn-border-width) var(--sn-color-accent);
+.settings-modal .settings-range input[type='range'] {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  margin: 0;
+  accent-color: var(--sn-color-accent);
 }
 
-/* 五套主题排成一行；更窄的设置窗口沿用旧样式中的两列规则。 */
-@media (min-width: 561px) {
-  .settings-modal .appearance-display .surface-choice-grid {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
-}
-
-.theme-preview {
-  display: flex;
-  gap: var(--sn-space-1);
-  height: calc(var(--sn-control-height) * 1.75);
+.settings-modal .settings-range-number {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-2);
+  width: auto;
+  height: auto;
   padding: 0;
-  overflow: hidden;
   border: 0;
-  border-radius: var(--sn-radius-sm);
   background: transparent;
 }
 
-.mini-sidebar {
+/* 数值框：数值居中（框窄，数字居中比靠右更容易看清）。 */
+.settings-modal :is(.settings-range-value, .settings-runtime-value input, .trash-retention-days) {
+  width: 7ch;
+  min-width: 0;
+  height: var(--sn-control-height-sm);
+  min-height: 0;
+  margin: 0;
+  padding: 0 var(--sn-space-3);
+  border: var(--sn-border-width) solid var(--sn-color-border-strong);
+  border-radius: var(--sn-radius-control);
+  background-color: var(--sn-color-surface);
+  box-shadow: none;
+  color: var(--sn-color-text);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.settings-modal :is(.settings-range-value, .settings-runtime-value input):disabled {
+  background-color: var(--sn-color-surface-sunken);
+  color: var(--sn-color-text-disabled);
+}
+
+.settings-modal .settings-runtime-value {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  height: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.settings-modal .settings-runtime-suffix {
+  width: auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.settings-modal .settings-runtime-field,
+.settings-modal .settings-runtime-controls {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sn-space-3);
+  width: auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* 数值框去掉浏览器自带的增减箭头，数字在框里居中（滚轮与键盘仍可调整）。 */
+.settings-modal input[type='number'] {
+  appearance: textfield;
+}
+
+.settings-modal input[type='number']::-webkit-inner-spin-button,
+.settings-modal input[type='number']::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.settings-modal .settings-runtime-card {
+  margin: 0;
+  padding: var(--sn-space-5);
+}
+
+/* 侧栏卡片：第一行是三项设置，下面是宽度、出入动画与卡片高度三个滑块，共用三列：名称、滑块、数值，滑块起点对齐。 */
+.settings-modal .sidebar-settings-layout {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sn-space-4) var(--sn-space-5);
+}
+
+.settings-modal .sidebar-settings-layout > .sidebar-settings-primary {
+  grid-column: 1 / -1;
+}
+
+.settings-modal .sidebar-settings-layout > .sidebar-width-row,
+.settings-modal .sidebar-width-row > .settings-control,
+.settings-modal .sidebar-width-row .settings-range {
+  display: contents;
+}
+
+/* 字体预览：占满一行，保留底色，文字居中；三行分别是中文与标点、英文大小写、数字与符号。 */
+.settings-modal .settings-font-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sn-space-2);
+  min-height: 0;
+  margin: 0;
+  padding: var(--sn-space-5) var(--sn-space-6);
+  border: 0;
+  border-radius: var(--sn-radius-sm);
+  background: var(--sn-color-surface-sunken);
+  color: var(--sn-color-text);
+  font-family: var(--sn-font-note);
+  font-size: var(--sn-note-size);
+  line-height: var(--sn-line-height-normal);
+  text-align: center;
+  white-space: normal;
+}
+
+.settings-modal .settings-font-preview > p {
+  margin: 0;
+}
+
+/* 下拉框与输入框：小号控件，边框用强调边框色；输入类控件获得焦点时底边换成强调色线（见「弹窗」）。 */
+.settings-modal select.form-control,
+.settings-modal select {
+  width: auto;
+  min-width: 0;
+  height: var(--sn-control-height-sm);
+  min-height: 0;
+  padding: 0 var(--sn-space-2) 0 var(--sn-space-4);
+  font-size: var(--sn-font-size-sm);
+}
+
+.settings-modal input.form-control:not([type='number']):not(.font-combobox-field > *) {
+  width: calc(var(--sn-dialog-width) * 0.65);
+  max-width: 100%;
+  height: var(--sn-control-height-sm);
+  min-height: 0;
+  padding: 0 var(--sn-space-4);
+  font-size: var(--sn-font-size-sm);
+}
+
+/* 开关：轨道是图标尺寸加一点，宽 1.8 倍；关闭时表面色底、灰色圆点，打开时强调色底、圆点移到右边。 */
+:is(.settings-modal, .settings-confirm-dialog) input:is(.toggle, .settings-toggle) {
+  --local-track: calc(var(--sn-icon-size) + var(--sn-space-1));
+  position: relative;
+  flex: none;
+  width: calc(var(--local-track) * 1.8);
+  min-width: 0;
+  height: var(--local-track);
+  margin: 0;
+  border: var(--sn-border-width) solid var(--sn-color-border-strong);
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-surface);
+  box-shadow: none;
+  appearance: none;
+  cursor: pointer;
+  transition:
+    background-color var(--sn-duration-fast) var(--sn-ease-standard),
+    border-color var(--sn-duration-fast) var(--sn-ease-standard);
+}
+
+:is(.settings-modal, .settings-confirm-dialog) input:is(.toggle, .settings-toggle)::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: auto;
+  bottom: auto;
+  left: var(--sn-space-1);
+  width: calc(var(--local-track) - var(--sn-space-3) - var(--sn-border-width) * 2);
+  height: calc(var(--local-track) - var(--sn-space-3) - var(--sn-border-width) * 2);
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-text-secondary);
+  box-shadow: none;
+  transform: translateY(-50%);
+  transition:
+    transform var(--sn-duration-normal) var(--sn-ease-enter),
+    background-color var(--sn-duration-fast) var(--sn-ease-standard);
+}
+
+:is(.settings-modal, .settings-confirm-dialog) input:is(.toggle, .settings-toggle):checked {
+  border-color: var(--sn-color-accent);
+  background: var(--sn-color-accent);
+}
+
+:is(.settings-modal, .settings-confirm-dialog) input:is(.toggle, .settings-toggle):checked::after {
+  background: var(--sn-color-on-accent);
+  transform: translate(calc(var(--local-track) * 0.8), -50%);
+}
+
+/* 设置页里是小号次要按钮（Playground 的 sn-button is-secondary is-sm）：浮起的表面、一圈边框与小投影；
+ * 叠在设置窗口上的确认与裁切弹窗用常规尺寸。 */
+.settings-confirm-backdrop .settings-confirm-dialog .button {
+  height: var(--sn-control-height);
+  padding: 0 var(--sn-space-5);
+  font-size: inherit;
+}
+
+.settings-modal .button,
+.settings-confirm-dialog .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sn-space-2);
+  height: var(--sn-control-height-sm);
+  min-height: 0;
+  padding: 0 var(--sn-space-4);
+  border: var(--sn-border-width) solid transparent;
+  border-radius: var(--sn-radius-control);
+  font-size: var(--sn-font-size-sm);
+  white-space: nowrap;
+}
+
+.settings-modal .button .icon,
+.settings-confirm-dialog .button .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.settings-modal .button.secondary,
+.settings-confirm-dialog .button.secondary {
+  border-color: var(--sn-color-border);
+  background-color: var(--sn-color-surface-raised);
+  box-shadow: var(--sn-shadow-sm);
+  color: var(--sn-color-text);
+}
+
+.settings-modal .settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sn-space-3);
+  margin: 0;
+}
+
+/* 说明条：网页原型中模拟的能力写在这里（数据页顶部、快捷键页底部）。 */
+.settings-modal .settings-notice {
+  margin: 0 0 var(--sn-space-5);
+  padding: var(--sn-space-4) var(--sn-space-5);
+  border: 0;
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-info-subtle);
+  color: var(--sn-color-text);
+  font-size: var(--sn-font-size-sm);
+  line-height: var(--sn-line-height-normal);
+}
+
+.settings-modal .settings-dashboard + .settings-notice {
+  margin: var(--sn-space-5) 0 0;
+}
+
+.settings-modal .settings-notice.is-error {
+  background: var(--sn-color-danger-subtle);
+}
+
+/* 快捷键：一行是名称与按键；按键是凹陷底上的一小块。 */
+.settings-modal .shortcut-grid {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sn-space-3);
+  margin: 0;
+}
+
+.settings-modal .shortcut-grid > .settings-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sn-space-4);
+  width: 100%;
+  min-height: var(--sn-control-height-sm);
+}
+
+.settings-modal .shortcut-grid .settings-control {
+  min-height: 0;
+}
+
+.settings-modal .shortcut-grid kbd {
+  display: inline-flex;
+  align-items: center;
+  height: var(--sn-control-height-sm);
+  min-width: 0;
+  padding: 0 var(--sn-space-3);
+  border: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  border-radius: var(--sn-radius-sm);
+  background: var(--sn-color-surface-sunken);
+  color: var(--sn-color-text);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-sm);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* 数据目录：当前目录是一行代码字体的路径，后面一个打开目录的小按钮。 */
+.settings-modal .settings-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sn-space-3);
+  min-width: 0;
+  margin: 0;
+}
+
+.settings-modal .current-directory {
+  flex-wrap: nowrap;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.settings-modal .settings-path {
+  display: block;
+  flex: 0 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: var(--sn-color-text-secondary);
+  font-family: var(--sn-font-code);
+  font-size: var(--sn-font-size-xs);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-modal .current-directory .icon-button {
+  width: var(--sn-control-height-sm);
+  height: var(--sn-control-height-sm);
+}
+
+.settings-modal .current-directory .icon-button .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+/* 云端备份的服务：三张选项卡片。 */
+.settings-modal .sync-provider-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sn-space-4);
+}
+
+.settings-modal .sync-provider {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sn-space-1);
+  height: auto;
+  min-height: 0;
+  padding: var(--sn-space-4);
+  border: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-surface);
+  box-shadow: none;
+  color: var(--sn-color-text);
+}
+
+.settings-modal .sync-provider:hover {
+  border-color: var(--sn-color-border-strong);
+}
+
+.settings-modal .sync-provider:is(.selected, .active) {
+  border-color: var(--sn-color-accent);
+  background: var(--sn-color-accent-subtle);
+  box-shadow: 0 0 0 var(--sn-border-width) var(--sn-color-accent);
+}
+
+.settings-modal .sync-provider-mark {
+  width: var(--sn-icon-size);
+  height: var(--sn-icon-size);
+}
+
+.settings-modal .sync-provider-name {
+  font-size: var(--sn-font-size-sm);
+  font-weight: var(--sn-font-weight-medium);
+}
+
+.settings-modal .sync-provider small {
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-xs);
+}
+
+.settings-modal .sync-status {
+  margin: 0;
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+}
+
+/* 回收站：搜索框与两个下拉框一行；下面是条数、保留天数与两个批量操作；记录是浮起的小卡片。 */
+.settings-modal .settings-trash-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  margin: 0 0 var(--sn-space-4);
+}
+
+.settings-modal .settings-search {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--sn-space-3);
+  min-width: 0;
+  height: var(--sn-control-height);
+  padding: 0 var(--sn-space-3) 0 var(--sn-space-4);
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-control);
+  background-color: var(--sn-color-surface-sunken);
+  color: var(--sn-color-text-muted);
+  transition:
+    border-color var(--sn-duration-fast) var(--sn-ease-standard),
+    background-color var(--sn-duration-fast) var(--sn-ease-standard);
+}
+
+.settings-modal .settings-search .icon {
+  flex: none;
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.settings-modal .settings-search input,
+.settings-modal .settings-search input:focus {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--sn-color-text);
+  font: inherit;
+  outline: none;
+}
+
+.settings-modal .settings-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.settings-modal .settings-search:focus-within {
+  border-bottom-color: transparent;
+  background-color: var(--sn-color-surface);
+  background-image: linear-gradient(var(--sn-color-accent), var(--sn-color-accent));
+  background-position: bottom;
+  background-repeat: no-repeat;
+  background-size: 100% calc(var(--sn-border-width) * 2);
+  background-origin: border-box;
+}
+
+.settings-modal .settings-trash-toolbar select {
+  height: var(--sn-control-height);
+  padding: 0 var(--sn-space-3) 0 var(--sn-space-5);
+  font-size: inherit;
+}
+
+.settings-modal select {
+  text-align: left;
+}
+
+.settings-modal .trash-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  margin: 0 0 var(--sn-space-4);
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-sm);
+}
+
+.settings-modal .trash-toolbar > .button:first-of-type {
+  margin-left: auto;
+}
+
+.settings-modal .trash-retention-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  margin-left: var(--sn-space-3);
+  color: var(--sn-color-text-secondary);
+}
+
+/* 保留天数：数值与展开箭头合成一个组合框，单位写在框外（与 Playground 的数字组合框相同）。 */
+.settings-modal .trash-retention-control {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+}
+
+.settings-modal .trash-retention-control .trash-retention-days {
+  order: 1;
+  width: 6ch;
+  padding: 0 var(--sn-space-2);
+  border-right: 0;
+  border-radius: var(--sn-radius-control) 0 0 var(--sn-radius-control);
+}
+
+.settings-modal .trash-retention-toggle.icon-button {
+  order: 2;
+  width: var(--sn-control-height-sm);
+  height: var(--sn-control-height-sm);
+  border: var(--sn-border-width) solid var(--sn-color-border-strong);
+  border-left: 0;
+  border-radius: 0 var(--sn-radius-control) var(--sn-radius-control) 0;
+  background-color: var(--sn-color-surface);
+  color: var(--sn-color-text-muted);
+}
+
+.settings-modal .trash-retention-toggle.icon-button .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.settings-modal .trash-retention-unit {
+  order: 3;
+  margin-left: var(--sn-space-3);
+  color: var(--sn-color-text-secondary);
+}
+
+.settings-modal .settings-trash-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sn-space-3);
+}
+
+.settings-modal .settings-trash-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sn-space-4);
+  margin: 0;
+  padding: var(--sn-space-4) var(--sn-space-5);
+  border: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-surface-raised);
+  box-shadow: none;
+}
+
+.settings-modal .trash-item-main {
   display: flex;
   flex: 1;
   flex-direction: column;
   gap: var(--sn-space-1);
-  padding: var(--sn-space-2);
-  border: var(--sn-border-width) solid var(--sn-color-border);
-  border-radius: var(--sn-radius-sm);
-  background: var(--sn-color-panel);
+  min-width: 0;
 }
 
-.mini-sidebar .mini-head {
-  height: var(--sn-space-2);
-  width: 45%;
-  border-radius: var(--sn-radius-full);
-  background: var(--sn-color-text-secondary);
+.settings-modal .trash-title {
+  margin: 0;
+  overflow: hidden;
+  color: var(--sn-color-text);
+  font-size: var(--sn-font-size-md);
+  font-weight: var(--sn-font-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.mini-sidebar .mini-tab {
-  height: var(--sn-space-1);
-  width: 30%;
-  border-radius: var(--sn-radius-full);
-  background: var(--sn-color-accent);
+.settings-modal .trash-item-meta {
+  margin: 0;
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-xs);
 }
 
-.mini-sidebar .mini-card {
-  flex: 1;
+.settings-modal .trash-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sn-space-2);
+  margin-top: var(--sn-space-1);
+}
+
+.settings-modal .trash-tags:empty {
+  display: none;
+}
+
+.settings-modal .trash-tag {
+  padding: 0 var(--sn-space-3);
+  border-radius: var(--sn-radius-chip);
+  background: var(--sn-color-surface-sunken);
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-xs);
+}
+
+.settings-modal .trash-item-actions {
+  display: flex;
+  flex: none;
+  gap: var(--sn-space-1);
+}
+
+.settings-modal .trash-item-actions .icon-button {
+  width: var(--sn-control-height-sm);
+  height: var(--sn-control-height-sm);
+}
+
+.settings-modal .trash-item-actions .icon-button .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.settings-modal .settings-trash-list > .empty-state {
+  padding: var(--sn-space-9) 0;
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-sm);
+  text-align: center;
+}
+
+/* 关于：应用图标、名称与口号，版本号在右上；下面三组小块按钮，不再套卡片。 */
+.settings-modal .about-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: var(--sn-space-5);
+  row-gap: var(--sn-space-1);
+  margin: 0 0 var(--sn-space-5);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.settings-modal .about-hero img {
+  grid-row: 1 / 3;
+  width: calc(var(--sn-control-height-lg) * 1.5);
+  height: calc(var(--sn-control-height-lg) * 1.5);
+  margin: 0;
+}
+
+.settings-modal .about-hero h3 {
+  grid-column: 2;
+  align-self: end;
+  margin: 0;
+  color: var(--sn-color-text);
+  font-family: var(--sn-font-title);
+  font-size: var(--sn-font-size-xl);
+  font-weight: var(--sn-title-weight);
+  letter-spacing: normal;
+  line-height: var(--sn-line-height-tight);
+}
+
+.settings-modal .about-hero .settings-version {
+  grid-row: 1;
+  grid-column: 3;
+  align-self: start;
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+}
+
+.settings-modal .about-hero p {
+  grid-column: 2;
+  align-self: start;
+  margin: 0;
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-sm);
+}
+
+.settings-modal .about-hero ~ :is(.settings-group, .settings-card) {
+  gap: var(--sn-space-4);
+  margin: 0 0 var(--sn-space-5);
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.settings-modal .resource-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sn-space-3);
+  margin: 0;
+}
+
+.settings-modal .about-hero ~ :is(.settings-group, .settings-card) > .button {
+  align-self: flex-start;
+}
+
+.settings-modal :is(.about-hero ~ .settings-group, .about-hero ~ .settings-card) :is(.resource-link, .button) {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  height: var(--sn-control-height);
+  min-height: 0;
+  padding: 0 var(--sn-space-5);
   border: var(--sn-border-width) solid var(--sn-color-border-subtle);
-  border-radius: var(--sn-radius-xs);
-  background: var(--sn-color-card);
+  border-radius: var(--sn-radius-control);
+  background-color: var(--sn-color-surface-raised);
+  box-shadow: none;
+  color: var(--sn-color-text);
+  font-size: var(--sn-font-size-sm);
+  text-decoration: none;
 }
 
-.mini-sidebar .mini-card.is-active {
-  border-color: var(--sn-color-accent);
+.settings-modal :is(.about-hero ~ .settings-group, .about-hero ~ .settings-card) :is(.resource-link, .button):hover {
+  border-color: var(--sn-color-border-strong);
+  background-image: linear-gradient(var(--sn-color-hover), var(--sn-color-hover));
+  text-decoration: none;
 }
 
-/* 半透明主题的迷你预览叠在不透明的底上，避免透出设置窗口的颜色。 */
-.mini-sidebar[data-sn-translucent='true'] {
-  background: linear-gradient(var(--sn-color-panel), var(--sn-color-panel)), var(--sn-color-bg);
+.settings-modal :is(.resource-link, .button) :is(.icon, .resource-icon) {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  color: var(--sn-color-text-muted);
+}
+
+.settings-modal .resource-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: auto;
+  margin: 0;
+  background: transparent;
+  color: var(--sn-color-text-muted);
+}
+
+.settings-modal .sponsor-note {
+  margin: 0;
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+}
+
+/* 选项卡片里的单选在键盘操作时显示焦点环。 */
+.settings-modal :is(.theme-option, .surface-choice):focus-visible {
+  outline: var(--sn-focus-ring-width) solid var(--sn-color-focus);
+  outline-offset: var(--sn-focus-ring-offset);
 }
 
 /* ---------- 设置窗口上叠的一层：回收站确认、调整应用图标 ----------
@@ -2653,12 +3881,54 @@ mark {
   }
 }
 
-/* ---------- 提示条：反色，可带「撤销」 ---------- */
+/* ---------- 提示条：反色，可带「撤销」 ----------
+ * 与 Playground 相同，出现在侧栏窗口里：默认在标题区下方正中，设置中的「通知位置」可以换成右上角或底栏上方。
+ * 提示条区域随字号整页缩放，屏幕坐标要除以缩放；--sidebar-width 是未缩放的侧栏宽度。 */
+.toast-region {
+  top: calc(var(--sn-header-height) + var(--sn-space-4));
+  right: auto;
+  bottom: auto;
+  left: calc(100vw / var(--app-zoom, 1) - var(--sidebar-width) / 2);
+  align-items: center;
+  gap: var(--sn-space-3);
+  width: max-content;
+  max-width: calc(var(--sidebar-width) - var(--sn-space-8) * 2);
+  transform: translateX(-50%);
+}
+
+body[data-edge='left'] .toast-region {
+  left: calc(var(--sidebar-width) / 2);
+}
+
+[data-sn-toast='top-right'] .toast-region {
+  right: var(--sn-space-6);
+  left: auto;
+  align-items: flex-end;
+  transform: none;
+}
+
+[data-sn-toast='top-right'] body[data-edge='left'] .toast-region {
+  right: auto;
+  left: calc(var(--sidebar-width) - var(--sn-space-6));
+  transform: translateX(-100%);
+}
+
+[data-sn-toast='bottom-center'] .toast-region {
+  top: auto;
+  bottom: calc(var(--sn-footer-height) + var(--sn-space-4));
+}
+
 .toast-region .toast {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-4);
+  max-width: 100%;
+  min-height: var(--sn-control-height-lg);
+  padding: var(--sn-space-2) var(--sn-space-3) var(--sn-space-2) var(--sn-space-5);
   border: 0;
   border-radius: var(--sn-radius-md);
   background: var(--sn-color-inverse);
-  box-shadow: var(--sn-shadow-md);
+  box-shadow: var(--sn-shadow-lg);
   color: var(--sn-color-on-inverse);
   font-size: var(--sn-font-size-sm);
   animation-duration: var(--sn-duration-normal);
@@ -2762,6 +4032,37 @@ mark {
     border-radius: var(--sn-radius-lg) var(--sn-radius-lg) 0 0;
     transform: none;
   }
+
+  /* 设置窗口：分类栏在上，名称在控件上方，主题卡片排成三列，快捷键的两张卡片各占一行。 */
+  .settings-modal .settings-layout {
+    flex-direction: column;
+  }
+
+  .settings-modal .settings-nav {
+    width: auto;
+  }
+
+  .settings-modal .settings-panel {
+    border-left: 0;
+    border-radius: 0;
+  }
+
+  .settings-modal .appearance-display-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sn-space-3);
+  }
+
+  .settings-modal .surface-choice-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .settings-modal .settings-dashboard > .shortcut-section {
+    grid-column: 1 / -1;
+  }
+
+  .settings-modal :is(.settings-trash-toolbar, .trash-toolbar) {
+    flex-wrap: wrap;
+  }
 }
 
 /* ---------- 与 Playground 的实际显示保持一致 ----------
@@ -2774,8 +4075,15 @@ mark {
 .note-card .note-emoji,
 .sidebar-footer .version-button,
 .help-button,
-.settings-help-button {
+.settings-help-button,
+.settings-modal :is(.about-hero ~ .settings-group, .about-hero ~ .settings-card) :is(.resource-link, .button) {
   font: inherit;
+}
+
+/* 设置窗口里的文字按钮不加粗；小号按钮仍是小号字（Playground 中 .sn-button.is-sm 的字号优先级更高，没有被外壳覆盖）。 */
+:is(.settings-modal, .settings-confirm-dialog) .button {
+  font-weight: inherit;
+  line-height: inherit;
 }
 
 /* Playground 的主要图标按钮（新建卡片、卡片编辑与速记浮窗的保存）没有单独的样式，显示为普通图标按钮；
