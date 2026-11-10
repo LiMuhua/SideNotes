@@ -133,6 +133,19 @@
   border-color: var(--sn-color-border);
 }
 
+/* 主要图标按钮（保存）：强调色底、强调色上的文字色，与主要按钮一致；没有内容时禁用，变淡。 */
+.sn-icon-button.is-primary {
+  background-color: var(--sn-color-accent);
+  color: var(--sn-color-on-accent);
+}
+
+.sn-icon-button.is-primary:hover:not(:disabled),
+.sn-icon-button.is-primary[data-force='hover'] {
+  --local-overlay: transparent;
+  background-color: var(--sn-color-accent-hover);
+  color: var(--sn-color-on-accent);
+}
+
 .sn-icon-button:hover:not(:disabled),
 .sn-icon-button[data-force='hover'] {
   --local-overlay: var(--sn-color-hover);

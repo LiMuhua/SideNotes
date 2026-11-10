@@ -143,13 +143,23 @@ kbd,
   opacity: var(--sn-opacity-disabled);
 }
 
+/* 文字按钮（Playground 的 sn-button）：常规尺寸是正文字号、中等字重；compact 对应小号按钮（is-sm）。 */
 .button {
+  gap: var(--sn-space-3);
   min-height: var(--sn-control-height);
   padding: 0 var(--sn-space-5);
   border-radius: var(--sn-radius-control);
-  font-size: var(--sn-font-size-sm);
+  font-size: var(--sn-font-size-md);
   font-weight: var(--sn-font-weight-medium);
+  line-height: var(--sn-line-height-tight);
   transition: background-color var(--sn-duration-fast) var(--sn-ease-standard);
+}
+
+.button.compact {
+  gap: var(--sn-space-2);
+  min-height: var(--sn-control-height-sm);
+  padding: 0 var(--sn-space-4);
+  font-size: var(--sn-font-size-sm);
 }
 
 .button.secondary {
@@ -916,6 +926,12 @@ img.brand-mark.is-small {
 
 #quick-composer .composer-tools {
   margin-right: auto;
+}
+
+/* 字数紧挨着收起与保存（Playground 的 sn-composer-bar），操作组不再自己撑开。 */
+#quick-composer .composer-actions {
+  flex: none;
+  margin-left: 0;
 }
 
 /* 新建卡片与卡片编辑的工具栏都是小号图标按钮（Playground 的 size="sm"）；速记浮窗只有附件工具是小号。 */
@@ -2187,7 +2203,7 @@ mark {
   display: none;
 }
 
-/* 弹窗底部的按钮是常规尺寸；与 Playground 的实际显示一样不加粗、沿用正文字号。 */
+/* 弹窗底部的按钮是常规尺寸：正文字号、中等字重。 */
 .modal:not(.settings-modal) .modal-footer .button {
   display: inline-flex;
   align-items: center;
@@ -2198,7 +2214,9 @@ mark {
   padding: 0 var(--sn-space-5);
   border: var(--sn-border-width) solid transparent;
   border-radius: var(--sn-radius-control);
-  font: inherit;
+  font-size: var(--sn-font-size-md);
+  font-weight: var(--sn-font-weight-medium);
+  line-height: var(--sn-line-height-tight);
   white-space: nowrap;
 }
 
@@ -3035,7 +3053,7 @@ mark {
 .settings-confirm-backdrop .settings-confirm-dialog .button {
   height: var(--sn-control-height);
   padding: 0 var(--sn-space-5);
-  font-size: inherit;
+  font-size: var(--sn-font-size-md);
 }
 
 .settings-modal .button,
@@ -4063,39 +4081,6 @@ body[data-edge='left'] .toast-region {
   .settings-modal :is(.settings-trash-toolbar, .trash-toolbar) {
     flex-wrap: wrap;
   }
-}
-
-/* ---------- 与 Playground 的实际显示保持一致 ----------
- * Playground 外壳的 .pg-shell button { font: inherit }（shell.css）同样作用于应用窗口里的按钮，
- * 优先级又高于组件自身的字号规则，于是这些按钮沿用所在区域的字体、字号与行高：
- * 时间、标签与 Emoji 是正文字号，版本号是底栏的小号字，按钮不加粗。
- * 原型按 Playground 的实际显示还原；Playground 修正这条规则后，删掉本节即回到组件规范（components.md）的字号。 */
-.note-card .note-side .note-time,
-.note-card .tag-chip,
-.note-card .note-emoji,
-.sidebar-footer .version-button,
-.help-button,
-.settings-help-button,
-.settings-modal :is(.about-hero ~ .settings-group, .about-hero ~ .settings-card) :is(.resource-link, .button) {
-  font: inherit;
-}
-
-/* 设置窗口里的文字按钮不加粗；小号按钮仍是小号字（Playground 中 .sn-button.is-sm 的字号优先级更高，没有被外壳覆盖）。 */
-:is(.settings-modal, .settings-confirm-dialog) .button {
-  font-weight: inherit;
-  line-height: inherit;
-}
-
-/* Playground 的主要图标按钮（新建卡片、卡片编辑与速记浮窗的保存）没有单独的样式，显示为普通图标按钮；
- * 文字按钮的主要样式（.button.primary）照常使用强调色。 */
-.icon-button.primary {
-  background: transparent;
-  color: var(--sn-color-text-secondary);
-}
-
-.icon-button.primary:hover:not(:disabled) {
-  background: var(--sn-color-hover);
-  color: var(--sn-color-text);
 }
 
 /* ---------- 减少动态效果 ---------- */
