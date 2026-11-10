@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "playground": "vite --port 1430 --strictPort --open /design-playground",
+    "icons": "node scripts/app-icons.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
