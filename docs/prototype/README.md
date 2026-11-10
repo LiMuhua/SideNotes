@@ -4,11 +4,22 @@
 
 请固定同一个浏览器与访问地址；file、localhost、不同端口使用不同存储（地址从 4173 端口换到 1431 后，浏览器把它当作新地址，旧存档不会自动出现：先在旧地址的设置中导出 JSON 备份，再到新地址导入）。保留旧记录与草稿，不重置用户存档；设置中可导出 JSON 备份。
 
+## 按 Playground 还原样式（2026-11-10）
+
+侧栏、速记浮窗、设置窗口、编辑区、菜单、弹窗与提示条的尺寸、间距、字体与颜色按 [Design Playground](../design-system/playground/README.md) 逐项对齐：两边在无头 Edge 中按五套主题与明暗截图并排比对，并比对对应元素的计算样式。
+
+- 终端主题的界面字体 Maple Mono NF CN 随应用打包，原型引用同一份 `src/styles/fonts.css`；只服务 `docs/prototype/` 时取不到字体，仍要从仓库根目录起服务。
+- 新建卡片移到列表之上，不随列表滚动；平时只是一行占位，获得焦点或有内容时才出现工具栏。Ctrl+Enter 保存后侧栏保持展开，焦点留在新建卡片（与现有应用的 T47 一致）；速记浮窗仍是保存即收起。去掉了「置顶」「普通」分组标题。
+- 设置窗口：标题栏有最小化与关闭（浏览器原型中最小化与关闭相同）；分类栏、分组卡片、一行几项的竖线、滑块、数值框、开关与按钮按 Playground 排列；外观页的选项卡片用迷你侧栏预览，「跟随系统」写出当前明暗；快捷键分成「全局」「应用内」。
+- 补上现有应用已有的三项设置：出入动画（侧栏滑出与收起的时长，0–600 ms）、卡片高度（正文的最大高度，120–600 px）、通知位置（顶部正中、右上角、底部正中）。提示条出现在侧栏窗口里，默认在标题区下方正中。
+- 与 Playground 的实际显示一致：Playground 外壳的按钮字体规则同样作用于应用窗口，时间、标签、版本号与问号是正文字号，按钮不加粗；保存这类主要图标按钮显示为普通图标按钮。两处都与组件规范不同，记在 [已知问题](../known-issues.md) 中，`theme.css` 末尾的「与 Playground 的实际显示保持一致」一节单独存放这些规则。
+- 原型没有的内容不补：Playground 快捷键页的「格式」快捷键（原型的编辑器没有实现）、数据页的快照与附件清理。
+
 ## 五套主题与设计令牌（2026-11-10）
 
 原型接入 `docs/design-system/` 的设计令牌与五套主题，规范见 [DESIGN.md](../design-system/DESIGN.md)。
 
-- 令牌是唯一来源：页面先引用 `base.css` 与五套主题的令牌文件，再引用旧样式，最后是 [theme.css](theme.css)。旧样式中的颜色都换成了令牌；`theme.css` 只引用令牌，按规范补齐各部件的样式。
+- 令牌是唯一来源：页面先引用应用的内置字体（`src/styles/fonts.css`），再引用 `base.css` 与五套主题的令牌文件、旧样式层 [legacy.css](legacy.css)，最后是 [theme.css](theme.css)。旧样式中的颜色都换成了令牌，并放进级联层 `legacy`：`theme.css` 写了的属性一律以它为准，没写的属性仍沿用旧样式。`theme.css` 只引用令牌，按 Playground 的样式补齐各部件。
 - 主题与明暗写在根节点的 `data-sn-surface`、`data-sn-theme` 上；令牌表达不了的结构差异写在 `data-sn-dock`（贴边、浮动、分块）、`data-sn-entries`（窗格、卡片、玻璃块）、`data-sn-tabs`（下划线、分段）、`data-sn-translucent`、`data-sn-shortcuts`（快捷键写在界面上或只在提示里）、`data-sn-tab-marks`（页签前的分区色点）上，取值与 Playground 的 `surfaces.ts` 一致（[surfaces.js](surfaces.js)）。组件不区分主题，样式按这些属性选择。
 - 设置「外观与交互 › 显示」：明暗模式（浅色、深色、跟随系统）与主题（终端、杂志、记录纸、Windows 11、磨砂玻璃，默认终端）都是单选卡片，预览是用对应令牌画出的迷你侧栏，可以用方向键切换。跟随系统时，系统明暗变化立即生效。
 - 字体默认「跟随主题」，选了具体字体时替换界面与正文的字体。字号 12–20（默认 16）就是整页缩放：界面按 13px 设计，缩放到「字号 ÷ 13」倍；侧栏宽度按 13px 字号计。
@@ -103,10 +114,10 @@
 | [surfaces.js](surfaces.js) | 五套主题的结构差异、设置迁移与根节点属性。 |
 | [app-icons.js](app-icons.js) | 内置应用图标的清单、图片地址与上传图片的保存。 |
 | `../design-system/tokens/*.css` | 设计令牌：`base.css` 与五套主题，原型直接引用。 |
-| styles.css、v2–v8 系列 CSS | 基础界面与各轮交互布局，颜色引用令牌。 |
+| [legacy.css](legacy.css) | 旧样式层：把 styles.css 与 v2–v8 系列 CSS（基础界面与各轮交互布局，颜色引用令牌）放进级联层 `legacy`。 |
 | [theme.css](theme.css) | 按设计规范补齐的部件样式与五套主题的结构差异，只引用令牌。 |
 | [VALIDATION.md](VALIDATION.md) | 检查结果和实际浏览器验收限制。 |
 
-`pnpm test` 中的 `docs/design-system/tests/prototype.test.ts` 检查原型与设计系统的一致：主题结构与 Playground 相同，内置图标清单与 `manifest.json` 相同，令牌引用顺序正确、文件都存在，`theme.css` 只引用令牌，旧样式不写死颜色，变量都有来源。
+`pnpm test` 中的 `docs/design-system/tests/prototype.test.ts` 检查原型与设计系统的一致：主题结构与 Playground 相同，内置图标清单与 `manifest.json` 相同，字体、令牌、旧样式层与 `theme.css` 的引用顺序正确、文件都存在，旧样式都在级联层中，`theme.css` 只引用令牌，旧样式不写死颜色，变量都有来源。
 
 未修改 tauri-demo。后续桌面方案参见 [技术路线](../begin/tauri-route.md)、[技术样机计划](../begin/technical-validation.md)。
