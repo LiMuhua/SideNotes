@@ -51,7 +51,9 @@
     const padding = 8;
     const viewWidth = window.innerWidth || document.documentElement.clientWidth;
     const viewHeight = window.innerHeight || document.documentElement.clientHeight;
-    menu.style.maxHeight = Math.max(100, viewHeight - padding * 2) + 'px';
+    // 菜单随字号整页缩放（zoom），位置与高度按视口坐标算好后除以缩放倍数再写入。
+    const zoom = parseFloat(window.getComputedStyle(menu).zoom) || 1;
+    menu.style.maxHeight = Math.max(100, viewHeight - padding * 2) / zoom + 'px';
     const measured = menu.getBoundingClientRect();
     const width = measured.width || 214;
     const height = measured.height || menu.scrollHeight || 340;
@@ -61,8 +63,8 @@
     let top = point ? anchor.clientY : rect ? rect.bottom + 5 : 80;
     if (point && left + width > viewWidth - padding) left = anchor.clientX - width;
     if (top + height > viewHeight - padding) top = point ? anchor.clientY - height : rect ? rect.top - height - 5 : viewHeight - height - padding;
-    menu.style.left = Math.max(padding, Math.min(left, viewWidth - width - padding)) + 'px';
-    menu.style.top = Math.max(padding, Math.min(top, viewHeight - height - padding)) + 'px';
+    menu.style.left = Math.max(padding, Math.min(left, viewWidth - width - padding)) / zoom + 'px';
+    menu.style.top = Math.max(padding, Math.min(top, viewHeight - height - padding)) / zoom + 'px';
   }
 
   /* ==================== 记录操作 ==================== */
@@ -156,8 +158,8 @@
     menu.setAttribute('role', 'menu');
     menu.setAttribute('aria-label', '记录操作');
     menu.dataset.noteMenu = latest.id;
-    appendCommand(menu, 'copy', '复制内容与附件', 'copy', { hint: '双击' });
-    appendCommand(menu, 'edit', '编辑内容', 'edit');
+    appendCommand(menu, 'copy', '复制内容与附件', 'copy', { hint: 'Ctrl+C' });
+    appendCommand(menu, 'edit', '编辑内容', 'edit', { hint: '双击' });
     appendCommand(menu, 'collapse', latest.collapsed ? '展开正文' : '收起正文', 'chevron-down', { collapsed: latest.collapsed });
     appendSeparator(menu);
     if (latest.status === 'active') appendCommand(menu, 'pin', latest.pinned ? '移到普通记录' : '置顶记录', latest.pinned ? 'pin-off' : 'pin');
@@ -167,7 +169,7 @@
     appendCommand(menu, 'export', '导出 Markdown', 'download');
     appendCommand(menu, 'info', '记录信息', 'info');
     appendSeparator(menu);
-    appendCommand(menu, 'trash', '移入回收站', 'trash', { danger: true });
+    appendCommand(menu, 'trash', '移入回收站', 'trash', { danger: true, hint: 'Delete' });
     menu.addEventListener('click', function activateItem(event) {
       const item = event.target.closest('[data-menu-command]');
       if (!item) return;

@@ -15,7 +15,10 @@ window.SideNotesSettings = (function createSettingsController() {
     ['data', '数据与同步', 'cloud'], ['trash', '回收站', 'trash'], ['about', '关于', 'info']
   ];
   const PROVIDERS = { synology: '群晖 NAS', google: 'Google Drive', onedrive: 'OneDrive' };
-  const FONTS = ['系统默认', 'Microsoft YaHei UI', 'Microsoft YaHei', 'Segoe UI', 'SimSun', 'KaiTi', 'Arial', 'Consolas', 'Noto Sans CJK SC'];
+  /** 字体候选：「跟随主题」在最前（默认，写出当前主题的字体），「系统默认」在最后，中间是常用字体与五套主题用到的字体。 */
+  const FOLLOW_THEME = '跟随主题';
+  const SYSTEM_FONT = '系统默认';
+  const FONTS = ['Maple Mono NF CN', 'Microsoft YaHei UI', 'Microsoft YaHei', 'Segoe UI Variable Text', 'Segoe UI', 'SimSun', 'KaiTi', 'Georgia', 'Inter', 'Archivo', 'Cascadia Mono', 'Consolas', 'Noto Sans CJK SC'];
   let currentSection = 'appearance';
   let activeDialog = null;
   let backupTimer = 0;
@@ -212,7 +215,16 @@ window.SideNotesSettings = (function createSettingsController() {
       return true;
     }
 
+    // 字号是整页缩放，松开滑块或滚轮停下后才应用，拖动途中只改显示的数值；其余滑块拖动即生效。
+    const deferred = key === 'fontSize';
     control.addEventListener('input', function rangeChanged() {
+      const next = boundedNumber(control.value, minimum, maximum, step);
+      if (deferred) { if (next !== null) value.value = String(next); return; }
+      if (next !== null && next !== state.settings[key]) save({ [key]: next });
+      reset();
+    });
+    control.addEventListener('change', function rangeCommitted() {
+      if (!deferred) return;
       const next = boundedNumber(control.value, minimum, maximum, step);
       if (next !== null && next !== state.settings[key]) save({ [key]: next });
       reset();
@@ -230,6 +242,52 @@ window.SideNotesSettings = (function createSettingsController() {
     });
     wrapper.append(control, number);
     return wrapper;
+  }
+
+  /**
+   * @brief 滚轮调整数值（本次提出，interactions.md 第九节）。
+   * @details 指针停在滑块或数值框上转动滚轮：向上加、向下减，每一格一个步长，按住 Shift 为十个步长，结果限制在取值范围内。
+   * 一次滚动手势只交给一个对象：手势开始时指针在控件上，由控件接管，页面不滚动；开始时在别处，整个手势都滚动页面，
+   * 中途扫过滑块也不改值。停顿超过 400ms 算新的手势；触控板的小增量累计到约 30px 才算一格；禁用的控件不接管；Ctrl + 滚轮留给缩放。
+   * 数值框与字号在滚轮停下 500ms 后才提交，途中只改显示的数值。
+   * @param {HTMLElement} root 设置窗口。
+   */
+  function initializeWheel(root) {
+    let owner = null;
+    let lastAt = 0;
+    let carry = 0;
+    root.addEventListener('wheel', function adjustByWheel(event) {
+      if (event.ctrlKey) return;
+      const now = Date.now();
+      if (now - lastAt > 400) { owner = wheelTarget(event.target); carry = 0; }
+      lastAt = now;
+      if (!owner || !owner.isConnected || owner.disabled) return;
+      event.preventDefault();
+      let steps = 0;
+      if (event.deltaMode !== 0 || Math.abs(event.deltaY) >= 50) { steps = Math.sign(event.deltaY); carry = 0; }
+      else { carry += event.deltaY; if (Math.abs(carry) >= 30) { steps = Math.trunc(carry / 30); carry -= steps * 30; } }
+      if (steps) nudge(owner, -steps * (event.shiftKey ? 10 : 1));
+    }, { passive: false });
+  }
+
+  /** @brief 滚轮的接管对象：滑块组（滑块与旁边的数值框）或独立的数值框。 @param {Element} target 指针下的元素。 @return {HTMLInputElement|null} 控件。 */
+  function wheelTarget(target) {
+    if (!target || !target.closest) return null;
+    const group = target.closest('.settings-range');
+    const control = group ? group.querySelector('input[type="range"]') : target.closest('input[type="number"]');
+    return control && !control.disabled ? control : null;
+  }
+
+  /** @brief 按步长加减并限制在取值范围内。 @param {HTMLInputElement} control 控件。 @param {number} steps 步数，正数为加。 */
+  function nudge(control, steps) {
+    const minimum = Number(control.min), maximum = Number(control.max), step = Number(control.step) || 1;
+    const current = Number(control.value);
+    const next = Math.max(minimum, Math.min(maximum, (Number.isFinite(current) ? current : minimum) + steps * step));
+    if (next === current) return;
+    control.value = String(next);
+    if (control.type === 'range') control.dispatchEvent(new Event('input', { bubbles: true }));
+    window.clearTimeout(control.wheelCommit);
+    control.wheelCommit = window.setTimeout(function commitWheel() { control.dispatchEvent(new Event('change', { bubbles: true })); }, 500);
   }
 
   /** @brief 保存设置并刷新必要状态。 @param {object} patch 设置变化。 @return {boolean} 是否成功。 */
@@ -275,19 +333,16 @@ window.SideNotesSettings = (function createSettingsController() {
   /** @brief 应用已保存的外观及窗口配置。 */
   function apply() {
     const settings = state.settings;
-    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const theme = settings.theme === 'system' ? (prefersDark ? 'dark' : 'light') : settings.theme;
-    document.body.dataset.theme = theme;
-    document.documentElement.dataset.theme = theme;
-    document.body.dataset.surface = settings.surface || 'standard';
-    document.documentElement.dataset.surface = settings.surface || 'standard';
+    const root = document.documentElement;
+    // 主题与明暗写在根节点上：令牌按 data-sn-surface 与 data-sn-theme 取值，结构样式按 data-sn-dock 等属性选择。
+    window.SideNotesSurfaces.applyTo(root, settings.surface, window.SideNotesSurfaces.resolveTheme(settings.theme));
     document.body.dataset.edge = settings.edge;
-    const font = settings.fontFamily && settings.fontFamily !== '系统默认' ? '"' + settings.fontFamily.replace(/["\\\r\n]/g, '') + '", "Microsoft YaHei UI", sans-serif' : '"Segoe UI", "Microsoft YaHei UI", sans-serif';
-    document.documentElement.style.setProperty('--note-font-family', font);
-    document.documentElement.style.setProperty('--note-font-size', (settings.fontSize || 13) + 'px');
-    document.documentElement.style.setProperty('--app-font-family', font);
-    document.documentElement.style.setProperty('--app-font-size', (settings.fontSize || 13) + 'px');
-    document.documentElement.style.setProperty('--sidebar-width', settings.width + 'px');
+    // 字体：空值跟随主题；选了具体字体时只替换界面与正文的字体，标题与代码仍跟随主题（adaptation.md 第二节）。
+    const family = settings.fontFamily === '系统默认' ? '"Segoe UI", "Microsoft YaHei UI", sans-serif' : settings.fontFamily ? '"' + settings.fontFamily.replace(/["\\\r\n]/g, '') + '", "Microsoft YaHei UI", sans-serif' : '';
+    ['--sn-font-ui', '--sn-font-note'].forEach(function font(name) { if (family) root.style.setProperty(name, family); else root.style.removeProperty(name); });
+    // 字号是整页缩放：界面按 13px 设计，缩放到「字号 ÷ 13」倍后正文正好是所选字号（layout.md 第一节）。
+    root.style.setProperty('--app-zoom', String((settings.fontSize || 16) / 13));
+    root.style.setProperty('--sidebar-width', settings.width + 'px');
     if (elements.sidebar) {
       elements.sidebar.style.width = 'min(' + settings.width + 'px, 100vw)';
       elements.sidebar.dataset.edge = settings.edge;
@@ -303,37 +358,81 @@ window.SideNotesSettings = (function createSettingsController() {
     if (demo && demo.querySelector('span')) demo.querySelector('span').textContent = '打开侧栏';
   }
 
-  /** @brief 渲染不依赖内容固有宽度的主题与材质选择器。 @param {HTMLElement} target 容器。 */
+  /**
+   * @brief 迷你侧栏：在元素上写入主题与明暗属性，内部用那一套令牌画出面板、标题区、页签与两张卡片。
+   * @param {string} surface 主题。 @param {string} theme light 或 dark。 @return {HTMLElement} 预览。
+   */
+  function miniSidebar(surface, theme) {
+    const mini = el('span', 'mini-sidebar');
+    window.SideNotesSurfaces.applyTo(mini, surface, theme);
+    mini.append(el('span', 'mini-head'), el('span', 'mini-tab'), el('span', 'mini-card is-active'), el('span', 'mini-card'));
+    return mini;
+  }
+
+  /**
+   * @brief 单选组：方向键切换并立即生效，Home、End 到两端；重新渲染后焦点回到新选中的一项。
+   * @param {HTMLElement} group 单选组。 @param {string} label 组名，用于渲染后找回同一组。
+   */
+  function radioKeyboard(group, label) {
+    group.addEventListener('keydown', function moveRadio(event) {
+      const radios = Array.from(group.querySelectorAll('[role="radio"]')), index = radios.indexOf(event.target);
+      if (index < 0) return;
+      const next = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? (index + 1) % radios.length : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? (index - 1 + radios.length) % radios.length : event.key === 'Home' ? 0 : event.key === 'End' ? radios.length - 1 : -1;
+      if (next < 0) return;
+      event.preventDefault();
+      radios[next].click();
+      focusChecked(label);
+    });
+  }
+
+  /** @brief 选择会重绘设置面板，把焦点放回单选组中选中的一项，鼠标点选后也能接着用方向键。 @param {string} label 单选组名称。 */
+  function focusChecked(label) {
+    const checked = document.querySelector('[role="radiogroup"][aria-label="' + label + '"] [aria-checked="true"]');
+    if (checked) checked.focus();
+  }
+
+  /** @brief 明暗模式与主题：选项卡片，预览是用对应主题与明暗的令牌画出的迷你侧栏（components.md 第五节）。 @param {HTMLElement} target 容器。 */
   function themeChoices(target) {
+    const surfaces = window.SideNotesSurfaces;
     const options = el('div', 'appearance-display-grid');
     const modes = el('div', 'settings-option-block');
     const themes = el('div', 'settings-choice-grid theme-grid');
+    themes.setAttribute('role', 'radiogroup');
     themes.setAttribute('aria-label', '明暗模式');
     [['light', '浅色'], ['dark', '深色'], ['system', '跟随系统']].forEach(function themeChoice(item) {
-      const node = action(item[1], function chooseTheme() { if (save({ theme: item[0] })) renderPanel(); }, '', 'settings-choice theme-option' + (state.settings.theme === item[0] ? ' selected active' : ''));
-      node.setAttribute('aria-pressed', String(state.settings.theme === item[0]));
-      const preview = el('span', 'theme-swatch theme-preview');
-      preview.dataset.choice = item[0];
-      preview.dataset.theme = item[0];
+      const selected = state.settings.theme === item[0];
+      const node = action(item[1], function chooseTheme() { if (save({ theme: item[0] })) { renderPanel(); focusChecked('明暗模式'); } }, '', 'settings-choice theme-option' + (selected ? ' selected active' : ''));
+      node.setAttribute('role', 'radio');
+      node.setAttribute('aria-checked', String(selected));
+      node.tabIndex = selected ? 0 : -1;
+      const preview = el('span', 'theme-preview');
       preview.setAttribute('aria-hidden', 'true');
+      (item[0] === 'system' ? ['light', 'dark'] : [item[0]]).forEach(function half(theme) { preview.append(miniSidebar(state.settings.surface, theme)); });
       node.prepend(preview);
       themes.append(node);
     });
+    radioKeyboard(themes, '明暗模式');
     modes.append(row('明暗模式', '', themes));
     const materials = el('div', 'settings-option-block');
-    const surfaces = el('div', 'surface-choice-grid');
-    surfaces.setAttribute('aria-label', '界面材质');
-    [['standard', '经典'], ['paper', '记录纸'], ['glass', '磨砂玻璃'], ['win11', 'Windows 11']].forEach(function surfaceChoice(item) {
-      const node = action(item[1], function chooseSurface() { if (save({ surface: item[0] })) renderPanel(); }, '', 'surface-choice theme-option' + (state.settings.surface === item[0] ? ' selected active' : ''));
-      node.dataset.surface = item[0];
-      node.setAttribute('aria-pressed', String(state.settings.surface === item[0]));
+    const choices = el('div', 'surface-choice-grid');
+    choices.setAttribute('role', 'radiogroup');
+    choices.setAttribute('aria-label', '主题');
+    const resolved = surfaces.resolveTheme(state.settings.theme);
+    surfaces.SURFACES.forEach(function surfaceChoice(item) {
+      const selected = state.settings.surface === item.id;
+      const node = action(item.name, function chooseSurface() { if (save({ surface: item.id })) { renderPanel(); focusChecked('主题'); } }, '', 'surface-choice theme-option' + (selected ? ' selected active' : ''));
+      node.dataset.surface = item.id;
+      node.setAttribute('role', 'radio');
+      node.setAttribute('aria-checked', String(selected));
+      node.tabIndex = selected ? 0 : -1;
       const preview = el('span', 'theme-preview surface-preview');
-      preview.dataset.surface = item[0];
       preview.setAttribute('aria-hidden', 'true');
+      preview.append(miniSidebar(item.id, resolved));
       node.prepend(preview);
-      surfaces.append(node);
+      choices.append(node);
     });
-    materials.append(row('界面材质', '', surfaces));
+    radioKeyboard(choices, '主题');
+    materials.append(row('主题', '', choices));
     options.append(modes, materials);
     target.append(options);
   }
@@ -363,15 +462,20 @@ window.SideNotesSettings = (function createSettingsController() {
   }
 
   /** @brief 创建全量展开并支持手动输入的字体选择框。 @return {HTMLElement} 字体组合框。 */
+  /** @brief 字体候选的完整顺序：跟随主题、常用与已读取的字体、当前字体、系统默认。 @return {string[]} 候选。 */
+  function fontFamilies() {
+    return [FOLLOW_THEME, ...new Set([...FONTS, ...installedFonts, state.settings.fontFamily].filter(function named(family) { return family && family !== FOLLOW_THEME && family !== SYSTEM_FONT; })), SYSTEM_FONT];
+  }
+
   function fontPicker() {
     const picker = el('div', 'font-combobox');
     const field = el('div', 'font-combobox-field');
     const control = el('input', 'form-control');
     control.type = 'text';
     control.autocomplete = 'off';
-    control.value = state.settings.fontFamily || '系统默认';
+    control.value = state.settings.fontFamily || FOLLOW_THEME;
     control.placeholder = '选择或输入字体';
-    control.setAttribute('aria-label', '记录字体');
+    control.setAttribute('aria-label', '字体');
     control.setAttribute('role', 'combobox');
     control.setAttribute('aria-autocomplete', 'list');
     control.setAttribute('aria-expanded', 'false');
@@ -392,9 +496,9 @@ window.SideNotesSettings = (function createSettingsController() {
 
     /** @brief 保存用户明确选择或输入的字体。 @param {string} family 字体。 */
     function choose(family) {
-      const value = family === '系统默认' ? '' : family.trim().slice(0, 120);
+      const value = family === FOLLOW_THEME ? '' : family.trim().slice(0, 120);
       if (!save({ fontFamily: value })) return;
-      control.value = value || '系统默认';
+      control.value = value || FOLLOW_THEME;
       closeList();
       control.focus();
     }
@@ -422,7 +526,10 @@ window.SideNotesSettings = (function createSettingsController() {
       option.tabIndex = -1;
       option.setAttribute('role', 'option');
       option.setAttribute('aria-selected', String(label === control.value));
-      option.classList.toggle('is-selected', label === (state.settings.fontFamily || '系统默认'));
+      option.classList.toggle('is-selected', label === (state.settings.fontFamily || FOLLOW_THEME));
+      // 候选用各自的字体显示；「跟随主题」写出当前主题与它的界面字体。
+      if (label === FOLLOW_THEME) { const surface = window.SideNotesSurfaces.spec(state.settings.surface); option.append(el('span', 'font-option-detail', surface.name + ' · ' + window.SideNotesSurfaces.THEME_FONTS[surface.id])); }
+      else if (label !== SYSTEM_FONT && !extra) option.style.fontFamily = '"' + label.replace(/["\\]/g, '') + '"';
       option.addEventListener('mousedown', function retainInput(event) { event.preventDefault(); });
       list.append(option);
       choices.push(option);
@@ -433,8 +540,8 @@ window.SideNotesSettings = (function createSettingsController() {
       const previous=choices.find(function customChoice(node){return node.classList.contains('font-custom-option');});
       if(previous){previous.remove();choices=choices.filter(function retained(node){return node!==previous;});}
       activeIndex=-1;control.removeAttribute('aria-activedescendant');
-      const value=control.value.trim(),families=[...new Set([...FONTS,...installedFonts,state.settings.fontFamily].filter(Boolean))];
-      if(value&&value!=='系统默认'&&!families.some(function exactFont(family){return family.toLocaleLowerCase()===value.toLocaleLowerCase();}))appendChoice('使用“'+value+'”',function useCustomFont(){choose(value);},'font-custom-option');
+      const value=control.value.trim(),families=fontFamilies();
+      if(value&&value!==SYSTEM_FONT&&value!==FOLLOW_THEME&&!families.some(function exactFont(family){return family.toLocaleLowerCase()===value.toLocaleLowerCase();}))appendChoice('使用“'+value+'”',function useCustomFont(){choose(value);},'font-custom-option');
     }
 
     /** 刷新全量字体候选与授权入口。 */
@@ -442,7 +549,7 @@ window.SideNotesSettings = (function createSettingsController() {
       list.replaceChildren();
       choices = [];
       activeIndex = -1;
-      const families = [...new Set([...FONTS, ...installedFonts, state.settings.fontFamily].filter(Boolean))];
+      const families = fontFamilies();
       families.forEach(function fontOption(family) { appendChoice(family, function chooseFont() { choose(family); }); });
       if (!fontsRead) {
         appendChoice(fontsReading ? '正在读取系统字体…' : '读取系统字体…', function readFonts() { enumerateFonts(feedback, renderOptions); }, 'font-permission-option');
@@ -461,7 +568,12 @@ window.SideNotesSettings = (function createSettingsController() {
     control.addEventListener('focus', function focusFonts() { openList(); });
     control.addEventListener('input', function inputFonts() { if(list.hidden)openList();else renderCustomOption(); });
     control.addEventListener('keydown', function navigateFonts(event) {
-      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); control.value = state.settings.fontFamily || '系统默认'; closeList(); }
+      if (event.key === 'Escape') {
+        // 列表已收起、也没有输入时不拦截，Esc 继续交给设置窗口关闭（与现有应用一致）。
+        const current = state.settings.fontFamily || FOLLOW_THEME;
+        if (list.hidden && control.value === current) return;
+        event.preventDefault(); event.stopPropagation(); control.value = current; closeList();
+      }
       else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault();
         if (list.hidden) openList();
@@ -470,10 +582,10 @@ window.SideNotesSettings = (function createSettingsController() {
       } else if (event.key === 'Enter') {
         event.preventDefault();
         if (activeIndex >= 0 && choices[activeIndex]) choices[activeIndex].click();
-        else choose(control.value || '系统默认');
+        else choose(control.value || FOLLOW_THEME);
       }
     });
-    picker.addEventListener('focusout', function leaveFonts() { window.setTimeout(function finishFontsFocus() { if (!picker.contains(document.activeElement)) { control.value = state.settings.fontFamily || '系统默认'; closeList(); } }, 0); });
+    picker.addEventListener('focusout', function leaveFonts() { window.setTimeout(function finishFontsFocus() { if (!picker.contains(document.activeElement)) { control.value = state.settings.fontFamily || FOLLOW_THEME; closeList(); } }, 0); });
     field.append(control, expand);
     picker.append(field, list, feedback);
     return picker;
@@ -508,7 +620,7 @@ window.SideNotesSettings = (function createSettingsController() {
 
     const tidy = el('div', 'settings-runtime-field');
     const tidyName = el('div', 'settings-runtime-name', '整理提醒');
-    tidyName.title = '工作区记录超过阈值时提醒整理，关闭后不再提示。';
+    tidyName.append(help('整理提醒', '工作区记录超过阈值时在列表上方提醒整理，只提醒，不会自动归档或删除；关闭后不再提示。'));
     const tidyControls = el('div', 'settings-runtime-controls');
     let previousLimit = state.settings.tidyLimit || 50;
     const threshold = input('工作区整理提醒阈值', String(state.settings.tidyLimit || previousLimit), function limit(value) {
@@ -548,7 +660,7 @@ window.SideNotesSettings = (function createSettingsController() {
     const typography = group('文字');
     typography.classList.add('settings-wide');
     const fontRow = el('div', 'settings-field-grid settings-typography');
-    fontRow.append(row('字体', '', fontPicker()), row('字号', '', range('字体大小', 'fontSize', 12, 18, 1, ' px')));
+    fontRow.append(row('字体', '默认跟随主题；选了具体字体时替换界面与正文的字体，标题与代码的字体仍跟随主题。', fontPicker()), row('字号', '', range('字号', 'fontSize', 12, 20, 1, ' px')));
     typography.append(fontRow, el('div', 'settings-font-preview', '随手记录。 The quick brown fox · 0123456789'));
     layout.append(typography);
 
@@ -559,9 +671,9 @@ window.SideNotesSettings = (function createSettingsController() {
     primary.append(
       row('显示位置', '', select('触发边缘', [['right', '屏幕右侧'], ['left', '屏幕左侧']], state.settings.edge, function edge(value) { return save({ edge: value }); })),
       row('移出后收起', '', select('移出后收起', [[300, '300 毫秒'], [600, '600 毫秒'], [1000, '1 秒']], state.settings.hideDelay, function delay(value) { return save({ hideDelay: Number(value) }); })),
-      row('编辑时保持展开', '正在书写时，鼠标移出也保持侧栏展开。', toggle('编辑时保持展开', state.settings.protectEditing, function protect(value) { return save({ protectEditing: value }); }))
+      row('编辑时保持展开', '', toggle('编辑时保持展开', state.settings.protectEditing, function protect(value) { return save({ protectEditing: value }); }))
     );
-    const widthRow = row('宽度', '可拖动侧栏边缘直接调整。', range('侧栏宽度', 'width', 360, 720, 4, ' px'));
+    const widthRow = row('宽度', '按 13px 字号计；窗口实际宽度是「宽度 × 字号 ÷ 13」。也可以拖动侧栏朝屏幕内侧的边调整，按 4px 取整。', range('侧栏宽度', 'width', 360, 720, 4, ' px'));
     widthRow.classList.add('sidebar-width-row');
     fields.append(primary, widthRow);
     behavior.append(fields);
@@ -580,8 +692,10 @@ window.SideNotesSettings = (function createSettingsController() {
     browse.classList.add('shortcut-section');
     const actions = el('div', 'shortcut-grid');
     const navigation = el('div', 'shortcut-grid');
-    [['新建记录', 'Ctrl + N'], ['呼出速记', 'Ctrl + Shift + Space'], ['保存并退出编辑', 'Ctrl + Enter']].forEach(function entry(item) { actions.append(row(item[0], '', el('kbd', '', item[1]))); });
-    [['搜索记录与标签', 'Ctrl + F'], ['呼出侧栏', 'Alt + Shift + S']].forEach(function entry(item) { navigation.append(row(item[0], '', el('kbd', '', item[1]))); });
+    // 全局快捷键带说明适用范围的问号：桌面端在任何程序中生效，浏览器原型只在页面获得焦点时生效（模拟）。
+    const globalScope = '全局快捷键：桌面端注册为系统热键，在任何程序中生效；浏览器原型中只在页面获得焦点时生效。';
+    [['新建记录', 'Ctrl + N', ''], ['呼出速记', 'Ctrl + Shift + Space', globalScope], ['保存并退出编辑', 'Ctrl + Enter', '']].forEach(function entry(item) { actions.append(row(item[0], item[2], el('kbd', '', item[1]))); });
+    [['搜索记录与标签', 'Ctrl + F', ''], ['呼出侧栏', 'Alt + Shift + S', globalScope], ['打开设置', 'Ctrl + ,', '']].forEach(function entry(item) { navigation.append(row(item[0], item[2], el('kbd', '', item[1]))); });
     editing.append(actions);
     browse.append(navigation);
     layout.append(editing, browse);
@@ -776,7 +890,7 @@ window.SideNotesSettings = (function createSettingsController() {
     cloud.append(providers);
     if (state.settings.cloud.provider === 'synology') cloud.append(row('WebDAV 地址', '', input('NAS WebDAV 地址', state.settings.cloud.endpoint, function endpointChanged(value) { return saveCloud({ endpoint: value.slice(0, 500) }); }, 'https://nas.example.com:5006')));
     const cloudFields=el('div','settings-field-grid');
-    cloudFields.append(row('账户', '仅配置预览，无需密码或令牌。', input('同步账户标识', state.settings.cloud.account, function accountChanged(value) { return saveCloud({ account: value.slice(0, 120) }); }, state.settings.cloud.provider === 'synology' ? 'NAS 用户名' : '账户邮箱')));
+    cloudFields.append(row('账户', '', input('同步账户标识', state.settings.cloud.account, function accountChanged(value) { return saveCloud({ account: value.slice(0, 120) }); }, state.settings.cloud.provider === 'synology' ? 'NAS 用户名' : '账户邮箱')));
     cloudFields.append(row('远程文件夹', '', input('云端备份文件夹', state.settings.cloud.folder, function folderChanged(value) { return saveCloud({ folder: value.slice(0, 240) }); }, 'SideNotes')));
     cloud.append(cloudFields);
     const statusNode = el('p', 'settings-status sync-status');
@@ -792,13 +906,13 @@ window.SideNotesSettings = (function createSettingsController() {
         if (state.settings.cloud.simulationFailure) { toast('模拟连接失败，关闭故障开关后可重试', null, true); return; }
         toast('模拟配置校验通过；未连接真实云服务');
       }, 'check'));
-      cloud.append(row('模拟备份失败', '验证首页与系统通知中的故障提醒。', toggle('模拟备份失败', state.settings.cloud.simulationFailure, function simulationChanged(value) { return saveCloud({ simulationFailure: value }); })));
+      cloud.append(row('模拟备份失败', '', toggle('模拟备份失败', state.settings.cloud.simulationFailure, function simulationChanged(value) { return saveCloud({ simulationFailure: value }); })));
     }
     cloud.append(actions);
     const permission = 'Notification' in window ? Notification.permission : 'unsupported';
     cloud.append(row('备份失败系统通知', permission === 'granted' ? '已允许；仅在备份失败时提醒。' : permission === 'denied' ? '浏览器已阻止；可在站点权限中调整。' : '经你允许后，备份失败时发送系统通知。', action(permission === 'granted' ? '已开启' : '开启通知', enableNotifications, 'bell')));
     dashboard.append(cloud);
-    const backup = group('导入与导出', 'JSON 备份包含记录、图片、草稿与设置。导入前可预览并确认。');backup.classList.add('settings-wide');
+    const backup = group('导入与导出');backup.classList.add('settings-wide');
     const localActions = el('div', 'settings-actions data-actions');
     localActions.append(button('导出备份', 'export-data', 'download', 'button secondary compact'), button('导入备份', 'import-data', 'upload', 'button secondary compact'));
     backup.append(localActions);
@@ -1002,9 +1116,6 @@ window.SideNotesSettings = (function createSettingsController() {
     const label = el('span', 'trash-retention-label', '保留');
     const days = retentionPicker(function retainedDaysChanged() { renderList(); });
     retention.append(label, days, help('保留策略', '默认 30 天；到期后提示清理，确认前仍可恢复。'));
-    const heading = panel.querySelector('.settings-panel-heading');
-    if (heading) heading.append(retention);
-    else panel.append(retention);
     const query = el('input', 'form-control');
     query.type = 'search';
     query.placeholder = '搜索回收站';
@@ -1022,7 +1133,8 @@ window.SideNotesSettings = (function createSettingsController() {
     const restore = action('恢复筛选结果', function restoreFiltered() { restoreNotes(filtered()); }, 'restore');
     const clean = action('清理到期项', function deleteExpired() { const overdue = all.filter(expired); if (overdue.length) confirmDelete(overdue, panel); }, 'trash');
     clean.disabled = !all.some(expired);
-    bulk.append(summary, restore, clean);
+    // 条数之后紧跟保留天数，右边是「恢复筛选结果」「清理到期项」（本次提出：此前在页面标题右侧）。
+    bulk.append(summary, retention, restore, clean);
     panel.append(bulk);
     const list = el('div', 'settings-trash-list');
     panel.append(list);
@@ -1068,7 +1180,7 @@ window.SideNotesSettings = (function createSettingsController() {
   function renderAbout(panel) {
     const hero = el('div', 'about-hero settings-about-logo');
     const logo = el('img');
-    logo.src = 'assets/favicon.svg';
+    logo.src = '../design-system/assets/app-icon.svg';
     logo.alt = '';
     hero.append(logo, el('h3', '', 'SideNotes'), el('span', 'settings-version', '交互原型 0.5.0'), el('p', 'setting-description', '本地速记 · 置顶取用 · 用后归档'));
     panel.append(hero);
@@ -1094,6 +1206,10 @@ window.SideNotesSettings = (function createSettingsController() {
     });
     credits.append(list);
     panel.append(credits);
+    // 调试只有一个按钮（本次提出）：桌面端打开侧栏窗口的开发者工具，浏览器原型中提示按 F12。
+    const debug = group('调试');
+    debug.append(action('打开开发者工具', function openDevtools() { toast('浏览器原型请按 F12 打开开发者工具'); }, 'code'));
+    panel.append(debug);
   }
 
   /** 渲染当前设置分类。 */
@@ -1126,6 +1242,7 @@ window.SideNotesSettings = (function createSettingsController() {
     if (ui.editing && !flushEdit()) { toast('编辑内容尚未保存，请先导出备份', null, true); return; }
     currentSection = SECTIONS.some(function knownSection(item) { return item[0] === section; }) ? section : 'appearance';
     activeDialog = openModal('设置', 'settings-modal');
+    initializeWheel(activeDialog.modal);
     const layout = el('div', 'settings-layout');
     const nav = el('nav', 'settings-nav');
     nav.setAttribute('aria-label', '设置分类');

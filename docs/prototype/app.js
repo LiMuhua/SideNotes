@@ -97,11 +97,14 @@ function normalizeSettings(value = {}) {
   if (!value || typeof value !== 'object') value = {};
   const cloud = value.cloud && typeof value.cloud === 'object' ? value.cloud : {};
   const shortcuts = value.shortcuts && typeof value.shortcuts === 'object' ? value.shortcuts : {};
+  const surfaces = window.SideNotesSurfaces;
   return {
+    // 设置结构版本 3：主题改为五套（旧的 standard 迁移为 terminal），字体默认跟随主题，见 surfaces.js。
+    version: surfaces.SETTINGS_VERSION,
     theme: ['light','dark','system'].includes(value.theme) ? value.theme : 'light',
-    surface: ['standard','paper','glass','win11'].includes(value.surface) ? value.surface : 'standard',
-    fontFamily: typeof value.fontFamily === 'string' ? value.fontFamily.slice(0,120) : 'Segoe UI',
-    fontSize: Math.max(12,Math.min(18,Number(value.fontSize)||13)),
+    surface: surfaces.normalizeSurface(value.surface),
+    fontFamily: surfaces.normalizeFontFamily(value.fontFamily, value.version),
+    fontSize: Math.max(12,Math.min(20,Number(value.fontSize)||16)),
     edge: value.edge === 'left' ? 'left' : 'right', width: Math.min(720,Math.max(360,Number(value.width)||416)),
     hideDelay: [300,600,1000].includes(Number(value.hideDelay)) ? Number(value.hideDelay) : 600,
     protectEditing: value.protectEditing !== false,
@@ -156,11 +159,11 @@ function setStorageStatus(failed) {
   const busy=ui.pendingImages>0||ui.draftDirty||(sync.enabled&&sync.busy);
   const error=ui.storageError||Boolean(cloudError);
   if(elements.storageStatus){const status=elements.storageStatus;status.replaceChildren();status.classList.toggle('is-cloud',Boolean(sync.enabled));status.classList.toggle('is-busy',busy);status.classList.toggle('is-error',error);
-    if(sync.enabled)status.append(icon(error?'cloud-off':'cloud'));else status.append(el('span','small-dot'));
+    // 正常时底栏不显示状态（本次提出：去掉绿色圆点）；出错时版本号左边出现警告图标，处理中只写文字。
+    if(error)status.append(icon(ui.storageError?'alert':'cloud-off'));
     const message=ui.storageError?'本地保存失败':cloudError?'备份失败':ui.pendingImages?'读取附件…':ui.draftDirty?'保存中…':sync.busy?'备份中…':'';
-    if(message)status.append(document.createTextNode(message));const label=message||(sync.enabled?'本地已保存 · 云端连接为模拟':'本地已保存');status.title=label;status.setAttribute('aria-label',label);
+    if(message)status.append(document.createTextNode(message));const label=message||(sync.enabled?'本地已保存 · 云端连接为模拟':'本地已保存');status.title=label;status.setAttribute('aria-label',label);status.hidden=!message;
   }
-  if(elements.draftStatus)elements.draftStatus.textContent=ui.pendingImages?'读取附件…':ui.editStorageError?'编辑未保存':ui.storageError?'保存失败，输入已保留':ui.draftDirty?'保存中…':'';
   if(elements.syncWarning){elements.syncWarning.hidden=!cloudError;elements.syncWarning.replaceChildren();if(cloudError){elements.syncWarning.append(icon('alert'),el('span','',cloudError),button('重试','retry-cloud','','button secondary compact'));}}
 }
 
@@ -215,41 +218,70 @@ function formatTime(timestamp) {
 /** @brief 图标、标题、数量及短渐隐线组成的分组标记。 @param {string} title 名称。 @param {number} count 数量。 @return {HTMLElement} 标记。 */
 function sectionHeading(title,count){const pinned=title==='置顶',heading=el('div','list-section-heading'+(pinned?' section-pinned':' section-normal')),symbol=el('span','section-symbol');symbol.append(icon(pinned?'pin':'note'));heading.append(symbol,el('span','section-label',title),el('span','section-count',String(count)));return heading;}
 
-/** @brief 渲染带可配置 Emoji 的记录卡片。 @param {object} note 记录。 @return {HTMLElement} 卡片。 */
+/**
+ * @brief 渲染记录卡片。
+ * @details 标题最多两行；右侧一格叠放「置顶标记与时间」和操作按钮，悬停、高亮或聚焦时换成按钮，
+ * 收起按钮在最右，落在时间原来的位置，标题宽度因此不变（components.md 2.1）。底部只在有标签时出现。
+ * 列表按 roving tabindex 只让高亮的一张进入 Tab 顺序，卡片内的按钮也只在这一张上可聚焦。
+ * @param {object} note 记录。 @return {HTMLElement} 卡片。
+ */
 function renderCard(note) {
   const parsed=noteParts(note), lines=parsed.body.split('\n');
   const first=lines.findIndex(function nonempty(line){return Boolean(line.trim());});
   const firstLine=first<0?'':lines[first];
   const fullBody=firstLine.length>120||/^\s*(?:`{3,}|~{3,}|!\[|>|(?:-\s*){3,}$|(?:_\s*){3,}$|(?:\*\s*){3,}$)|^(?: {4}|\t)|^\s*[-*+]\s|^\s*\d+[.)]\s/.test(firstLine)||Boolean(window.NoteContent.filePath(firstLine));
   const title=first<0 ? (note.images.length?'图片记录':'记录') : lines[first].replace(/^#{1,6}\s+|^[-*+]\s+|^\d+\.\s+/,'').replace(/[*\x60~]/g,'').slice(0,120)||'记录';
-  const editing=ui.editing&&ui.editing.id===note.id;
-  const card=el('article','note-card'+(note.pinned?' is-pinned':'')+(editing?' is-editing':'')+(note.collapsed?' is-collapsed':''));card.dataset.noteId=note.id;card.tabIndex=0;card.setAttribute('aria-label',title);
-  const header=el('header','note-header'),mark=el('button','note-emoji',note.emoji||'📝');mark.type='button';mark.dataset.action='choose-emoji';mark.setAttribute('aria-label','选择记录Emoji');mark.title='更换 Emoji';
-  const time=el('button','note-time',formatTime(note.createdAt));time.type='button';time.dataset.action='toggle-note-collapse';time.setAttribute('aria-expanded',String(!note.collapsed));time.setAttribute('aria-label',(note.collapsed?'展开':'折叠')+'记录正文');time.title='创建：'+new Date(note.createdAt).toLocaleString('zh-CN',{hour12:false})+'\n修改：'+new Date(note.updatedAt).toLocaleString('zh-CN',{hour12:false});
+  const editing=ui.editing&&ui.editing.id===note.id,current=ui.currentId===note.id;
+  const card=el('article','note-card'+(note.pinned?' is-pinned':'')+(editing?' is-editing':'')+(note.collapsed?' is-collapsed':'')+(current?' is-current':''));card.dataset.noteId=note.id;card.tabIndex=current||editing?0:-1;card.setAttribute('aria-label',title);if(current)card.setAttribute('aria-current','true');
+  const header=el('header','note-header'),mark=el('button','note-emoji',note.emoji||'📝');mark.type='button';mark.dataset.action='choose-emoji';mark.setAttribute('aria-label','更换 Emoji');mark.title='更换 Emoji';
   const titleNode=el('h3','note-title',fullBody?(firstLine.length>120?title:'记录'):title);
   if(!fullBody){titleNode.replaceChildren();window.NoteContent.renderInline(firstLine.replace(/^#{1,6}\s+/,''),titleNode);}
-  header.append(mark,titleNode,time);card.append(header);
+  // 右侧一格：平时是置顶标记与创建时间；点时间收起或展开正文（时间不进入 Tab 顺序，键盘用收起按钮）。
+  const side=el('div','note-side'),meta=el('span','note-meta');
+  if(note.pinned){const pin=el('span','note-pin');pin.title='已置顶';pin.append(icon('pin'));meta.append(pin);}
+  const time=el('button','note-time',formatTime(note.createdAt));time.type='button';time.dataset.action='toggle-note-collapse';time.tabIndex=-1;time.setAttribute('aria-label',(note.collapsed?'展开':'收起')+'正文');time.title='创建：'+new Date(note.createdAt).toLocaleString('zh-CN',{hour12:false})+'\n修改：'+new Date(note.updatedAt).toLocaleString('zh-CN',{hour12:false});
+  meta.append(time);side.append(meta);
+  header.append(mark,titleNode,side);card.append(header);
   if(editing){
-    const input=el('textarea','note-edit-input');input.value=ui.editing.text;input.dataset.editId=note.id;input.setAttribute('aria-label','编辑 Markdown 与标签');input.rows=Math.min(12,Math.max(4,ui.editing.text.split('\n').length));
-    const actions=el('div','note-edit-actions'),tools=el('div','composer-tools'),confirm=el('div','composer-actions');tools.append(button('添加图片','attach-edit-image','image'),button('引用文件','attach-edit-file','file'));confirm.append(button('取消修改 · Esc','cancel-edit','x'),button('保存修改 · Ctrl+Enter','finish-edit','check','icon-button primary'));actions.append(tools,confirm);card.append(input,actions);renderEditAttachments(card);if(window.LiveMarkdown)window.LiveMarkdown.attach(input,{value:ui.editing.text,minHeight:100,maxHeight:300});const editingSession=ui.editing;input.addEventListener('blur',function editInputBlur(){scheduleEditBlur(editingSession);});return card;
+    const input=el('textarea','note-edit-input');input.value=ui.editing.text;input.dataset.editId=note.id;input.setAttribute('aria-label','编辑记录');input.rows=Math.min(12,Math.max(4,ui.editing.text.split('\n').length));
+    const actions=el('div','note-edit-actions'),tools=el('div','composer-tools'),confirm=el('div','composer-actions');tools.append(button('添加图片','attach-edit-image','image'),button('引用文件','attach-edit-file','file'));confirm.append(keyHint(['Ctrl','Enter']),button('取消修改 · Esc','cancel-edit','x'),button('保存修改 · Ctrl+Enter','finish-edit','check','icon-button primary'));actions.append(tools,confirm);card.append(input,actions);renderEditAttachments(card);if(window.LiveMarkdown)window.LiveMarkdown.attach(input,{value:ui.editing.text,minHeight:100,maxHeight:300});const editingSession=ui.editing;input.addEventListener('blur',function editInputBlur(){scheduleEditBlur(editingSession);});return card;
   }
+  // 操作按钮：置顶（只在工作区与置顶中）排在最前，然后是复制、归档或恢复、更多，收起在最右。
+  const actions=el('div','note-actions');
+  if(note.status==='active'){const pin=button(note.pinned?'取消置顶':'置顶记录','pin-note',note.pinned?'pin-off':'pin','icon-button note-pin-toggle'+(note.pinned?' is-pinned':''));pin.setAttribute('aria-pressed',String(note.pinned));actions.append(pin);}
+  actions.append(button('复制记录与附件 · Ctrl+C','copy-note','copy'),button(note.status==='archived'?'恢复记录':'归档记录','archive-note',note.status==='archived'?'restore':'archive'),button('更多操作 · Shift+F10','more-note','more'));
+  const collapse=button(note.collapsed?'展开正文':'收起正文','toggle-note-collapse','chevron-down','icon-button note-collapse'+(note.collapsed?' is-collapsed':''));collapse.setAttribute('aria-expanded',String(!note.collapsed));actions.append(collapse);
+  side.append(actions);
   const content=el('div','note-content markdown-body');
   const displayBody=first<0?'':fullBody?parsed.body:lines.slice(first+1).join('\n');
   window.NoteContent.renderMarkdown(displayBody,content,{onTaskToggle:function toggleCardTask(index,checked){const changed=displayBody.slice(0,index)+(checked?'x':' ')+displayBody.slice(index+1),prefix=fullBody||first<0?'':lines.slice(0,first+1).join('\n')+'\n';return updateNote(note.id,{text:window.NoteContent.compose(prefix+changed,parsed.tags)});}});
   note.images.forEach(function renderAttachment(attachment){const preview=button('预览图片：'+attachment.name,'preview-image','', 'note-image-button');preview.dataset.imageId=attachment.id;const image=el('img','note-image');image.src=attachment.data;image.alt=attachment.name;image.loading='lazy';preview.append(image);content.append(preview);});
-  card.append(content);
+  // 只有标题行的记录不留正文区，与收起的记录一样只剩标题行。
+  if(content.childNodes.length)card.append(content);else card.classList.add('is-single');
   const expanded=button('展开全文','open-note','chevron-down','note-expand');card.append(expanded);
   const likelyLong=parsed.body.length>360||parsed.body.split('\n').length>9||note.images.length>1;
   card.classList.toggle('is-truncated',likelyLong);expanded.hidden=!likelyLong;
   const measureOverflow=function measureOverflow(){if(!content.isConnected)return;const overflow=content.scrollHeight>content.clientHeight+2;card.classList.toggle('is-truncated',overflow);expanded.hidden=!overflow;};
   if(window.requestAnimationFrame)window.requestAnimationFrame(measureOverflow);
   content.querySelectorAll('img').forEach(function remeasureImage(image){image.addEventListener('load',measureOverflow);image.addEventListener('error',measureOverflow);});
-  const bottom=el('footer','note-bottom'),tags=el('div','note-tags');
-  const expandedTags=ui.expandedTags.has(note.id);tags.classList.toggle('tags-expanded',expandedTags);
-  parsed.tags.forEach(function renderTag(tag){const chip=button('#'+tag,'filter-tag','','tag-chip');chip.dataset.tag=tag;const remove=button('从此记录移除 #'+tag,'remove-note-tag','x','tag-remove');remove.dataset.tag=tag;const wrap=el('span','tag-chip-wrap');wrap.append(chip,remove);tags.append(wrap);});
-  if(parsed.tags.length){const more=button(expandedTags?'收起标签':'展开并管理标签','expand-tags','more','tags-more');more.dataset.noteId=note.id;tags.append(more);}
-  const actions=el('div','note-actions');actions.append(button('复制记录与附件','copy-note','copy'));if(note.status==='active'){const pin=button(note.pinned?'取消置顶':'置顶记录','pin-note',note.pinned?'pin-off':'pin');pin.setAttribute('aria-pressed',String(note.pinned));actions.append(pin);}actions.append(button(note.status==='archived'?'恢复记录':'归档记录','archive-note',note.status==='archived'?'restore':'archive'),button('更多操作','more-note','more'));bottom.append(tags,actions);card.append(bottom);card.title='单击编辑，双击复制，长按拖动排序';if(window.requestAnimationFrame)window.requestAnimationFrame(function fit(){fitCardTags(card);});return card;
+  // 底部只在有标签时出现，没有标签时不占位置。
+  if(parsed.tags.length){
+    const bottom=el('footer','note-bottom'),tags=el('div','note-tags');
+    const expandedTags=ui.expandedTags.has(note.id);tags.classList.toggle('tags-expanded',expandedTags);
+    parsed.tags.forEach(function renderTag(tag){const chip=button('#'+tag,'filter-tag','','tag-chip');chip.dataset.tag=tag;const remove=button('从此记录移除 #'+tag,'remove-note-tag','x','tag-remove');remove.dataset.tag=tag;const wrap=el('span','tag-chip-wrap');wrap.append(chip,remove);tags.append(wrap);});
+    const more=button(expandedTags?'收起标签':'展开并管理标签','expand-tags','more','tags-more');more.dataset.noteId=note.id;tags.append(more);
+    bottom.append(tags);card.append(bottom);
+  }
+  if(!current)card.querySelectorAll('button').forEach(function outOfTabOrder(node){node.tabIndex=-1;});
+  card.title='单击选中，双击编辑，长按拖动排序';if(window.requestAnimationFrame)window.requestAnimationFrame(function fit(){fitCardTags(card);});return card;
 }
+
+/**
+ * @brief 快捷键提示：每个键一个小框。
+ * @details 只在终端主题显示（根节点 data-sn-shortcuts="inline"），其余主题由样式隐藏，快捷键留在按钮的工具提示中。
+ * @param {string[]} keys 按键。 @return {HTMLElement} 提示。
+ */
+function keyHint(keys){const node=el('span','key-hint');node.setAttribute('aria-hidden','true');keys.forEach(function key(name){node.append(el('kbd','',name));});return node;}
 
 /** @brief 更新筛选快照并加载首批，保留同一视图已加载数量。 @param {object} options 重置选项。 */
 function renderNotes(options={}) {
@@ -258,7 +290,7 @@ function renderNotes(options={}) {
   const active=state.notes.filter(function activeNote(n){return n.status==='active';}),archive=state.notes.filter(function archivedNote(n){return n.status==='archived';});
   const counts={workspace:active.length,pinned:active.filter(function pinnedNote(n){return n.pinned;}).length,archive:archive.length};
   document.querySelectorAll('[data-count]').forEach(function count(node){node.textContent=String(counts[node.dataset.count]||0);});
-  document.querySelectorAll('[data-tab]').forEach(function tab(node){const selected=node.dataset.tab===ui.tab;node.classList.toggle('active',selected);if(selected)node.setAttribute('aria-current','page');else node.removeAttribute('aria-current');});
+  document.querySelectorAll('.sidebar-tabs [data-tab]').forEach(function tab(node){const selected=node.dataset.tab===ui.tab;node.classList.toggle('active',selected);node.setAttribute('aria-selected',String(selected));node.tabIndex=selected?0:-1;});
   const notes=state.notes.filter(function visible(n){return inCurrentTab(n)&&(!ui.selectedTag||hasTag(n,ui.selectedTag))&&matchesQuery(n,ui.query);}).sort(compareNoteOrder);
   const pinned=notes.filter(function pinned(n){return n.pinned;}),normal=notes.filter(function normal(n){return !n.pinned;});
   const key=[ui.tab,ui.selectedTag,ui.query,state.settings.lazyLoading,state.settings.pageSize].join('|');const same=ui.listKey===key&&!options.reset;
@@ -269,7 +301,7 @@ function renderNotes(options={}) {
   ui.listItems=pinned.concat(normal);ui.listKey=key;ui.visibleCount=0;ui.lastListGroup='';ui.groupCounts={pinned:pinned.length,normal:normal.length};ui.sentinel=null;ui.loading=false;
   if(!notes.length){const empty=el('div','empty-state');empty.append(el('h3','',ui.query||ui.selectedTag?'没有匹配的记录':'暂无记录'),el('p','',ui.query||ui.selectedTag?'调整搜索或标签筛选。':'在上方直接输入。'));if(ui.query||ui.selectedTag)empty.append(button('清除筛选','clear-filters','','button secondary'));elements.noteList.append(empty);}
   else appendNextPage(target);
-  elements.noteList.scrollTop=same?oldScroll:0;elements.listSummary.textContent=notes.length+' 条'+(ui.selectedTag?' · #'+ui.selectedTag:'');elements.clearSearch.hidden=!ui.query;
+  elements.noteList.scrollTop=same?oldScroll:0;elements.listSummary.textContent=notes.length+' 条'+(ui.selectedTag?' · #'+ui.selectedTag:'');elements.noteList.setAttribute('aria-label',notes.length+' 条记录');syncCardTabStops();elements.clearSearch.hidden=!ui.query;
   renderTagMenu();renderWorkspaceNudge();refreshSearchSummary();if(window.NoteInteractions)window.NoteInteractions.refresh();
 }
 
@@ -280,8 +312,10 @@ function createComposer() {
   const attachments=el('div','attachment-list');attachments.id='sidebar-attachment-list';
   const footer=el('div','composer-footer'),tools=el('div','composer-tools'),actions=el('div','composer-actions');
   tools.append(button('添加图片','attach-image','image'),button('引用文件','attach-file','file'));
-  actions.append(button('收起输入','close-composer','x'),button('保存记录，保持侧栏展开','save-sidebar-note','check','composer-submit icon-button primary'));
-  footer.append(tools,actions);composer.append(input,attachments,footer);
+  // 字数紧跟附件工具；终端主题在同一位置写出 Ctrl+Enter（由样式按 data-sn-shortcuts 切换），见 components.md 1.6。
+  const count=el('span','composer-count','0 字');elements.composerCount=count;
+  actions.append(keyHint(['Ctrl','Enter']),button('收起输入 · Esc','close-composer','x'),button('保存记录，保持侧栏展开','save-sidebar-note','check','composer-submit icon-button primary'));
+  footer.append(tools,count,actions);composer.append(input,attachments,footer);
   const slot=el('div','composer-sticky-slot');slot.append(composer);elements.noteList.append(slot);
   elements.sidebarDraft=input;elements.sidebarComposer=composer;elements.composerSlot=slot;elements.sidebarAttachments=attachments;
   input.addEventListener('focus',function activateInput(){ui.composer=true;composer.classList.add('is-active');cancelHide();resizeDraftInput();});
@@ -292,7 +326,9 @@ function createComposer() {
 function renderDraft() {
   if (elements.draftInput.value !== state.draft.text) elements.draftInput.value = state.draft.text;
   if (elements.sidebarDraft.value !== state.draft.text) elements.sidebarDraft.value = state.draft.text;
-  elements.charCount.textContent = state.draft.text.length + ' 字';
+  const characters = Array.from(state.draft.text).length + ' 字';
+  elements.charCount.textContent = characters;
+  if (elements.composerCount) elements.composerCount.textContent = characters;
   [elements.attachmentList, elements.sidebarAttachments].forEach(function renderAttachmentList(list) {
     list.replaceChildren();
     state.draft.images.forEach(function appendAttachment(attachment) {
@@ -318,7 +354,6 @@ function renderDraft() {
   sidebarSave.disabled = elements.saveNote.disabled;
   elements.sidebarComposer.hidden = false;
   resizeDraftInput();
-  elements.captureSubtitle.textContent = 'Markdown · #标签';
   [elements.draftInput,elements.sidebarDraft].forEach(function syncEditor(input){if(input.liveMarkdown&&input.liveMarkdown.getValue()!==state.draft.text)input.liveMarkdown.setValue(state.draft.text);});
   setStorageStatus(ui.storageWriteError);
 }
@@ -385,7 +420,7 @@ function cancelHide() {
 function scheduleHide(){
   cancelHide();
   /** @brief 检查当前是否允许自动收起。 @return {boolean} 是否应保留侧栏。 */
-  function keepVisible(){return ui.locked||ui.modal||ui.resizing||ui.searchOpen||window.NoteMenus&&window.NoteMenus.isOpen()||window.NoteInteractions&&(window.NoteInteractions.isBusy()||window.NoteInteractions.hasSelection())||(state.settings.protectEditing&&(ui.editing||(ui.composer&&(state.draft.text.trim()||state.draft.images.length||ui.pendingImages))||ui.expandedTags.size));}
+  function keepVisible(){return ui.locked||ui.modal||window.matchMedia&&window.matchMedia('(max-width: 480px)').matches||ui.resizing||ui.searchOpen||window.NoteMenus&&window.NoteMenus.isOpen()||window.NoteInteractions&&(window.NoteInteractions.isBusy()||window.NoteInteractions.hasSelection())||(state.settings.protectEditing&&(ui.editing||(ui.composer&&(state.draft.text.trim()||state.draft.images.length||ui.pendingImages))||ui.expandedTags.size));}
   if(keepVisible())return;
   ui.hideTimer=window.setTimeout(function hideAfterDelay(){if(!elements.sidebar.matches(':hover')&&!keepVisible())hideSidebar();},state.settings.hideDelay);
 }
@@ -476,6 +511,7 @@ function removeDraftImage(id) {
 function toast(message, action = null, error = false) {
   if (!elements.toastRegion) return;
   const item = el('div', 'toast' + (error ? ' error' : ''));
+  if (error) item.setAttribute('role', 'alert');
   item.append(icon(error ? 'alert' : 'check-circle'), el('span', '', message));
   if (action) {
     const control = el('button', 'toast-action', action.label);
@@ -488,13 +524,22 @@ function toast(message, action = null, error = false) {
   item.append(close);
   elements.toastRegion.append(item);
   while (elements.toastRegion.children.length > 3) elements.toastRegion.firstElementChild.remove();
-  window.setTimeout(function dismissToast() { item.remove(); }, action ? 9000 : 6000);
+  // 停留 6 秒，带撤销 9 秒；指针停在提示条上或焦点在提示条内时暂停计时（本次提出）。
+  let remaining = action ? 9000 : 6000, started = 0, timer = 0;
+  const resume = function resumeToast() { window.clearTimeout(timer); started = Date.now(); timer = window.setTimeout(function dismissToast() { item.remove(); }, remaining); };
+  const pause = function pauseToast() { window.clearTimeout(timer); remaining = Math.max(1000, remaining - (Date.now() - started)); };
+  item.addEventListener('pointerenter', pause);
+  item.addEventListener('pointerleave', function leaveToast() { if (!item.contains(document.activeElement)) resume(); });
+  item.addEventListener('focusin', pause);
+  item.addEventListener('focusout', function blurToast(event) { if (!item.contains(event.relatedTarget) && !item.matches(':hover')) resume(); });
+  resume();
 }
 
 /** 关闭当前对话框并恢复焦点。 */
 function closeModal() {
   elements.modalRoot.replaceChildren();
   ui.modal = null;
+  document.getElementById('sidebar-lock').classList.remove('is-linked');
   document.body.classList.remove('has-modal');
   if (ui.previousFocus && ui.previousFocus.isConnected && !ui.previousFocus.closest('[inert]')) ui.previousFocus.focus({ preventScroll: true });
   ui.previousFocus = null;
@@ -522,6 +567,8 @@ function openModal(title, className = '') {
   elements.modalRoot.replaceChildren(backdrop);
   document.body.classList.add('has-modal');
   ui.modal = className || 'dialog';
+  // 设置打开期间侧栏保持展开，固定按钮显示虚线圈，表示「临时固定」（T31）。
+  if (className === 'settings-modal') document.getElementById('sidebar-lock').classList.add('is-linked');
   window.setTimeout(function focusModal() { const focusable = modal.querySelector('[autofocus],input,textarea,select,button'); (focusable || modal).focus(); }, 30);
   return { modal: modal, body: body, footer: footer };
 }
@@ -723,6 +770,86 @@ function handleAction(event) {
   }
 }
 
+/* ==================== 高亮、键盘与复制 ==================== */
+/**
+ * @brief 高亮一张卡片：悬停与单击共用这一种状态（T66），指针离开后保持。
+ * @details 高亮的卡片是 Ctrl+C 复制与键盘操作的对象，也是列表唯一的 Tab 停靠点；它的按钮进入 Tab 顺序，
+ * 其余卡片的按钮只响应指针（interactions.md 3.2）。
+ * @param {string} id 记录标识，空值清除高亮。 @param {object} options focus 为真时把焦点移到卡片并滚动到可见位置。
+ */
+function setCurrentCard(id,options={}){
+  ui.currentId=id||'';
+  elements.noteList.querySelectorAll('.note-card').forEach(function mark(card){
+    const current=card.dataset.noteId===ui.currentId;card.classList.toggle('is-current',current);
+    if(current)card.setAttribute('aria-current','true');else card.removeAttribute('aria-current');
+    card.querySelectorAll('.note-emoji,.note-actions button,.note-bottom button,.note-expand').forEach(function tabStop(node){node.tabIndex=current?0:-1;});
+  });
+  syncCardTabStops();
+  if(options.focus){const card=currentCardElement();if(card){card.focus({preventScroll:true});card.scrollIntoView({block:'nearest'});}}
+}
+/** @brief 当前高亮的卡片元素。 @return {HTMLElement|null} 卡片。 */
+function currentCardElement(){return Array.from(elements.noteList.querySelectorAll('.note-card')).find(function same(card){return card.dataset.noteId===ui.currentId;})||null;}
+/** 列表只占一个 Tab 停靠点：编辑中或高亮的卡片，没有时是第一张。 */
+function syncCardTabStops(){
+  const cards=Array.from(elements.noteList.querySelectorAll('.note-card'));
+  const stop=cards.find(function editing(card){return card.classList.contains('is-editing');})||cards.find(function current(card){return card.dataset.noteId===ui.currentId;})||cards[0];
+  cards.forEach(function tabStop(card){card.tabIndex=card===stop?0:-1;});
+}
+
+/**
+ * @brief 卡片列表的键盘操作（interactions.md 3.2）。
+ * @details ↑ ↓ 移动并高亮，Home、End 到两端，Enter 编辑，Delete 移入回收站（先确认），
+ * Shift+F10 或菜单键在卡片左上角附近打开卡片菜单。只处理焦点落在卡片本身的按键，卡片内的按钮与编辑区各自处理。
+ * @param {KeyboardEvent} event 按键。
+ */
+function handleCardKeyboard(event){
+  if(event.defaultPrevented||event.isComposing||!event.target.matches('.note-card')||event.target.classList.contains('is-editing'))return;
+  const card=event.target,cards=Array.from(elements.noteList.querySelectorAll('.note-card')),index=cards.indexOf(card);
+  const note=state.notes.find(function same(n){return n.id===card.dataset.noteId;});if(!note)return;
+  const next=event.key==='ArrowDown'?cards[Math.min(cards.length-1,index+1)]:event.key==='ArrowUp'?cards[Math.max(0,index-1)]:event.key==='Home'?cards[0]:event.key==='End'?cards[cards.length-1]:null;
+  if(next&&!event.altKey&&!event.ctrlKey){event.preventDefault();setCurrentCard(next.dataset.noteId,{focus:true});return;}
+  if(event.key==='Enter'&&!event.ctrlKey&&!event.altKey&&!event.shiftKey){event.preventDefault();ui.skipCardClick=false;beginEdit(note.id);return;}
+  if(event.key==='Delete'&&!event.ctrlKey&&!event.altKey){event.preventDefault();setCurrentCard(note.id);requestDelete(note);return;}
+  if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();setCurrentCard(note.id);const box=card.getBoundingClientRect();if(window.NoteMenus)window.NoteMenus.open(note,{clientX:box.left+24,clientY:box.top+32});}
+}
+
+/** @brief 页签按 WAI-ARIA 页签模式：← → 切换并立即显示，Home、End 到两端。 @param {KeyboardEvent} event 按键。 */
+function handleTabKeyboard(event){
+  const tabs=Array.from(document.querySelectorAll('.sidebar-tabs [role="tab"]')),index=tabs.indexOf(event.target);
+  if(index<0||event.altKey||event.ctrlKey)return;
+  const next=event.key==='ArrowRight'?tabs[(index+1)%tabs.length]:event.key==='ArrowLeft'?tabs[(index-1+tabs.length)%tabs.length]:event.key==='Home'?tabs[0]:event.key==='End'?tabs[tabs.length-1]:null;
+  if(!next)return;event.preventDefault();next.click();next.focus();
+}
+
+/**
+ * @brief 复制高亮或多选的记录：有多选时是全部选中的记录，否则是高亮的那一张（interactions.md 第二节）。
+ * @return {boolean} 是否有可复制的记录。
+ */
+function copyCurrentOrSelected(){
+  if(!elements.sidebar.classList.contains('open'))return false;
+  const ids=window.NoteInteractions&&window.NoteInteractions.hasSelection()?window.NoteInteractions.selectedIds():[];
+  if(ids.length>1){
+    const chosen=state.notes.filter(function picked(note){return ids.includes(note.id);}).sort(compareNoteOrder);
+    const text=chosen.map(function plain(note){return (note.emoji||'📝')+' '+note.text;}).join('\n\n');
+    navigator.clipboard.writeText(text).then(function copied(){toast('已复制 '+chosen.length+' 条记录');},function denied(){toast('剪贴板权限受限，请逐条复制',null,true);});
+    return true;
+  }
+  const id=ids[0]||ui.currentId,note=id&&state.notes.find(function same(item){return item.id===id&&item.status!=='trash';});
+  if(!note)return false;copyNote(note);return true;
+}
+
+/**
+ * @brief 问号说明：悬停、获得焦点或点击时显示，Esc 关闭（components.md 第六节）。
+ * @param {HTMLElement|null} anchor 包含 .help-button 与 .help-text 的容器。
+ */
+function initializeHelp(anchor){
+  if(!anchor)return;const trigger=anchor.querySelector('.help-button'),message=anchor.querySelector('.help-text');
+  const show=function show(shown){message.hidden=!shown;trigger.setAttribute('aria-expanded',String(shown));};
+  trigger.addEventListener('click',function toggleHelp(){show(message.hidden);});trigger.addEventListener('focus',function focusHelp(){show(true);});trigger.addEventListener('blur',function blurHelp(){show(false);});
+  anchor.addEventListener('mouseenter',function hoverHelp(){show(true);});anchor.addEventListener('mouseleave',function leaveHelp(){if(document.activeElement!==trigger)show(false);});
+  trigger.addEventListener('keydown',function closeHelp(event){if(event.key==='Escape'&&!message.hidden){event.preventDefault();event.stopPropagation();show(false);}});
+}
+
 /** @brief 先退出当前操作，最后才收起窗口。 @param {KeyboardEvent} event 键盘事件。 */
 function handleKeyboard(event){
   if(event.defaultPrevented||event.isComposing||ui.composing||event.keyCode===229)return;
@@ -739,9 +866,15 @@ function handleKeyboard(event){
   if(escape&&window.NoteInteractions&&window.NoteInteractions.isBusy()){event.preventDefault();window.NoteInteractions.cancelGesture();return;}
   if(escape&&ui.resizing){event.preventDefault();finishSidebarResize(false);return;}
   if(escape&&ui.expandedTags.size){event.preventDefault();cancelTagRename();closeExpandedTags();return;}
-  if(escape&&ui.searchOpen){event.preventDefault();toggleSearch(false,{focusButton:true});return;}
+  // Esc 逐级退出（interactions.md 3.4）：菜单与弹窗、拖动、编辑、新建卡片失焦（有草稿时，草稿保留）、多选、搜索，最后收起侧栏。
+  if(escape&&elements.tagDropdown&&!elements.tagDropdown.hidden){event.preventDefault();closeTagMenu();elements.tagFilterButton.focus();return;}
   if(ui.editing&&(escape||event.ctrlKey&&event.key==='Enter')){event.preventDefault();if(escape)cancelEdit();else finishEdit();return;}
+  if(escape&&elements.sidebarComposer&&elements.sidebarComposer.contains(document.activeElement)&&(state.draft.text.trim()||state.draft.images.length)){event.preventDefault();document.activeElement.blur();ui.composer=false;return;}
   if(escape&&window.NoteInteractions&&window.NoteInteractions.hasSelection()){event.preventDefault();window.NoteInteractions.clearSelection();return;}
+  if(escape&&ui.searchOpen){event.preventDefault();ui.query='';elements.searchInput.value='';toggleSearch(false,{focusButton:true});renderNotes();return;}
+  // Ctrl+, 打开设置（本次提出），编辑中同样可用；Ctrl+C 复制高亮或多选的记录，有选中文字时保留浏览器的复制。
+  if(event.ctrlKey&&!event.shiftKey&&!event.altKey&&(event.key===','||event.code==='Comma')){event.preventDefault();openSettings();return;}
+  if((event.ctrlKey||event.metaKey)&&!event.shiftKey&&!event.altKey&&event.code==='KeyC'&&!ui.editing){const typing=event.target&&event.target.closest&&event.target.closest('input,textarea,select,[contenteditable="true"]'),selection=window.getSelection&&window.getSelection();if(!typing&&!(selection&&String(selection).trim())&&copyCurrentOrSelected()){event.preventDefault();return;}}
   if(!ui.sortPress&&(event.key==='Enter'||event.key===' ')){ui.skipCardClick=false;ui.consumeClick=false;}
   if(event.ctrlKey&&!event.shiftKey&&!event.altKey&&(event.code==='KeyF'||event.code==='KeyN')){
     event.preventDefault();ui.skipCardClick=false;if(event.code==='KeyF')toggleSearch(true);else{if(!finishEdit())return;showSidebar({focus:false});focusNewComposer();}return;
@@ -782,7 +915,7 @@ function changeSetting(event) {
 
 /** 连接页面元素并注册交互。 */
 function initialize() {
-  const ids = { resizer:'sidebar-resizer', versionButton:'app-version', tagDropdown:'tag-dropdown', tagFilterButton:'tag-filter-button', syncWarning:'sync-warning', workspaceNudge:'workspace-nudge', sidebar: 'sidebar', edgeTrigger: 'edge-trigger', capture: 'capture', noteList: 'note-list', listSummary: 'list-summary', searchInput: 'search-input', clearSearch: 'clear-search', storageStatus: 'storage-status', draftInput: 'draft-input', attachmentList: 'attachment-list', imagePicker: 'image-picker', charCount: 'capture-char-count', draftStatus: 'draft-status', saveNote: 'save-note', captureSubtitle: 'capture-subtitle', modalRoot: 'modal-root', toastRegion: 'toast-region' };
+  const ids = { resizer:'sidebar-resizer', versionButton:'app-version', tagDropdown:'tag-dropdown', tagFilterButton:'tag-filter-button', syncWarning:'sync-warning', workspaceNudge:'workspace-nudge', sidebar: 'sidebar', edgeTrigger: 'edge-trigger', capture: 'capture', noteList: 'note-list', listSummary: 'list-summary', searchInput: 'search-input', clearSearch: 'clear-search', storageStatus: 'storage-status', draftInput: 'draft-input', attachmentList: 'attachment-list', imagePicker: 'image-picker', charCount: 'capture-char-count', saveNote: 'save-note', modalRoot: 'modal-root', toastRegion: 'toast-region' };
   Object.entries(ids).forEach(function collectElement(entry) { elements[entry[0]] = document.getElementById(entry[1]); });
   elements.searchInput.type='text';elements.searchInput.setAttribute('role','searchbox');
   loadState();
@@ -833,17 +966,29 @@ function initialize() {
     if(ui.query.includes('#')){elements.tagDropdown.hidden=false;elements.tagFilterButton.setAttribute('aria-expanded','true');}
   });
   elements.clearSearch.addEventListener('click', function clearSearch() { ui.query = ''; elements.searchInput.value = ''; renderNotes(); elements.searchInput.focus(); });
-  elements.noteList.addEventListener('click',function editCard(event){
-    if(event.defaultPrevented||window.NoteInteractions&&(window.NoteInteractions.isBusy()||window.NoteInteractions.hasSelection())||ui.skipCardClick||ui.expandedTags.size||ui.sortPress&&ui.sortPress.active||event.target.closest('button,a,input,textarea,select,[contenteditable="true"]'))return;const card=event.target.closest('.note-card');if(!card||card.classList.contains('is-editing'))return;window.clearTimeout(ui.clickTimer);const epoch=ui.clickEpoch||0;ui.clickTimer=window.setTimeout(function editAfterClick(){if(epoch===(ui.clickEpoch||0)&&!ui.skipCardClick&&!ui.expandedTags.size&&!ui.sortPress)beginEdit(card.dataset.noteId);},550);
+  // 单击与悬停共用一种高亮（T66）：高亮的卡片是 Ctrl+C 与键盘操作的对象；双击进入编辑（interactions.md 第二、四节）。
+  elements.noteList.addEventListener('pointerover',function highlightOnHover(event){
+    if(event.pointerType==='touch'||ui.sortPress||window.NoteInteractions&&window.NoteInteractions.isBusy())return;
+    const card=event.target.closest('.note-card');if(card&&card.dataset.noteId!==ui.currentId&&!card.classList.contains('is-editing'))setCurrentCard(card.dataset.noteId);
   });
-  elements.noteList.addEventListener('dblclick',function copyCard(event){
+  elements.noteList.addEventListener('click',function highlightCard(event){
+    if(event.defaultPrevented||window.NoteInteractions&&(window.NoteInteractions.isBusy()||window.NoteInteractions.hasSelection())||ui.skipCardClick||ui.expandedTags.size||ui.sortPress&&ui.sortPress.active)return;
+    const card=event.target.closest('.note-card'),control=event.target.closest('button,a,input,textarea,select,[contenteditable="true"]');
+    if(!card){if(!control&&!event.target.closest('.sidebar-composer,.composer-sticky-slot'))setCurrentCard('');return;}
+    if(card.classList.contains('is-editing'))return;setCurrentCard(card.dataset.noteId,{focus:!control});
+  });
+  elements.noteList.addEventListener('dblclick',function editCardOnDoubleClick(event){
     if(event.defaultPrevented||window.NoteInteractions&&(window.NoteInteractions.isBusy()||window.NoteInteractions.hasSelection())||ui.skipCardClick||ui.sortPress&&ui.sortPress.active)return;
     const tag=event.target.closest('.tag-chip');if(tag){event.preventDefault();window.clearTimeout(ui.tagClickTimer);startTagRename(tag);return;}
-    if(event.target.closest('button,a,input,textarea,select,[contenteditable="true"]'))return;const card=event.target.closest('.note-card');if(!card||card.classList.contains('is-editing'))return;window.clearTimeout(ui.clickTimer);event.preventDefault();const note=state.notes.find(function same(n){return n.id===card.dataset.noteId;});if(note)copyNote(note);
+    if(event.target.closest('button,a,input,textarea,select,[contenteditable="true"]'))return;const card=event.target.closest('.note-card');if(!card||card.classList.contains('is-editing'))return;event.preventDefault();const selection=window.getSelection();if(selection&&selection.removeAllRanges)selection.removeAllRanges();beginEdit(card.dataset.noteId);
   });
-  elements.noteList.addEventListener('keydown', function editCardWithKeyboard(event) {
-    if ((event.key === 'Enter' || event.key === ' ') && event.target.matches('.note-card')) { event.preventDefault();ui.skipCardClick=false;beginEdit(event.target.dataset.noteId); }
+  elements.noteList.addEventListener('keydown', handleCardKeyboard);
+  // 键盘把焦点移到卡片上时同样选中这张卡片，与现有应用一致。
+  elements.noteList.addEventListener('focusin',function highlightOnFocus(event){
+    const card=event.target;if(card.classList&&card.classList.contains('note-card')&&card.dataset.noteId!==ui.currentId&&!card.classList.contains('is-editing'))setCurrentCard(card.dataset.noteId);
   });
+  document.querySelector('.sidebar-tabs').addEventListener('keydown', handleTabKeyboard);
+  initializeHelp(document.querySelector('#capture .help-anchor'));
   elements.sidebar.addEventListener('mouseenter', cancelHide);
   elements.sidebar.addEventListener('mouseleave', scheduleHide);
   elements.edgeTrigger.addEventListener('mouseenter', showSidebar);
@@ -910,7 +1055,8 @@ function renderTagMenu() {
     if(index===0&&(item.match||item.selected)){const manage=button('管理 #'+item.tag,'manage-tag','more');manage.dataset.tag=item.tag;group.append(manage);}menu.append(group);});
   const priority=menu.querySelector('.current-tag-row');if(priority)menu.prepend(priority);
   if(!candidates.length)menu.append(el('p','tag-menu-empty',ui.query?'没有匹配的标签':'输入 #标签 创建分组'));
-  const foot=el('div','tag-menu-footer');foot.append(el('span','',candidates.length>6?'另有 '+(candidates.length-6)+' 个标签，使用搜索查找':'搜索 #标签 可快速定位'),button('搜索','focus-tag-search','search','tag-search-button'));menu.append(foot);
+  // 底部只有「搜索标签」一项；候选之外还有标签时，右侧写「另有 N 个」（本次提出）。
+  const foot=el('div','tag-menu-footer'),search=button('搜索标签','focus-tag-search','search','tag-option tag-search-button');search.setAttribute('role','menuitem');if(candidates.length>6)search.append(el('span','tag-option-count','另有 '+(candidates.length-6)+' 个'));foot.append(search);menu.append(foot);
 }
 /** 关闭标签菜单。 */
 function closeTagMenu(){if(elements.tagDropdown){elements.tagDropdown.hidden=true;elements.tagFilterButton.setAttribute('aria-expanded','false');}}
@@ -975,20 +1121,29 @@ function scheduleTagLayout(){if(ui.tagFrame)return;const update=function updateC
 /** @brief 只更新拖动预览，释放后才写入设置。 @param {number} width 目标宽度。 */
 function previewSidebarWidth(width){document.documentElement.style.setProperty('--sidebar-width',width+'px');elements.sidebar.style.width='min('+width+'px,100vw)';elements.resizer.setAttribute('aria-valuenow',String(width));scheduleTagLayout();}
 /** @brief 结束拖动并保存或取消。 @param {boolean} commit 是否保存。 */
-function finishSidebarResize(commit=true){if(!ui.resizing)return;const drag=ui.resizing;ui.resizing=null;document.body.classList.remove('is-resizing-sidebar');try{if(elements.resizer.hasPointerCapture&&elements.resizer.hasPointerCapture(drag.pointerId))elements.resizer.releasePointerCapture(drag.pointerId);}catch(error){/* 系统可能已取消捕获。 */}if(commit&&drag.current!==drag.width){const settings={...state.settings,width:drag.current};if(!persistSnapshot(state.notes,state.draft,settings)){previewSidebarWidth(drag.width);toast('宽度未保存',null,true);return;}}else previewSidebarWidth(drag.width);elements.resizer.dataset.edge=state.settings.edge;}
+function finishSidebarResize(commit=true){if(!ui.resizing)return;const drag=ui.resizing;ui.resizing=null;document.body.classList.remove('is-resizing-sidebar');if(!elements.resizer.matches(':hover'))elements.resizer.classList.remove('is-armed');try{if(elements.resizer.hasPointerCapture&&elements.resizer.hasPointerCapture(drag.pointerId))elements.resizer.releasePointerCapture(drag.pointerId);}catch(error){/* 系统可能已取消捕获。 */}if(commit&&drag.current!==drag.width){const settings={...state.settings,width:drag.current};if(!persistSnapshot(state.notes,state.draft,settings)){previewSidebarWidth(drag.width);toast('宽度未保存',null,true);return;}}else previewSidebarWidth(drag.width);elements.resizer.dataset.edge=state.settings.edge;}
 /** 连接指针拖动、取消与键盘宽度调整。 */
 function initializeSidebarResize(){
   const handle=elements.resizer;handle.setAttribute('aria-valuenow',String(state.settings.width));
+  // 指针移上去立即是左右箭头，停留 400ms 后才高亮，只是划过不会闪一下强调色（本次提出）。
+  let armTimer=0;handle.addEventListener('pointerenter',function armLater(){window.clearTimeout(armTimer);armTimer=window.setTimeout(function arm(){handle.classList.add('is-armed');},400);});handle.addEventListener('pointerleave',function disarm(){window.clearTimeout(armTimer);if(!ui.resizing)handle.classList.remove('is-armed');});
   handle.addEventListener('pointerdown',function resizeStarted(event){if(event.button!==0||ui.modal)return;event.preventDefault();cancelHide();ui.resizing={x:event.clientX,width:state.settings.width,current:state.settings.width,edge:state.settings.edge,pointerId:event.pointerId};document.body.classList.add('is-resizing-sidebar');if(handle.setPointerCapture)handle.setPointerCapture(event.pointerId);});
-  window.addEventListener('pointermove',function resizing(event){if(!ui.resizing)return;const drag=ui.resizing;if(event.pointerId!==undefined&&event.pointerId!==drag.pointerId)return;const delta=(event.clientX-drag.x)*(drag.edge==='right'?-1:1);drag.current=Math.round(Math.max(360,Math.min(720,window.innerWidth,drag.width+delta)));previewSidebarWidth(drag.current);});
+  window.addEventListener('pointermove',function resizing(event){if(!ui.resizing)return;const drag=ui.resizing;if(event.pointerId!==undefined&&event.pointerId!==drag.pointerId)return;const zoom=parseFloat(window.getComputedStyle(elements.sidebar).zoom)||1,delta=(event.clientX-drag.x)*(drag.edge==='right'?-1:1)/zoom;drag.current=Math.round(Math.max(360,Math.min(720,window.innerWidth/zoom,drag.width+delta))/4)*4;previewSidebarWidth(drag.current);});
   window.addEventListener('pointerup',function resizeFinished(){finishSidebarResize(true);});window.addEventListener('pointercancel',function resizeCancelled(){finishSidebarResize(false);});window.addEventListener('blur',function resizeFocusLost(){finishSidebarResize(false);});window.addEventListener('resize',function resizeLayout(){scheduleTagLayout();refreshSearchSummary();});
-  handle.addEventListener('keydown',function keyboardResize(event){if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;event.preventDefault();const delta=(event.key==='ArrowLeft'?1:-1)*(state.settings.edge==='right'?1:-1)*16;const width=Math.max(360,Math.min(720,state.settings.width+delta));if(persistSnapshot(state.notes,state.draft,{...state.settings,width:width}))previewSidebarWidth(width);});
+  handle.addEventListener('keydown',function keyboardResize(event){if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;event.preventDefault();const delta=(event.key==='ArrowLeft'?1:-1)*(state.settings.edge==='right'?1:-1)*(event.shiftKey?40:8);const width=Math.max(360,Math.min(720,state.settings.width+delta));if(persistSnapshot(state.notes,state.draft,{...state.settings,width:width}))previewSidebarWidth(width);});
 }
 /* ==================== 版本与更新 ==================== */
 /** 刷新版号及可用更新标记。 */
-function refreshVersionBadge(){const flags=window.PrototypeFlags||{version:'0.5.0',availableVersion:''};if(ui.availableVersion===undefined)ui.availableVersion=flags.availableVersion;const label=elements.versionButton.querySelector('span');if(label)label.textContent=(ui.currentVersion||flags.version)+' PREVIEW';const dot=elements.versionButton.querySelector('.update-dot');if(dot)dot.hidden=!ui.availableVersion;elements.versionButton.title=ui.availableVersion?'可用更新 '+ui.availableVersion:'版本与更新日志';}
+function refreshVersionBadge(){const flags=window.PrototypeFlags||{version:'0.5.0',availableVersion:''};if(ui.availableVersion===undefined)ui.availableVersion=flags.availableVersion;const version=ui.currentVersion||flags.version;const label=elements.versionButton.querySelector('.version-label');if(label)label.textContent='v'+version;const badge=elements.versionButton.querySelector('.update-badge');if(badge)badge.hidden=!ui.availableVersion;elements.versionButton.classList.toggle('has-update',Boolean(ui.availableVersion));const name=ui.availableVersion?'发现新版本 '+ui.availableVersion+'，点击查看更新内容':'版本 '+version+'，查看更新日志';elements.versionButton.setAttribute('aria-label',name);elements.versionButton.title=name;}
+/** 发现新版本：列出这次即将更新的内容，可以「立即更新」或「稍后」，稍后之后角标保留（本次提出；浏览器中为模拟更新）。 */
+function showUpdate(){
+  const dialog=openModal('发现新版本','update-modal');dialog.body.append(el('p','update-summary','SideNotes '+ui.availableVersion+' · 当前 '+(ui.currentVersion||'0.5.0')));
+  const notes=el('ul','update-notes');['五套主题：终端、杂志、记录纸、Windows 11、磨砂玻璃','操作按钮与时间共用标题行右侧，标题最多两行','键盘：↑ ↓ 移动，Enter 编辑，Delete 移入回收站'].forEach(function item(text){notes.append(el('li','',text));});dialog.body.append(notes);
+  const later=button('稍后','close-modal','','button secondary'),now=button('立即更新','','download','button primary');now.addEventListener('click',function updateNow(){ui.currentVersion=ui.availableVersion;ui.availableVersion='';refreshVersionBadge();closeModal();toast('更新演示完成');});dialog.footer.append(later,now);
+}
 /** 显示更新日志及更新服务入口。 */
 function showChangelog(){
+  if(ui.availableVersion){showUpdate();return;}
   const dialog=openModal('版本与更新','changelog-modal');dialog.body.append(el('p','version-summary','SideNotes '+(ui.currentVersion||'0.5.0')+' PREVIEW'));
   const log=el('div','changelog-list');[['0.5.0','失焦保存、退出层级、开栏聚焦、长按与批量排序、卡片菜单及折叠、回收确认和新版速记浮窗。'],['0.4.1','修复 Markdown 完整复制、按页签新建、侧栏打开聚焦、搜索摘要与设置布局。'],['0.4.0','长按排序、编辑确认与取消、Ctrl+F紧凑搜索、富文本和图片复制、重新组织设置布局。'],['0.3.0','Emoji、实时 Markdown 编辑、每批10条增量列表、侧栏拖动、字体搜索与双击复制。'],['0.2.0','标签分组、Markdown预览、分类设置、材质主题和备份流程。'],['0.1.0','侧栏、快捷速记、共享草稿与本地存储。']].forEach(function entry(item){const row=el('section','changelog-entry');row.append(el('h3','',item[0]),el('p','',item[1]));log.append(row);});dialog.body.append(log);
   const actions=el('div','update-actions');const check=button('检查更新','','restore','button secondary');check.addEventListener('click',function checkUpdate(){if(window.PrototypeFlags.demo){ui.availableVersion='0.5.1';refreshVersionBadge();toast('已显示更新提示示例');showChangelog();}else toast('更新服务待桌面端接入');});actions.append(check);

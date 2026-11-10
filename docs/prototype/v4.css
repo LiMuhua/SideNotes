@@ -19,7 +19,7 @@
 .note-card.is-drop-target .note-content{opacity:.8}
 
 /* 待办控件保持可点击，聚焦时不挤动文字。 */
-.md-task-toggle{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:0 0 15px;width:15px;height:15px;min-width:15px;min-height:15px;margin:0 5px 0 0;padding:0;vertical-align:-2px;border:1px solid color-mix(in srgb,var(--subtle) 60%,var(--line));border-radius:3px;background:var(--card);color:var(--accent);font:11px/1 'Segoe UI Symbol','Segoe UI',sans-serif;cursor:pointer;user-select:none;accent-color:var(--accent)}
+.md-task-toggle{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:0 0 15px;width:15px;height:15px;min-width:15px;min-height:15px;margin:0 5px 0 0;padding:0;vertical-align:-2px;border:1px solid color-mix(in srgb,var(--subtle) 60%,var(--line));border-radius:3px;background:var(--card);color:var(--accent);font:11px/1 var(--sn-font-ui);cursor:pointer;user-select:none;accent-color:var(--accent)}
 .md-task-toggle:hover{border-color:var(--accent);background:var(--accent-soft)}
 .md-task-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .md-task-toggle[aria-checked=true],.md-task-toggle[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
