@@ -104,6 +104,8 @@ function normalizeSettings(value = {}) {
     theme: ['light','dark','system'].includes(value.theme) ? value.theme : 'light',
     surface: surfaces.normalizeSurface(value.surface),
     fontFamily: surfaces.normalizeFontFamily(value.fontFamily, value.version),
+    // 应用图标：内置图标的 id，或 custom 表示上传的图片（图片单独保存，见 app-icons.js）。
+    appIcon: window.SideNotesAppIcons.normalize(value.appIcon),
     fontSize: Math.max(12,Math.min(20,Number(value.fontSize)||16)),
     edge: value.edge === 'left' ? 'left' : 'right', width: Math.min(720,Math.max(360,Number(value.width)||416)),
     hideDelay: [300,600,1000].includes(Number(value.hideDelay)) ? Number(value.hideDelay) : 600,

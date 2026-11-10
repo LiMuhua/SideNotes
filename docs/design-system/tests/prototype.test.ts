@@ -5,6 +5,7 @@
  * - index.html 用相对路径引用 base.css 与五套主题的令牌文件：令牌在旧样式之前，theme.css 在最后；引用的文件都存在。
  * - theme.css 只引用令牌与运行时变量，确需固定的数值在行尾注明「固定：原因」；旧样式不再写死颜色，也不再使用旧的主题属性。
  * - 原型样式引用的变量都有来源：令牌、原型样式自己定义的变量（旧样式的别名）、settings.js 写在根节点上的运行时变量。
+ * - app-icons.js 的内置图标清单与 src-tauri/icons/builtin/manifest.json 一致，图片地址都存在；上传的图片单独保存、按约定校验。
  */
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -92,6 +93,74 @@ describe('主题结构 surfaces.js', () => {
   });
 });
 
+interface Manifest {
+  default: string;
+  icons: Array<{ id: string; number: string; name: string }>;
+}
+
+interface PrototypeAppIcons {
+  ICONS: ReadonlyArray<{ id: string; number: string; name: string }>;
+  DEFAULT_ICON: string;
+  CUSTOM_ICON: string;
+  CORNER_RATIO: number;
+  normalize(value: unknown): string;
+  source(id: string): string;
+  readCustom(): string;
+  writeCustom(url: string): boolean;
+  resolve(value: unknown): { id: string; src: string; type: string };
+}
+
+/** 在独立的上下文中执行 app-icons.js；localStorage 用内存中的表代替。 */
+function loadAppIcons(): PrototypeAppIcons {
+  const storage = new Map<string, string>();
+  const localStorage = {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => void storage.set(key, String(value)),
+    removeItem: (key: string) => void storage.delete(key),
+  };
+  const context: { window: { SideNotesAppIcons?: PrototypeAppIcons }; localStorage: typeof localStorage } = { window: {}, localStorage };
+  runInNewContext(readPrototypeFile('app-icons.js'), context);
+  if (!context.window.SideNotesAppIcons) throw new Error('app-icons.js 没有定义 window.SideNotesAppIcons');
+  return context.window.SideNotesAppIcons;
+}
+
+describe('应用图标 app-icons.js', () => {
+  const icons = loadAppIcons();
+  const manifest = JSON.parse(readFileSync(designPath('../../src-tauri/icons/builtin/manifest.json'), 'utf-8')) as Manifest;
+
+  it('内置图标的清单与 manifest.json 一致，默认图标排第一', () => {
+    expect(icons.ICONS.map(({ id, number, name }) => ({ id, number, name }))).toEqual(manifest.icons);
+    expect(icons.DEFAULT_ICON).toBe(manifest.default);
+    expect(icons.ICONS[0].id).toBe(manifest.default);
+    expect(icons.CORNER_RATIO).toBe(14 / 64);
+  });
+
+  it('每个内置图标的图片都存在：默认图标用设计系统中的副本，其余引用随应用打包的资源', () => {
+    for (const { id } of icons.ICONS) {
+      const source = icons.source(id);
+      expect(existsSync(resolvePath(PROTOTYPE_ROOT, source)), source).toBe(true);
+    }
+    expect(icons.source(manifest.default)).toBe('../design-system/assets/app-icon.svg');
+  });
+
+  it('设置中的取值：内置图标与 custom 原样保留，找不到的按默认处理', () => {
+    for (const { id } of icons.ICONS) expect(icons.normalize(id)).toBe(id);
+    expect(icons.normalize('custom')).toBe('custom');
+    for (const value of ['removed-icon', '', undefined, null, 211]) expect(icons.normalize(value)).toBe(manifest.default);
+  });
+
+  it('上传的图片只接受 PNG 的 data URL；图片不在时按默认图标显示', () => {
+    expect(icons.resolve('custom')).toEqual({ id: manifest.default, src: '../design-system/assets/app-icon.svg', type: 'image/svg+xml' });
+    const png = 'data:image/png;base64,iVBORw0KGgo=';
+    expect(icons.writeCustom(png)).toBe(true);
+    expect(icons.resolve('custom')).toEqual({ id: 'custom', src: png, type: 'image/png' });
+    expect(icons.writeCustom('data:image/png;base64,' + 'A'.repeat(1_500_000))).toBe(false);
+    expect(icons.readCustom()).toBe(png);
+    expect(icons.writeCustom('')).toBe(true);
+    expect(icons.readCustom()).toBe('');
+  });
+});
+
 describe('页面引用 index.html', () => {
   const html = readPrototypeFile('index.html');
   const stylesheets = [...html.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map((match) => match[1]);
@@ -111,11 +180,13 @@ describe('页面引用 index.html', () => {
     expect(missing).toEqual([]);
   });
 
-  it('surfaces.js 在设置与主程序之前加载', () => {
+  it('surfaces.js 与 app-icons.js 在设置与主程序之前加载', () => {
     const position = (name: string) => scripts.indexOf(name);
-    expect(position('surfaces.js')).toBeGreaterThanOrEqual(0);
-    expect(position('surfaces.js')).toBeLessThan(position('settings.js'));
-    expect(position('surfaces.js')).toBeLessThan(position('app.js'));
+    for (const module of ['surfaces.js', 'app-icons.js']) {
+      expect(position(module), module).toBeGreaterThanOrEqual(0);
+      expect(position(module), module).toBeLessThan(position('settings.js'));
+      expect(position(module), module).toBeLessThan(position('app.js'));
+    }
   });
 
   it('根节点在脚本运行前就带默认主题的属性，避免首屏闪烁', () => {

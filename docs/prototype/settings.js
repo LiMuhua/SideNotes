@@ -356,6 +356,390 @@ window.SideNotesSettings = (function createSettingsController() {
     const demo = document.getElementById('demo-open-sidebar');
     if (demo && demo.querySelector('use')) demo.querySelector('use').setAttribute('href', '#i-arrow-' + settings.edge);
     if (demo && demo.querySelector('span')) demo.querySelector('span').textContent = '打开侧栏';
+    applyAppIcon();
+  }
+
+  /* ==================== 应用图标 ==================== */
+
+  /** 可以上传的图片：浏览器与 WebView2 都能解码的常见格式，最大 10 MB（components.md 7.2）。 */
+  const ICON_ACCEPT = 'image/png,image/jpeg,image/webp,image/gif,image/bmp,image/svg+xml,image/x-icon,.ico';
+  const ICON_MAX_BYTES = 10 * 1024 * 1024;
+  /** 裁好的图标边长；短边小于 ICON_SHARP_SIZE 的图片，在桌面与资源管理器的大图标里会发虚。 */
+  const ICON_OUTPUT_SIZE = 256;
+  const ICON_SHARP_SIZE = 256;
+  /** 最多放大到刚好铺满时的几倍。 */
+  const ICON_MAX_ZOOM = 4;
+  /** 预览的三种实际尺寸：托盘、任务栏、桌面（100% 缩放）。 */
+  const ICON_PREVIEW_SIZES = [16, 24, 48];
+
+  /** 应用图标作用于网页图标与各处的品牌标记：页面左上角、侧栏标题区与速记浮窗；关于页在渲染时读取。 */
+  function applyAppIcon() {
+    const current = window.SideNotesAppIcons.resolve(state.settings.appIcon);
+    document.querySelectorAll('img.brand-mark').forEach(function mark(node) { if (node.getAttribute('src') !== current.src) node.setAttribute('src', current.src); });
+    const favicon = document.querySelector('link[rel="icon"]');
+    if (favicon && favicon.getAttribute('href') !== current.src) {
+      favicon.type = current.type;
+      favicon.setAttribute('href', current.src);
+    }
+  }
+
+  /** @brief 选用应用图标，重绘后焦点留在选中的一格。 @param {string} id 内置图标 id 或 custom。 */
+  function chooseAppIcon(id) {
+    if (save({ appIcon: id })) { renderPanel(); focusChecked('应用图标'); }
+  }
+
+  /**
+   * @brief 图标格：单选按钮，图标铺满格子；名称用工具提示显示，格子本身不写字。
+   * @param {string} label 名称。 @param {string} src 图片地址。 @param {boolean} selected 是否选中。 @param {Function} run 选用动作。
+   * @return {HTMLButtonElement} 图标格。
+   */
+  function iconChoice(label, src, selected, run) {
+    const node = el('button', 'icon-choice' + (selected ? ' selected' : ''));
+    node.type = 'button';
+    node.setAttribute('role', 'radio');
+    node.setAttribute('aria-checked', String(selected));
+    node.setAttribute('aria-label', label);
+    node.dataset.tooltip = label;
+    node.tabIndex = selected ? 0 : -1;
+    const image = el('img');
+    image.src = src;
+    image.alt = '';
+    image.draggable = false;
+    node.append(image);
+    node.addEventListener('click', run);
+    return node;
+  }
+
+  /**
+   * @brief 应用图标设置：6 个内置图标在前，默认图标排第一，最后是自定义格；单击即换，立即生效（components.md 7.2）。
+   * @details 自定义格没有图片时是虚线加号格，点击选择图片；上传后显示裁好的图片，右下角的编辑按钮打开「更换图片…」「移除」。
+   * @return {HTMLElement} 图标行。
+   */
+  function appIconPicker() {
+    const icons = window.SideNotesAppIcons;
+    const current = icons.resolve(state.settings.appIcon).id;
+    const custom = icons.readCustom();
+    const picker = el('div', 'icon-picker');
+    picker.setAttribute('role', 'radiogroup');
+    picker.setAttribute('aria-label', '应用图标');
+    icons.ICONS.forEach(function builtinIcon(item) {
+      const label = item.id === icons.DEFAULT_ICON ? item.name + '（默认）' : item.name;
+      picker.append(iconChoice(label, icons.source(item.id), current === item.id, function chooseBuiltin() { chooseAppIcon(item.id); }));
+    });
+    const input = el('input');
+    input.type = 'file';
+    input.accept = ICON_ACCEPT;
+    input.hidden = true;
+    input.addEventListener('change', function pickedIcon() {
+      const file = input.files && input.files[0];
+      // 清空选择，下次选同一个文件也会触发 change。
+      input.value = '';
+      if (file) loadIconImage(file);
+    });
+    if (custom) {
+      const slot = el('span', 'icon-custom');
+      slot.append(iconChoice('自定义图标', custom, current === icons.CUSTOM_ICON, function chooseCustom() { chooseAppIcon(icons.CUSTOM_ICON); }));
+      customIconMenu(slot, input);
+      picker.append(slot);
+    } else {
+      const add = el('button', 'icon-choice is-add');
+      add.type = 'button';
+      add.setAttribute('aria-label', '上传图片作为应用图标');
+      add.dataset.tooltip = '上传图片';
+      add.append(icon('plus'));
+      add.addEventListener('click', function chooseFile() { input.click(); });
+      picker.append(add);
+    }
+    picker.append(input);
+    radioKeyboard(picker, '应用图标');
+    return picker;
+  }
+
+  /** @brief 菜单项。 @param {string} label 名称。 @param {string} glyph 图标。 @param {Function} run 动作。 @param {boolean} danger 是否为删除类操作。 @return {HTMLButtonElement} 菜单项。 */
+  function iconMenuItem(label, glyph, run, danger = false) {
+    const item = el('button', 'icon-edit-item' + (danger ? ' is-danger' : ''));
+    item.type = 'button';
+    item.tabIndex = -1;
+    item.setAttribute('role', 'menuitem');
+    item.append(icon(glyph), el('span', '', label));
+    item.addEventListener('click', run);
+    return item;
+  }
+
+  /**
+   * @brief 自定义图标右下角的编辑按钮与菜单：更换图片、移除。方向键在菜单项之间移动，Esc 或焦点离开时收起。
+   * @param {HTMLElement} slot 自定义格的容器。 @param {HTMLInputElement} input 选择图片的输入框。
+   */
+  function customIconMenu(slot, input) {
+    const trigger = el('button', 'icon-edit');
+    trigger.type = 'button';
+    trigger.title = '更换或移除';
+    trigger.setAttribute('aria-label', '更换或移除自定义图标');
+    trigger.setAttribute('aria-haspopup', 'menu');
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.append(icon('edit'));
+    const menu = el('div', 'icon-edit-menu');
+    menu.id = 'icon-edit-menu-' + createId();
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', '自定义图标');
+    menu.hidden = true;
+    trigger.setAttribute('aria-controls', menu.id);
+    /** @brief 收起菜单。 @param {boolean} restore 是否把焦点还给编辑按钮。 */
+    function closeMenu(restore) {
+      if (menu.hidden) return;
+      menu.hidden = true;
+      trigger.setAttribute('aria-expanded', 'false');
+      if (restore) trigger.focus();
+    }
+    const items = [
+      iconMenuItem('更换图片…', 'upload', function replaceImage() { closeMenu(false); input.click(); }),
+      iconMenuItem('移除', 'trash', function removeImage() { closeMenu(false); removeCustomIcon(); }, true)
+    ];
+    menu.append(items[0], el('span', 'icon-edit-separator'), items[1]);
+    trigger.addEventListener('click', function toggleMenu() {
+      if (!menu.hidden) { closeMenu(true); return; }
+      menu.hidden = false;
+      trigger.setAttribute('aria-expanded', 'true');
+      items[0].focus();
+    });
+    menu.addEventListener('keydown', function menuKeyboard(event) {
+      const index = items.indexOf(document.activeElement);
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeMenu(true); }
+      else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); items[(index + (event.key === 'ArrowDown' ? 1 : items.length - 1) + items.length) % items.length].focus(); }
+      else if (event.key === 'Home' || event.key === 'End') { event.preventDefault(); items[event.key === 'Home' ? 0 : items.length - 1].focus(); }
+      else if (event.key === 'Tab') closeMenu(false);
+    });
+    slot.addEventListener('focusout', function leaveMenu(event) { if (!slot.contains(event.relatedTarget)) closeMenu(false); });
+    slot.append(trigger, menu);
+  }
+
+  /** 移除上传的图片：正在使用时回到默认图标；提示条可以撤销。 */
+  function removeCustomIcon() {
+    const icons = window.SideNotesAppIcons;
+    const previous = icons.readCustom();
+    const using = state.settings.appIcon === icons.CUSTOM_ICON;
+    if (!icons.writeCustom('')) { toast('自定义图标未能移除，请重试', null, true); return; }
+    if (using) save({ appIcon: icons.DEFAULT_ICON });
+    else apply();
+    renderPanel();
+    const add = activeDialog && activeDialog.modal.querySelector('.icon-choice.is-add');
+    if (add) add.focus();
+    toast(using ? '已移除自定义图标，换回默认图标' : '已移除自定义图标', { label: '撤销', run: function undoRemove() {
+      if (!icons.writeCustom(previous)) { toast('无法恢复自定义图标', null, true); return; }
+      if (using) save({ appIcon: icons.CUSTOM_ICON });
+      else apply();
+      renderPanel();
+    } });
+  }
+
+  /** @brief 读取选好的图片，成功后打开裁切弹窗；过大或读不出时提示，不做改动。 @param {File} file 图片文件。 */
+  function loadIconImage(file) {
+    if (file.size > ICON_MAX_BYTES) { toast('图片不能超过 10 MB', null, true); return; }
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = function loadedIcon() {
+      // 没有固有尺寸的 SVG 按 512 × 512 处理。
+      openIconCrop({ url: url, element: image, width: image.naturalWidth || 512, height: image.naturalHeight || 512 });
+    };
+    image.onerror = function brokenIcon() {
+      URL.revokeObjectURL(url);
+      toast('无法读取这张图片，请换一张 PNG、JPG 或 SVG 图片', null, true);
+    };
+    image.src = url;
+  }
+
+  /**
+   * @brief 「调整应用图标」弹窗：拖动移动，滚轮以指针为中心缩放，方向键微调（Shift 移得更多），加号与减号缩放。
+   * @details 视图以裁切框的边长为单位：scale 是每个图片像素占的长度，x、y 是图片左上角相对裁切框的位置。
+   * 同一个视图既画大的裁切框，也画 16px 的预览，最后按同样的比例画到 256 × 256 的画布上。
+   * 刚打开时图片铺满裁切框并居中；最小缩到完整显示（空出的部分透明），最大放大到铺满时的 4 倍；
+   * 图片比裁切框大的方向上不留空边。打开时焦点在「使用」上，「取消」、Esc 或关闭按钮不做改动。
+   * @param {{url: string, element: HTMLImageElement, width: number, height: number}} source 选好的图片。
+   */
+  function openIconCrop(source) {
+    const width = source.width;
+    const height = source.height;
+    const cover = 1 / Math.min(width, height);
+    const contain = 1 / Math.max(width, height);
+    const maximum = cover * ICON_MAX_ZOOM;
+    /** @brief 校正视图：比裁切框大的方向不留空边，比裁切框小时居中。 @param {object} next 视图。 @return {object} 校正后的视图。 */
+    function clampView(next) {
+      const w = width * next.scale;
+      const h = height * next.scale;
+      return {
+        scale: next.scale,
+        x: w >= 1 - 1e-9 ? Math.min(0, Math.max(1 - w, next.x)) : (1 - w) / 2,
+        y: h >= 1 - 1e-9 ? Math.min(0, Math.max(1 - h, next.y)) : (1 - h) / 2
+      };
+    }
+    let view = clampView({ scale: cover, x: (1 - width * cover) / 2, y: (1 - height * cover) / 2 });
+    let rounded = true;
+    let drag = null;
+    let close = null;
+    const images = [];
+    const frames = [];
+    /** @return {HTMLImageElement} 按视图摆放的图片，裁切框与各个预览各放一张。 */
+    function cropImage() {
+      const image = el('img');
+      image.src = source.url;
+      image.alt = '';
+      image.draggable = false;
+      images.push(image);
+      return image;
+    }
+
+    const headingId = 'icon-crop-title-' + createId();
+    const dialog = el('section', 'settings-confirm-dialog icon-crop-dialog');
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    dialog.setAttribute('aria-labelledby', headingId);
+    const header = el('header', 'settings-confirm-header');
+    const heading = el('h3', '', '调整应用图标');
+    heading.id = headingId;
+    const closeButton = action('关闭', function closeCrop() { close(); }, 'x', 'icon-button');
+    closeButton.setAttribute('aria-label', '关闭');
+    header.append(heading, closeButton);
+
+    const stage = el('div', 'icon-crop-stage');
+    stage.tabIndex = 0;
+    stage.setAttribute('role', 'group');
+    stage.setAttribute('aria-label', '裁切区域：拖动移动图片，滚轮缩放，方向键微调');
+    stage.append(cropImage());
+    frames.push(stage);
+    const zoomOut = action('缩小', function zoomOutIcon() { zoomTo(view.scale / 1.25); }, 'minus', 'icon-button');
+    const zoomIn = action('放大', function zoomInIcon() { zoomTo(view.scale * 1.25); }, 'plus', 'icon-button');
+    const range = el('input', 'icon-crop-range');
+    range.type = 'range';
+    range.min = String(contain);
+    range.max = String(maximum);
+    range.step = 'any';
+    range.setAttribute('aria-label', '缩放');
+    range.addEventListener('input', function slideZoom() { zoomTo(Number(range.value)); });
+    const zoomRow = el('div', 'icon-crop-zoom');
+    zoomRow.append(zoomOut, range, zoomIn);
+    const main = el('div', 'icon-crop-main');
+    main.append(stage, zoomRow);
+
+    const side = el('div', 'icon-crop-side');
+    side.append(el('span', 'icon-crop-caption', '托盘、任务栏与桌面'));
+    ['light', 'dark'].forEach(function previewRow(tone) {
+      const line = el('div', 'icon-crop-previews is-' + tone);
+      line.setAttribute('aria-hidden', 'true');
+      ICON_PREVIEW_SIZES.forEach(function previewSize(size) {
+        const frame = el('span', 'icon-crop-preview is-' + size);
+        frame.append(cropImage());
+        frames.push(frame);
+        line.append(frame);
+      });
+      side.append(line);
+    });
+    const roundSwitch = toggle('圆角', true, function roundedChanged(value) { rounded = value; render(); return true; });
+    const roundRow = el('label', 'icon-crop-round');
+    roundRow.append(el('span', '', '圆角'), roundSwitch);
+    side.append(roundRow);
+    const body = el('div', 'icon-crop');
+    body.append(main, side);
+    dialog.append(header, body);
+    if (Math.min(width, height) < ICON_SHARP_SIZE) dialog.append(el('p', 'icon-crop-warning', '图片只有 ' + width + ' × ' + height + ' 像素，桌面与资源管理器中的大图标会发虚。'));
+
+    /** @return {string} 按裁切结果画出的 256 × 256 PNG；圆角与内置图标相同，画不出时为空字符串。 */
+    function renderIcon() {
+      const canvas = document.createElement('canvas');
+      canvas.width = ICON_OUTPUT_SIZE;
+      canvas.height = ICON_OUTPUT_SIZE;
+      const context = canvas.getContext('2d');
+      if (!context) return '';
+      if (rounded) {
+        context.beginPath();
+        context.roundRect(0, 0, ICON_OUTPUT_SIZE, ICON_OUTPUT_SIZE, ICON_OUTPUT_SIZE * window.SideNotesAppIcons.CORNER_RATIO);
+        context.clip();
+      }
+      context.imageSmoothingQuality = 'high';
+      context.drawImage(source.element, view.x * ICON_OUTPUT_SIZE, view.y * ICON_OUTPUT_SIZE, width * view.scale * ICON_OUTPUT_SIZE, height * view.scale * ICON_OUTPUT_SIZE);
+      try { return canvas.toDataURL('image/png'); } catch (error) { return ''; }
+    }
+    const footer = el('footer', 'settings-confirm-actions');
+    const cancel = action('取消', function cancelCrop() { close(); });
+    const use = action('使用', function useIcon() {
+      const url = renderIcon();
+      if (!url) { toast('无法处理这张图片，请换一张', null, true); return; }
+      if (!window.SideNotesAppIcons.writeCustom(url)) { toast('浏览器存储空间不足，图标未保存', null, true); return; }
+      close();
+      if (save({ appIcon: window.SideNotesAppIcons.CUSTOM_ICON })) {
+        renderPanel();
+        focusChecked('应用图标');
+        toast('已换成自定义图标');
+      }
+    }, '', 'button primary compact');
+    footer.append(cancel, use);
+    dialog.append(footer);
+
+    /** 按视图摆放所有图片，同步滑块、缩放按钮与圆角。 */
+    function render() {
+      images.forEach(function place(image) {
+        image.style.left = view.x * 100 + '%';
+        image.style.top = view.y * 100 + '%';
+        image.style.width = width * view.scale * 100 + '%';
+        image.style.height = height * view.scale * 100 + '%';
+      });
+      frames.forEach(function corner(frame) { frame.classList.toggle('is-rounded', rounded); });
+      range.value = String(view.scale);
+      const focused = document.activeElement;
+      zoomOut.disabled = view.scale <= contain * (1 + 1e-9);
+      zoomIn.disabled = view.scale >= maximum * (1 - 1e-9);
+      // 按到尽头时按钮被禁用，焦点改放到裁切框上，免得落到页面上、离开这一层。
+      if ((focused === zoomOut || focused === zoomIn) && focused.disabled) stage.focus({ preventScroll: true });
+    }
+    /** @brief 缩放，锚点（以裁切框边长为单位）在屏幕上的位置保持不动。 @param {number} next 目标比例。 @param {number} anchorX 锚点横坐标。 @param {number} anchorY 锚点纵坐标。 */
+    function zoomTo(next, anchorX = 0.5, anchorY = 0.5) {
+      const scale = Math.min(maximum, Math.max(contain, next));
+      const ratio = scale / view.scale;
+      view = clampView({ scale: scale, x: anchorX - (anchorX - view.x) * ratio, y: anchorY - (anchorY - view.y) * ratio });
+      render();
+    }
+
+    stage.addEventListener('pointerdown', function startDrag(event) {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      drag = { pointer: event.pointerId, x: event.clientX, y: event.clientY, from: view };
+      stage.setPointerCapture(event.pointerId);
+      stage.focus({ preventScroll: true });
+    });
+    stage.addEventListener('pointermove', function moveDrag(event) {
+      if (!drag || drag.pointer !== event.pointerId) return;
+      // 位移按裁切框在屏幕上的实际大小换算，整页缩放不影响拖动的手感。
+      const rect = stage.getBoundingClientRect();
+      view = clampView({ scale: drag.from.scale, x: drag.from.x + (event.clientX - drag.x) / rect.width, y: drag.from.y + (event.clientY - drag.y) / rect.height });
+      render();
+    });
+    ['pointerup', 'pointercancel'].forEach(function endType(type) {
+      stage.addEventListener(type, function endDrag(event) { if (drag && drag.pointer === event.pointerId) drag = null; });
+    });
+    stage.addEventListener('wheel', function wheelZoom(event) {
+      event.preventDefault();
+      const rect = stage.getBoundingClientRect();
+      zoomTo(view.scale * (event.deltaY < 0 ? 1.1 : 1 / 1.1), (event.clientX - rect.left) / rect.width, (event.clientY - rect.top) / rect.height);
+    }, { passive: false });
+    stage.addEventListener('keydown', function keyCrop(event) {
+      const step = event.shiftKey ? 0.1 : 0.02;
+      const moves = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+      const move = moves[event.key];
+      if (move) {
+        event.preventDefault();
+        view = clampView({ scale: view.scale, x: view.x + move[0], y: view.y + move[1] });
+        render();
+      } else if (event.key === '+' || event.key === '=') {
+        event.preventDefault();
+        zoomTo(view.scale * 1.1);
+      } else if (event.key === '-') {
+        event.preventDefault();
+        zoomTo(view.scale / 1.1);
+      }
+    });
+
+    render();
+    close = openLayer(dialog, { initialFocus: use, onClose: function releaseImage() { URL.revokeObjectURL(source.url); } });
+    if (!close) URL.revokeObjectURL(source.url);
   }
 
   /**
@@ -433,7 +817,10 @@ window.SideNotesSettings = (function createSettingsController() {
     });
     radioKeyboard(choices, '主题');
     materials.append(row('主题', '', choices));
-    options.append(modes, materials);
+    // 应用图标排在主题之后（components.md 7.2）。
+    const appIcons = el('div', 'settings-option-block');
+    appIcons.append(row('应用图标', '', appIconPicker()));
+    options.append(modes, materials, appIcons);
     target.append(options);
   }
 
@@ -937,13 +1324,54 @@ window.SideNotesSettings = (function createSettingsController() {
     return Boolean(note.deletedAt) && Date.now() - note.deletedAt > (state.settings.trashDays || 30) * 86400000;
   }
 
-  /** @brief 显示保留设置上下文的回收站二次确认弹窗。 @param {string} title 标题。 @param {string} message 提示。 @param {string} confirmLabel 确认按钮。 @param {Function} run 确认动作，返回 false 时保留弹窗。 @param {boolean} danger 是否为不可恢复操作。 */
-  function confirmTrash(title, message, confirmLabel, run, danger = false) {
-    if (!activeDialog || !activeDialog.modal.isConnected) return;
+  /**
+   * @brief 在设置窗口上叠一层对话框：设置窗口暂时不可操作，Esc 或点背景关闭，Tab 只在这一层内循环。
+   * @param {HTMLElement} dialog 对话框。 @param {object} options initialFocus 初始焦点，onClose 关闭时的回调。
+   * @return {Function|null} 关闭函数；设置窗口没有打开或已经叠了一层时返回 null。
+   */
+  function openLayer(dialog, options = {}) {
+    if (!activeDialog || !activeDialog.modal.isConnected) return null;
     const parent = activeDialog.modal.parentElement;
-    if (!parent || parent.querySelector('.settings-confirm-backdrop')) return;
+    if (!parent || parent.querySelector('.settings-confirm-backdrop')) return null;
     const previousFocus = document.activeElement;
     const overlay = el('div', 'settings-confirm-backdrop');
+    let closed = false;
+
+    /** 关闭这一层，焦点回到打开前的位置。 */
+    function close() {
+      if (closed) return;
+      closed = true;
+      overlay.remove();
+      activeDialog.modal.inert = false;
+      activeDialog.modal.removeAttribute('aria-hidden');
+      if (options.onClose) options.onClose();
+      const fallback = activeDialog.modal.querySelector('.settings-panel input, .settings-nav-button.active');
+      const target = previousFocus && previousFocus.isConnected ? previousFocus : fallback;
+      if (target) target.focus({ preventScroll: true });
+    }
+
+    overlay.append(dialog);
+    parent.append(overlay);
+    activeDialog.modal.inert = true;
+    activeDialog.modal.setAttribute('aria-hidden', 'true');
+    overlay.addEventListener('click', function dismissBackdrop(event) { if (event.target === overlay) close(); });
+    overlay.addEventListener('keydown', function layerKeyboard(event) {
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); return; }
+      if (event.key !== 'Tab') return;
+      event.stopPropagation();
+      const controls = Array.from(dialog.querySelectorAll('button, input, select, textarea, [tabindex]')).filter(function focusable(node) { return !node.disabled && node.tabIndex >= 0 && node.getClientRects().length > 0; });
+      if (!controls.length) return;
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    });
+    if (options.initialFocus) options.initialFocus.focus({ preventScroll: true });
+    return close;
+  }
+
+  /** @brief 显示保留设置上下文的回收站二次确认弹窗。 @param {string} title 标题。 @param {string} message 提示。 @param {string} confirmLabel 确认按钮。 @param {Function} run 确认动作，返回 false 时保留弹窗。 @param {boolean} danger 是否为不可恢复操作。 */
+  function confirmTrash(title, message, confirmLabel, run, danger = false) {
     const dialog = el('section', 'settings-confirm-dialog');
     const headingId = 'trash-confirm-title-' + createId();
     const messageId = 'trash-confirm-message-' + createId();
@@ -959,25 +1387,15 @@ window.SideNotesSettings = (function createSettingsController() {
     const error = el('p', 'settings-confirm-error');
     error.setAttribute('role', 'alert');
     error.hidden = true;
-    let closed = false;
-
+    let close = null;
     /** 关闭确认并返回回收站原位置。 */
-    function close() {
-      if (closed) return;
-      closed = true;
-      overlay.remove();
-      activeDialog.modal.inert = false;
-      activeDialog.modal.removeAttribute('aria-hidden');
-      const fallback = activeDialog.modal.querySelector('.settings-panel input, .settings-nav-button.active');
-      const target = previousFocus && previousFocus.isConnected ? previousFocus : fallback;
-      if (target) target.focus({ preventScroll: true });
-    }
+    function dismiss() { if (close) close(); }
 
-    const closeButton = action('取消确认', close, 'x', 'icon-button');
+    const closeButton = action('取消确认', dismiss, 'x', 'icon-button');
     closeButton.setAttribute('aria-label', '取消确认');
     header.append(heading, closeButton);
     const footer = el('footer', 'settings-confirm-actions');
-    const cancel = action('取消', close);
+    const cancel = action('取消', dismiss);
     const confirm = action(confirmLabel, function confirmOperation() {
       confirm.disabled = true;
       if (run() === false) {
@@ -986,26 +1404,11 @@ window.SideNotesSettings = (function createSettingsController() {
         error.hidden = false;
         return;
       }
-      close();
+      dismiss();
     }, danger ? 'trash' : 'restore', danger ? 'button danger compact' : 'button primary compact');
     footer.append(cancel, confirm);
     dialog.append(header, description, error, footer);
-    overlay.append(dialog);
-    parent.append(overlay);
-    activeDialog.modal.inert = true;
-    activeDialog.modal.setAttribute('aria-hidden', 'true');
-    overlay.addEventListener('click', function dismissBackdrop(event) { if (event.target === overlay) close(); });
-    overlay.addEventListener('keydown', function confirmKeyboard(event) {
-      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); return; }
-      if (event.key !== 'Tab') return;
-      event.stopPropagation();
-      const controls = [closeButton, cancel, confirm].filter(function enabled(node) { return !node.disabled; });
-      const first = controls[0];
-      const last = controls[controls.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-    });
-    cancel.focus({ preventScroll: true });
+    close = openLayer(dialog, { initialFocus: cancel });
   }
 
   /** @brief 二次确认后永久删除回收站记录。 @param {Array} notes 要删除的记录。 @param {HTMLElement} panel 保留的设置容器。 */
@@ -1180,7 +1583,7 @@ window.SideNotesSettings = (function createSettingsController() {
   function renderAbout(panel) {
     const hero = el('div', 'about-hero settings-about-logo');
     const logo = el('img');
-    logo.src = '../design-system/assets/app-icon.svg';
+    logo.src = window.SideNotesAppIcons.resolve(state.settings.appIcon).src;
     logo.alt = '';
     hero.append(logo, el('h3', '', 'SideNotes'), el('span', 'settings-version', '交互原型 0.5.0'), el('p', 'setting-description', '本地速记 · 置顶取用 · 用后归档'));
     panel.append(hero);
