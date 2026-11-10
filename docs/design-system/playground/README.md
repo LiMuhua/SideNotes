@@ -18,10 +18,11 @@ pnpm playground
 | --- | --- |
 | 侧栏 | 模拟桌面上的侧栏：贴边滑出，按设置延迟收起；新建、搜索、编辑、菜单、多选、键盘操作都可以试 |
 | 速记浮窗 | 侧栏收起时用快捷键呼出的浮窗，草稿与新建卡片共用；按住标题区可以拖动，放到不同的背景上检查材质（设置窗口同样可以拖动） |
-| 设置 | 设置窗口的五个分类，布局沿用现有应用；修改立即作用于所有窗口，包括字体 |
+| 设置 | 设置窗口的五个分类，布局沿用现有应用；修改立即作用于所有窗口，包括字体。「外观与交互 › 显示」可以换应用图标：6 个内置图标，或上传图片（裁切后使用，可更换、移除），任务栏、托盘、标题区与关于页随之变化 |
 | 组件 | 卡片的各种状态、编辑模式、侧栏部件、菜单、弹窗、提示条与基础控件 |
 | 令牌 | 当前主题与明暗下的全部令牌，以及关键颜色组合的对比度 |
 | 五套对比 | 五个侧栏并排放在同一张壁纸上，下方是结构差异对照表 |
+| 应用图标 | 定稿的 6 个应用图标（默认 211）：一览，点一个查看大图、说明与演进线；尺寸阶梯（实际像素 16–256）与 4 倍像素放大；使用场景（Windows 浅深任务栏与托盘、桌面、资源管理器、Linux 程序坞、Android 圆形遮罩）；全部图标的小尺寸对照；资源文件；下方是六轮设计演进。图片就是随应用打包的资源（`src-tauri/icons/builtin/`），这一页不受主题与明暗设置影响 |
 
 ## 控件与地址参数
 
@@ -29,7 +30,7 @@ pnpm playground
 
 | 控件 | 参数 | 取值 |
 | --- | --- | --- |
-| 页面 | `page` | `sidebar`、`capture`、`settings`、`components`、`tokens`、`compare` |
+| 页面 | `page` | `sidebar`、`capture`、`settings`、`components`、`tokens`、`compare`、`icons` |
 | 主题 | `surface` | `terminal`（终端，默认）、`magazine`（杂志）、`paper`（记录纸）、`win11`（Windows 11）、`glass`（磨砂玻璃） |
 | 明暗 | `theme` | `light`、`dark`、`system` |
 | 平台 | `platform` | `windows`、`linux` |
@@ -54,16 +55,17 @@ pnpm playground
 | --- | --- |
 | `index.html` | 页面入口，开发服务器把 `/design-playground` 转到这里（`vite.config.ts` 中的 `sidenotes-design-playground` 插件） |
 | `src/app/` | 桌面场景与三个窗口：侧栏、记录卡片、新建卡片、菜单与弹窗、速记浮窗、设置窗口 |
-| `src/model/` | 内存中的记录与设置，规则沿用 `src/core` |
+| `src/model/` | 内存中的记录与设置，规则沿用 `src/core`；以及内置应用图标的清单（`model/appIcons.ts`，引用 `src-tauri/icons/builtin/`） |
 | `src/ui/` | 通用组件（按钮、菜单、弹窗、输入框等）、滚轮调整数值与令牌作用域 |
-| `src/pages/` | 组件页、令牌页、五套对比页 |
+| `src/pages/` | 组件页、令牌页、五套对比页、应用图标页 |
 | `src/shell/` | Playground 外壳与舞台缩放 |
 | `src/styles/` | 样式，见下文 |
 | `src/surfaces.ts` | 五套主题的名称、理念与 6 项结构差异 |
 | `../tokens/` | 设计令牌：`base.css` 与五套主题的令牌文件，`schema.ts` 是令牌表 |
 | `../tests/` | 设计系统的测试 |
+| `../icon-history/` | 设计演进保留的 18 个历史图标 |
 
-`src/styles/` 中，`base`、`components`、`controls`、`content`、`sidebar`、`windows` 是产品样式，只引用令牌；`desktop`（桌面场景）、`pages`（组件页）与 `shell`（外壳）不属于 SideNotes 的设计，可以写固定数值。
+`src/styles/` 中，`base`、`components`、`controls`、`content`、`sidebar`、`windows` 是产品样式，只引用令牌；`desktop`（桌面场景）、`pages`（组件页）、`icons`（应用图标页）与 `shell`（外壳）属于展示台，不是 SideNotes 的设计，可以写固定数值，不在只用令牌的检查范围内。
 
 ## 复用的现有代码
 
@@ -85,6 +87,7 @@ pnpm test
 - `docs/design-system/tests/tokens.test.ts`：每套主题、每种明暗的令牌齐全，关键颜色组合在最差背景上达到 4.5:1 或 3:1。
 - `docs/design-system/tests/styles.test.ts`：产品样式不写死颜色、像素、rem 与时长，只引用令牌表中的令牌。
 - `docs/design-system/tests/docs.test.ts`：设计令牌文档与主题文档附录中的表与令牌文件一致，主题文档的章节统一，文档中的相对链接有效。
+- `docs/design-system/tests/app-icons.test.ts`：内置图标的清单、母版、PNG、ICO 与打包配置一致，默认图标的母版副本与桌面 ICO 和默认图标一致。修改图标母版或清单后运行 `pnpm icons` 重新生成。
 
 修改令牌后，在 Git Bash 或 Linux 终端中运行下面的命令，重新生成文档中的表：
 
@@ -101,3 +104,4 @@ SN_UPDATE_DOCS=1 pnpm exec vitest run docs/design-system/tests/docs.test.ts
 - 「数据与同步」页的目录、快照、导入导出与云端备份只弹出示例提示，不访问文件。
 - 手机画面没有放大触控目标。
 - 全局快捷键只在页面获得焦点时生效。
+- 上传的应用图标只保存在内存中，刷新后回到默认图标。
