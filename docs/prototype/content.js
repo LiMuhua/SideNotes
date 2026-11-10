@@ -193,7 +193,14 @@
     node.dataset.action = 'open-file-reference';
     node.dataset.filePath = path;
     node.dataset.fileStatus = 'unknown';
-    node.title = isFileToken(path) ? fileLabel(path) + '\n点击校验并打开；刷新后需重新定位文件' : path + '\n点击校验并打开文件';
+    // 文件胶囊：文件图标加链接文字，不加悬停提示（与现有应用一致）。
+    const glyph = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    glyph.setAttribute('class', 'icon');
+    glyph.setAttribute('aria-hidden', 'true');
+    const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+    use.setAttribute('href', '#i-file');
+    glyph.append(use);
+    node.prepend(glyph);
     return node;
   }
 

@@ -99,6 +99,10 @@
       if(overTrash){clearTabTarget(gesture);dragTrash.classList.add('is-target');gesture.targetMode='trash';gesture.targetDestination='trash';gesture.label.textContent=gesture.ids.size+' 条 · 松开后移入回收站';return;}
       dragTrash.classList.remove('is-target');
     }
+    // 拖出侧栏（指针离开侧栏朝屏幕内侧的边）：松开后在那里打开记录窗口（本次提出）。
+    const sidebarBounds=elements.sidebar.getBoundingClientRect(),outside=state.settings.edge==='left'?gesture.x>sidebarBounds.right+4:gesture.x<sidebarBounds.left-4;
+    gesture.ghost.classList.toggle('is-window',outside);
+    if(outside&&window.NoteWindows){clearTabTarget(gesture);gesture.targetMode='window';gesture.label.textContent=gesture.ids.size+' 条 · 松开后在窗口中打开';return;}
     const tab=document.elementFromPoint?document.elementFromPoint(gesture.x,gesture.y):null;
     const tabTarget=tab&&tab.closest?tab.closest('.sidebar-tabs [data-tab]'):null;
     if(tabTarget){
@@ -110,7 +114,7 @@
     const listBounds=elements.noteList.getBoundingClientRect();
     if(gesture.x<listBounds.left-14||gesture.x>listBounds.right+14){gesture.label.textContent=gesture.ids.size+' 条 · 移入记录列表后松开';return;}
     const candidates=Array.from(elements.noteList.querySelectorAll('.note-card[data-note-id]')).filter(function eligible(card){return !gesture.ids.has(card.dataset.noteId);});
-    if(!candidates.length){gesture.label.textContent=gesture.ids.size+' 条 · 当前没有可用落点';if(gesture.guide){gesture.guide.hidden=false;gesture.guide.classList.add('is-invalid');gesture.guide.style.left=listBounds.left+5+'px';gesture.guide.style.width=Math.max(0,listBounds.width-10)+'px';gesture.guide.style.top=Math.max(listBounds.top+8,Math.min(gesture.y-10,listBounds.bottom-26))+'px';gesture.guideLabel.textContent='此处不能放置';}return;}
+    if(!candidates.length){gesture.label.textContent=gesture.ids.size+' 条 · 当前没有可用落点';return;}
     let best=null;const measured=candidates.map(function measure(card){const bounds=card.getBoundingClientRect();return {card:card,bounds:bounds};});
     const visible=measured.filter(function onScreen(item){return item.bounds.bottom>listBounds.top&&item.bounds.top<listBounds.bottom;});
     if(gesture.y>listBounds.bottom&&visible.length){const last=visible[visible.length-1];best={card:last.card,bounds:last.bounds,after:true,distance:0};}
@@ -122,15 +126,16 @@
     });
     const target=best.card,note=state.notes.find(function find(item){return item.id===target.dataset.noteId;});if(!note)return;
     gesture.targetId=note.id;gesture.after=best.after;target.classList.add(best.after?'drop-after':'drop-before');
-    const group=note.status==='archived'?'归档':note.pinned?'置顶':'普通',position=best.after?'之后':'之前';
+    const position=best.after?'之后':'之前';
     gesture.label.textContent=gesture.ids.size+' 条 · 松开后放到「'+noteTitle(note)+'」'+position;
     if(gesture.guide){
       const insertionY=best.after?Math.min(best.bounds.bottom,listBounds.bottom-2):Math.max(best.bounds.top,listBounds.top+2);
-      gesture.guide.hidden=false;gesture.guide.classList.remove('is-invalid');
-      gesture.guide.style.left=Math.max(4,listBounds.left+5)+'px';
-      gesture.guide.style.width=Math.max(0,listBounds.width-10)+'px';
-      gesture.guide.style.top=Math.max(4,insertionY-10)+'px';
-      gesture.guideLabel.textContent=group+' · 放在「'+noteTitle(note)+'」'+position+'，松开保存';
+      // 插入线横跨卡片的宽度，位于两张卡片的间隙中间（Playground 的 sn-drop-line）。
+      const cardBounds=best.bounds,gap=parseFloat(window.getComputedStyle(elements.noteList).rowGap)||0,middle=best.after?insertionY+gap*gesture.zoom/2:insertionY-gap*gesture.zoom/2;
+      gesture.guide.hidden=false;
+      gesture.guide.style.left=cardBounds.left+'px';
+      gesture.guide.style.width=Math.max(0,cardBounds.width)+'px';
+      gesture.guide.style.top=middle+'px';
     }
   }
   /** @brief 更新框选区域及与其相交的卡片。 @param {object} gesture 框选手势。 */
@@ -141,7 +146,7 @@
     elements.noteList.querySelectorAll('.note-card').forEach(function hit(card){const rect=card.getBoundingClientRect();if(rect.right>=left&&rect.left<=right&&rect.bottom>=top&&rect.top<=bottom)selected.add(card.dataset.noteId);});tools.mode=true;refresh();
   }
   /** @brief 跟随指针更新反馈及落点。 @param {object} gesture 手势。 */
-  function paintGesture(gesture){if(tools.gesture!==gesture||!gesture.active)return;if(gesture.kind==='sort'){gesture.ghost.style.transform='translate('+(gesture.x+12)+'px,'+(gesture.y+12)+'px)';updateDropTarget(gesture);}else updateFrame(gesture);}
+  function paintGesture(gesture){if(tools.gesture!==gesture||!gesture.active)return;if(gesture.kind==='sort'){gesture.ghost.style.left=(gesture.x-gesture.grabX)/gesture.zoom+'px';gesture.ghost.style.top=(gesture.y-gesture.grabY)/gesture.zoom+'px';updateDropTarget(gesture);}else updateFrame(gesture);}
   /** 在靠近滚动边缘时持续滚动，无需再次移动指针。 */
   function scrollDuringGesture(){const gesture=tools.gesture;if(!gesture||!gesture.active){tools.scrollFrame=0;return;}if(gesture.targetMode==='tab'||gesture.targetMode==='trash'){tools.scrollFrame=window.requestAnimationFrame(scrollDuringGesture);return;}const bounds=elements.noteList.getBoundingClientRect(),margin=38;let speed=0;if(gesture.y<bounds.top+margin)speed=-Math.ceil((bounds.top+margin-gesture.y)/4);else if(gesture.y>bounds.bottom-margin)speed=Math.ceil((gesture.y-bounds.bottom+margin)/4);speed=Math.max(-22,Math.min(22,speed));if(speed){elements.noteList.scrollTop+=speed;paintGesture(gesture);}tools.scrollFrame=window.requestAnimationFrame(scrollDuringGesture);}
   /** @brief 长按到阈值后启动拖动，不把手部轻微漂移判定为取消。 @param {object} gesture 按压。 */
@@ -150,7 +155,16 @@
     gesture.ids=selected.has(gesture.id)&&selected.size?new Set(selectedIds()):new Set([gesture.id]);
     document.body.classList.add('is-sorting-cards');elements.noteList.querySelectorAll('.note-card').forEach(function mark(card){card.classList.toggle('is-sorting-member',gesture.ids.has(card.dataset.noteId));});
     const selection=window.getSelection();if(selection&&selection.removeAllRanges)selection.removeAllRanges();
-    gesture.ghost=el('div','card-drag-ghost batch-drag-ghost');gesture.ghost.setAttribute('aria-hidden','true');const note=state.notes.find(function find(item){return item.id===gesture.id;}),heading=el('strong','',(note&&note.emoji||'📝')+' '+(note&&note.text.split(/\r?\n/).find(function content(text){return text.trim();})||'图片记录').slice(0,44));gesture.label=el('span','',gesture.ids.size+' 条 · 拖到 Tab 切换页面，或拖到红色回收站');gesture.ghost.append(heading,gesture.label);gesture.guide=el('div','card-drop-guide');gesture.guide.hidden=true;gesture.guideLabel=el('span','card-drop-guide-label','松开后放在这里');gesture.guide.append(el('span','card-drop-guide-line'),gesture.guideLabel);document.body.append(gesture.ghost,gesture.guide);if(dragTrash)dragTrash.setAttribute('aria-hidden','false');
+    // 拖影是卡片本身的副本：向右错开、微微倾斜、浮起（Playground 的 sn-drag-ghost）；拖出侧栏时摆正并放大一点，表示松开后成为窗口。
+    // 副本放进带 note-list 类的外壳，卡片的样式照常生效；多选时右上角写出条数。说明文字只留给读屏（gesture.label 不放进页面）。
+    const source=gesture.card.getBoundingClientRect(),zoom=parseFloat(window.getComputedStyle(elements.sidebar).zoom)||1;
+    gesture.grabX=gesture.startX-source.left;gesture.grabY=gesture.startY-source.top;gesture.zoom=zoom;
+    gesture.ghost=el('div','card-drag-ghost note-list');gesture.ghost.setAttribute('aria-hidden','true');gesture.ghost.style.width=source.width/zoom+'px';
+    const copy=gesture.card.cloneNode(true);copy.classList.remove('is-sort-pending','is-sorting','is-sorting-member','drop-before','drop-after','is-selected');copy.classList.add('is-current');copy.removeAttribute('id');copy.querySelectorAll('[id]').forEach(function strip(node){node.removeAttribute('id');});gesture.ghost.append(copy);
+    if(gesture.ids.size>1)gesture.ghost.append(el('span','card-drag-count',String(gesture.ids.size)));
+    gesture.label=el('span','');
+    gesture.guide=el('div','card-drop-guide');gesture.guide.hidden=true;gesture.guide.append(el('span','card-drop-guide-line'));
+    document.body.append(gesture.ghost,gesture.guide);if(dragTrash)dragTrash.setAttribute('aria-hidden','false');
     try{if(gesture.card.setPointerCapture&&gesture.pointerId!==undefined)gesture.card.setPointerCapture(gesture.pointerId);}catch(error){/* 指针失效时由 pointercancel 清理。 */}
     paintGesture(gesture);tools.scrollFrame=window.requestAnimationFrame(scrollDuringGesture);
   }
@@ -191,7 +205,7 @@
     if(gesture.ghost)gesture.ghost.remove();if(gesture.guide)gesture.guide.remove();if(gesture.overlay)gesture.overlay.remove();if(dragTrash){dragTrash.classList.remove('is-target');dragTrash.setAttribute('aria-hidden','true');}document.body.classList.remove('is-sorting-cards','is-framing-cards');elements.noteList.querySelectorAll('.note-card').forEach(function clean(card){card.classList.remove('is-sort-pending','is-sorting','is-sorting-member','drop-before','drop-after');});tools.gesture=null;ui.sortPress=null;return true;
   }
   /** @brief 松开后一次性保存排序或完成框选，不触发编辑。 @param {Event} event 松开。 */
-  function release(event){if(!samePointer(event))return;const gesture=tools.gesture;if(gesture.active){gesture.x=event.clientX;gesture.y=event.clientY;paintGesture(gesture);consume(event);}const active=gesture.active,kind=gesture.kind,target=gesture.targetId,after=gesture.after,ids=gesture.ids,mode=gesture.targetMode,destination=gesture.targetDestination,originTab=gesture.originTab;cancelGesture();if(!active||kind!=='sort')return;if(mode==='trash')moveRecords(ids,'trash');else if(mode==='tab'&&destination&&destination!==originTab)moveRecords(ids,destination);else if(mode==='list'&&target)reorder(ids,target,after);}
+  function release(event){if(!samePointer(event))return;const gesture=tools.gesture;if(gesture.active){gesture.x=event.clientX;gesture.y=event.clientY;paintGesture(gesture);consume(event);}const active=gesture.active,kind=gesture.kind,target=gesture.targetId,after=gesture.after,ids=gesture.ids,mode=gesture.targetMode,destination=gesture.targetDestination,originTab=gesture.originTab,point={x:gesture.x,y:gesture.y},ghost=gesture.ghost&&gesture.ghost.firstElementChild?gesture.ghost.firstElementChild.getBoundingClientRect():null;cancelGesture();if(!active||kind!=='sort')return;if(mode==='window'){window.NoteWindows.openFromDrag(ids,point,ghost);return;}if(mode==='trash')moveRecords(ids,'trash');else if(mode==='tab'&&destination&&destination!==originTab)moveRecords(ids,destination);else if(mode==='list'&&target)reorder(ids,target,after);}
   /** @brief 选择模式下 Ctrl+A 全选筛选结果。 @param {KeyboardEvent} event 按键。 */
   function keyboard(event){const target=targetOf(event);if(hasSelection()&&(event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='a'&&!(target&&target.closest('input,textarea,[contenteditable="true"]'))){consume(event);visibleIds().forEach(function select(id){selected.add(id);});refresh();}}
   /** 连接捕获阶段手势与普通按钮，不接管正文编辑事务。 */

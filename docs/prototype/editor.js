@@ -74,16 +74,21 @@
     return caret !== null && caret >= start && caret <= start + length;
   }
 
-  /** @brief 为原文标记生成可折叠节点。 @param {HTMLElement} parent 父节点。 @param {string} text 标记原文。 @param {number|null} caret 原文插入位置。 @param {number} start 标记起点。 @param {object|null} range 包裹结构范围。 */
-  function syntax(parent, text, caret, start = 0, range = null) {
+  /**
+   * @brief 为原文标记生成可折叠节点。
+   * @param {HTMLElement} parent 父节点。 @param {string} text 标记原文。 @param {number|null} caret 原文插入位置。 @param {number} start 标记起点。 @param {object|null} range 包裹结构范围。
+   * @param {boolean} locked 一直隐藏、不随光标展开（列表项头与待办标记，由圆点、序号与复选框代替）。
+   */
+  function syntax(parent, text, caret, start = 0, range = null, locked = false) {
     if (!text) return;
-    const revealed = range ? markerVisible(caret, range.start, range.end-range.start) : markerVisible(caret,start,text.length);
+    const revealed = !locked && (range ? markerVisible(caret, range.start, range.end-range.start) : markerVisible(caret,start,text.length));
     const node = element('span', 'md-syntax ' + (revealed ? 'is-revealed' : 'is-hidden'), text);
     node.dataset.mdStart = String(start);
     node.dataset.mdEnd = String(start + text.length);
     node.dataset.mdRevealStart=String(range?range.start:start);
     node.dataset.mdRevealEnd=String(range?range.end:start+text.length);
     if (range) { node.dataset.mdGroupStart = String(range.start); node.dataset.mdGroupEnd = String(range.end); }
+    if (locked) node.dataset.mdLocked = '';
     node.hidden = !revealed;
     if (!revealed) node.setAttribute('aria-hidden', 'true');
     parent.append(node);
@@ -184,19 +189,22 @@
             const label = text.slice(labelStart, labelEnd);
             const target = text.slice(labelEnd + 2, end - 1).trim().replace(/^<|>$/g, '');
             if (image) {
-              // 图片的源文本参与光标映射，图片本身只是不可编辑的预览。
+              // 图片整块显示（与现有应用一致）：原文锁定隐藏，不随光标展开；退格与删除按整个引用删除，点击打开附件弹窗。
               const address = imageAddress(target);
               if (address) {
-                syntax(parent, text.slice(index, end), caret, start + index);
+                syntax(parent, text.slice(index, end), caret, start + index, null, true);
+                parent.lastChild.dataset.mdAtomic = '';
                 const preview = element('button', 'md-editor-image');
                 preview.type = 'button';
                 preview.tabIndex = -1;
                 preview.contentEditable = 'false';
                 preview.dataset.mdDecoration = '';
-                preview.dataset.action = 'preview-markdown-image';
+                preview.dataset.mdAttachment = 'image';
+                preview.dataset.mdStart = String(start + index);
+                preview.dataset.mdEnd = String(start + end);
                 preview.dataset.src = address;
                 preview.dataset.alt = label;
-                preview.setAttribute('aria-label', '放大图片：' + (label || '图片'));
+                preview.setAttribute('aria-label', '图片：' + (label || '图片'));
                 parent.append(preview);
                 const picture = element('img', 'markdown-image');
                 picture.src = address;
@@ -207,6 +215,31 @@
                 index = end;
                 continue;
               }
+            } else if (window.NoteContent && (window.NoteContent.isFileToken(target) || window.NoteContent.filePath(target))) {
+              // 文件引用整块显示为胶囊：文件图标加名称，原文锁定隐藏，点击打开附件弹窗（与现有应用一致）。
+              syntax(parent, text.slice(index, end), caret, start + index, null, true);
+              parent.lastChild.dataset.mdAtomic = '';
+              const chip = element('button', 'md-attachment-chip');
+              chip.type = 'button';
+              chip.tabIndex = -1;
+              chip.contentEditable = 'false';
+              chip.dataset.mdDecoration = '';
+              chip.dataset.mdAttachment = 'file';
+              chip.dataset.mdStart = String(start + index);
+              chip.dataset.mdEnd = String(start + end);
+              chip.dataset.path = target;
+              const name = label.replace(/\\([\\[\]])/g, '$1') || window.NoteContent.fileLabel(target);
+              chip.setAttribute('aria-label', '文件：' + name);
+              const glyph = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+              glyph.setAttribute('class', 'icon');
+              glyph.setAttribute('aria-hidden', 'true');
+              const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+              use.setAttribute('href', '#i-file');
+              glyph.append(use);
+              chip.append(glyph, element('span', '', name));
+              parent.append(chip);
+              index = end;
+              continue;
             } else {
               syntax(parent,'[',caret,start+index,{start:start+index,end:start+end});
               const link = element('span', 'markdown-link md-editor-link');
@@ -250,6 +283,7 @@
       this.undoStack = []; // 编辑历史。
       this.redoStack = []; // 重做历史。
       this.listeners = []; // 可清理的局部事件监听。
+      this.plainPaste = false; // 按下 Ctrl+Shift+V 时只粘贴纯文本，松开按键后复位。
       this.element = element('div', ((this.textarea && this.textarea.className) || '') + ' live-markdown-editor markdown-body'); // 真正的可编辑表面。
       this.element.contentEditable = this.textarea && (this.textarea.disabled || this.textarea.readOnly) ? 'false' : 'true';
       this.element.dataset.mdEditor = '';
@@ -500,7 +534,7 @@
     markerKey() {
       const caret = this.markerCaret();
       let key = String(this.activeLine) + '|';
-      for (const node of this.element.querySelectorAll('.md-syntax')) {
+      for (const node of this.element.querySelectorAll('.md-syntax:not([data-md-locked])')) {
         const start=Number(node.dataset.mdRevealStart??node.dataset.mdStart);
         const end=Number(node.dataset.mdRevealEnd??node.dataset.mdEnd);
         if (markerVisible(caret, start, end - start)) key += start + ':' + end + ';';
@@ -580,13 +614,16 @@
             if (!markerVisible(caret, model.start, model.text.length)) decoration(line, 'md-rule-line', '');
           } else if (item) {
             line.classList.add('md-list-item');
+            if (item[1].length) line.style.setProperty('--md-list-indent', String(item[1].length));
             const prefix = item[1] + item[2] + item[3];
             const task = item[4].match(/^(\[[ xX]\][\t ]+)(.*)$/);
-            if (!task && !markerVisible(caret, model.start, prefix.length)) decoration(line, 'md-list-bullet', /^\d/.test(item[2]) ? item[2] + ' ' : '• ');
-            syntax(line, prefix, caret, model.start);
+            // 列表与待办的项头不随光标显示原文（本次提出）：一直显示圆点、序号或复选框；
+            // 光标在正文开头按退格删去项头，这一行变回普通文字（见 removeListPrefix）。
+            if (!task) decoration(line, 'md-list-bullet', /^\d/.test(item[2]) ? item[2] + ' ' : '• ');
+            syntax(line, prefix, caret, model.start, null, true);
             if (task) {
               this.renderTask(line, model.start + prefix.length + 1, /[xX]/.test(task[1]));
-              syntax(line, task[1], caret, model.start + prefix.length);
+              syntax(line, task[1], caret, model.start + prefix.length, null, true);
               renderInline(task[2], line, caret, model.start + prefix.length + task[1].length);
             } else renderInline(item[4], line, caret, model.start + prefix.length);
           } else renderInline(model.text, line, caret, model.start);
@@ -620,6 +657,87 @@
       this.undoStack.push({ value: this.value, selection: { ...selection } });
       if (this.undoStack.length > 100) this.undoStack.shift();
       this.redoStack.length = 0;
+    }
+
+    /** @brief 写回编辑命令的结果并记入撤销历史。 @param {object|null} result 新原文与选区。 @param {object} range 命令之前的选区。 @return {boolean} 是否写回。 */
+    applyEdit(result, range) {
+      if (!result) return false;
+      this.remember(range);
+      this.value = result.value;
+      this.selection = { start: result.start, end: result.end, direction: result.start === result.end ? 'none' : 'forward' };
+      this.activeLine = this.lineAt(result.end);
+      this.render(this.selection);
+      this.notify();
+      return true;
+    }
+
+    /** @brief 光标在列表项或待办的正文开头时，退格删去项头（保留缩进），这一行变回普通文字。 @param {number} caret 光标。 @return {boolean} 是否处理。 */
+    removeListPrefix(caret) {
+      const commands = window.MarkdownCommands;
+      if (commands && commands.inCode(this.value, caret)) return false;
+      const line = splitLines(this.value)[this.lineAt(caret)];
+      const item = line && line.text.match(/^(\s{0,3})([-+*]|\d+[.)])([\t ]+)(\[[ xX]\][\t ]+)?/);
+      if (!item || caret !== line.start + item[0].length) return false;
+      this.replace('', { start: line.start + item[1].length, end: caret, direction: 'none' });
+      return true;
+    }
+
+    /** @brief 删除范围碰到整块显示的附件引用时，扩大到整个引用。 @param {object} range 删除范围。 @return {object} 范围。 */
+    atomicRange(range) {
+      let start = range.start, end = range.end;
+      this.element.querySelectorAll('.md-syntax[data-md-atomic]').forEach(function cover(node) {
+        const from = Number(node.dataset.mdStart), to = Number(node.dataset.mdEnd);
+        if (start < to && end > from) { start = Math.min(start, from); end = Math.max(end, to); }
+      });
+      return { start: start, end: end, direction: range.direction };
+    }
+
+    /** @brief 设置中改过的快捷键（没改过的用默认按键）。 @return {object} 绑定。 */
+    bindings() {
+      if (typeof this.options.shortcuts === 'function') return this.options.shortcuts() || {};
+      return (typeof state !== 'undefined' && state && state.settings && state.settings.shortcuts) || {};
+    }
+
+    /**
+     * @brief 格式快捷键：先按设置中的按键找命令，再看固定的按键：Ctrl+0–6 设为正文与标题，兼容 Alt+Shift+5 删除线与 Ctrl+Shift+` 行内代码（与现有应用的 editor.ts 一致）。
+     * @param {KeyboardEvent} event 按键。
+     */
+    formatShortcut(event) {
+      const shortcuts = window.SideNotesShortcuts, commands = window.MarkdownCommands;
+      if (!shortcuts || !commands) return;
+      const bound = shortcuts.commandFor(event, this.bindings(), ['format']);
+      const range = this.readSelection();
+      if (bound === 'link') { event.preventDefault(); this.insertLink(range); return; }
+      const inline = function inline(marker) { return function wrap(value, start, end) { return commands.toggleInline(value, start, end, marker); }; };
+      const table = {
+        bold: inline('**'), italic: inline('*'), strike: inline('~~'), inlineCode: inline('`'),
+        underline: function underline(value, start, end) { return commands.toggleTag(value, start, end, 'u'); },
+        codeBlock: commands.wrapCodeBlock, quote: commands.toggleQuote,
+        orderedList: function ordered(value, start, end) { return commands.toggleList(value, start, end, true); },
+        bulletList: function bullet(value, start, end) { return commands.toggleList(value, start, end, false); }
+      };
+      let command = bound ? table[bound] : null;
+      if (!command) {
+        const combo = shortcuts.comboFromEvent(event);
+        const heading = combo && combo.match(/^Ctrl\+([0-6])$/);
+        if (heading) command = function setHeading(value, start, end) { return commands.setHeading(value, start, end, Number(heading[1])); };
+        else if (combo === 'Alt+Shift+5') command = table.strike;
+        else if (combo === 'Ctrl+Shift+`') command = table.inlineCode;
+      }
+      if (!command) return;
+      event.preventDefault();
+      this.applyEdit(command(this.value, range.start, range.end), range);
+    }
+
+    /** @brief Ctrl+K：剪贴板中是网址时直接生成链接，否则插入或去掉链接；读剪贴板期间原文变了就放弃。 @param {object} range 选区。 */
+    insertLink(range) {
+      const commands = window.MarkdownCommands, before = this.value;
+      const apply = (clipboard) => {
+        if (this.destroyed || this.value !== before) return;
+        this.applyEdit(commands.linkWithAddress(before, range.start, range.end, clipboard) || commands.toggleLink(before, range.start, range.end), range);
+      };
+      if (!navigator.clipboard || typeof navigator.clipboard.readText !== 'function') { apply(''); return; }
+      navigator.clipboard.readText().catch(function denied() { return ''; }).then(function read(text) { apply(String(text || '')); });
     }
 
     /** @brief 以原文片段替换选区并重新排版。 @param {string} text 插入文本。 @param {object} range 原文选区。 */
@@ -679,12 +797,17 @@
       if (type === 'historyUndo' || type === 'historyRedo') { event.preventDefault(); this.history(type === 'historyRedo'); return; }
       if (/^delete/.test(type)) {
         event.preventDefault();
-        this.replace('', this.deletionRange(this.readSelection(), type));
+        const range = this.readSelection();
+        if (type === 'deleteContentBackward' && range.start === range.end && this.removeListPrefix(range.start)) return;
+        this.replace('', this.atomicRange(this.deletionRange(range, type)));
         return;
       }
       if (type === 'insertParagraph' || type === 'insertLineBreak') {
         event.preventDefault();
-        this.replace((this.value.match(/\r\n|\r|\n/) || ['\n'])[0]);
+        // 回车在列表、引用与代码块中续写，空项回车结束；Shift+Enter 只换行（与现有应用一致）。
+        const range = this.readSelection();
+        if (type === 'insertParagraph' && window.MarkdownCommands && this.applyEdit(window.MarkdownCommands.continueBlock(this.value, range.start, range.end), range)) return;
+        this.replace((this.value.match(/\r\n|\r|\n/) || ['\n'])[0], range);
         return;
       }
       if (type === 'insertText' || type === 'insertReplacementText' || type === 'insertFromDrop') {
@@ -735,9 +858,17 @@
       });
       this.listen(this.element, 'mousedown', (event) => {
         // 操作待办或图片时保留正文选区，避免光标被装饰节点夺走。
-        if (event.target.closest('[data-md-task],[data-action="preview-markdown-image"]') && (event.button === undefined || event.button === 0)) event.preventDefault();
+        if (event.target.closest('[data-md-task],[data-md-attachment]') && (event.button === undefined || event.button === 0)) event.preventDefault();
       });
       this.listen(this.element, 'click', (event) => {
+        const attachment = event.target.closest('[data-md-attachment]');
+        if (attachment && this.element.contains(attachment)) {
+          event.preventDefault();
+          event.stopPropagation();
+          const start = Number(attachment.dataset.mdStart), end = Number(attachment.dataset.mdEnd);
+          if (typeof window.SideNotesOpenAttachment === 'function') window.SideNotesOpenAttachment(event, { editor: this, kind: attachment.dataset.mdAttachment, start: start, end: end, markdown: this.value.slice(start, end), src: attachment.dataset.src || '', path: attachment.dataset.path || '', label: attachment.dataset.alt || attachment.textContent.trim() });
+          return;
+        }
         const checkbox = event.target.closest('[data-md-task]');
         if (!checkbox || !this.element.contains(checkbox)) return;
         event.preventDefault();
@@ -763,7 +894,19 @@
         if (!event.clipboardData) return;
         event.preventDefault();
         if (event.clipboardData.files.length) return;
-        this.replace(event.clipboardData.getData('text/plain'));
+        const text = event.clipboardData.getData('text/plain');
+        const range = this.readSelection();
+        const commands = window.MarkdownCommands;
+        // 网址贴在选中的文字上变成链接、代码编辑器复制的内容变成代码块；Ctrl+Shift+V 只粘贴纯文本（与现有应用一致）。
+        if (!this.plainPaste && commands) {
+          let language = null;
+          try {
+            const data = JSON.parse(event.clipboardData.getData('vscode-editor-data') || 'null');
+            if (data && typeof data.mode === 'string') language = commands.codeLanguage(data.mode);
+          } catch (error) { /* 不是代码编辑器写入的内容。 */ }
+          if (this.applyEdit(commands.smartPaste(this.value, range.start, range.end, { text: text, html: event.clipboardData.getData('text/html'), codeLanguage: language }), range)) return;
+        }
+        this.replace(text, range);
       });
       this.listen(this.element, 'copy', (event) => {
         const range = this.clipboardRange();
@@ -790,17 +933,22 @@
       });
       this.listen(this.element, 'keydown', (event) => {
         if (this.composing || event.isComposing) return;
-        if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'a') {
+        const modifier = event.ctrlKey || event.metaKey;
+        this.plainPaste = modifier && event.shiftKey && Boolean(window.SideNotesShortcuts) && window.SideNotesShortcuts.physicalKey(event) === 'KeyV';
+        if (modifier && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'a') {
           event.preventDefault();
           this.setSelectionRange(0, this.value.length, 'forward');
-        } else if ((event.ctrlKey || event.metaKey) && !event.altKey && /^[zy]$/i.test(event.key)) {
+        } else if (modifier && !event.altKey && /^[zy]$/i.test(event.key)) {
           event.preventDefault();
           this.history(event.key.toLowerCase() === 'y' || event.shiftKey);
-        } else if (event.key === 'Tab' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        } else if (event.key === 'Tab' && !modifier && !event.altKey) {
+          // Tab 不移出编辑区；列表与引用中缩进或减少缩进，其余位置 Tab 插入两个空格（与现有应用一致）。
           event.preventDefault();
-          this.replace('  ');
-        }
+          const range = this.readSelection();
+          if (!(window.MarkdownCommands && this.applyEdit(window.MarkdownCommands.indentLines(this.value, range.start, range.end, event.shiftKey), range)) && !event.shiftKey) this.replace('  ', range);
+        } else this.formatShortcut(event);
       });
+      this.listen(this.element, 'keyup', () => { this.plainPaste = false; });
     }
   }
 

@@ -41,13 +41,12 @@ function icon(name) {
   return svg;
 }
 
-/** @brief 创建动作按钮。 @param {string} label 可访问名称。 @param {string} action 动作。 @param {string} iconName 图标。 @param {string} className 样式。 @return {HTMLButtonElement} 按钮。 */
+/** @brief 创建动作按钮：名称写在 aria-label 中，不加悬停提示（悬停说明只跟问号绑定）。 @param {string} label 可访问名称。 @param {string} action 动作。 @param {string} iconName 图标。 @param {string} className 样式。 @return {HTMLButtonElement} 按钮。 */
 function button(label, action, iconName, className = 'icon-button') {
   const node = el('button', className);
   node.type = 'button';
   node.dataset.action = action;
   node.setAttribute('aria-label', label);
-  node.title = label;
   if (iconName) node.append(icon(iconName));
   if (!className.split(/\s+/).some(function iconOnly(name){return ['icon-button','tag-remove','tags-more','note-image-button'].includes(name);})) node.append(document.createTextNode(label));
   return node;
@@ -106,23 +105,30 @@ function normalizeSettings(value = {}) {
     fontFamily: surfaces.normalizeFontFamily(value.fontFamily, value.version),
     // 应用图标：内置图标的 id，或 custom 表示上传的图片（图片单独保存，见 app-icons.js）。
     appIcon: window.SideNotesAppIcons.normalize(value.appIcon),
-    fontSize: Math.max(12,Math.min(20,Number(value.fontSize)||16)),
-    edge: value.edge === 'left' ? 'left' : 'right', width: Math.min(720,Math.max(360,Number(value.width)||416)),
+    // 字号 9–16，步长 0.5，默认 12：常用的 12 落在滑块中间附近（本次提出；现有应用为 12–20，步长 1，默认 16）。
+    fontSize: Number.isFinite(Number(value.fontSize)) && value.fontSize !== null && value.fontSize !== '' ? Math.max(9,Math.min(16,Math.round(Number(value.fontSize)*2)/2)) : 12,
+    // 侧栏宽度 360–720，按 4px 取整，默认 400（本次提出；现有应用默认 416）。
+    edge: value.edge === 'left' ? 'left' : 'right', width: Math.min(720,Math.max(360,Math.round((Number(value.width)||400)/4)*4)),
     // 出入动画、卡片高度与通知位置：取值范围与默认值同现有应用（src/core/settings.ts）。
     animDuration: Number.isFinite(Number(value.animDuration)) && value.animDuration !== null && value.animDuration !== '' ? Math.max(0,Math.min(600,Math.round(Number(value.animDuration)))) : 260,
     cardMaxHeight: Number.isFinite(Number(value.cardMaxHeight)) && value.cardMaxHeight !== null && value.cardMaxHeight !== '' ? Math.max(120,Math.min(600,Math.round(Number(value.cardMaxHeight)))) : 220,
     toastPosition: ['top-center','top-right','bottom-center'].includes(value.toastPosition) ? value.toastPosition : 'top-center',
-    hideDelay: [300,600,1000].includes(Number(value.hideDelay)) ? Number(value.hideDelay) : 600,
-    protectEditing: value.protectEditing !== false,
+    // 移出后收起：100–10000 毫秒，下拉框列出常用的 300、600、1000（与现有应用一致）。
+    hideDelay: Number.isFinite(Number(value.hideDelay)) && value.hideDelay !== null && value.hideDelay !== '' ? Math.max(100,Math.min(10000,Math.round(Number(value.hideDelay)))) : 600,
+    // 进入编辑时把卡片滚到列表顶部（本次提出，默认打开）。编辑期间侧栏一律保持展开，不再提供开关。
+    scrollOnEdit: value.scrollOnEdit !== false,
     lazyLoading: value.lazyLoading !== false,
     pageSize: Math.max(5,Math.min(100,Math.round(Number(value.pageSize)||10))),
     tidySnoozeUntil: Number(value.tidySnoozeUntil)||0,
     tidyLimit: Number.isFinite(Number(value.tidyLimit)) ? Math.max(0,Math.min(100000,Math.round(Number(value.tidyLimit)))) : 50,
     storageLocation: ['appdata','portable','custom'].includes(value.storageLocation) ? value.storageLocation : 'appdata',
     customDirectory: String(value.customDirectory||'').slice(0,500),
+    // 快照目录：空值表示数据目录下的 snapshots 文件夹（与现有应用一致）。
+    snapshotDirectory: String(value.snapshotDirectory||'').trim().slice(0,500),
     trashDays: Math.round(Math.max(1,Math.min(365,Number(value.trashDays)||30))),
     cloud: { enabled: cloud.enabled===true, provider: ['synology','google','onedrive'].includes(cloud.provider)?cloud.provider:'synology', endpoint:String(cloud.endpoint||'').slice(0,1000), account:String(cloud.account||'').slice(0,160), folder:String(cloud.folder||'SideNotes').slice(0,300), lastBackup:Number(cloud.lastBackup)||0, lastError:String(cloud.lastError||'').slice(0,500), simulationFailure:cloud.simulationFailure===true, notifications:cloud.notifications===true },
-    shortcuts: {capture:String(shortcuts.capture||'Ctrl+Shift+Space'),save:String(shortcuts.save||'Ctrl+Enter'),hide:String(shortcuts.hide||'Escape')}
+    // 快捷键只保存改过的命令，其余用默认按键（shortcuts.js，同现有应用）；旧存档的 capture、save、hide 是默认按键，整理后不再保存。
+    shortcuts: window.SideNotesShortcuts.normalizeBindings(shortcuts)
   };
 }
 
@@ -167,8 +173,9 @@ function setStorageStatus(failed) {
   if(elements.storageStatus){const status=elements.storageStatus;status.replaceChildren();status.classList.toggle('is-cloud',Boolean(sync.enabled));status.classList.toggle('is-busy',busy);status.classList.toggle('is-error',error);
     // 正常时底栏不显示状态（本次提出：去掉绿色圆点）；出错时版本号左边出现警告图标，处理中只写文字。
     if(error)status.append(icon(ui.storageError?'alert':'cloud-off'));
-    const message=ui.storageError?'本地保存失败':cloudError?'备份失败':ui.pendingImages?'读取附件…':ui.draftDirty?'保存中…':sync.busy?'备份中…':'';
-    if(message)status.append(document.createTextNode(message));const label=message||(sync.enabled?'本地已保存 · 云端连接为模拟':'本地已保存');status.title=label;status.setAttribute('aria-label',label);status.hidden=!message;
+    // 只在出错时写出原因；读取附件与保存中不显示文字（与现有应用一致，读取期间禁用保存）。
+    const message=ui.storageError?'本地保存失败':cloudError?'备份失败':'';
+    if(message)status.append(document.createTextNode(message));status.setAttribute('aria-label',message||'本地已保存');status.hidden=!message;
   }
   if(elements.syncWarning){elements.syncWarning.hidden=!cloudError;elements.syncWarning.replaceChildren();if(cloudError){elements.syncWarning.append(icon('alert'),el('span','',cloudError),button('重试','retry-cloud','','button secondary compact'));}}
 }
@@ -207,7 +214,7 @@ function persistDraft() {
 function updateNote(id, patch) {
   const next = state.notes.map(function patchRecord(note) { return note.id === id ? { ...note, ...patch, updatedAt: Date.now() } : note; });
   if (!persistSnapshot(next)) {
-    toast('保存失败，原记录未改动。请导出备份后重试。', null, true);
+    toast('操作未保存', null, true);
     return false;
   }
   renderNotes();
@@ -236,13 +243,13 @@ function renderCard(note) {
   const title=first<0 ? (note.images.length?'图片记录':'记录') : lines[first].replace(/^#{1,6}\s+|^[-*+]\s+|^\d+\.\s+/,'').replace(/[*\x60~]/g,'').slice(0,120)||'记录';
   const editing=ui.editing&&ui.editing.id===note.id,current=ui.currentId===note.id;
   const card=el('article','note-card'+(note.pinned?' is-pinned':'')+(editing?' is-editing':'')+(note.collapsed?' is-collapsed':'')+(current?' is-current':''));card.dataset.noteId=note.id;card.tabIndex=current||editing?0:-1;card.setAttribute('aria-label',title);if(current)card.setAttribute('aria-current','true');
-  const header=el('header','note-header'),mark=el('button','note-emoji',note.emoji||'📝');mark.type='button';mark.dataset.action='choose-emoji';mark.setAttribute('aria-label','更换 Emoji');mark.title='更换 Emoji';
+  const header=el('header','note-header'),mark=el('button','note-emoji',note.emoji||'📝');mark.type='button';mark.dataset.action='choose-emoji';mark.setAttribute('aria-label','更换 Emoji');
   const titleNode=el('h3','note-title',fullBody?(firstLine.length>120?title:'记录'):title);
   if(!fullBody){titleNode.replaceChildren();window.NoteContent.renderInline(firstLine.replace(/^#{1,6}\s+/,''),titleNode);}
   // 右侧一格：平时是置顶标记与创建时间；点时间收起或展开正文（时间不进入 Tab 顺序，键盘用收起按钮）。
   const side=el('div','note-side'),meta=el('span','note-meta');
-  if(note.pinned){const pin=el('span','note-pin');pin.title='已置顶';pin.append(icon('pin'));meta.append(pin);}
-  const time=el('button','note-time',formatTime(note.createdAt));time.type='button';time.dataset.action='toggle-note-collapse';time.tabIndex=-1;time.setAttribute('aria-label',(note.collapsed?'展开':'收起')+'正文');time.title='创建：'+new Date(note.createdAt).toLocaleString('zh-CN',{hour12:false})+'\n修改：'+new Date(note.updatedAt).toLocaleString('zh-CN',{hour12:false});
+  if(note.pinned){const pin=el('span','note-pin');pin.setAttribute('aria-label','已置顶');pin.append(icon('pin'));meta.append(pin);}
+  const time=el('button','note-time',formatTime(note.createdAt));time.type='button';time.dataset.action='toggle-note-collapse';time.tabIndex=-1;time.setAttribute('aria-label',(note.collapsed?'展开':'收起')+'正文');
   meta.append(time);side.append(meta);
   header.append(mark,titleNode,side);card.append(header);
   if(editing){
@@ -276,7 +283,7 @@ function renderCard(note) {
     bottom.append(tags);card.append(bottom);
   }
   if(!current)card.querySelectorAll('button').forEach(function outOfTabOrder(node){node.tabIndex=-1;});
-  card.title='单击选中，双击编辑，长按拖动排序';if(window.requestAnimationFrame)window.requestAnimationFrame(function fit(){fitCardTags(card);});return card;
+  if(window.requestAnimationFrame)window.requestAnimationFrame(function fit(){fitCardTags(card);});return card;
 }
 
 /**
@@ -305,7 +312,7 @@ function renderNotes(options={}) {
   if(!notes.length){const empty=el('div','empty-state');empty.append(el('h3','',ui.query||ui.selectedTag?'没有匹配的记录':'暂无记录'),el('p','',ui.query||ui.selectedTag?'调整搜索或标签筛选。':'在上方直接输入。'));if(ui.query||ui.selectedTag)empty.append(button('清除筛选','clear-filters','','button secondary'));elements.noteList.append(empty);}
   else appendNextPage(target);
   elements.noteList.scrollTop=same?oldScroll:0;elements.listSummary.textContent=notes.length+' 条'+(ui.selectedTag?' · #'+ui.selectedTag:'');elements.noteList.setAttribute('aria-label',notes.length+' 条记录');syncCardTabStops();elements.clearSearch.hidden=!ui.query;
-  renderTagMenu();renderWorkspaceNudge();refreshSearchSummary();if(window.NoteInteractions)window.NoteInteractions.refresh();
+  renderTagMenu();renderWorkspaceNudge();refreshSearchSummary();if(window.NoteInteractions)window.NoteInteractions.refresh();if(window.NoteWindows)window.NoteWindows.refresh();
 }
 
 /** 创建可直接输入的空白卡片，工具与提交操作分别排列。 */
@@ -379,11 +386,11 @@ function saveDraft(origin,options={}){
   const now=Date.now(),targetTab=origin==='sidebar'?ui.tab:'workspace',collapse=Boolean(options.collapse);
   const note={id:createId(),text:window.NoteContent.canonicalize(state.draft.text),images:state.draft.images.map(function clone(image){return {...image};}),pinned:targetTab==='pinned',status:targetTab==='archive'?'archived':'active',collapsed:false,emoji:window.NoteEmoji.pick(state.notes.map(function current(n){return n.emoji;})),createdAt:now,updatedAt:now};
   if(!persistSnapshot([note,...state.notes],{text:'',images:[],updatedAt:now})){persistDraft();toast('没有保存成功，草稿和图片仍在，可导出备份后重试',null,true);renderDraft();return;}
-  ui.tab=targetTab;ui.query='';ui.selectedTag='';elements.searchInput.value='';ui.composer=false;renderDraft();renderNotes();
+  ui.composer=false;renderDraft();renderNotes();
   if(origin==='capture'){
     if(collapse)hideCapture();else showCapture();
   }else if(collapse)hideSidebar(true);else{showSidebar({focus:false});focusNewComposer();}
-  toast(targetTab==='pinned'?'已保存并置顶':targetTab==='archive'?'已保存到归档':'已保存到工作区',{label:'查看',run:function reveal(){showSidebar({focus:false});window.setTimeout(function focusSaved(){const card=Array.from(elements.noteList.querySelectorAll('[data-note-id]')).find(function same(n){return n.dataset.noteId===note.id;});if(card){card.scrollIntoView({block:'nearest',behavior:'smooth'});card.focus({preventScroll:true});}},80);}});
+  toast('记录已保存');
 }
 
 /** @brief 开始事务式编辑，标签整理和拖动优先于正文。 @param {string} id 记录标识。 */
@@ -393,7 +400,9 @@ function beginEdit(id){
   if(ui.editing&&ui.editing.id===id)return;if(ui.editing&&!finishEdit())return;
   const note=state.notes.find(function same(n){return n.id===id;});if(!note)return;
   ui.editing={id:id,text:note.text,images:note.images.map(function clone(image){return {...image};}),originalText:note.text,originalImages:note.images};
-  cancelHide();renderNotes();const input=elements.noteList.querySelector('textarea[data-edit-id]');if(input){input.focus();const end=input.liveMarkdown?input.liveMarkdown.getValue().length:input.value.length;input.setSelectionRange(end,end);}
+  cancelHide();renderNotes();const input=elements.noteList.querySelector('textarea[data-edit-id]');if(input){input.focus({preventScroll:true});const end=input.liveMarkdown?input.liveMarkdown.getValue().length:input.value.length;input.setSelectionRange(end,end);}
+  // 进入编辑时把卡片滚到列表顶部（本次提出，「编辑时滚到顶部」默认打开）；关闭时列表不滚动（与现有应用一致）。
+  const editingCard=elements.noteList.querySelector('.note-card.is-editing');if(editingCard&&state.settings.scrollOnEdit)editingCard.scrollIntoView({block:'start',behavior:window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
 }
 
 /** @brief 仅显式提交时写入编辑事务，后台备份不提交当前修改。 @param {boolean} commit 是否提交。 @return {boolean} 是否成功。 */
@@ -401,7 +410,8 @@ function flushEdit(commit=false){
   window.clearTimeout(ui.editTimer);if(!ui.editing||!commit)return true;
   if(ui.pendingImages){toast('请等待读取完成后再保存');return false;}
   const editing=ui.editing,note=state.notes.find(function same(n){return n.id===editing.id;});if(!note)return false;
-  if(!editing.text.trim()&&!editing.images.length){toast('记录内容为空，可使用删除操作移入回收站',null,true);return false;}
+  if(!editing.text.trim()&&!editing.images.length)return true;
+  if(editing.text===editing.originalText&&editing.images.length===editing.originalImages.length&&editing.images.every(function same(image,index){return image.id===editing.originalImages[index].id;}))return true;
   const next=state.notes.map(function apply(n){return n.id===editing.id?{...n,text:window.NoteContent.canonicalize(editing.text),images:editing.images,updatedAt:Date.now()}:n;});
   const saved=persistSnapshot(next);ui.editStorageError=!saved;setStorageStatus(ui.storageWriteError);if(!saved)toast('编辑未保存，修改仍保留在输入区',null,true);return saved;
 }
@@ -424,7 +434,7 @@ function cancelHide() {
 function scheduleHide(){
   cancelHide();
   /** @brief 检查当前是否允许自动收起。 @return {boolean} 是否应保留侧栏。 */
-  function keepVisible(){return ui.locked||ui.modal||window.matchMedia&&window.matchMedia('(max-width: 480px)').matches||ui.resizing||ui.searchOpen||window.NoteMenus&&window.NoteMenus.isOpen()||window.NoteInteractions&&(window.NoteInteractions.isBusy()||window.NoteInteractions.hasSelection())||(state.settings.protectEditing&&(ui.editing||(ui.composer&&(state.draft.text.trim()||state.draft.images.length||ui.pendingImages))||ui.expandedTags.size));}
+  function keepVisible(){return ui.locked||ui.modal||window.matchMedia&&window.matchMedia('(max-width: 480px)').matches||ui.resizing||ui.searchOpen||window.NoteMenus&&window.NoteMenus.isOpen()||window.NoteInteractions&&(window.NoteInteractions.isBusy()||window.NoteInteractions.hasSelection())||ui.editing||(ui.composer&&(state.draft.text.trim()||state.draft.images.length||ui.pendingImages))||ui.expandedTags.size||window.NoteWindows&&window.NoteWindows.isDragging();}
   if(keepVisible())return;
   ui.hideTimer=window.setTimeout(function hideAfterDelay(){if(!elements.sidebar.matches(':hover')&&!keepVisible())hideSidebar();},state.settings.hideDelay);
 }
@@ -443,7 +453,7 @@ function showSidebar(options={}){
 function hideSidebar(manual=false){
   if(ui.editing&&!finishEdit())return;
   cancelHide();ui.composerFocusToken=(ui.composerFocusToken||0)+1;persistDraft();
-  if(manual){ui.locked=false;const lock=document.getElementById('sidebar-lock');lock.setAttribute('aria-pressed','false');lock.setAttribute('aria-label','固定侧栏');lock.title='固定侧栏';lock.replaceChildren(icon('pin'));}
+  if(manual){ui.locked=false;const lock=document.getElementById('sidebar-lock');lock.setAttribute('aria-pressed','false');lock.setAttribute('aria-label','固定侧栏');lock.replaceChildren(icon('pin'));}
   if(elements.sidebar.contains(document.activeElement))document.activeElement.blur();
   elements.sidebar.classList.remove('open');elements.sidebar.setAttribute('aria-hidden','true');elements.sidebar.inert=true;closeTagMenu();
   if(window.NoteMenus)window.NoteMenus.close({restoreFocus:false});
@@ -541,6 +551,8 @@ function toast(message, action = null, error = false) {
 
 /** 关闭当前对话框并恢复焦点。 */
 function closeModal() {
+  // 设置窗口的浮层（问号说明、下拉列表、图标预览）挂在 body 下，随窗口一起关闭，也结束快捷键录入。
+  if (ui.modal === 'settings-modal' && window.SideNotesSettings) window.SideNotesSettings.closeFloating();
   elements.modalRoot.replaceChildren();
   ui.modal = null;
   document.getElementById('sidebar-lock').classList.remove('is-linked');
@@ -591,6 +603,113 @@ function confirmAction(options) {
   dialog.footer.append(cancel, confirm);
 }
 
+/* ==================== 附件弹窗（与现有应用的 AttachmentDialog 一致） ==================== */
+
+/**
+ * @brief 正文中的图片或文件引用：在记录原文中找到这一段 Markdown，供弹窗改写或删除。
+ * @param {object|null} note 记录（卡片与记录窗口中）。 @param {string} kind image 或 file。 @param {string} target 地址或路径。 @param {string} label 显示的名称。
+ * @return {object} 附件上下文。
+ */
+function textAttachment(note,kind,target,label){
+  const context={kind:kind,source:'text',note:note,label:label,src:kind==='image'?target:'',path:kind==='file'?target:'',markdown:undefined,start:-1,end:-1};
+  if(!note)return context;
+  const text=note.text,pattern=kind==='image'?/!\[((?:\\.|[^\]\\])*)\]\(\s*<?([^)\s>]+)>?\s*\)/g:/(?<!!)\[((?:\\.|[^\]\\])*)\]\(\s*<?([^)>]+?)>?\s*\)/g;
+  let match;while((match=pattern.exec(text))){if(match[2]===target||kind==='image'&&target.startsWith(match[2])){context.markdown=match[0];context.start=match.index;context.end=match.index+match[0].length;break;}}
+  return context;
+}
+
+/** @brief 编辑面中的附件被点击（editor.js 调用）：改动写回这个编辑器，Ctrl+Z 可以撤销。 @param {MouseEvent} event 点击。 @param {object} info 编辑器、原文范围、地址与名称。 */
+window.SideNotesOpenAttachment=function openEditorAttachment(event,info){attachmentClick(event,{kind:info.kind,source:'editor',editor:info.editor,markdown:info.markdown,start:info.start,end:info.end,src:info.src,path:info.path,label:info.label});};
+
+/** @brief 附件的单击：按住 Ctrl 直接打开，否则打开附件弹窗。 @param {MouseEvent} event 点击。 @param {object} context 附件上下文。 */
+function attachmentClick(event,context){if(event.ctrlKey||event.metaKey)openAttachmentDirect(context);else openAttachment(context);}
+
+/**
+ * @brief 直接打开附件：图片在新的标签页打开；本次会话中选过的文件打开它的副本，找不到时让用户重新定位（浏览器拿不到本机路径）。
+ * @param {object} context 附件上下文。
+ */
+function openAttachmentDirect(context){
+  const source=context.image?context.image.data:context.src;
+  if(context.kind==='image'&&source){if(/^data:/i.test(source)){fetch(source).then(function asBlob(response){return response.blob();}).then(function openBlob(blob){const url=URL.createObjectURL(blob);window.open(url,'_blank','noopener,noreferrer');window.setTimeout(function release(){URL.revokeObjectURL(url);},60000);}).catch(function failed(){toast('无法打开：图片读取失败',null,true);});}else window.open(source,'_blank','noopener,noreferrer');return;}
+  const entry=context.path&&window.NoteContent.files.get(window.NoteContent.fileKey(context.path));
+  if(entry){Promise.resolve(entry.handle?entry.handle.getFile():entry.file).then(function openFile(file){const url=URL.createObjectURL(file);window.open(url,'_blank','noopener,noreferrer');window.setTimeout(function release(){URL.revokeObjectURL(url);},60000);}).catch(function missing(){toast('文件不存在或已移动',null,true);});return;}
+  if(context.path)openFileReference(context.path);
+}
+
+/** @brief 下载附件到本机（另存为）。 @param {object} context 附件上下文。 */
+function saveAttachmentAs(context){
+  const source=context.image?context.image.data:context.src,name=context.image?context.image.name:context.label||'附件';
+  if(context.kind==='image'&&source){const link=el('a');link.href=source;link.download=name;document.body.append(link);link.click();link.remove();toast('已另存');return;}
+  const entry=context.path&&window.NoteContent.files.get(window.NoteContent.fileKey(context.path));
+  if(!entry){toast('未能另存：找不到文件',null,true);return;}
+  Promise.resolve(entry.handle?entry.handle.getFile():entry.file).then(function download(file){const url=URL.createObjectURL(file),link=el('a');link.href=url;link.download=file.name;document.body.append(link);link.click();link.remove();window.setTimeout(function release(){URL.revokeObjectURL(url);},60000);toast('已另存');}).catch(function failed(){toast('未能另存：找不到文件',null,true);});
+}
+
+/**
+ * @brief 改写正文中的引用：卡片中立即保存并可撤销；编辑面中写回编辑器（Ctrl+Z 撤销）。删去后整行只剩空白或列表标记时，整行删掉。
+ * @param {object} context 附件上下文。 @param {string} replacement 新的 Markdown，空串表示删除。 @param {string} message 提示。 @return {boolean} 是否完成。
+ */
+function rewriteAttachment(context,replacement,message){
+  const editor=context.editor,source=editor?editor.getValue():context.note?(state.notes.find(function same(note){return note.id===context.note.id;})||{}).text:null;
+  if(typeof source!=='string'||context.start<0||source.slice(context.start,context.end)!==context.markdown){toast('内容已变化，未能修改附件',null,true);return false;}
+  let start=context.start,end=context.end;
+  if(!replacement){const lineStart=source.lastIndexOf('\n',start-1)+1,lineEnd=source.indexOf('\n',end)<0?source.length:source.indexOf('\n',end);const rest=source.slice(lineStart,start)+source.slice(end,lineEnd);if(/^\s*(?:[-*+]\s+|\d+[.)]\s+)?\s*$/.test(rest)){start=lineStart;end=lineEnd<source.length?lineEnd+1:lineEnd;if(end===source.length&&start>0&&source[start-1]==='\n')start-=1;}}
+  if(editor){editor.replace(replacement,{start:start,end:end,direction:'none'});return true;}
+  const next=source.slice(0,start)+replacement+source.slice(end);
+  if(!updateNote(context.note.id,{text:next}))return false;
+  toast(message,{label:'撤销',run:function undoAttachment(){updateNote(context.note.id,{text:source});}});return true;
+}
+
+/**
+ * @brief 改写缩略条中的图片：卡片中立即保存并可撤销，编辑中与草稿中写回对应的图片列表。
+ * @param {object} context 附件上下文。 @param {object|null} next 新图片，null 表示删除。 @param {string} message 提示。 @return {boolean} 是否完成。
+ */
+function rewriteImage(context,next,message){
+  const swap=function swap(images){return next?images.map(function replace(image){return image.id===context.image.id?next:image;}):images.filter(function keep(image){return image.id!==context.image.id;});};
+  if(context.source==='edit'){if(!ui.editing)return false;ui.editing.images=swap(ui.editing.images);const card=elements.noteList.querySelector('.note-card.is-editing');if(card)renderEditAttachments(card);return true;}
+  if(context.source==='draft'){state.draft={...state.draft,images:swap(state.draft.images),updatedAt:Date.now()};persistDraft();renderDraft();return true;}
+  const current=state.notes.find(function same(note){return note.id===context.note.id;});if(!current)return false;const before=current.images;
+  if(!updateNote(current.id,{images:swap(before)}))return false;
+  toast(message,{label:'撤销',run:function undoImage(){updateNote(current.id,{images:before});}});return true;
+}
+
+/**
+ * @brief 附件弹窗：标题是附件名，正文是图片预览或文件块；正文中的引用可以改 Markdown 原文（Ctrl+Enter 或「应用修改」）。
+ * 底栏：打开（正文中的引用）、更换、另存为、删除。缩略条中的图片没有原文，也没有「打开」，更换只接受 2 MB 以内的图片。
+ * @param {object} context 附件上下文：kind、source（strip、edit、draft、text、editor）、note、image、editor、markdown、start、end、src、path、label。
+ */
+function openAttachment(context){
+  const image=context.kind==='image',strip=Boolean(context.image),name=strip?context.image.name:context.label||(context.path?window.NoteContent.fileLabel(context.path):'')||(image?'图片':'附件');
+  const dialog=openModal(name,'attachment-modal');const heading=dialog.modal.querySelector('.modal-header h2');heading.prepend(icon(image?'image':'file'));
+  const source=strip?context.image.data:context.src;
+  if(image&&source){const preview=el('img','attachment-preview-image');preview.src=source;preview.alt=name;dialog.body.append(preview);}
+  else{const block=el('div','attachment-file');block.append(icon('file'),el('span','',context.path?window.NoteContent.fileLabel(context.path):name));dialog.body.append(block);}
+  let input=null;
+  if(!strip&&context.markdown!==undefined){
+    const field=el('label','attachment-source');input=el('textarea','form-control attachment-source-input');input.value=context.markdown;input.rows=2;input.spellcheck=false;input.setAttribute('aria-label','Markdown 原文');
+    const apply=button('应用修改','','check','button secondary compact');apply.addEventListener('click',function applySource(){if(input.value!==context.markdown&&rewriteAttachment(context,input.value,'已修改附件'))closeModal();else if(input.value===context.markdown)closeModal();});
+    input.addEventListener('keydown',function applyByKey(event){if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();event.stopPropagation();apply.click();}});
+    field.append(el('span','attachment-source-label','Markdown 原文'),input,apply);dialog.body.append(field);
+  }
+  const picker=el('input');picker.type='file';picker.hidden=true;picker.accept=strip?'image/png,image/jpeg,image/gif,image/webp,image/svg+xml':'';dialog.body.append(picker);
+  picker.addEventListener('change',async function replaceFile(){
+    const file=picker.files&&picker.files[0];picker.value='';if(!file)return;
+    try{
+      if(strip){const next=await readImage(file);if(rewriteImage(context,{...next,id:context.image.id},'已更换图片'))closeModal();return;}
+      let replacement;
+      if(/^image\//.test(file.type)){const next=await readImage(file);replacement='!['+next.name.replace(/\.[^.]+$/,'').replace(/([\\\[\]])/g,'\\$1')+']('+next.data+')';}
+      else replacement='['+file.name.replace(/[\r\n]+/g,' ').replace(/([\\\[\]])/g,'\\$1')+']('+window.NoteContent.createFileReference(file,null)+')';
+      if(rewriteAttachment(context,replacement,'已修改附件'))closeModal();
+    }catch(error){toast('未能更换：'+(error.message||'读取失败'),null,true);}
+  });
+  const footer=dialog.footer;
+  if(!strip){const open=button('打开','','external','button secondary');open.addEventListener('click',function openDirect(){openAttachmentDirect(context);});footer.append(open);}
+  const replace=button('更换','','upload','button secondary');replace.addEventListener('click',function chooseReplacement(){picker.click();});
+  const save=button('另存为','','download','button secondary');save.addEventListener('click',function saveAs(){saveAttachmentAs(context);});
+  const remove=button('删除这个附件','','trash','icon-button attachment-delete');remove.addEventListener('click',function deleteAttachment(){if(strip?rewriteImage(context,null,'已删除图片'):rewriteAttachment(context,'',image?'已删除图片':'已删除附件'))closeModal();});
+  footer.append(replace,save,remove);
+}
+
 /** @brief 显示图片原图。 @param {object} attachment 图片。 */
 function previewImage(attachment) {
   if (!attachment) return;
@@ -605,11 +724,28 @@ function previewImage(attachment) {
   dialog.footer.append(el('span', 'modal-hint', 'Esc 关闭预览'), download);
 }
 
-/** @brief 同时复制Emoji、正文与图像表示；文件附件提供真实文件交接。 @param {object} note 记录。 */
-async function copyNote(note){
-  try{const result=await window.NoteClipboard.copy(note);toast(result.kind==='image'?'已复制文字、富文本和图片表示':result.kind==='rich'?'已复制文字与富文本':'已复制文字');if(result.refs.length||result.imageError)showCopiedAttachments(note,result);}
-  catch(error){const dialog=openModal('复制记录','copy-modal');dialog.body.append(el('p','modal-hint','剪贴板权限受限，可选中文字后按 Ctrl+C。'));const input=el('textarea','copy-fallback form-control');input.value=(note.emoji||'📝')+' '+note.text;input.readOnly=true;input.rows=8;dialog.body.append(input);window.setTimeout(function selectText(){input.focus();input.select();},30);}
+/**
+ * @brief 粘贴的截图改名为「截图-年月日-时分秒」（与现有应用一致）；浏览器给的名字通常是 image.png，资源管理器复制的文件保留原名。
+ * @param {File} file 文件。 @return {File} 改名后的文件。
+ */
+function screenshotFile(file){
+  if(!file||file.name&&!/^image\.(?:png|jpe?g|gif|webp|bmp)$/i.test(file.name))return file;
+  const date=new Date(),pad=function pad(value){return String(value).padStart(2,'0');},extension=(file.type.split('/')[1]||'png').replace('jpeg','jpg').replace('svg+xml','svg');
+  const name='截图-'+date.getFullYear()+pad(date.getMonth()+1)+pad(date.getDate())+'-'+pad(date.getHours())+pad(date.getMinutes())+pad(date.getSeconds())+'.'+extension;
+  try{return new File([file],name,{type:file.type,lastModified:file.lastModified});}catch(error){return file;}
 }
+
+/** @brief 同时复制Emoji、正文与图像表示；文件附件提供真实文件交接。 @param {object} note 记录。 */
+async function copyNote(note){return copyNotes([note]);}
+/** @brief 复制记录的纯文本：多条之间空一行；单条时提示带上标题（与现有应用一致）。 @param {Array} notes 记录。 */
+async function copyNotes(notes){
+  try{await navigator.clipboard.writeText(notes.map(function plain(note){return (note.emoji||'📝')+' '+note.text;}).join('\n\n'));if(notes.length>1)toast('已复制 '+notes.length+' 条记录');else{const title=noteTitle(notes[0]);toast('已复制-'+(title.length>24?title.slice(0,24)+'…':title));}}
+  catch(error){toast('剪贴板不可用',null,true);}
+}
+/** @brief 记录的标题：第一行非空文字去掉标记，只有图片时为「图片记录」。 @param {object} note 记录。 @return {string} 标题。 */
+function noteTitle(note){const line=noteParts(note).body.split('\n').find(function nonempty(text){return text.trim();});return line?line.replace(/^\s*(?:#{1,6}\s+|>\s*|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+)/,'').replace(/[*`~]/g,'').trim()||'记录':note.images.length?'图片记录':'记录';}
+/** @brief 卡片与记录窗口显示的正文：首行做了标题时不再重复，首行是代码、列表、引用等结构时整段显示（与 renderCard 相同）。 @param {object} note 记录。 @return {{body:string,prefix:string}} 显示的正文，以及勾选待办时补回的前缀。 */
+function noteDisplay(note){const parsed=noteParts(note),lines=parsed.body.split('\n'),first=lines.findIndex(function nonempty(line){return Boolean(line.trim());}),firstLine=first<0?'':lines[first];const fullBody=firstLine.length>120||/^\s*(?:`{3,}|~{3,}|!\[|>|(?:-\s*){3,}$|(?:_\s*){3,}$|(?:\*\s*){3,}$)|^(?: {4}|\t)|^\s*[-*+]\s|^\s*\d+[.)]\s/.test(firstLine)||Boolean(window.NoteContent.filePath(firstLine));return {body:first<0?'':fullBody?parsed.body:lines.slice(first+1).join('\n'),prefix:fullBody||first<0?'':lines.slice(0,first+1).join('\n')+'\n'};}
 /** @brief 展示浏览器不能写入原生文件剪贴板的真实附件交接入口。 @param {object} note 记录。 @param {object} result 复制结果。 */
 function showCopiedAttachments(note,result){const dialog=openModal('复制与附件','clipboard-attachments-modal');dialog.body.append(el('p','modal-hint',result.refs.length?'文字已复制。浏览器无法把任意文件写入微信等应用的文件剪贴板；可保存真实文件后拖入目标应用，或使用系统分享。':'图片复制受限，已保留文字与富文本。'));if(result.imageError)dialog.body.append(el('p','settings-notice',result.imageError));const list=el('div','clipboard-file-list');result.refs.forEach(function row(ref){const item=el('div','clipboard-file-row');item.append(icon('file'),el('span','',window.NoteContent.fileLabel(ref)));const save=button('保存文件','','download','button secondary compact');save.addEventListener('click',async function saveRealFile(){const file=await window.NoteClipboard.file(ref);if(!file){openFileReference(ref);return;}window.NoteClipboard.download(file);});const share=button('系统分享','','external','button secondary compact');share.addEventListener('click',async function shareRealFile(){try{const file=await window.NoteClipboard.file(ref);if(!file){openFileReference(ref);return;}if(!navigator.share||!navigator.canShare||!navigator.canShare({files:[file]})){toast('当前环境不支持文件系统分享，请保存后拖入目标应用');return;}await navigator.share({files:[file],title:(note.emoji||'📝')+' '+file.name});}catch(error){if(error.name!=='AbortError')toast('分享未完成，可保存文件后发送',null,true);}});item.append(save,share);list.append(item);});note.images.forEach(function imageRow(image){const item=el('div','clipboard-file-row');item.append(icon('image'),el('span','',image.name));const save=button('保存图片','','download','button secondary compact');save.addEventListener('click',async function saveImage(){try{const response=await fetch(image.data),blob=await response.blob();window.NoteClipboard.download(new File([blob],image.name,{type:blob.type}));}catch(error){toast('图片读取失败',null,true);}});item.append(save);list.append(item);});dialog.body.append(list);dialog.footer.remove();}
 
@@ -620,7 +756,7 @@ function archiveNote(note) {
   const previousStatus = note.status;
   const archived = previousStatus !== 'archived';
   if (!updateNote(note.id, { status: archived ? 'archived' : 'active' })) return;
-  toast(archived ? '已归档，需要时仍能找到' : '已移回工作区', { label: '撤销', run: function undoArchive() { updateNote(note.id, { status: previousStatus }); } });
+  toast(archived ? '已归档' : '已移回工作区', { label: '撤销', run: function undoArchive() { updateNote(note.id, { status: previousStatus }); } });
 }
 
 /** @brief 删除前请求确认。 @param {object} note 记录。 */
@@ -678,7 +814,10 @@ async function inspectImport(file) {
       });
       const importedDraft = parsed.draft && typeof parsed.draft.text === 'string' ? { text: parsed.draft.text, images: (Array.isArray(parsed.draft.images) ? parsed.draft.images : []).map(normalizeImage).filter(Boolean), updatedAt: Date.now() } : null;
       const draft = !state.draft.text.trim() && !state.draft.images.length && importedDraft ? importedDraft : state.draft;
-      if (!persistSnapshot(Array.from(merged.values()), draft)) { toast('导入未完成，浏览器存储空间不足；当前内容未改动。', null, true); return; }
+      // 导入前先创建一份快照（与现有应用一致），需要时可以在「数据与同步 › 快照」中恢复。
+      const snapshotFailed = window.SideNotesSettings ? window.SideNotesSettings.createSnapshot('import') : '';
+      if (snapshotFailed) toast('导入前的快照未创建：' + snapshotFailed, null, true);
+      if (!persistSnapshot(Array.from(merged.values()), draft)) { toast('导入未完成，本地写入失败；当前内容未改动。', null, true); return; }
       closeModal();
       renderNotes();
       renderDraft();
@@ -731,19 +870,20 @@ function handleAction(event) {
     case 'show-changelog':showChangelog();break;
     case 'load-more':appendNextPage();break;
     case 'hide-capture':hideCapture();break;
-    case 'lock-sidebar':ui.locked=!ui.locked;control.setAttribute('aria-pressed',String(ui.locked));control.setAttribute('aria-label',ui.locked?'取消固定侧栏':'固定侧栏');control.title=ui.locked?'取消固定侧栏':'固定侧栏';control.replaceChildren(icon('pin'));if(ui.locked){cancelHide();queueComposerFocus();}break;
+    case 'lock-sidebar':ui.locked=!ui.locked;control.setAttribute('aria-pressed',String(ui.locked));control.setAttribute('aria-label',ui.locked?'取消固定侧栏':'固定侧栏');control.replaceChildren(icon('pin'));if(ui.locked){cancelHide();queueComposerFocus();}break;
     case 'new-note':if(finishEdit()){showSidebar();ui.composer=true;renderDraft();elements.sidebarDraft.focus();}break;
     case 'close-composer':ui.composer=false;persistDraft();elements.sidebarDraft.blur();renderDraft();break;
     case 'capture-to-sidebar':hideCapture();showSidebar();ui.composer=true;renderDraft();elements.sidebarDraft.focus();break;
     case 'save-note':saveDraft('capture');break;case 'save-sidebar-note':saveDraft('sidebar');break;
     case 'attach-image':ui.attachmentTarget=control.closest('#capture')?'capture':'draft';elements.imagePicker.click();break;
-    case 'attach-file':{ui.attachmentTarget=control.closest('#capture')?'capture':'draft';const d=openModal('添加文件引用','file-reference-modal');const input=el('input','form-control tag-name-input');input.placeholder='C:\\项目\\设计稿.pdf 或 file:///…';input.setAttribute('aria-label','文件路径');const choose=button('选择本机文件','','folder','button secondary');choose.addEventListener('click',function chooseReference(){closeModal();elements.attachmentPicker.click();});d.body.append(choose,input,el('p','modal-hint','选择文件或输入完整路径；打开时校验或重新定位。'));const add=button('插入引用','','file','button primary');add.addEventListener('click',function insertFile(){const p=input.value.trim();if(!window.NoteContent.filePath(p)){toast('请输入有效的本地绝对路径',null,true);return;}const name=p.split(/[\\/]/).pop()||'文件';changeDraft(state.draft.text+(state.draft.text?'\n\n':'')+'['+name.replace(/[\[\]]/g,'')+']('+p+')');closeModal();});d.footer.append(add);break;}
+    case 'attach-file':ui.attachmentTarget=control.closest('#capture')?'capture':'draft';elements.attachmentPicker.click();break;
     case 'remove-draft-image':removeDraftImage(control.dataset.imageId);break;
-    case 'preview-draft-image':previewImage(state.draft.images.find(function find(i){return i.id===control.dataset.imageId;}));break;
-    case 'preview-image':if(note)previewImage(note.images.find(function find(i){return i.id===control.dataset.imageId;}));break;
-    case 'preview-markdown-image':previewImage({name:control.dataset.alt||'图片',data:control.dataset.src});break;
-    case 'open-file-reference':openFileReference(control.dataset.filePath);break;
-    case 'open-note':if(note)openNote(note);break;
+    case 'preview-draft-image':{const image=state.draft.images.find(function find(i){return i.id===control.dataset.imageId;});if(image)attachmentClick(event,{kind:'image',source:'draft',image:image});break;}
+    case 'preview-image':if(note){const image=note.images.find(function find(i){return i.id===control.dataset.imageId;});if(image)attachmentClick(event,{kind:'image',source:'strip',note:note,image:image});}break;
+    case 'preview-edit-image':if(ui.editing){const image=ui.editing.images.find(function find(i){return i.id===control.dataset.imageId;});if(image)attachmentClick(event,{kind:'image',source:'edit',image:image});}break;
+    case 'preview-markdown-image':attachmentClick(event,textAttachment(note,'image',control.dataset.src,control.dataset.alt||''));break;
+    case 'open-file-reference':attachmentClick(event,textAttachment(note,'file',control.dataset.filePath,control.textContent.trim()));break;
+    case 'open-note':if(note)openNote(note,card);break;
     case 'copy-note':if(note)copyNote(note);break;
     case 'pin-note':if(note)updateNote(note.id,{pinned:!note.pinned});break;
     case 'archive-note':if(note)archiveNote(note);break;
@@ -834,14 +974,9 @@ function handleTabKeyboard(event){
 function copyCurrentOrSelected(){
   if(!elements.sidebar.classList.contains('open'))return false;
   const ids=window.NoteInteractions&&window.NoteInteractions.hasSelection()?window.NoteInteractions.selectedIds():[];
-  if(ids.length>1){
-    const chosen=state.notes.filter(function picked(note){return ids.includes(note.id);}).sort(compareNoteOrder);
-    const text=chosen.map(function plain(note){return (note.emoji||'📝')+' '+note.text;}).join('\n\n');
-    navigator.clipboard.writeText(text).then(function copied(){toast('已复制 '+chosen.length+' 条记录');},function denied(){toast('剪贴板权限受限，请逐条复制',null,true);});
-    return true;
-  }
+  if(ids.length>1){copyNotes(state.notes.filter(function picked(note){return ids.includes(note.id);}).sort(compareNoteOrder));return true;}
   const id=ids[0]||ui.currentId,note=id&&state.notes.find(function same(item){return item.id===id&&item.status!=='trash';});
-  if(!note)return false;copyNote(note);return true;
+  if(!note){toast('没有选中内容');return true;}copyNote(note);return true;
 }
 
 /**
@@ -850,11 +985,16 @@ function copyCurrentOrSelected(){
  */
 function initializeHelp(anchor){
   if(!anchor)return;const trigger=anchor.querySelector('.help-button'),message=anchor.querySelector('.help-text');
-  const show=function show(shown){message.hidden=!shown;trigger.setAttribute('aria-expanded',String(shown));};
-  trigger.addEventListener('click',function toggleHelp(){show(message.hidden);});trigger.addEventListener('focus',function focusHelp(){show(true);});trigger.addEventListener('blur',function blurHelp(){show(false);});
+  // 说明挂在 body 下的浮层中（layer.js），不被浮窗裁剪。
+  message.classList.add('floating-panel');message.remove();message.hidden=false;let close=null;
+  const show=function show(shown){trigger.setAttribute('aria-expanded',String(shown));if(shown&&!close)close=window.SideNotesLayer.open(message,trigger,{placement:'bottom-start'});else if(!shown&&close){close();close=null;}};
+  trigger.addEventListener('click',function toggleHelp(){show(!close);});trigger.addEventListener('focus',function focusHelp(){show(true);});trigger.addEventListener('blur',function blurHelp(){show(false);});
   anchor.addEventListener('mouseenter',function hoverHelp(){show(true);});anchor.addEventListener('mouseleave',function leaveHelp(){if(document.activeElement!==trigger)show(false);});
-  trigger.addEventListener('keydown',function closeHelp(event){if(event.key==='Escape'&&!message.hidden){event.preventDefault();event.stopPropagation();show(false);}});
+  trigger.addEventListener('keydown',function closeHelp(event){if(event.key==='Escape'&&close){event.preventDefault();event.stopPropagation();show(false);}});
 }
+
+/** @brief 按键是否就是命令当前的快捷键（设置中改过的按键优先，见 shortcuts.js）。 @param {KeyboardEvent} event 按键。 @param {string} id 命令。 @return {boolean} 是否匹配。 */
+function shortcut(event,id){return Boolean(window.SideNotesShortcuts)&&window.SideNotesShortcuts.matches(event,state.settings.shortcuts,id);}
 
 /** @brief 先退出当前操作，最后才收起窗口。 @param {KeyboardEvent} event 键盘事件。 */
 function handleKeyboard(event){
@@ -874,24 +1014,24 @@ function handleKeyboard(event){
   if(escape&&ui.expandedTags.size){event.preventDefault();cancelTagRename();closeExpandedTags();return;}
   // Esc 逐级退出（interactions.md 3.4）：菜单与弹窗、拖动、编辑、新建卡片失焦（有草稿时，草稿保留）、多选、搜索，最后收起侧栏。
   if(escape&&elements.tagDropdown&&!elements.tagDropdown.hidden){event.preventDefault();closeTagMenu();elements.tagFilterButton.focus();return;}
-  if(ui.editing&&(escape||event.ctrlKey&&event.key==='Enter')){event.preventDefault();if(escape)cancelEdit();else finishEdit();return;}
+  if(ui.editing&&(escape||shortcut(event,'save'))&&!(window.NoteWindows&&window.NoteWindows.owns(event.target))){event.preventDefault();if(escape)cancelEdit();else finishEdit();return;}
   if(escape&&elements.sidebarComposer&&elements.sidebarComposer.contains(document.activeElement)&&(state.draft.text.trim()||state.draft.images.length)){event.preventDefault();document.activeElement.blur();ui.composer=false;return;}
   if(escape&&window.NoteInteractions&&window.NoteInteractions.hasSelection()){event.preventDefault();window.NoteInteractions.clearSelection();return;}
   if(escape&&ui.searchOpen){event.preventDefault();ui.query='';elements.searchInput.value='';toggleSearch(false,{focusButton:true});renderNotes();return;}
   // Ctrl+, 打开设置（本次提出），编辑中同样可用；Ctrl+C 复制高亮或多选的记录，有选中文字时保留浏览器的复制。
-  if(event.ctrlKey&&!event.shiftKey&&!event.altKey&&(event.key===','||event.code==='Comma')){event.preventDefault();openSettings();return;}
+  if(shortcut(event,'settings')){event.preventDefault();openSettings();return;}
   if((event.ctrlKey||event.metaKey)&&!event.shiftKey&&!event.altKey&&event.code==='KeyC'&&!ui.editing){const typing=event.target&&event.target.closest&&event.target.closest('input,textarea,select,[contenteditable="true"]'),selection=window.getSelection&&window.getSelection();if(!typing&&!(selection&&String(selection).trim())&&copyCurrentOrSelected()){event.preventDefault();return;}}
   if(!ui.sortPress&&(event.key==='Enter'||event.key===' ')){ui.skipCardClick=false;ui.consumeClick=false;}
-  if(event.ctrlKey&&!event.shiftKey&&!event.altKey&&(event.code==='KeyF'||event.code==='KeyN')){
-    event.preventDefault();ui.skipCardClick=false;if(event.code==='KeyF')toggleSearch(true);else{if(!finishEdit())return;showSidebar({focus:false});focusNewComposer();}return;
+  if(shortcut(event,'search')||shortcut(event,'newNote')){
+    event.preventDefault();ui.skipCardClick=false;if(shortcut(event,'search'))toggleSearch(true);else{if(!finishEdit())return;showSidebar({focus:false});focusNewComposer();}return;
   }
-  if(event.ctrlKey&&event.shiftKey&&event.code==='Space'){event.preventDefault();showCapture();return;}
-  if(event.altKey&&event.shiftKey&&!event.ctrlKey&&event.code==='KeyS'){
+  if(shortcut(event,'capture')){event.preventDefault();showCapture();return;}
+  if(shortcut(event,'sidebar')){
     event.preventDefault();ui.skipCardClick=false;if(!finishEdit())return;
     if(elements.capture.classList.contains('open'))hideCapture();
     if(ui.searchOpen)toggleSearch(false);showSidebar({focus:false});focusNewComposer();return;
   }
-  if(event.ctrlKey&&event.key==='Enter'&&(elements.capture.contains(event.target)||elements.sidebarComposer.contains(event.target))){event.preventDefault();const fromCapture=elements.capture.contains(event.target);saveDraft(fromCapture?'capture':'sidebar',{collapse:fromCapture});return;}
+  if(shortcut(event,'save')&&(elements.capture.contains(event.target)||elements.sidebarComposer.contains(event.target))){event.preventDefault();const fromCapture=elements.capture.contains(event.target);saveDraft(fromCapture?'capture':'sidebar',{collapse:fromCapture});return;}
   if(escape){event.preventDefault();if(elements.capture.classList.contains('open')&&(elements.capture.contains(document.activeElement)||!elements.sidebar.classList.contains('open')))hideCapture();else if(elements.sidebar.classList.contains('open'))hideSidebar(true);else if(elements.capture.classList.contains('open'))hideCapture();}
 }
 
@@ -948,6 +1088,8 @@ function initialize() {
   renderNotes();
   renderDraft();
   document.addEventListener('pointerdown', protectTagFocus, true);
+  // 搜索展开时点到别处（包括卡片区域）即收起搜索：卡片按下时为长按排序阻止了浏览器默认的失焦，这里主动让搜索框失焦。
+  document.addEventListener('pointerdown',function blurSearchOutside(event){if(!ui.searchOpen)return;const wrap=document.getElementById('header-search');if(wrap.contains(event.target))return;if(wrap.contains(document.activeElement))document.activeElement.blur();},true);
   if(!window.PointerEvent)document.addEventListener('mousedown', protectTagFocus, true);
   document.addEventListener('click', dismissTagEditing, true);
   document.addEventListener('click', trackPinnedReturn, true);
@@ -1010,9 +1152,12 @@ function initialize() {
   const attachmentPicker=el('input');attachmentPicker.type='file';attachmentPicker.multiple=true;attachmentPicker.hidden=true;document.body.append(attachmentPicker);elements.attachmentPicker=attachmentPicker;attachmentPicker.addEventListener('change',function selectedFiles(){addPickedAttachments(attachmentPicker.files,ui.attachmentTarget||'draft');attachmentPicker.value='';});
   importPicker.addEventListener('change', function selectedImport() { inspectImport(importPicker.files[0]); importPicker.value = ''; });
   [elements.draftInput,elements.sidebarDraft].flatMap(function inputTargets(input){return input.liveMarkdown?[input,input.liveMarkdown.element]:[input];}).forEach(function attachPaste(input) {
-    input.addEventListener('paste', function pastedImages(event) {
-      const files = Array.from(event.clipboardData && event.clipboardData.items || []).filter(function imageItem(item) { return item.kind === 'file' && item.type.startsWith('image/'); }).map(function itemFile(item) { return item.getAsFile(); }).filter(Boolean);
-      if (files.length) { event.preventDefault(); addImages(files); }
+    input.addEventListener('paste', function pastedFiles(event) {
+      // 粘贴截图或文件（与现有应用一致）：截图改名后放进缩略条，其它文件在光标处插入引用。
+      const files = Array.from(event.clipboardData && event.clipboardData.files || []);
+      if (!files.length) return;
+      event.preventDefault();
+      addPickedAttachments(files.map(screenshotFile), elements.capture.contains(input) ? 'capture' : 'draft');
     });
   });
   window.addEventListener('beforeunload', function preserveOnExit(event) {
@@ -1057,7 +1202,7 @@ function renderTagMenu() {
   const menu=elements.tagDropdown;menu.replaceChildren();
   const all=button('全部标签','clear-tag','','tag-option');all.append(el('span','tag-option-count',String(state.notes.filter(inCurrentTab).length)));menu.append(all);
   const candidates=rankedTags();candidates.slice(0,6).forEach(function row(item,index){const group=el('div','tag-option-row'+(index===0&&(item.match||item.selected)?' current-tag-row':''));
-    const choice=button('#'+item.tag,'filter-tag','','tag-option');choice.dataset.tag=item.tag;choice.setAttribute('role','menuitem');choice.title='访问频率 40 · 近期访问 30 · 条数 4 · 置顶 3';choice.append(el('span','tag-option-count',String(item.count)));group.append(choice);
+    const choice=button('#'+item.tag,'filter-tag','','tag-option');choice.dataset.tag=item.tag;choice.setAttribute('role','menuitem');choice.append(el('span','tag-option-count',String(item.count)));group.append(choice);
     if(index===0&&(item.match||item.selected)){const manage=button('管理 #'+item.tag,'manage-tag','more');manage.dataset.tag=item.tag;group.append(manage);}menu.append(group);});
   const priority=menu.querySelector('.current-tag-row');if(priority)menu.prepend(priority);
   if(!candidates.length)menu.append(el('p','tag-menu-empty',ui.query?'没有匹配的标签':'输入 #标签 创建分组'));
@@ -1083,9 +1228,9 @@ function renderWorkspaceNudge(){if(!elements.workspaceNudge||!state)return;const
 function resizeDraftInput(){const input=elements.sidebarDraft;if(!input)return;const active=ui.composer||Boolean(state.draft.text||state.draft.images.length);elements.sidebarComposer.classList.add('is-active');if(input.liveMarkdown){input.liveMarkdown.element.style.maxHeight=Math.min(340,window.innerHeight*.42)+'px';return;}input.style.height='auto';input.style.height=Math.min(Math.min(300,window.innerHeight*.38),Math.max(active?100:76,input.scrollHeight||40))+'px';}
 /* ==================== 全文、文件与更多操作 ==================== */
 /** @brief 查看未裁切的 Markdown 全文。 @param {object} note 记录。 */
-function openNote(note){if(ui.editing&&!finishEdit())return;const dialog=openModal('记录详情','detail-modal');const body=el('div','detail-source markdown-body');window.NoteContent.renderMarkdown(noteParts(note).body,body);note.images.forEach(function image(a){const b=button('预览 '+a.name,'preview-markdown-image','','note-image-button');b.dataset.src=a.data;b.dataset.alt=a.name;const i=el('img','note-image');i.src=a.data;i.alt=a.name;b.append(i);body.append(b);});dialog.body.append(body);const tags=el('p','detail-tags',noteParts(note).tags.map(function tag(t){return '#'+t;}).join(' '));dialog.body.append(tags);const edit=button('编辑','','edit','button primary');edit.addEventListener('click',function editDetail(){closeModal();showSidebar();beginEdit(note.id);});dialog.footer.append(el('span','modal-hint',formatTime(note.createdAt)),edit);}
+function openNote(note,card){if(!window.NoteWindows)return;const rect=card&&card.getBoundingClientRect?card.getBoundingClientRect():null;window.NoteWindows.open(note.id,{kind:'expand',from:rect});}
 /** @brief 下载单条 Markdown。 @param {object} note 记录。 */
-function exportNote(note){const blob=new Blob([note.text],{type:'text/markdown;charset=utf-8'}),url=URL.createObjectURL(blob),a=el('a');a.href=url;a.download=(noteParts(note).body.split('\n')[0].replace(/[<>:"/\\|?*]/g,'_').slice(0,50)||'SideNotes')+'.md';document.body.append(a);a.click();a.remove();window.setTimeout(function release(){URL.revokeObjectURL(url);},1000);}
+function exportNote(note){const blob=new Blob([note.text],{type:'text/markdown;charset=utf-8'}),url=URL.createObjectURL(blob),a=el('a');a.href=url;a.download=((note.emoji||'')+noteParts(note).body.split('\n')[0].slice(0,40)).replace(/[<>:"/\\|?*]/g,'_')+'.md';document.body.append(a);a.click();a.remove();window.setTimeout(function release(){URL.revokeObjectURL(url);},60000);toast('已导出 Markdown');}
 /** @brief 校验并打开文件引用，未授权时要求用户定位文件。 @param {string} filePath 本地路径。 */
 async function openFileReference(filePath){const status=await window.NoteContent.checkFile(filePath);const entry=window.NoteContent.files.get(window.NoteContent.fileKey(filePath));const token=window.NoteContent.isFileToken&&window.NoteContent.isFileToken(filePath),label=token?window.NoteContent.fileLabel(filePath):filePath;const dialog=openModal('文件引用','file-reference-modal');dialog.body.append(el('code','file-path',label));const hint=el('p','file-check-status',status==='missing'?'文件已失效，请重新定位。':status==='valid'?(entry&&entry.handle?'已校验，文件可读取。':token?'本次会话所选文件可读取；刷新后需重新定位。':'所选文件副本可读取，原路径未验证。'):token?'引用已保留，请重新选择文件以校验并打开。':'尚未授权校验此文件。');dialog.body.append(hint);dialog.body.append(el('p','modal-hint',token?'浏览器未提供原始完整路径，仅保留文件名和引用标识。':'浏览器只能访问你选择的文件；原路径检查和系统默认应用跳转由桌面端接入。'));
   const locate=button(status==='valid'?'重新定位':'选择文件','','folder','button secondary');locate.addEventListener('click',async function chooseFile(){try{if(window.showOpenFilePicker){const handles=await window.showOpenFilePicker();const handle=handles[0],file=await handle.getFile();window.NoteContent.registerFile(filePath,file,handle);openFileReference(filePath);}else{ui.pendingFilePath=filePath;elements.filePicker.click();}}catch(error){if(error.name!=='AbortError')toast('无法读取所选文件',null,true);}});dialog.footer.append(locate);
@@ -1119,7 +1264,7 @@ function fitCardTags(card){
   if(!more||tags.classList.contains('tags-expanded'))return;const width=tags.clientWidth;if(!width)return;
   const reserve=more.getBoundingClientRect().width||24,gap=4,widths=wraps.map(function measure(w){return w.getBoundingClientRect().width;});let used=0,visible=0;
   widths.forEach(function fit(value,index){const next=used+value+(visible?gap:0);if(next+reserve+gap<=width){used=next;visible++;}else wraps[index].hidden=true;});
-  const hidden=wraps.length-visible;more.title=hidden?'展开剩余 '+hidden+' 个标签':'管理标签';more.setAttribute('aria-label',more.title);more.dataset.hiddenCount=String(hidden);
+  const hidden=wraps.length-visible;more.setAttribute('aria-label',hidden?'展开剩余 '+hidden+' 个标签':'管理标签');more.dataset.hiddenCount=String(hidden);
 }
 /** 在同一帧统一检查标签与正文裁切。 */
 function scheduleTagLayout(){if(ui.tagFrame)return;const update=function updateCardGeometry(){ui.tagFrame=0;elements.noteList.querySelectorAll('.note-card').forEach(function geometry(card){fitCardTags(card);const content=card.querySelector('.note-content'),expand=card.querySelector('.note-expand');if(content&&expand&&content.clientHeight){const overflow=content.scrollHeight>content.clientHeight+2;card.classList.toggle('is-truncated',overflow);expand.hidden=!overflow;}});};if(window.requestAnimationFrame)ui.tagFrame=window.requestAnimationFrame(update);else update();}
@@ -1139,21 +1284,22 @@ function initializeSidebarResize(){
   handle.addEventListener('keydown',function keyboardResize(event){if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;event.preventDefault();const delta=(event.key==='ArrowLeft'?1:-1)*(state.settings.edge==='right'?1:-1)*(event.shiftKey?40:8);const width=Math.max(360,Math.min(720,state.settings.width+delta));if(persistSnapshot(state.notes,state.draft,{...state.settings,width:width}))previewSidebarWidth(width);});
 }
 /* ==================== 版本与更新 ==================== */
+/** 原型这一版的要点：版本弹窗与「发现新版本」共用的写法。 */
+const VERSION_NOTES=['卡片可以拖出侧栏，成为可以移动、缩放与置顶的窗口；「展开全文」也在窗口中打开','快捷键可以重新绑定，编辑时可以用格式快捷键','「数据与同步」增加快照与附件','进入编辑时可以把卡片滚到列表顶部'];
 /** 刷新版号及可用更新标记。 */
-function refreshVersionBadge(){const flags=window.PrototypeFlags||{version:'0.5.0',availableVersion:''};if(ui.availableVersion===undefined)ui.availableVersion=flags.availableVersion;const version=ui.currentVersion||flags.version;const label=elements.versionButton.querySelector('.version-label');if(label)label.textContent='v'+version;const badge=elements.versionButton.querySelector('.update-badge');if(badge)badge.hidden=!ui.availableVersion;elements.versionButton.classList.toggle('has-update',Boolean(ui.availableVersion));const name=ui.availableVersion?'发现新版本 '+ui.availableVersion+'，点击查看更新内容':'版本 '+version+'，查看更新日志';elements.versionButton.setAttribute('aria-label',name);elements.versionButton.title=name;}
-/** 发现新版本：列出这次即将更新的内容，可以「立即更新」或「稍后」，稍后之后角标保留（本次提出；浏览器中为模拟更新）。 */
+function refreshVersionBadge(){const flags=window.PrototypeFlags||{version:'',availableVersion:''};if(ui.availableVersion===undefined)ui.availableVersion=flags.availableVersion;const version=ui.currentVersion||flags.version;const label=elements.versionButton.querySelector('.version-label');if(label)label.textContent='v'+version;const badge=elements.versionButton.querySelector('.update-badge');if(badge)badge.hidden=!ui.availableVersion;elements.versionButton.classList.toggle('has-update',Boolean(ui.availableVersion));const name=ui.availableVersion?'发现新版本 '+ui.availableVersion+'，点击查看更新内容':'版本 '+version+'，查看更新日志';elements.versionButton.setAttribute('aria-label',name);}
+/** 发现新版本：列出即将更新的内容，可以「立即更新」或「稍后」，稍后之后角标保留（本次提出）。 */
 function showUpdate(){
-  const dialog=openModal('发现新版本','update-modal');dialog.body.append(el('p','update-summary','SideNotes '+ui.availableVersion+' · 当前 '+(ui.currentVersion||'0.5.0')));
-  const notes=el('ul','update-notes');['五套主题：终端、杂志、记录纸、Windows 11、磨砂玻璃','操作按钮与时间共用标题行右侧，标题最多两行','键盘：↑ ↓ 移动，Enter 编辑，Delete 移入回收站'].forEach(function item(text){notes.append(el('li','',text));});dialog.body.append(notes);
-  const later=button('稍后','close-modal','','button secondary'),now=button('立即更新','','download','button primary');now.addEventListener('click',function updateNow(){ui.currentVersion=ui.availableVersion;ui.availableVersion='';refreshVersionBadge();closeModal();toast('更新演示完成');});dialog.footer.append(later,now);
+  const dialog=openModal('发现新版本','update-modal');dialog.body.append(el('p','update-summary','SideNotes '+ui.availableVersion+' · 当前 '+(ui.currentVersion||window.PrototypeFlags.version)));
+  const notes=el('ul','update-notes');VERSION_NOTES.forEach(function item(text){notes.append(el('li','',text));});dialog.body.append(notes);
+  const later=button('稍后','close-modal','','button secondary'),now=button('立即更新','','download','button primary');now.addEventListener('click',function updateNow(){const version=ui.availableVersion;ui.currentVersion=version;ui.availableVersion='';refreshVersionBadge();closeModal();toast('已更新到 '+version);});dialog.footer.append(later,now);
 }
-/** 显示更新日志及更新服务入口。 */
+/** 版本弹窗：只列本版要点（与现有应用的 ChangelogDialog 一致）；演示模式下另有测试按钮。 */
 function showChangelog(){
   if(ui.availableVersion){showUpdate();return;}
-  const dialog=openModal('版本与更新','changelog-modal');dialog.body.append(el('p','version-summary','SideNotes '+(ui.currentVersion||'0.5.0')+' PREVIEW'));
-  const log=el('div','changelog-list');[['0.5.0','失焦保存、退出层级、开栏聚焦、长按与批量排序、卡片菜单及折叠、回收确认和新版速记浮窗。'],['0.4.1','修复 Markdown 完整复制、按页签新建、侧栏打开聚焦、搜索摘要与设置布局。'],['0.4.0','长按排序、编辑确认与取消、Ctrl+F紧凑搜索、富文本和图片复制、重新组织设置布局。'],['0.3.0','Emoji、实时 Markdown 编辑、每批10条增量列表、侧栏拖动、字体搜索与双击复制。'],['0.2.0','标签分组、Markdown预览、分类设置、材质主题和备份流程。'],['0.1.0','侧栏、快捷速记、共享草稿与本地存储。']].forEach(function entry(item){const row=el('section','changelog-entry');row.append(el('h3','',item[0]),el('p','',item[1]));log.append(row);});dialog.body.append(log);
-  const actions=el('div','update-actions');const check=button('检查更新','','restore','button secondary');check.addEventListener('click',function checkUpdate(){if(window.PrototypeFlags.demo){ui.availableVersion='0.5.1';refreshVersionBadge();toast('已显示更新提示示例');showChangelog();}else toast('更新服务待桌面端接入');});actions.append(check);
-  if(ui.availableVersion){dialog.body.append(el('p','settings-notice','可用版本 '+ui.availableVersion+'（更新演示）'));const update=button('模拟完成更新','','download','button primary');update.hidden=!window.PrototypeFlags.demo;update.addEventListener('click',function completeDemoUpdate(){ui.currentVersion=ui.availableVersion;ui.availableVersion='';refreshVersionBadge();closeModal();toast('更新演示完成');});actions.append(update);}
+  const dialog=openModal('版本与更新','changelog-modal');dialog.body.append(el('p','version-summary','SideNotes '+(ui.currentVersion||window.PrototypeFlags.version)));
+  const notes=el('ul','update-notes');VERSION_NOTES.forEach(function item(text){notes.append(el('li','',text));});dialog.body.append(notes);
+  const actions=el('div','update-actions');const check=button('检查更新','','restore','button secondary');check.addEventListener('click',function checkUpdate(){checkForUpdates();});actions.append(check);
   dialog.body.append(actions);
   if(window.PrototypeFlags.demo){const test=el('div','demo-controls');const add=button('生成30条测试记录','','plus','button secondary');add.addEventListener('click',function sampleRows(){const time=Date.now();const notes=Array.from({length:30},function sample(_,index){return {id:'demo-'+createId(),text:'测试记录 '+(index+1)+'\n\n用于检查增量加载、Emoji与卡片交互。\n\n#测试',images:[],pinned:false,status:'active',createdAt:time-index*60000,updatedAt:time-index*60000};});if(persistSnapshot(notes.concat(state.notes))){ui.tab='workspace';ui.selectedTag='';ui.query='';elements.searchInput.value='';renderNotes({reset:true});closeModal();showSidebar();toast('已添加30条测试记录');}});test.append(add);dialog.body.append(test);}
   dialog.footer.remove();
@@ -1169,7 +1315,7 @@ function startTagRename(chip){
   const card=chip.closest('[data-note-id]'),note=card&&state.notes.find(function same(n){return n.id===card.dataset.noteId;});if(!note)return;
   ui.expandedTags.clear();ui.expandedTags.add(note.id);
   elements.noteList.querySelectorAll('.note-tags').forEach(function expand(tags){tags.classList.toggle('tags-expanded',tags.closest('[data-note-id]').dataset.noteId===note.id);});
-  const input=el('input','tag-rename-input');input.type='text';input.value=chip.dataset.tag;input.maxLength=40;input.setAttribute('aria-label','修改此记录的标签');input.title='Enter 确认，Esc 取消';
+  const input=el('input','tag-rename-input');input.type='text';input.value=chip.dataset.tag;input.maxLength=40;input.setAttribute('aria-label','修改此记录的标签');
   ui.tagRenaming={id:note.id,tag:chip.dataset.tag,input:input,chip:chip};chip.replaceWith(input);
   input.addEventListener('keydown',function renameKey(event){if(event.isComposing||ui.composing||event.keyCode===229)return;if(event.key==='Enter'){event.preventDefault();event.stopPropagation();finishTagRename();}else if(event.key==='Escape'){event.preventDefault();event.stopPropagation();cancelTagRename();}});
   fitCardTags(card);input.focus();input.select();
@@ -1182,7 +1328,7 @@ function finishTagRename(refresh=true){
   const note=state.notes.find(function same(n){return n.id===editing.id;});
   if(note&&next!==editing.tag){const parsed=noteParts(note),text=window.NoteContent.compose(parsed.body,parsed.tags.map(function rename(tag){return tagKey(tag)===tagKey(editing.tag)?next:tag;}));const notes=state.notes.map(function change(n){return n.id===note.id?{...n,text:text,updatedAt:Date.now()}:n;});if(!persistSnapshot(notes)){toast('标签未保存，输入仍在',null,true);return false;}ui.tagRefreshPending=true;}
   editing.chip.textContent='#'+next;editing.chip.dataset.tag=next;
-  const wrap=editing.input.parentElement,remove=wrap&&wrap.querySelector('.tag-remove');if(remove){remove.dataset.tag=next;remove.setAttribute('aria-label','从此记录移除 #'+next);remove.title='从此记录移除 #'+next;}
+  const wrap=editing.input.parentElement,remove=wrap&&wrap.querySelector('.tag-remove');if(remove){remove.dataset.tag=next;remove.setAttribute('aria-label','从此记录移除 #'+next);}
   editing.input.replaceWith(editing.chip);ui.tagRenaming=null;
   if(refresh)renderNotes();else renderTagMenu();return true;
 }
@@ -1262,7 +1408,7 @@ function initializeContentDrop(){
   document.addEventListener('dragleave',function leaveContentDrop(event){const target=dropTarget(event);if(target&&(!event.relatedTarget||!target.contains(event.relatedTarget)))target.classList.remove('is-drop-target');},true);
   document.addEventListener('dragend',function endContentDrop(){document.querySelectorAll('.is-drop-target').forEach(function clear(target){target.classList.remove('is-drop-target');});},true);
   document.addEventListener('drop',receiveContentDrop,true);
-  document.addEventListener('paste',function pasteEditAttachments(event){const card=event.target.closest('.note-card.is-editing');if(!card||!ui.editing||!event.clipboardData)return;const files=Array.from(event.clipboardData.files||[]);if(!files.length)return;event.preventDefault();event.stopPropagation();addPickedAttachments(files,ui.editing.id);},true);
+  document.addEventListener('paste',function pasteEditAttachments(event){const card=event.target.closest('.note-card.is-editing');if(!card||!ui.editing||!event.clipboardData)return;const files=Array.from(event.clipboardData.files||[]);if(!files.length)return;event.preventDefault();event.stopPropagation();addPickedAttachments(files.map(screenshotFile),ui.editing.id);},true);
 }
 
 /* ==================== 编辑事务与附件 ==================== */
@@ -1278,7 +1424,7 @@ function cancelEdit(){
 /** @brief 渲染编辑事务中的图片，不移动正文光标。 @param {HTMLElement} card 编辑卡片。 */
 function renderEditAttachments(card){
   if(!ui.editing)return;let list=card.querySelector('.note-edit-attachments');if(!list){list=el('div','attachment-list note-edit-attachments');card.insertBefore(list,card.querySelector('.note-edit-actions'));}list.replaceChildren();
-  ui.editing.images.forEach(function item(image){const wrap=el('div','attachment-item'),preview=button('预览 '+image.name,'preview-markdown-image','','attachment-preview note-image-button');preview.dataset.src=image.data;preview.dataset.alt=image.name;const picture=el('img');picture.src=image.data;picture.alt=image.name;preview.append(picture);const remove=button('移除 '+image.name,'remove-edit-image','x');remove.classList.add('attachment-remove');remove.dataset.imageId=image.id;wrap.append(preview,remove);list.append(wrap);});
+  ui.editing.images.forEach(function item(image){const wrap=el('div','attachment-item'),preview=button('预览 '+image.name,'preview-edit-image','','attachment-preview note-image-button');preview.dataset.imageId=image.id;const picture=el('img');picture.src=image.data;picture.alt=image.name;preview.append(picture);const remove=button('移除 '+image.name,'remove-edit-image','x');remove.classList.add('attachment-remove');remove.dataset.imageId=image.id;wrap.append(preview,remove);list.append(wrap);});
 }
 /** @brief 移除尚未提交的图片。 @param {string} id 图片标识。 */
 function removeEditImage(id){if(!ui.editing)return;ui.editing.images=ui.editing.images.filter(function keep(image){return image.id!==id;});const card=elements.noteList.querySelector('.note-card.is-editing');if(card)renderEditAttachments(card);}
@@ -1293,12 +1439,14 @@ function applyEditPayload(payload,range=null){
 /** @brief 将附件插入当前编辑面或共享草稿，保持原来的输入窗口。 @param {FileList|Array} files 文件。 @param {string} target 目标。 */
 async function addPickedAttachments(files,target='draft'){
   const editing=ui.editing&&ui.editing.id===target?ui.editing:null,input=target==='capture'?elements.draftInput:elements.sidebarDraft;
+  // 引用插在选择文件之前的光标处（与现有应用一致），没有光标时接在末尾。
+  const editInput=editing&&elements.noteList.querySelector('textarea[data-edit-id]'),source=editing?editInput:input,range=source&&source.liveMarkdown?source.liveMarkdown.readSelection():null;
   ui.pendingImages++;renderDraft();
   try{
     const payload=await window.NoteDrop.prepare({files:Array.from(files),getData:function noText(){return '';}});
     payload.errors.forEach(function warn(message){toast(message,null,true);});
-    if(editing){if(ui.editing!==editing){toast('编辑已退出，未插入附件');return;}applyEditPayload(payload);}
-    else applyDraftDrop(payload,null,input);
+    if(editing){if(ui.editing!==editing){toast('编辑已退出，未插入附件');return;}applyEditPayload(payload,range);}
+    else applyDraftDrop(payload,range,input);
   }catch(error){toast(error.message||'附件读取失败',null,true);}
   finally{ui.pendingImages--;ui.editAttachmentHold=null;renderDraft();resumeEditBlur();}
 }
@@ -1309,7 +1457,7 @@ function toggleSearch(open=true,options={}){
   if(open){showSidebar({focus:false});elements.searchInput.value=ui.query;elements.searchInput.focus();elements.searchInput.select();}else if(options.focusButton)document.getElementById('search-toggle').focus();
 }
 /** 检查更新的原型入口，关于页与版本弹窗共用。 */
-function checkForUpdates(){if(window.PrototypeFlags.demo){ui.availableVersion='0.5.1';refreshVersionBadge();showChangelog();toast('可用更新演示');}else{toast('更新服务待桌面端接入');}}
+function checkForUpdates(){if(window.PrototypeFlags.demo&&!ui.currentVersion){ui.availableVersion=window.PrototypeFlags.nextVersion;refreshVersionBadge();showChangelog();}else toast('已是最新版本');}
 
 /* ==================== 手势优先级与长按排序 ==================== */
 /** @brief 默认按创建时间倒序，手动排序后使用持久顺序。 @param {object} a 记录。 @param {object} b 记录。 @return {number} 比较结果。 */
@@ -1365,7 +1513,7 @@ function refreshSearchSummary(){
   const query=ui.query.trim();
   let label=trigger.querySelector('.search-query-label');
   if(!label){label=el('span','search-query-label');label.setAttribute('aria-hidden','true');trigger.append(label);}
-  label.textContent=query;label.hidden=!query;label.title=query;
+  label.textContent=query;label.hidden=!query;
   wrap.classList.toggle('has-query',Boolean(query));
   row.classList.toggle('has-search-query',Boolean(query));
   if(!query||ui.searchOpen){
@@ -1381,12 +1529,11 @@ function refreshSearchSummary(){
     const width=Math.min(maxWidth,Math.max(64,Math.ceil(textWidth)+45));
     wrap.style.width=width+'px';trigger.style.width=width+'px';row.style.setProperty('--search-collapsed-width',width+'px');
   }
-  trigger.title=query||'搜索 · Ctrl+F';
   trigger.setAttribute('aria-label',query?'搜索：'+query+'，点击修改':'搜索记录 · Ctrl+F');
 }
 /** 连接品牌双击回顶与搜索失焦收起，不抢走外部操作的焦点。 */
 function initializeHeaderInteractions(){
-  const brand=document.querySelector('.sidebar-brand');brand.title='双击回到列表顶部';brand.addEventListener('dblclick',function top(event){if(event.target.closest('button'))return;event.preventDefault();const selection=window.getSelection();if(selection&&selection.removeAllRanges)selection.removeAllRanges();scrollNotesToTop();});
+  const brand=document.querySelector('.sidebar-brand');brand.addEventListener('dblclick',function top(event){if(event.target.closest('button'))return;event.preventDefault();const selection=window.getSelection();if(selection&&selection.removeAllRanges)selection.removeAllRanges();scrollNotesToTop();});
   const wrap=document.getElementById('header-search');wrap.addEventListener('focusout',function closeOnBlur(event){if(event.relatedTarget&&wrap.contains(event.relatedTarget))return;window.clearTimeout(ui.searchBlurTimer);ui.searchBlurTimer=window.setTimeout(function afterFocus(){if(ui.searchOpen&&!wrap.contains(document.activeElement))toggleSearch(false);},0);});
   window.requestAnimationFrame(function initialFocus(){if(elements.sidebar.classList.contains('open')&&!ui.searchOpen&&!ui.modal&&!ui.editing)queueComposerFocus();});
 }
@@ -1412,7 +1559,7 @@ function scheduleEditBlur(editing){
   window.clearTimeout(ui.editBlurTimer);
   ui.editBlurTimer=window.setTimeout(function commitBlur(){
     if(!editing||ui.editing!==editing){ui.pendingEditBlur=null;return;}
-    if(ui.composing||ui.pendingImages||ui.editAttachmentHold===editing){ui.pendingEditBlur=editing;return;}
+    if(ui.composing||ui.pendingImages||ui.editAttachmentHold===editing||ui.modal){ui.pendingEditBlur=editing;return;}
     const card=elements.noteList.querySelector('.note-card.is-editing');
     if(card&&card.contains(document.activeElement)){ui.pendingEditBlur=null;return;}
     ui.pendingEditBlur=null;
