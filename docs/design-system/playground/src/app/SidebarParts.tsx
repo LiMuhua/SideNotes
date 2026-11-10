@@ -15,17 +15,24 @@ import { Icon, type IconName } from '../ui/Icon';
 import { Layer, useAnchoredPosition } from '../ui/layer';
 import { Keys } from '../ui/Misc';
 import { SHORTCUT_KEYS } from './shortcuts';
-import appIconUrl from '../../../assets/app-icon.svg';
+import { builtinAppIcon, CUSTOM_APP_ICON } from '../model/appIcons';
+
+/** 当前应用图标的地址：内置图标用母版 SVG，自定义图标用上传后裁好的 PNG。 */
+export function useAppIconUrl(): string {
+  const { appIcon, customIcon } = useNotes();
+  return appIcon === CUSTOM_APP_ICON && customIcon ? customIcon : builtinAppIcon(appIcon).svg;
+}
 
 /**
- * 应用图标（`docs/design-system/assets/app-icon.svg`，本次提出）：一张黄色便签从屏幕右边缘探出头来，看着屏幕上的内容。
+ * 应用图标（本次提出）：设置「外观与交互 › 显示 › 应用图标」中选用的图标，默认是 211 门缝浅笑 · 靛蓝（见 model/appIcons.ts）。
  * 配色固定，不随主题变化。任务栏、托盘、程序坞与关于页直接显示它；标题区、速记浮窗与设置窗口通过 BrandMark 显示。
  */
 export function AppIcon({ className, size }: { className?: string; size?: number }) {
+  const src = useAppIconUrl();
   return (
     <img
       className={cx('sn-app-icon', className)}
-      src={appIconUrl}
+      src={src}
       alt=""
       draggable={false}
       style={size ? { width: size, height: size } : undefined}

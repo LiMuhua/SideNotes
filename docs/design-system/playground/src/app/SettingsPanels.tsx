@@ -2,7 +2,8 @@
  * 设置：外观与交互、快捷键。
  *
  * 分组、设置项、说明文字、取值范围与默认值沿用现有应用 0.7.3（`AppearancePanel.tsx`、`ShortcutsPanel.tsx`、
- * `src/core/settings.ts`）。不同之处：「界面材质」改称「主题」，五个选项；字体增加「跟随主题」并作为默认值（见 adaptation.md）。
+ * `src/core/settings.ts`）。不同之处：「界面材质」改称「主题」，五个选项；字体增加「跟随主题」并作为默认值（见 adaptation.md）；
+ * 「显示」中新增应用图标（本次提出，见 AppIconPicker.tsx）。
  * 明暗模式与主题在 Playground 中分别对应外壳的「明暗」与「主题」。
  */
 
@@ -18,6 +19,7 @@ import { cx } from '../ui/context';
 import { Select } from '../ui/Select';
 import { useToast } from '../ui/Tabs';
 import { Switch } from '../ui/Toggle';
+import { AppIconPicker } from './AppIconPicker';
 import { Field, FieldRow, NumberInput, RangeGroup, RangeRow, SettingLabel, SettingsCard, SettingsPage } from './SettingsParts';
 import { SHORTCUTS, type ShortcutSpec } from './shortcuts';
 
@@ -138,6 +140,8 @@ export function AppearancePanel() {
               </label>
             ))}
           </div>
+          <SettingLabel label="应用图标" help="任务栏、托盘、桌面快捷方式与窗口标题区都换成选中的图标；上传的图片先裁成正方形" />
+          <AppIconPicker />
         </div>
       </SettingsCard>
 

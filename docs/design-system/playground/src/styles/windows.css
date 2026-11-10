@@ -515,6 +515,198 @@
   font-weight: var(--sn-font-weight-regular);
 }
 
+/* 应用图标（本次提出）：内置图标与自定义图标排成一行，单击即换；选中的一格与选项卡片一样带强调色边框。 */
+.sn-icon-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sn-space-3);
+}
+
+.sn-icon-choice {
+  display: grid;
+  place-items: center;
+  width: calc(var(--sn-control-height) * 1.5);
+  height: calc(var(--sn-control-height) * 1.5);
+  padding: var(--sn-space-1);
+  border: var(--sn-border-width) solid transparent;
+  border-radius: var(--sn-radius-md);
+  color: var(--sn-color-text-muted);
+  cursor: pointer;
+}
+
+.sn-icon-choice:hover {
+  border-color: var(--sn-color-border-strong);
+}
+
+.sn-icon-choice.is-selected {
+  border-color: var(--sn-color-accent);
+  box-shadow: 0 0 0 var(--sn-border-width) var(--sn-color-accent);
+}
+
+.sn-icon-choice:has(input:focus-visible) {
+  outline: var(--sn-focus-ring-width) solid var(--sn-color-focus);
+  outline-offset: var(--sn-focus-ring-offset);
+}
+
+.sn-icon-choice > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* 还没有上传自定义图标时是一个虚线加号格，与头像上传的空位一样。 */
+.sn-icon-choice.is-add {
+  border-style: dashed;
+  border-color: var(--sn-color-border-strong);
+}
+
+.sn-icon-choice.is-add:hover {
+  border-color: var(--sn-color-accent);
+  color: var(--sn-color-accent-text);
+}
+
+/* 自定义图标：编辑按钮压在右下角，打开「更换图片、移除」菜单。 */
+.sn-icon-custom {
+  position: relative;
+  display: inline-flex;
+}
+
+.sn-icon-edit {
+  position: absolute;
+  right: calc(var(--sn-space-2) * -1);
+  bottom: calc(var(--sn-space-2) * -1);
+  display: grid;
+  place-items: center;
+  width: calc(var(--sn-icon-size) * 1.25);
+  height: calc(var(--sn-icon-size) * 1.25);
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-surface-raised);
+  box-shadow: var(--sn-shadow-sm);
+  color: var(--sn-color-text-secondary);
+}
+
+.sn-icon-edit:hover {
+  color: var(--sn-color-accent-text);
+}
+
+.sn-icon-edit .sn-icon {
+  width: calc(var(--sn-icon-size) * 0.75);
+  height: calc(var(--sn-icon-size) * 0.75);
+}
+
+/* 裁切应用图标：左边是裁切框与缩放，右边是实际尺寸的预览与圆角开关。 */
+.sn-crop {
+  display: flex;
+  gap: var(--sn-space-6);
+}
+
+.sn-crop-main {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--sn-space-3);
+  width: calc(var(--sn-dialog-width) * 0.48);
+}
+
+/* 棋盘格表示透明：缩小到完整显示时，空出的部分在图标里是透明的。 */
+.sn-crop-stage {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: var(--sn-radius-sm);
+  background: repeating-conic-gradient(var(--sn-color-surface-sunken) 0 25%, var(--sn-color-surface) 0 50%) 0 0 / var(--sn-space-6) var(--sn-space-6);
+  cursor: grab;
+  touch-action: none;
+}
+
+.sn-crop-stage:active {
+  cursor: grabbing;
+}
+
+.sn-crop-stage > img,
+.sn-crop-preview > img {
+  position: absolute;
+  max-width: none;
+  pointer-events: none;
+  user-select: none;
+}
+
+.sn-crop-stage.is-rounded,
+.sn-crop-preview.is-rounded {
+  border-radius: 21.875%; /* 固定：与内置图标的圆角一致（64 视图框中的 14） */
+}
+
+.sn-crop-zoom {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-2);
+}
+
+.sn-crop-zoom .sn-range {
+  flex: 1;
+  min-width: 0;
+}
+
+.sn-crop-side {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sn-space-4);
+  min-width: 0;
+}
+
+.sn-crop-caption {
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+}
+
+/* 预览放在模拟的任务栏颜色上：同一个图标在浅色与深色任务栏上都要分得开。 */
+.sn-crop-previews {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-5);
+  padding: var(--sn-space-4) var(--sn-space-5);
+  border-radius: var(--sn-radius-sm);
+}
+
+.sn-crop-previews.is-light {
+  background: #f3f3f3; /* 固定：Windows 浅色任务栏 */
+}
+
+.sn-crop-previews.is-dark {
+  background: #202020; /* 固定：Windows 深色任务栏 */
+}
+
+.sn-crop-preview {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+}
+
+.sn-crop-preview.is-16 {
+  width: 16px; /* 固定：托盘图标的实际尺寸 */
+  height: 16px; /* 固定：托盘图标的实际尺寸 */
+}
+
+.sn-crop-preview.is-24 {
+  width: 24px; /* 固定：任务栏图标的实际尺寸 */
+  height: 24px; /* 固定：任务栏图标的实际尺寸 */
+}
+
+.sn-crop-preview.is-48 {
+  width: 48px; /* 固定：桌面图标的实际尺寸 */
+  height: 48px; /* 固定：桌面图标的实际尺寸 */
+}
+
+.sn-crop-warning {
+  margin-top: var(--sn-space-5);
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+}
+
 .sn-mini {
   display: flex;
   flex: 1;

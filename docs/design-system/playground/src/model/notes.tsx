@@ -14,6 +14,7 @@ import { DEFAULT_SETTINGS } from '@/core/settings';
 import { canonicalize, compose, hasTag, parse, removeTag, tagKey } from '@/core/tags';
 import type { Note, NoteStatus, Settings, TabKey, TagUsage } from '@/core/types';
 import { createSampleNotes } from '@/debug/sample-notes';
+import { CUSTOM_APP_ICON, DEFAULT_APP_ICON } from './appIcons';
 
 interface State {
   notes: Note[];
@@ -22,6 +23,10 @@ interface State {
   settings: Settings;
   /** 标签筛选的访问记录，标签菜单按它评分（与现有应用的 tagUsage 一致）。 */
   tagUsage: Record<string, TagUsage>;
+  /** 应用图标（本次提出）：内置图标的 id，或 CUSTOM_APP_ICON 表示使用上传的图片。 */
+  appIcon: string;
+  /** 上传并裁好的图标（256 × 256 PNG 的 data URL）；没有上传过时为 null。 */
+  customIcon: string | null;
 }
 
 type Action =
@@ -36,6 +41,8 @@ type Action =
   | { type: 'order'; ids: string[] }
   | { type: 'draft'; text: string }
   | { type: 'settings'; patch: Partial<Settings> }
+  | { type: 'app-icon'; icon: string }
+  | { type: 'custom-icon'; url: string | null }
   | { type: 'track-tag'; tag: string; now: number }
   | { type: 'rename-tag'; tag: string; next: string; now: number }
   | { type: 'remove-tag'; tag: string; now: number }
@@ -43,7 +50,14 @@ type Action =
 
 function initialState(now = Date.now()): State {
   // 字体默认「跟随主题」（空值）：现有设置里的旧默认值 Maple Mono NF CN 迁移为跟随主题，见 adaptation.md。
-  return { notes: createSampleNotes(now), draft: '', settings: { ...DEFAULT_SETTINGS, fontFamily: '' }, tagUsage: {} };
+  return {
+    notes: createSampleNotes(now),
+    draft: '',
+    settings: { ...DEFAULT_SETTINGS, fontFamily: '' },
+    tagUsage: {},
+    appIcon: DEFAULT_APP_ICON,
+    customIcon: null,
+  };
 }
 
 function reduce(state: State, action: Action): State {
@@ -88,6 +102,15 @@ function reduce(state: State, action: Action): State {
       return { ...state, draft: action.text };
     case 'settings':
       return { ...state, settings: { ...state.settings, ...action.patch } };
+    case 'app-icon':
+      return { ...state, appIcon: action.icon };
+    case 'custom-icon':
+      // 上传后立即使用新图标；移除时如果正在使用它，回到默认图标。
+      return {
+        ...state,
+        customIcon: action.url,
+        appIcon: action.url ? CUSTOM_APP_ICON : state.appIcon === CUSTOM_APP_ICON ? DEFAULT_APP_ICON : state.appIcon,
+      };
     case 'track-tag': {
       const key = tagKey(action.tag);
       const current = state.tagUsage[key] ?? { count: 0, last: 0 };
@@ -125,7 +148,8 @@ function reduce(state: State, action: Action): State {
         }),
       };
     case 'reset':
-      return { ...initialState(action.now), settings: state.settings };
+      // 设置与应用图标都属于偏好，重置示例数据时保留。
+      return { ...initialState(action.now), settings: state.settings, appIcon: state.appIcon, customIcon: state.customIcon };
   }
 }
 
@@ -144,6 +168,10 @@ export interface NotesData extends State {
   duplicate: (id: string) => Note | null;
   setDraft: (text: string) => void;
   updateSettings: (patch: Partial<Settings>) => void;
+  /** 换成某个内置图标，或者换回已经上传的自定义图标（CUSTOM_APP_ICON）。 */
+  setAppIcon: (icon: string) => void;
+  /** 保存上传的图标并立即使用；传 null 移除。 */
+  setCustomIcon: (url: string | null) => void;
   /** 记一次标签筛选，作为标签菜单的评分依据。 */
   trackTagUsage: (tag: string) => void;
   /** 在所有记录中重命名标签，新名称已存在时合并。 */
@@ -187,6 +215,8 @@ export function NotesProvider({ children }: { children: ReactNode }) {
   const reorder = useCallback((ids: string[]) => dispatch({ type: 'order', ids }), []);
   const setDraft = useCallback((text: string) => dispatch({ type: 'draft', text }), []);
   const updateSettings = useCallback((patch: Partial<Settings>) => dispatch({ type: 'settings', patch }), []);
+  const setAppIcon = useCallback((icon: string) => dispatch({ type: 'app-icon', icon }), []);
+  const setCustomIcon = useCallback((url: string | null) => dispatch({ type: 'custom-icon', url }), []);
   const trackTagUsage = useCallback((tag: string) => dispatch({ type: 'track-tag', tag, now: Date.now() }), []);
   const renameTag = useCallback((tag: string, next: string) => dispatch({ type: 'rename-tag', tag, next, now: Date.now() }), []);
   const removeTagEverywhere = useCallback((tag: string) => dispatch({ type: 'remove-tag', tag, now: Date.now() }), []);
@@ -208,12 +238,14 @@ export function NotesProvider({ children }: { children: ReactNode }) {
       duplicate,
       setDraft,
       updateSettings,
+      setAppIcon,
+      setCustomIcon,
       trackTagUsage,
       renameTag,
       removeTagEverywhere,
       reset,
     }),
-    [state, byId, create, update, setPinned, setStatus, restore, removeForever, setCollapsed, setEmoji, reorder, duplicate, setDraft, updateSettings, trackTagUsage, renameTag, removeTagEverywhere, reset],
+    [state, byId, create, update, setPinned, setStatus, restore, removeForever, setCollapsed, setEmoji, reorder, duplicate, setDraft, updateSettings, setAppIcon, setCustomIcon, trackTagUsage, renameTag, removeTagEverywhere, reset],
   );
   return <NotesContext.Provider value={value}>{children}</NotesContext.Provider>;
 }

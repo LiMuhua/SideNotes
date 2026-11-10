@@ -174,7 +174,12 @@ export function Desktop({ form, platform, wallpaper, initial = {}, surface, prim
             <span />
           </div>
         ) : platform === 'windows' ? (
-          <Taskbar sidebarVisible={visible} onSidebar={() => setVisible((current) => !current)} onCapture={() => setCapture(true)} />
+          <Taskbar
+            sidebarVisible={visible}
+            settingsOpen={Boolean(settingsWindow)}
+            onSidebar={() => setVisible((current) => !current)}
+            onCapture={() => setCapture(true)}
+          />
         ) : (
           <div className="sn-desk-dock" aria-hidden="true">
             <span className="sn-dock-app is-a" />
@@ -245,8 +250,21 @@ function FloatingWindow({ kind, draggable, children }: { kind: 'capture' | 'sett
   );
 }
 
-/** Windows 11 任务栏：居中的图标与右侧的托盘，托盘里的 SideNotes 图标切换侧栏。 */
-function Taskbar({ sidebarVisible, onSidebar, onCapture }: { sidebarVisible: boolean; onSidebar: () => void; onCapture: () => void }) {
+/**
+ * Windows 11 任务栏：居中的图标与右侧的托盘，托盘里的 SideNotes 图标切换侧栏。
+ * 侧栏与速记浮窗不出现在任务栏中；设置窗口打开时出现一个带运行指示的图标，与现有应用一致（设置窗口 skipTaskbar 为 false）。
+ */
+function Taskbar({
+  sidebarVisible,
+  settingsOpen,
+  onSidebar,
+  onCapture,
+}: {
+  sidebarVisible: boolean;
+  settingsOpen: boolean;
+  onSidebar: () => void;
+  onCapture: () => void;
+}) {
   return (
     <div className="sn-taskbar">
       <div className="sn-taskbar-apps" aria-hidden="true">
@@ -254,6 +272,11 @@ function Taskbar({ sidebarVisible, onSidebar, onCapture }: { sidebarVisible: boo
         <span className="sn-taskbar-app is-a" />
         <span className="sn-taskbar-app is-b" />
         <span className="sn-taskbar-app is-c" />
+        {settingsOpen ? (
+          <span className="sn-taskbar-app is-sidenotes" title="SideNotes 设置">
+            <AppIcon />
+          </span>
+        ) : null}
       </div>
       <div className="sn-taskbar-tray">
         <button type="button" className="sn-tray-button" aria-label="速记 · Ctrl+Shift+Space" title="速记 · Ctrl+Shift+Space" onClick={onCapture}>

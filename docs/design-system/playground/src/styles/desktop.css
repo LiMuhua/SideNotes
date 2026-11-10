@@ -347,6 +347,31 @@
   background: linear-gradient(135deg, #16a34a, #84cc16);
 }
 
+/* 设置窗口打开时任务栏里的 SideNotes：按钮底色与底部的运行指示与 Windows 11 一致，图标 24px。 */
+.sn-taskbar-app.is-sidenotes {
+  position: relative;
+  display: grid;
+  place-items: center;
+  background: rgb(128 128 128 / 0.16);
+}
+
+.sn-taskbar-app.is-sidenotes .sn-app-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.sn-taskbar-app.is-sidenotes::after {
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  width: 16px;
+  height: 3px;
+  margin-left: -8px;
+  border-radius: 2px;
+  background: #0078d4;
+  content: '';
+}
+
 .sn-taskbar-tray {
   position: absolute;
   right: 12px;

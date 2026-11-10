@@ -9,6 +9,7 @@ import { Badge, Keys, Tag } from '../ui/Misc';
 import { Select } from '../ui/Select';
 import { Checkbox, Segmented, Switch } from '../ui/Toggle';
 import { Tooltip } from '../ui/Tooltip';
+import { AppIconPicker } from '../app/AppIconPicker';
 import { AppIcon, BrandMark } from '../app/SidebarParts';
 import { Demo, DemoRow, PageSection, StateCell } from './common';
 
@@ -145,7 +146,7 @@ export function ControlsSection() {
       </Demo>
       <Demo
         title="应用图标与品牌标记"
-        note="一张黄色便签从屏幕右边缘探出头来，看着屏幕上的内容：SideNotes 平时藏在屏幕边缘，需要时才探出来。配色固定，不随主题变化；任务栏、托盘、程序坞、关于页与标题区、速记浮窗、设置窗口的品牌标记都用同一个图标，只是尺寸不同。"
+        note="默认是 211 门缝浅笑 · 靛蓝：靛蓝暗房里，一张便签从门缝探出来浅笑。配色固定，不随主题变化；任务栏、托盘、程序坞、关于页与标题区、速记浮窗、设置窗口的品牌标记都用设置中选用的同一个图标，只是尺寸不同。下面一行是设置中的应用图标选择，与设置窗口共用同一份设置。"
       >
         <DemoRow>
           {[64, 32, 24, 16].map((size) => (
@@ -153,6 +154,9 @@ export function ControlsSection() {
           ))}
           <BrandMark />
           <BrandMark small />
+        </DemoRow>
+        <DemoRow>
+          <AppIconPicker />
         </DemoRow>
       </Demo>
     </PageSection>
