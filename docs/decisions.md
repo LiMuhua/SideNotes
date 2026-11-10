@@ -320,7 +320,7 @@
 
 ## DS-1. Playground 使用独立入口与端口
 
-**决定**：设计系统与 Playground 放在 `docs/design-system/`，开发入口为 `design-playground.html`（`/design-playground`），`pnpm playground` 固定使用 1430 端口（`--strictPort`）。Playground 不改动 `src/main.tsx`，不进入 `vite build`，只使用内存中的示例数据，不调用桌面接口。
+**决定**：设计系统与 Playground 放在 `docs/design-system/`，开发地址为 `/design-playground`（页面位置见 DS-4），`pnpm playground` 固定使用 1430 端口（`--strictPort`）。Playground 不改动 `src/main.tsx`，不进入 `vite build`，只使用内存中的示例数据，不调用桌面接口。
 
 **原因**：原仓库只读，设计工作不能影响应用的启动逻辑与构建；Playground 要能与应用的开发服务器（1420）同时运行，方便对照；固定端口便于在文档与预览配置中写明地址。
 
@@ -344,11 +344,11 @@
 
 ## DS-4. 设计系统迁入 docs/design-system
 
-**决定**：2026-11-09 用 `git mv` 把根目录的 `design-system/` 整体迁到 `docs/design-system/`，保留历史。Playground 的命令、地址与端口不变（`pnpm playground`、`/design-playground`、1430）；入口 `design-playground.html` 仍在仓库根目录，只改其中的资源路径；设计系统测试随目录迁移，由 `vite.config.ts` 的 `test.include` 收录。
+**决定**：2026-11-09 用 `git mv` 把根目录的 `design-system/` 整体迁到 `docs/design-system/`，保留历史。Playground 的命令、地址与端口不变（`pnpm playground`、`/design-playground`、1430）；入口页 `design-playground.html` 起初留在仓库根目录，2026-11-10 按用户要求移到 `docs/design-system/playground/index.html`，由 `vite.config.ts` 中的开发服务器插件把 `/design-playground` 转过去；设计系统测试随目录迁移，由 `vite.config.ts` 的 `test.include` 收录。
 
 **原因**：设计系统是规范文档与参考实现，和交互原型 `docs/prototype/` 一样属于文档；两者并列放在 `docs/` 下，原型可以用相对路径直接引用令牌文件，不必复制一份。
 
-**代价**：以仓库根为基准的路径写法都要加上 `docs/` 前缀，其它会话与旧记录中的路径要改用新位置；`docs/design-system/` 下的文档链接到 `docs/` 的文件时少一层 `../`。
+**代价**：以仓库根为基准的路径写法都要加上 `docs/` 前缀，其它会话与旧记录中的路径要改用新位置；`docs/design-system/` 下的文档链接到 `docs/` 的文件时少一层 `../`。入口页不在根目录，Vite 不会再按文件名提供 `/design-playground`，这个地址依赖转发插件；页面中的脚本与图标要写以仓库根为基准的路径，相对路径会按 `/design-playground` 解析而出错。
 
 ## DS-5. 内置应用图标随应用打包，由脚本生成
 

@@ -10,7 +10,7 @@ SideNotes 设计系统的交互式预览：在模拟的桌面上运行侧栏、�
 pnpm playground
 ```
 
-浏览器打开 `http://localhost:1430/design-playground`。Playground 固定使用 1430 端口（`--strictPort`），端口被占用时直接报错，不会改用其他端口；应用的开发服务器使用 1420，两者可以同时运行，方便对照实际应用。
+命令会自动在浏览器打开 `http://localhost:1430/design-playground`。Playground 固定使用 1430 端口（`--strictPort`），端口被占用时直接报错，不会改用其他端口；应用的开发服务器使用 1420，两者可以同时运行，方便对照实际应用。
 
 ## 页面
 
@@ -52,6 +52,7 @@ pnpm playground
 
 | 位置 | 内容 |
 | --- | --- |
+| `index.html` | 页面入口，开发服务器把 `/design-playground` 转到这里（`vite.config.ts` 中的 `sidenotes-design-playground` 插件） |
 | `src/app/` | 桌面场景与三个窗口：侧栏、记录卡片、新建卡片、菜单与弹窗、速记浮窗、设置窗口 |
 | `src/model/` | 内存中的记录与设置，规则沿用 `src/core` |
 | `src/ui/` | 通用组件（按钮、菜单、弹窗、输入框等）、滚轮调整数值与令牌作用域 |
@@ -73,7 +74,7 @@ pnpm playground
 | `src/core/editor` 的 `MarkdownEditor` | 新建卡片、速记浮窗与卡片编辑 |
 | `src/debug/sample-notes.ts` | 示例数据 |
 
-Playground 有独立的入口 `design-playground.html`，不改动 `src/main.tsx`，也不进入 `vite build`。
+Playground 有独立的页面入口，不改动 `src/main.tsx`，也不进入 `vite build`（构建只打包仓库根目录的 `index.html`）。
 
 ## 检查
 

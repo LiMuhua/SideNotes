@@ -9,6 +9,7 @@
   </head>
   <body>
     <!-- 设计系统的交互式预览，只在开发服务器中访问（/design-playground），不进入正式构建。 -->
+    <!-- 开发服务器把 /design-playground 转到本页（见 vite.config.ts），相对路径会按该地址解析，脚本与图标因此用以仓库根为基准的路径。 -->
     <div id="playground-root"></div>
     <script type="module" src="/docs/design-system/playground/src/main.tsx"></script>
   </body>

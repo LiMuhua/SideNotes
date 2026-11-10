@@ -1,6 +1,7 @@
 // 使用 vitest/config 的 defineConfig：它在 Vite 配置类型上补充 test 字段，
 // Vite 自身会忽略该字段，两个工具因此共用同一份别名与插件配置。
 import { defineConfig } from 'vitest/config';
+import type { Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
@@ -30,8 +31,32 @@ const stripViewportMedia = {
   },
 };
 
+/**
+ * 开发服务器把 /design-playground 转到设计系统目录中的 Playground 页面。
+ *
+ * 页面与源码一起放在 docs/design-system/playground/，仓库根目录只保留应用自己的 index.html。
+ * 这里只改写请求路径，地址栏与地址参数保持不变，`pnpm playground` 打开的地址也不用改。
+ * 只在开发服务器中生效；vite build 只打包根目录的 index.html，Playground 不进入正式构建。
+ */
+const designPlaygroundPage = '/docs/design-system/playground/index.html';
+const designPlayground: Plugin = {
+  name: 'sidenotes-design-playground',
+  apply: 'serve',
+  configureServer(server) {
+    server.middlewares.use((req, _res, next) => {
+      const url = req.url ?? '';
+      const queryStart = url.indexOf('?');
+      const pathname = queryStart === -1 ? url : url.slice(0, queryStart);
+      if (pathname === '/design-playground' || pathname === '/design-playground/') {
+        req.url = designPlaygroundPage + (queryStart === -1 ? '' : url.slice(queryStart));
+      }
+      next();
+    });
+  },
+};
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), designPlayground],
   css: {
     postcss: { plugins: [stripViewportMedia] },
   },
