@@ -70,10 +70,10 @@
 - **Windows 对比主题未处理**：强制颜色模式下，悬停、选中与编辑中的卡片与默认状态分不开，需要补 `forced-colors` 的样式，见 [docs/design-system/adaptation.md](./design-system/adaptation.md) 第七节。
 - **手机形态未完成**：触控目标没有放大；手机上的排序方式待定。
 - **滚轮调整只用派发的事件验证过**：滑块与数值的滚轮调整在 Playground 中用脚本派发的 WheelEvent 验证，没有用真实的鼠标滚轮与触控板操作；触控板每一格约 30px 的累计量、400ms 的手势间隔是否顺手，要在 WebView2 中实测。
-- **应用图标只能在 Playground 中切换**（DS03）：内置图标已随应用打包，默认图标已换成 211，但桌面应用还没有「应用图标」设置，也不会替换窗口、托盘与快捷方式的图标，做法见 [docs/design-system/adaptation.md](./design-system/adaptation.md) 第十节。Playground 只在内存中保存上传的图片，刷新后回到默认图标。
+- **桌面应用还不能切换应用图标**（DS03）：内置图标已随应用打包，默认图标已换成 211，Playground 与交互原型都能切换，但桌面应用还没有「应用图标」设置，也不会替换窗口、托盘与快捷方式的图标，做法见 [docs/design-system/adaptation.md](./design-system/adaptation.md) 第十节。Playground 只在内存中保存上传的图片，刷新后回到默认图标。
 - **Android 自适应图标没有拆分图层**：`tauri icon` 生成的自适应图标，前景是整张带圆角的图标，背景层是白色，启动器裁成圆形或圆角方形后四角会露白。接入 Android 时要单独准备前景与背景层（`tauri icon` 的清单文件支持 `android_fg`、`android_bg`）。
 - **工作树内编译失败**：在 `SideNotes-Design/src-tauri/target` 中运行 `cargo build`，autocfg 报 `output path is not a writable directory`；把 `CARGO_TARGET_DIR` 设到 OneDrive 之外的临时目录即可编译。原因未查明，可能与 OneDrive 目录的只读属性有关。
 - **Playground 的模拟限制**：全局快捷键只在页面获得焦点时生效；浏览器保留了 Ctrl+N 等组合键；附件按钮只显示提示，不读取本机文件；拖动排序、框选与拖入文件没有模拟；「数据与同步」页的目录、快照、导入导出与云端备份只弹出示例提示，不访问文件；侧栏的出入动画不受「减少动态效果」影响。
-- **交互原型没有应用图标切换**（DS04）：`docs/prototype/` 的品牌标记固定为默认图标 211，没有「应用图标」设置。内置图标在 `src-tauri/icons/builtin/`，原型从 `docs/` 起服务时取不到；接入要么改为从仓库根目录起服务，要么把图标复制进 `docs/`，需要先决定做法。
+- **交互原型的应用图标只作用于页面**（DS04）：原型没有模拟任务栏与托盘，选中的图标只作用于网页图标、品牌标记与关于页；上传的图片保存在浏览器本地存储的单独键中，不进入导出的备份，桌面版要按 [docs/design-system/adaptation.md](./design-system/adaptation.md) 第十节保存到应用数据目录。
 - **交互原型的模拟能力**（DS04）：Windows 11 与磨砂玻璃的半透明用 CSS `backdrop-filter` 模拟，只能模糊页面中的模拟桌面；全局快捷键只在页面获得焦点时生效；「打开开发者工具」与「立即更新」只弹出提示。都要在 Tauri 与 Windows 中验证。
 - **键盘焦点的去向**（DS04）：与现有应用一致，Esc 退出编辑、确认移入回收站后，焦点落到页面而不是列表；新建卡片的编辑区里 Tab 用于缩进，从顶部按 Tab 进不了列表，要从底栏按 Shift+Tab。规范没有规定，待定。
