@@ -7,6 +7,8 @@
   <meta name="description" content="SideNotes 高保真交互原型：侧栏取用、快捷速记与本地记录。">
   <title>SideNotes · 交互原型 0.5</title>
   <link rel="icon" type="image/svg+xml" href="../design-system/assets/app-icon.svg">
+  <!-- 内置字体 Maple Mono NF CN（终端主题的界面字体），与应用和 Design Playground 共用 src/styles/fonts.css。 -->
+  <link rel="stylesheet" href="../../src/styles/fonts.css">
   <!-- 设计令牌：唯一的样式数值来源，与 Design Playground 共用 docs/design-system/tokens。 -->
   <link rel="stylesheet" href="../design-system/tokens/base.css">
   <link rel="stylesheet" href="../design-system/tokens/terminal.css">
@@ -14,19 +16,9 @@
   <link rel="stylesheet" href="../design-system/tokens/paper.css">
   <link rel="stylesheet" href="../design-system/tokens/win11.css">
   <link rel="stylesheet" href="../design-system/tokens/glass.css">
-  <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="v2.css">
-  <link rel="stylesheet" href="v3.css">
-  <link rel="stylesheet" href="v4.css">
-  <link rel="stylesheet" href="v5.css">
-  <link rel="stylesheet" href="v6.css">
-  <link rel="stylesheet" href="v6-settings.css">
-  <link rel="stylesheet" href="v7-settings.css">
-  <link rel="stylesheet" href="v7-menu.css">
-  <link rel="stylesheet" href="v7-interactions.css">
-  <link rel="stylesheet" href="v7.css">
-  <link rel="stylesheet" href="v8.css">
-  <!-- 五套主题的组件样式与结构差异，只引用令牌，放在最后。 -->
+  <!-- 旧样式（styles.css 与 v2–v8）放在级联层 legacy 中，排在 theme.css 之后，见 legacy.css。 -->
+  <link rel="stylesheet" href="legacy.css">
+  <!-- 五套主题的组件样式与结构差异，只引用令牌，放在最后；不分层，写了的属性压过旧样式。 -->
   <link rel="stylesheet" href="theme.css">
   <script src="boot.js" defer></script>
   <script src="surfaces.js" defer></script>
@@ -53,7 +45,7 @@
       <p>浏览器演示 · 数据仅存于当前浏览器</p>
     </div>
     <section id="capture" class="capture open" aria-labelledby="capture-title" aria-hidden="false">
-      <header class="capture-header"><div class="capture-heading"><img class="brand-mark is-small" src="../design-system/assets/app-icon.svg" alt="" aria-hidden="true"><h2 id="capture-title">速记</h2><span class="help-anchor"><button id="capture-help-button" class="help-button" type="button" aria-label="速记说明" aria-expanded="false" aria-describedby="capture-help-text"><svg class="icon" aria-hidden="true"><use href="#i-help"></use></svg></button><span id="capture-help-text" class="help-text" role="tooltip" hidden><span class="help-line shortcut-line"><kbd>Ctrl</kbd><kbd>Enter</kbd> 保存并收起</span><span class="help-line shortcut-line"><kbd>Esc</kbd> 收起，草稿保留</span><span class="help-line">支持 Markdown 与 #标签</span><span class="help-line">草稿与侧栏的新建卡片共用</span></span></span></div><div class="window-actions"><button id="capture-to-sidebar" class="icon-button" type="button" data-action="capture-to-sidebar" title="在侧栏继续" aria-label="在侧栏继续"><svg class="icon" aria-hidden="true"><use href="#i-expand"></use></svg></button><button id="capture-close" class="icon-button" type="button" data-action="hide-capture" title="保留草稿并收起 · Esc" aria-label="保留草稿并收起速记" aria-keyshortcuts="Escape"><svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button></div></header>
+      <header class="capture-header"><div class="capture-heading"><img class="brand-mark is-small" src="../design-system/assets/app-icon.svg" alt="" aria-hidden="true"><h2 id="capture-title">速记</h2><span class="help-anchor"><button id="capture-help-button" class="help-button" type="button" aria-label="速记说明" aria-expanded="false" aria-describedby="capture-help-text">?</button><span id="capture-help-text" class="help-text" role="tooltip" hidden><span class="help-line shortcut-line"><kbd>Ctrl</kbd><kbd>Enter</kbd> 保存并收起</span><span class="help-line shortcut-line"><kbd>Esc</kbd> 收起，草稿保留</span><span class="help-line">支持 Markdown 与 #标签，草稿与侧栏的新建卡片共用</span></span></span></div><div class="window-actions"><button id="capture-to-sidebar" class="icon-button" type="button" data-action="capture-to-sidebar" title="在侧栏继续" aria-label="在侧栏继续"><svg class="icon" aria-hidden="true"><use href="#i-arrow-up-right"></use></svg></button><button id="capture-close" class="icon-button" type="button" data-action="hide-capture" title="保留草稿并收起 · Esc" aria-label="保留草稿并收起速记" aria-keyshortcuts="Escape"><svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button></div></header>
       <div class="capture-body"><label class="sr-only" for="draft-input">速记内容</label><textarea id="draft-input" placeholder="随手记… 支持 Markdown 与 #标签" spellcheck="false"></textarea><div id="attachment-list" class="attachment-list"></div></div>
       <footer class="capture-footer"><div class="composer-tools"><button id="attach-image" class="icon-button" type="button" data-action="attach-image" title="添加图片，也可粘贴或拖入" aria-label="添加图片"><svg class="icon" aria-hidden="true"><use href="#i-image"></use></svg></button><button class="icon-button" type="button" data-action="attach-file" title="引用文件，也可直接拖入" aria-label="引用文件"><svg class="icon" aria-hidden="true"><use href="#i-file"></use></svg></button></div><span id="capture-char-count" class="composer-count">0 字</span><div class="composer-actions"><button class="icon-button" type="button" data-action="hide-capture" title="保留草稿并收起 · Esc" aria-label="保留草稿并收起" aria-keyshortcuts="Escape"><svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button><button id="save-note" class="icon-button primary" type="button" data-action="save-note" title="保存记录，保持浮窗展开" aria-label="保存记录，保持浮窗展开"><svg class="icon" aria-hidden="true"><use href="#i-check"></use></svg></button></div></footer>
       <input id="image-picker" type="file" accept="image/*" multiple hidden>

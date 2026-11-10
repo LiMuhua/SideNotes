@@ -18,7 +18,7 @@ const LEGACY_EXAMPLES = {
   "sample-archive-2": "已经整理好的周报\n\n把工作记录归拢成文档，保留过程，继续向前。"
 };
 const elements = {};
-const ui = { tab: 'workspace', query: '', editing: null, composer: false, locked: false, composing: false, pendingImages: 0, modal: null, hideTimer: 0, draftTimer: 0, editTimer: 0, previousFocus: null, storageError: false, storageWriteError: false, editStorageError: false, draftDirty: false, selectedTag: '', expandedTags: new Set(), pendingFilePath: '', listItems: [], visibleCount: 0, listKey: '', lastListGroup: '', listObserver: null, loading: false, sentinel: null, clickTimer: 0, resizing: null, resizeFrame: 0, pinnedReturnPending: false };
+const ui = { tab: 'workspace', query: '', editing: null, composer: false, locked: false, composing: false, pendingImages: 0, modal: null, hideTimer: 0, draftTimer: 0, editTimer: 0, previousFocus: null, storageError: false, storageWriteError: false, editStorageError: false, draftDirty: false, selectedTag: '', expandedTags: new Set(), pendingFilePath: '', listItems: [], visibleCount: 0, listKey: '', listObserver: null, loading: false, sentinel: null, clickTimer: 0, resizing: null, resizeFrame: 0, pinnedReturnPending: false };
 let state;
 const noteParseCache = new WeakMap(); // 同一记录的标签解析供列表、筛选与卡片复用。
 
@@ -217,9 +217,6 @@ function formatTime(timestamp) {
   return d.toDateString()===now.toDateString() ? hm : d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+' '+hm;
 }
 
-/** @brief 图标、标题、数量及短渐隐线组成的分组标记。 @param {string} title 名称。 @param {number} count 数量。 @return {HTMLElement} 标记。 */
-function sectionHeading(title,count){const pinned=title==='置顶',heading=el('div','list-section-heading'+(pinned?' section-pinned':' section-normal')),symbol=el('span','section-symbol');symbol.append(icon(pinned?'pin':'note'));heading.append(symbol,el('span','section-label',title),el('span','section-count',String(count)));return heading;}
-
 /**
  * @brief 渲染记录卡片。
  * @details 标题最多两行；右侧一格叠放「置顶标记与时间」和操作按钮，悬停、高亮或聚焦时换成按钮，
@@ -299,8 +296,8 @@ function renderNotes(options={}) {
   const target=state.settings.lazyLoading?(same?Math.max(state.settings.pageSize,ui.visibleCount||0):state.settings.pageSize):notes.length;
   const oldScroll=elements.noteList.scrollTop;
   elements.noteList.querySelectorAll('.note-edit-input').forEach(function dispose(input){if(input.liveMarkdown)input.liveMarkdown.destroy();});
-  elements.noteList.replaceChildren();if(elements.composerSlot)elements.noteList.append(elements.composerSlot);else if(elements.sidebarComposer)elements.noteList.append(elements.sidebarComposer);
-  ui.listItems=pinned.concat(normal);ui.listKey=key;ui.visibleCount=0;ui.lastListGroup='';ui.groupCounts={pinned:pinned.length,normal:normal.length};ui.sentinel=null;ui.loading=false;
+  elements.noteList.replaceChildren();
+  ui.listItems=pinned.concat(normal);ui.listKey=key;ui.visibleCount=0;ui.sentinel=null;ui.loading=false;
   if(!notes.length){const empty=el('div','empty-state');empty.append(el('h3','',ui.query||ui.selectedTag?'没有匹配的记录':'暂无记录'),el('p','',ui.query||ui.selectedTag?'调整搜索或标签筛选。':'在上方直接输入。'));if(ui.query||ui.selectedTag)empty.append(button('清除筛选','clear-filters','','button secondary'));elements.noteList.append(empty);}
   else appendNextPage(target);
   elements.noteList.scrollTop=same?oldScroll:0;elements.listSummary.textContent=notes.length+' 条'+(ui.selectedTag?' · #'+ui.selectedTag:'');elements.noteList.setAttribute('aria-label',notes.length+' 条记录');syncCardTabStops();elements.clearSearch.hidden=!ui.query;
@@ -310,7 +307,7 @@ function renderNotes(options={}) {
 /** 创建可直接输入的空白卡片，工具与提交操作分别排列。 */
 function createComposer() {
   const composer=el('section','sidebar-composer composer-placeholder is-active');composer.id='quick-composer';composer.setAttribute('aria-label','直接记录');
-  const input=el('textarea','sidebar-draft-input');input.id='sidebar-draft-input';input.rows=1;input.placeholder="记一条… 支持 Markdown、#标签\nCtrl+Enter 保存并收起侧栏";input.setAttribute('aria-label','直接输入新记录，Ctrl+Enter 保存并收起侧栏');
+  const input=el('textarea','sidebar-draft-input');input.id='sidebar-draft-input';input.rows=1;input.placeholder="记一条… 支持 Markdown、#标签\nCtrl+Enter 保存，侧栏保持展开";input.setAttribute('aria-label','直接输入新记录，Ctrl+Enter 保存，侧栏保持展开');
   const attachments=el('div','attachment-list');attachments.id='sidebar-attachment-list';
   const footer=el('div','composer-footer'),tools=el('div','composer-tools'),actions=el('div','composer-actions');
   tools.append(button('添加图片','attach-image','image'),button('引用文件','attach-file','file'));
@@ -318,8 +315,9 @@ function createComposer() {
   const count=el('span','composer-count','0 字');elements.composerCount=count;
   actions.append(keyHint(['Ctrl','Enter']),button('收起输入 · Esc','close-composer','x'),button('保存记录，保持侧栏展开','save-sidebar-note','check','composer-submit icon-button primary'));
   footer.append(tools,count,actions);composer.append(input,attachments,footer);
-  const slot=el('div','composer-sticky-slot');slot.append(composer);elements.noteList.append(slot);
-  elements.sidebarDraft=input;elements.sidebarComposer=composer;elements.composerSlot=slot;elements.sidebarAttachments=attachments;
+  // 新建卡片独占列表上方的一块区域，不随列表滚动（与 Design Playground 相同），列表滚动时卡片从它下方移出。
+  elements.noteList.before(composer);
+  elements.sidebarDraft=input;elements.sidebarComposer=composer;elements.sidebarAttachments=attachments;
   input.addEventListener('focus',function activateInput(){ui.composer=true;composer.classList.add('is-active');cancelHide();resizeDraftInput();});
   input.addEventListener('input',resizeDraftInput);
 }
@@ -887,7 +885,7 @@ function handleKeyboard(event){
     if(elements.capture.classList.contains('open'))hideCapture();
     if(ui.searchOpen)toggleSearch(false);showSidebar({focus:false});focusNewComposer();return;
   }
-  if(event.ctrlKey&&event.key==='Enter'&&(elements.capture.contains(event.target)||elements.sidebarComposer.contains(event.target))){event.preventDefault();saveDraft(elements.capture.contains(event.target)?'capture':'sidebar',{collapse:true});return;}
+  if(event.ctrlKey&&event.key==='Enter'&&(elements.capture.contains(event.target)||elements.sidebarComposer.contains(event.target))){event.preventDefault();const fromCapture=elements.capture.contains(event.target);saveDraft(fromCapture?'capture':'sidebar',{collapse:fromCapture});return;}
   if(escape){event.preventDefault();if(elements.capture.classList.contains('open')&&(elements.capture.contains(document.activeElement)||!elements.sidebar.classList.contains('open')))hideCapture();else if(elements.sidebar.classList.contains('open'))hideSidebar(true);else if(elements.capture.classList.contains('open'))hideCapture();}
 }
 
@@ -922,7 +920,7 @@ function initialize() {
   elements.searchInput.type='text';elements.searchInput.setAttribute('role','searchbox');
   loadState();
   createComposer();
-  if(window.LiveMarkdown){window.LiveMarkdown.attach(elements.draftInput,{value:state.draft.text,minHeight:100,maxHeight:340});window.LiveMarkdown.attach(elements.sidebarDraft,{value:state.draft.text,minHeight:76,maxHeight:340});}
+  if(window.LiveMarkdown){window.LiveMarkdown.attach(elements.draftInput,{value:state.draft.text,minHeight:100,maxHeight:340});window.LiveMarkdown.attach(elements.sidebarDraft,{value:state.draft.text,minHeight:56,maxHeight:240});}
   initializeSidebarResize();
   initializeListLoading();
   initializeContentDrop();
@@ -1097,7 +1095,7 @@ function appendNextPage(requested){
   if(ui.loading||!ui.listItems||ui.visibleCount>=ui.listItems.length)return;ui.loading=true;
   if(ui.sentinel)ui.sentinel.remove();const count=Number.isFinite(requested)?requested:state.settings.pageSize;
   const end=Math.min(ui.listItems.length,ui.visibleCount+count),nodes=[];
-  for(let index=ui.visibleCount;index<end;index++){const note=ui.listItems[index],group=note.pinned?'pinned':'normal';if(ui.lastListGroup!==group){nodes.push(sectionHeading(group==='pinned'?'置顶':'普通',ui.groupCounts[group]));ui.lastListGroup=group;}nodes.push(renderCard(note));}
+  for(let index=ui.visibleCount;index<end;index++)nodes.push(renderCard(ui.listItems[index]));
   elements.noteList.append(...nodes);ui.visibleCount=end;ui.loading=false;
   if(end<ui.listItems.length){
     if(!ui.sentinel){ui.sentinel=el('div','load-more-sentinel');ui.sentinel.setAttribute('role','status');}

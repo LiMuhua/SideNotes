@@ -2,7 +2,7 @@
  * 交互原型检查：docs/prototype 直接引用设计令牌，五套主题的结构差异与 Playground 一致。
  *
  * - surfaces.js 的主题列表与 6 项结构差异与 playground/src/surfaces.ts 一致；旧设置按约定迁移。
- * - index.html 用相对路径引用 base.css 与五套主题的令牌文件：令牌在旧样式之前，theme.css 在最后；引用的文件都存在。
+ * - index.html 依次引用内置字体、base.css 与五套主题的令牌文件、旧样式层 legacy.css（styles.css 与 v2–v8 都放在级联层 legacy 中）与 theme.css；引用的文件都存在。
  * - theme.css 只引用令牌与运行时变量，确需固定的数值在行尾注明「固定：原因」；旧样式不再写死颜色，也不再使用旧的主题属性。
  * - 原型样式引用的变量都有来源：令牌、原型样式自己定义的变量（旧样式的别名）、settings.js 写在根节点上的运行时变量。
  * - app-icons.js 的内置图标清单与 src-tauri/icons/builtin/manifest.json 一致，图片地址都存在；上传的图片单独保存、按约定校验。
@@ -166,11 +166,16 @@ describe('页面引用 index.html', () => {
   const stylesheets = [...html.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map((match) => match[1]);
   const scripts = [...html.matchAll(/<script src="([^"]+)"/g)].map((match) => match[1]);
 
-  it('先引用 base.css 与五套主题的令牌文件，旧样式在后，theme.css 最后', () => {
-    const tokens = ['base', ...SURFACES.map((item) => item.id)].map((name) => `../design-system/tokens/${name}.css`);
-    expect(stylesheets.slice(0, tokens.length)).toEqual(tokens);
-    expect(stylesheets.at(-1)).toBe('theme.css');
-    expect(new Set(stylesheets.slice(tokens.length))).toEqual(new Set(STYLESHEETS));
+  it('先引用内置字体，再引用 base.css 与五套主题的令牌文件，然后是旧样式层 legacy.css，theme.css 最后', () => {
+    const head = ['../../src/styles/fonts.css', ...['base', ...SURFACES.map((item) => item.id)].map((name) => `../design-system/tokens/${name}.css`)];
+    expect(stylesheets).toEqual([...head, 'legacy.css', 'theme.css']);
+  });
+
+  it('旧样式都放进级联层 legacy，原型中其余的样式文件都由 legacy.css 引入', () => {
+    const legacy = readPrototypeFile('legacy.css');
+    const imports = [...legacy.matchAll(/@import url\('([^']+)'\)\s*layer\(legacy\);/g)].map((match) => match[1]);
+    expect(legacy.match(/@import/g)?.length).toBe(imports.length);
+    expect(new Set([...imports, 'legacy.css', 'theme.css'])).toEqual(new Set(STYLESHEETS));
   });
 
   it('引用的样式、脚本与图标都存在', () => {
