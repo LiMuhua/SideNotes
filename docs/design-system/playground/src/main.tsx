@@ -22,6 +22,7 @@ import './styles/sidebar.css';
 import './styles/windows.css';
 import './styles/desktop.css';
 import './styles/pages.css';
+import './styles/icons.css';
 import './styles/shell.css';
 import { NotesProvider } from './model/notes';
 import { Shell } from './shell/Shell';

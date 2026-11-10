@@ -1,0 +1,680 @@
+/* ==================== 应用图标页 ====================
+ *
+ * 展示台的版式（见 pages/AppIcons.tsx）：固定的中性配色，不随主题与明暗变化，
+ * 图标在浅色与深色背景上的效果并排列出。不属于 SideNotes 的产品样式，可以写固定数值。
+ */
+
+.pg-icons {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  border-radius: 10px;
+  background: #ebecef;
+  color: #1d2025;
+  font: 14px/1.65 'Segoe UI', 'Microsoft YaHei UI', system-ui, sans-serif;
+}
+
+.pg-icons-content {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 28px 36px 80px;
+}
+
+.pg-icons code {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 0.06);
+  font: 12.5px/1.6 'Cascadia Mono', Consolas, monospace;
+}
+
+.pg-icons-intro h1 {
+  margin: 0 0 4px;
+  font-size: 24px;
+}
+
+.pg-icons-intro p,
+.pg-icons-note {
+  max-width: 76em;
+  margin: 0 0 12px;
+  color: #555b64;
+}
+
+.pg-icons-toc {
+  position: sticky;
+  top: -28px;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 8px -8px 0;
+  padding: 8px;
+  background: #ebecef;
+}
+
+.pg-icons-toc button {
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 99px;
+  background: none;
+  color: #4a4f57;
+  cursor: pointer;
+}
+
+.pg-icons-toc button:hover {
+  background: rgb(0 0 0 / 0.06);
+  color: #1d2025;
+}
+
+.pg-icons-section {
+  margin-top: 28px;
+  scroll-margin-top: 48px;
+}
+
+.pg-icons-section > h2 {
+  margin: 0 0 10px;
+  padding-top: 14px;
+  border-top: 1px solid #d3d6dc;
+  font-size: 19px;
+}
+
+.pg-icons-number {
+  margin-right: 6px;
+  color: #8a8f98;
+  font-variant-numeric: tabular-nums;
+}
+
+.pg-icons-badge {
+  margin-left: 8px;
+  padding: 0 8px;
+  border-radius: 99px;
+  background: #e3e6f6;
+  color: #3b47a0;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ---------- 定稿一览 ---------- */
+.pg-icons-finals {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
+  gap: 12px;
+}
+
+.pg-icons-final {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 4px 16px rgb(0 0 0 / 0.05);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.pg-icons-final:hover {
+  border-color: #c4c8d0;
+}
+
+.pg-icons-final[aria-checked='true'] {
+  border-color: #4150b0;
+  box-shadow: 0 0 0 1px #4150b0, 0 4px 16px rgb(65 80 176 / 0.16);
+}
+
+.pg-icons-final img {
+  filter: drop-shadow(0 4px 10px rgb(0 0 0 / 0.16));
+}
+
+.pg-icons-final-name {
+  font-weight: 600;
+}
+
+.pg-icons-final .pg-icons-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+/* ---------- 单个图标 ---------- */
+.pg-icons-detail {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 28px;
+  margin-top: 16px;
+  padding: 24px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 4px 16px rgb(0 0 0 / 0.05);
+}
+
+.pg-icons-hero {
+  display: grid;
+  place-items: center;
+  width: 320px;
+  height: 320px;
+  border-radius: 14px;
+  background: radial-gradient(circle at 50% 40%, #fafbfc, #dfe2e7);
+}
+
+.pg-icons-hero img {
+  filter: drop-shadow(0 10px 24px rgb(0 0 0 / 0.22));
+}
+
+.pg-icons-meta h3 {
+  display: flex;
+  align-items: baseline;
+  margin: 4px 0 6px;
+  font-size: 20px;
+}
+
+.pg-icons-meta p {
+  margin: 0 0 12px;
+  color: #3f444c;
+}
+
+.pg-icons-actions {
+  margin-bottom: 16px;
+}
+
+.pg-icons-button {
+  height: 30px;
+  padding: 0 14px;
+  border: 1px solid #c4c8d0;
+  border-radius: 6px;
+  background: #fff;
+  color: #1d2025;
+  font: inherit;
+  cursor: pointer;
+}
+
+.pg-icons-button:hover {
+  border-color: #4150b0;
+  color: #3b47a0;
+}
+
+.pg-icons-current {
+  color: #3b47a0;
+  font-size: 13px;
+}
+
+.pg-icons-lineage h4 {
+  margin: 0 0 8px;
+  color: #555b64;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pg-icons-lineage ol {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pg-icons-lineage li {
+  display: flex;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 10px;
+  background: #f4f5f7;
+}
+
+.pg-icons-lineage li + li::before {
+  align-self: center;
+  margin: 0 2px 0 -2px;
+  color: #a0a5ad;
+  content: '›';
+}
+
+.pg-icons-lineage li.is-final {
+  background: #eceefa;
+}
+
+/* 缩略图：图标与编号、名称；演进线中缩小为 40px。 */
+.pg-icons-thumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 96px;
+  margin: 0;
+  text-align: center;
+}
+
+.pg-icons-thumb.is-compact {
+  width: auto;
+}
+
+.pg-icons-thumb figcaption {
+  color: #4a4f57;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.pg-icons-thumb .pg-icons-number {
+  display: block;
+  margin: 0;
+}
+
+.pg-icons-thumb .pg-icons-badge {
+  display: inline-block;
+  margin: 2px 0 0;
+}
+
+.pg-icons-thumb.is-compact figcaption {
+  font-size: 11px;
+}
+
+/* ---------- 尺寸阶梯与像素放大 ---------- */
+.pg-icons-ladder {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  margin-bottom: 8px;
+  padding: 16px 18px 10px;
+  overflow-x: auto;
+  border-radius: 12px;
+}
+
+.pg-icons-ladder figure,
+.pg-icons-pixel-row figure {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.pg-icons-ladder figcaption,
+.pg-icons-pixel-row figcaption {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+
+.is-light.pg-icons-ladder,
+.is-light.pg-icons-pixel-row {
+  background: #f3f3f3;
+  color: #1d2025;
+}
+
+.is-dark.pg-icons-ladder,
+.is-dark.pg-icons-pixel-row {
+  background: #202020;
+  color: #d0d0d0;
+}
+
+.pg-icons-pixels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 8px;
+}
+
+.pg-icons-pixel-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+  gap: 12px;
+  padding: 16px 12px 10px;
+  border-radius: 12px;
+}
+
+.pg-icons-pixel-row img {
+  image-rendering: pixelated;
+}
+
+.pg-icons-pixel-row figcaption small {
+  display: block;
+  max-width: 128px;
+  font-size: 11px;
+  text-align: center;
+}
+
+/* ---------- 使用场景 ---------- */
+.pg-icons-scenes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.pg-icons-scene {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+.pg-icons-scene.is-wide {
+  grid-column: span 2;
+}
+
+.pg-icons-scene figcaption {
+  color: #5b616b;
+  font-size: 12px;
+}
+
+.pg-icons-scene > div {
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.pg-scene-taskbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 48px;
+  font-size: 12px;
+}
+
+.pg-scene-taskbar.is-light {
+  background: #f3f3f3;
+  color: #1d2025;
+}
+
+.pg-scene-taskbar.is-dark {
+  background: #202020;
+  color: #f0f0f0;
+}
+
+.pg-scene-apps {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pg-scene-app,
+.pg-scene-running {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+}
+
+.pg-scene-app::before {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  content: '';
+}
+
+.pg-scene-app.is-start::before {
+  background:
+    linear-gradient(#0078d4, #0078d4) 2px 2px / 9px 9px no-repeat,
+    linear-gradient(#0078d4, #0078d4) 13px 2px / 9px 9px no-repeat,
+    linear-gradient(#0078d4, #0078d4) 2px 13px / 9px 9px no-repeat,
+    linear-gradient(#0078d4, #0078d4) 13px 13px / 9px 9px no-repeat;
+}
+
+.pg-scene-app.is-a::before {
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+}
+
+.pg-scene-app.is-b::before {
+  background: linear-gradient(135deg, #2563eb, #06b6d4);
+}
+
+.pg-scene-running {
+  background: rgb(128 128 128 / 0.16);
+}
+
+.pg-scene-running::after {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  width: 16px;
+  height: 3px;
+  margin-left: -8px;
+  border-radius: 2px;
+  background: #0078d4;
+  content: '';
+}
+
+.pg-scene-tray {
+  position: absolute;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pg-scene-chevron {
+  opacity: 0.7;
+}
+
+.pg-scene-clock {
+  line-height: 1.3;
+  text-align: right;
+}
+
+.pg-scene-desktop,
+.pg-scene-explorer,
+.pg-scene-dock,
+.pg-scene-phone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 168px;
+}
+
+.pg-scene-desktop {
+  background: linear-gradient(135deg, #2b4c7e, #5a7fa8 55%, #9db6cf);
+}
+
+.pg-scene-shortcut,
+.pg-scene-file,
+.pg-scene-launcher {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.pg-scene-shortcut {
+  padding: 6px 8px;
+  border-radius: 4px;
+  color: #fff;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.6);
+}
+
+.pg-scene-shortcut:hover {
+  background: rgb(255 255 255 / 0.18);
+}
+
+.pg-scene-explorer {
+  background: #fff;
+  color: #1d2025;
+  box-shadow: inset 0 0 0 1px #e1e3e8;
+}
+
+.pg-scene-dock {
+  gap: 10px;
+  background: linear-gradient(160deg, #3a3f5c, #1f2333);
+}
+
+.pg-scene-dock > * {
+  padding: 6px;
+  border-radius: 14px;
+  background: rgb(255 255 255 / 0.08);
+}
+
+.pg-scene-dock-app > img {
+  display: block;
+}
+
+.pg-scene-dock-app.is-a::before,
+.pg-scene-dock-app.is-b::before {
+  display: block;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  content: '';
+}
+
+.pg-scene-dock-app.is-a::before {
+  background: linear-gradient(135deg, #f97316, #facc15);
+}
+
+.pg-scene-dock-app.is-b::before {
+  background: linear-gradient(135deg, #22c55e, #14b8a6);
+}
+
+.pg-scene-phone {
+  background: linear-gradient(180deg, #4b6f5f, #23392f);
+}
+
+.pg-scene-launcher {
+  color: #fff;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.5);
+}
+
+/* Android 自适应图标的圆形遮罩：裁成圆形时四角的点缀会被裁掉一部分。 */
+.pg-scene-launcher img.is-round {
+  border-radius: 50%;
+}
+
+/* ---------- 对照与资源文件 ---------- */
+.pg-icons-compare {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(520px, 1fr));
+  gap: 8px;
+}
+
+.pg-icons-compare table {
+  width: 100%;
+  border-collapse: collapse;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.pg-icons-compare table.is-light {
+  background: #f3f3f3;
+  color: #1d2025;
+}
+
+.pg-icons-compare table.is-dark {
+  background: #202020;
+  color: #d0d0d0;
+}
+
+.pg-icons-compare th,
+.pg-icons-compare td {
+  padding: 6px 10px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.pg-icons-compare thead th {
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.7;
+}
+
+.pg-icons-compare tbody th {
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.pg-icons-compare img {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.pg-icons-compare tr.is-selected {
+  background: rgb(65 80 176 / 0.14);
+}
+
+.pg-icons-files {
+  border-collapse: collapse;
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+}
+
+.pg-icons-files th,
+.pg-icons-files td {
+  padding: 5px 14px;
+  border-bottom: 1px solid #eef0f3;
+  text-align: left;
+}
+
+.pg-icons-files th {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.pg-icons-files a {
+  color: #3b47a0;
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 12.5px;
+}
+
+.pg-icons-files td {
+  color: #4a4f57;
+}
+
+/* ---------- 设计演进 ---------- */
+.pg-icons-rounds {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pg-icons-rounds > li {
+  display: grid;
+  grid-template-columns: minmax(260px, 2fr) 3fr;
+  gap: 20px;
+  align-items: center;
+  padding: 16px 20px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
+}
+
+.pg-icons-round-text h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.pg-icons-round-text p {
+  margin: 0;
+  color: #4a4f57;
+  font-size: 13px;
+}
+
+.pg-icons-round-icons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 960px) {
+  .pg-icons-detail,
+  .pg-icons-rounds > li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pg-icons-scenes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

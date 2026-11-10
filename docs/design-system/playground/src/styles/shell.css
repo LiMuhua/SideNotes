@@ -279,14 +279,6 @@ body,
   box-shadow: var(--pg-shadow);
 }
 
-/* 内嵌的独立页面（图标候选）：填满预览区。 */
-.pg-frame {
-  min-height: 0;
-  border: 0;
-  border-radius: 10px;
-  background: #fff;
-}
-
 .pg-viewport {
   position: relative;
   flex: none;

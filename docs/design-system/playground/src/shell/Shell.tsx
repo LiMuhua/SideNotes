@@ -12,7 +12,7 @@ import { useNotes } from '../model/notes';
 import { Desktop } from '../app/Desktop';
 import { ComparePage } from '../pages/Compare';
 import { GalleryPage } from '../pages/Gallery';
-import { IconCandidatesPage } from '../pages/IconCandidates';
+import { AppIconsPage } from '../pages/AppIcons';
 import { TokensPage } from '../pages/Tokens';
 import { Stage } from './Stage';
 import { PAGES, usePlayground, VIEWPORTS, WALLPAPERS, type PageId, type ThemeMode } from './state';
@@ -20,11 +20,11 @@ import { PAGES, usePlayground, VIEWPORTS, WALLPAPERS, type PageId, type ThemeMod
 const HINTS: Record<PageId, string> = {
   sidebar: '侧栏贴在屏幕边缘：单击或悬停选中，双击编辑，右键打开菜单，Ctrl+C 复制；收起后把鼠标移到屏幕边缘唤出，Alt+Shift+S 切换。浏览器保留了 Ctrl+N，新建请直接在顶部输入。',
   capture: '速记浮窗：在任何程序里按 Ctrl+Shift+Space 呼出，Ctrl+Enter 保存并收起，Esc 保留草稿并收起；草稿与侧栏的新建卡片共用。按住标题区可以拖动浮窗，放到不同的背景上检查材质。',
-  settings: '设置窗口 960 × 720：明暗模式、主题、侧栏行为、字号等改动立即作用于所有窗口。字号是整页缩放（字号 ÷ 13）。',
+  settings: '设置窗口 960 × 720：明暗模式、主题、侧栏行为、字号等改动立即作用于所有窗口。字号是整页缩放（字号 ÷ 13）。「显示」中的应用图标可以换成内置图标或上传的图片，任务栏、托盘与标题区随之变化。',
   components: '当前主题与明暗下的组件与状态：卡片的各种状态、编辑模式、新建卡片、页签、筛选条、菜单、弹窗与提示条。',
   tokens: '当前主题与明暗下的全部令牌。数值从令牌文件解析，与设计系统测试检查的是同一份数据；半透明表面的对比度按纯黑与纯白背景中较差的一个计算。',
   compare: '五套主题的侧栏放在同一张壁纸上对比，每个侧栏都可以操作；数据共享，浏览状态各自独立。',
-  icons: '应用图标的候选：最上面是第六轮的五个候选（210–214），下面依次是细化、居中表情、克制与生动两端与更早的深化版；每版有 256px 主图与浅色、深色背景上的 32px、16px 预览，顶部是任务栏与托盘尺寸的对照。这一页不受主题与明暗设置影响。',
+  icons: '定稿的 6 个应用图标（默认 211）：点一个查看大图、演进线、尺寸阶梯、像素放大与使用场景，下面是全部图标的小尺寸对照、资源文件与设计演进。图片就是随应用打包的资源；这一页不受主题与明暗设置影响。',
 };
 
 const THEMES: ReadonlyArray<{ value: ThemeMode; label: string }> = [
@@ -65,7 +65,7 @@ function PageContent({ page }: { page: PageId }) {
     case 'compare':
       return <ComparePage />;
     case 'icons':
-      return <IconCandidatesPage />;
+      return <AppIconsPage />;
   }
 }
 
