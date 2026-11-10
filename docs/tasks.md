@@ -80,6 +80,7 @@
 | DS01 | 设计系统研究、五套主题与交互式 Design Playground（`design-system` 分支） | 高 | 已完成 | `pnpm playground` 可启动并访问 `/design-playground`；以原仓库 0.7.3 已实现的功能为准，侧栏、速记浮窗、设置窗口三个页面原型可交互；五套主题（终端、杂志、记录纸、Windows 11、磨砂玻璃）与浅色、深色、跟随系统可切换，默认终端；1024×768、1280×800、1440×900、1920×1080 屏幕下无溢出与严重控制台错误；`docs/design-system/` 规范文档齐全、格式统一，令牌与 Playground 一致（`pnpm test` 中的令牌、样式与文档检查通过）。进度见下文「DS01 进度」 |
 | DS02 | 设计系统从根目录迁入 `docs/design-system/` | 高 | 已完成 | 根目录不再有 `design-system/`，用 `git mv` 迁移，`git log --follow` 可追溯历史；`tsconfig.json`、`vite.config.ts`、Playground 入口页、图标页与文档中的路径、链接、命令同步更新，全仓搜索不再有指向旧位置的写法（分支名 `design-system` 不变）；入口页也移入 `docs/design-system/playground/index.html`，根目录不再有 `design-playground.html`，开发服务器把 `/design-playground` 转到该页；`pnpm typecheck`、`pnpm lint`、`pnpm test`（17 个文件 415 项，其中设计系统 3 个文件 179 项）、`pnpm build` 通过，构建产物不含 Playground；`pnpm playground` 仍在 1430 端口打开 `/design-playground`，图标候选页 364 张图无缺失，令牌页正常，控制台无告警。入口页迁移后（2026-11-10）复验：`pnpm typecheck`、`pnpm lint`、`pnpm test`（18 个文件 438 项）、`pnpm build` 通过，构建产物不含 Playground；`/design-playground?surface=glass&theme=dark` 打开后地址栏不变，参数生效，控制台无报错 |
 | DS03 | 应用图标定稿：内置图标的多分辨率资源随应用打包，设置中可在内置图标与上传的图片之间切换，Playground 展示定稿与设计演进 | 高 | 已完成 | `pnpm icons` 为 172、210–214 六个内置图标生成 SVG 母版、12 个尺寸的 PNG 与 14 个尺寸的 ICO，重复运行除 `icon.icns` 外不改动文件；`docs/design-system/tests/app-icons.test.ts` 通过；调试版编译后 `app-icons/` 按原结构复制到输出目录；默认图标 211 替换 `src-tauri/icons/`、`docs/design-system/assets/app-icon.svg` 与 `src/assets/favicon.svg`；Playground 设置页可以切换内置图标、上传并裁切图片、更换与移除（可撤销），任务栏、托盘、标题区与关于页随之变化；图标页展示定稿的尺寸、使用场景、对照、资源文件与设计演进。桌面应用的运行时切换未实现，见[已知问题](./known-issues.md)。进度见下文「DS03 进度」 |
+| DS04 | 交互原型接入设计系统：五套主题、结构差异与规范改动落到 `docs/prototype/`（仍是无构建的 HTML、CSS、JS） | 高 | 已完成 | 原型直接引用 `docs/design-system/tokens/` 的令牌（相对路径，不复制），旧样式不写死颜色，`theme.css` 只引用令牌；根节点写 `data-sn-surface`、`data-sn-theme` 与 6 项结构属性，取值与 `surfaces.ts` 一致；设置中切换五套主题（默认终端）与浅色、深色、跟随系统，`standard` 迁移为 `terminal`，无法识别的取值回到终端，字体增加「跟随主题」并保留用户的选择；按 `DESIGN.md` 第五节调整卡片、键盘、Esc、速记浮窗、设置窗口、底栏、提示条与手机形态；新建、编辑、草稿、Markdown、附件、搜索、拖动、多选、归档、回收站、速记、设置、复制无回归；`docs/design-system/tests/prototype.test.ts` 通过；浏览器中五套主题的浅色、深色与跟随系统，宽度 360/416/720，设置 960×720，Android 412×892，刷新恢复，键盘与 Esc 分层核对通过。模拟能力与待原生验证事项见[验证记录](./prototype/VALIDATION.md)；应用图标的切换未接入原型，见[已知问题](./known-issues.md)。进度见下文「DS04 进度」 |
 | T08 | 列表按需加载（设置中的「列表加载」） | 中 | 已完成 | 桌面端：示例数据 21 条，首批渲染 10 条，滚动到底部依次加载到 20、21 条，底部的「已显示 N / M 条」随之更新并在全部加载后消失；搜索后从第一批开始；多选、全选与收起全部仍按整个列表处理 |
 | T09 | 卡片拖动排序与批量选择 | 中 | 已完成 | 与原型 interactions.js 行为一致：在无头浏览器中与原型逐项对照 Ctrl/Shift 单击多选、单击空白清除、空白处框选、长按拖动排序（插入线与提示文字）、拖到回收站、停留页签切换后移入、多选整批拖动，以及每项的撤销，两边结果一致；按住卡片拖动不会选中文字；0.6.9 起单击只选中、双击编辑，拖动之后的双击不进入编辑。单元测试覆盖按显示顺序计算落点 |
 | T10 | 更换数据存储位置并迁移数据 | 中 | 已完成 | Rust 单元测试覆盖复制数据库与附件、改写记录与草稿中的附件路径、改用新数据库后的读写、目标目录原有数据库改名保留、拒绝相同或互相包含的目录、location.json 的记下与回退。桌面端：迁移到自定义目录后数据库与 5 个附件复制完成，侧栏中的附件路径改为新目录，新粘贴的图片写入新目录并经本地文件协议显示，重启后仍使用新目录；迁回应用数据目录时那里原有的数据库改名保留，location.json 删除，原目录保持不动 |
@@ -309,6 +310,21 @@
   - 图标页：149 张图片全部加载；定稿一览、大图与演进线、尺寸阶梯与像素放大、六个使用场景、对照表、资源文件与六轮演进正常显示。
   - 控制台：没有新的报错（只有打开根页面时真实应用调用桌面接口的旧报错）。
 
+## DS04 进度
+
+工作分支 `design-system`，Worktree 为 `SideNotes-Design`。原型仍是无构建的 HTML、CSS、JS，没有改用 React。
+
+**2026-11-10 原型接入设计系统**：
+
+- 令牌：`docs/prototype/index.html` 先引用 `docs/design-system/tokens/` 的 `base.css` 与五套主题的令牌文件，再引用旧样式，最后是新增的 `theme.css`。旧样式中的十六进制颜色全部换成令牌，`styles.css` 的 `:root` 把旧变量（`--paper`、`--ink`、`--accent` 等）指向令牌；旧的明暗与材质选择器（`data-theme`、`data-surface`）删除。
+- 主题：新增 `surfaces.js`，五套主题的 6 项结构差异与 `surfaces.ts` 一致；`settings.js` 把主题、明暗与结构属性写到根节点，字号写成整页缩放 `--app-zoom`，选了具体字体时覆盖 `--sn-font-ui` 与 `--sn-font-note`。设置结构升到版本 3：`standard` 迁移为 `terminal`，字体增加「跟随主题」。
+- 规范改动：卡片标题行、单击与悬停共用高亮、双击编辑、卡片与页签的键盘操作、Esc 顺序、Ctrl+, 与 Ctrl+C、速记浮窗的问号说明与字数、设置窗口 960 × 720 与竖线分隔、滚轮调整数值、底栏版本号与更新角标、提示条暂停计时、宽度手柄延迟高亮与键盘调整、手机形态，详见 [docs/prototype/README.md](./prototype/README.md)。
+- 检查：新增 `docs/design-system/tests/prototype.test.ts`；声明解析与写死值的规则从 `styles.test.ts` 抽到 `css-rules.ts`，两处共用。
+- 浏览器核对中修正：磨砂玻璃的页签圆点与页签拉伸；设置中「字体」标签竖排、主题选项折成两行；主题单选点选后焦点丢失；字体组合框收起时仍拦截 Esc；焦点落到卡片时没有选中；新建卡片聚焦时出现焦点环外框；手机形态的侧栏与搜索框超出屏幕（旧样式按未缩放的屏幕宽度计算上下限）；两处无来源的变量。
+- 未做：应用图标的切换没有接入原型（内置图标在 `src-tauri/icons/builtin/`，原型从 `docs/` 起服务时取不到），见[已知问题](./known-issues.md)。
+
+**验证记录（2026-11-10）**：详见 [docs/prototype/VALIDATION.md](./prototype/VALIDATION.md) 的「2026-11-10 五套主题与设计令牌」。`pnpm typecheck`、`pnpm lint`、`pnpm test`（19 个文件 476 项，其中原型检查 38 项）、`pnpm build` 通过，构建产物不含 Playground 与原型；在浏览器窗格（Chromium）与 Edge 无头模式中核对五套主题的浅色、深色与跟随系统、旧设置迁移、主题切换不影响记录与草稿、宽度 360/416/720、设置 960 × 720、Android 412 × 892、刷新恢复、键盘与 Esc 分层和功能回归，控制台没有报错。Acrylic、全局快捷键、SQLite 与系统文件选择只在浏览器中模拟，待原生验证；本轮没有改动桌面代码，未运行 Tauri 编译。
+
 ## 开发与验证命令
 
 ```bash
@@ -339,7 +355,7 @@ pnpm tauri build
 
 ## 验证方法
 
-**与原型比对**：用 Python 启动原型的静态服务（`python -m http.server 5181 --directory docs/prototype`），与 `pnpm dev` 同时运行；分别打开原型的设置弹窗与应用的 `?window=settings`（视口 880×720），逐个分类导出截图、DOM 轮廓（标签、类名、文字与相对坐标）和计算样式后比对。`.claude/launch.json` 记录了这两个预览服务。侧栏比对时，原型视口取 1600×1000，应用取 `?debug-data=1`、视口 416×1000。
+**与原型比对**：用 Python 启动原型的静态服务（`python -m http.server 5181 --directory docs`，原型地址为 `/prototype/`；原型引用 `docs/design-system/tokens/`，服务目录必须是 `docs/`），与 `pnpm dev` 同时运行；分别打开原型的设置弹窗与应用的 `?window=settings`（视口 880×720），逐个分类导出截图、DOM 轮廓（标签、类名、文字与相对坐标）和计算样式后比对。`.claude/launch.json` 记录了这两个预览服务。侧栏比对时，原型视口取 1600×1000，应用取 `?debug-data=1`、视口 416×1000。
 
 用无头 Edge 比对时，每次使用全新的用户数据目录并加上 `--disable-extensions`：本机为 Edge 配置的扩展会自动装入新目录，其中有的会改写页面配色或注入浮层，干扰截图与样式比对。
 

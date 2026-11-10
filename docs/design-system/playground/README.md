@@ -60,7 +60,7 @@ pnpm playground
 | `src/pages/` | 组件页、令牌页、五套对比页、应用图标页 |
 | `src/shell/` | Playground 外壳与舞台缩放 |
 | `src/styles/` | 样式，见下文 |
-| `src/surfaces.ts` | 五套主题的名称、理念与 6 项结构差异 |
+| `src/surfaces.ts` | 五套主题的名称、理念与 6 项结构差异；交互原型的 `docs/prototype/surfaces.js` 与它逐项比对 |
 | `../tokens/` | 设计令牌：`base.css` 与五套主题的令牌文件，`schema.ts` 是令牌表 |
 | `../tests/` | 设计系统的测试 |
 | `../icon-history/` | 设计演进保留的 18 个历史图标 |
@@ -85,7 +85,8 @@ pnpm test
 ```
 
 - `docs/design-system/tests/tokens.test.ts`：每套主题、每种明暗的令牌齐全，关键颜色组合在最差背景上达到 4.5:1 或 3:1。
-- `docs/design-system/tests/styles.test.ts`：产品样式不写死颜色、像素、rem 与时长，只引用令牌表中的令牌。
+- `docs/design-system/tests/styles.test.ts`：产品样式不写死颜色、像素、rem 与时长，只引用令牌表中的令牌。规则在 `css-rules.ts`，与原型检查共用。
+- `docs/design-system/tests/prototype.test.ts`：交互原型 `docs/prototype/` 直接引用令牌，主题结构与 `surfaces.ts` 一致，旧设置按约定迁移，`theme.css` 只引用令牌，旧样式不写死颜色，变量都有来源。
 - `docs/design-system/tests/docs.test.ts`：设计令牌文档与主题文档附录中的表与令牌文件一致，主题文档的章节统一，文档中的相对链接有效。
 - `docs/design-system/tests/app-icons.test.ts`：内置图标的清单、母版、PNG、ICO 与打包配置一致，默认图标的母版副本与桌面 ICO 和默认图标一致。修改图标母版或清单后运行 `pnpm icons` 重新生成。
 
