@@ -335,6 +335,7 @@
 - 原型引用应用的内置字体；旧样式经 `legacy.css` 放进级联层 `legacy`，`theme.css` 写了的属性一律压过旧样式（旧样式中设置相关的 `!important` 去掉）。
 - 侧栏、速记浮窗、设置窗口、编辑区、菜单、弹窗与提示条按 Playground 对齐；新建卡片移到列表之上，Ctrl+Enter 保存后侧栏保持展开（T47）；补上出入动画、卡片高度与通知位置三项设置。
 - Playground 有两处显示与组件规范不同，用户决定按规范修正：`shell.css` 中外壳的按钮字体规则排除 `.sn-scope`（此前把时间、标签与版本号显示成正文字号，按钮不加粗），`components.css` 补上主要图标按钮（`.sn-icon-button.is-primary`）的强调色样式；原型同样按规范显示。
+- 2026-11-11 按用户的 24 项反馈改进原型（见 [docs/prototype/README.md](./prototype/README.md)「按反馈改进」）：悬浮说明只跟问号绑定、浮层挂在 body 上；快捷键可以重新绑定，编辑器接入现有应用的格式快捷键、回车续写、Tab 缩进与智能粘贴；列表与待办的项头不随光标露出；编辑中的卡片保留高亮，进入编辑时可滚到顶部；卡片拖出侧栏或点「展开全文」打开记录窗口；拖影按设计系统倾斜；新建卡片与列表卡片同宽；附件弹窗与 Ctrl+单击对齐现有应用；设置的外观、快捷键、数据与同步、回收站与关于页按 Playground 调整；版本号 0.7.4。Playground 同步了其中的设计决定（去掉悬浮提示、编辑高亮、明暗卡片宽度、侧栏设置项、应用图标大图预览、关于页标语、列表滚动条）。
 - 验证见 [docs/prototype/VALIDATION.md](./prototype/VALIDATION.md) 的「2026-11-10 按 Playground 还原样式」：`pnpm test`（19 个文件 483 项，其中原型检查 44 项）等检查通过，Edge 无头模式中两边并排截图比对。
 
 **验证记录（2026-11-10）**：详见 [docs/prototype/VALIDATION.md](./prototype/VALIDATION.md) 的「2026-11-10 五套主题与设计令牌」。`pnpm typecheck`、`pnpm lint`、`pnpm test`（19 个文件 476 项，其中原型检查 38 项）、`pnpm build` 通过，构建产物不含 Playground 与原型；在浏览器窗格（Chromium）与 Edge 无头模式中核对五套主题的浅色、深色与跟随系统、旧设置迁移、主题切换不影响记录与草稿、宽度 360/416/720、设置 960 × 720、Android 412 × 892、刷新恢复、键盘与 Esc 分层和功能回归，控制台没有报错。Acrylic、全局快捷键、SQLite 与系统文件选择只在浏览器中模拟，待原生验证；本轮没有改动桌面代码，未运行 Tauri 编译。

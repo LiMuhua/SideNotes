@@ -32,7 +32,7 @@ WCAG 允许 18pt 以上的大字只达到 3:1，本规范不使用这一放宽�
 - 每一个鼠标操作都有键盘方式完成：卡片用方向键移动、Enter 编辑、Delete 移入回收站、Shift+F10 打开菜单（本次提出，见 [interactions.md](./interactions.md) 第三节）；拖动排序、框选等只能用鼠标完成的操作，都能通过菜单或快捷键得到同样的结果（例如「选择全部记录」）。
 - 记录列表只占一个 Tab 停靠点（roving tabindex），不会让用户按几十次 Tab 才能离开列表。
 - 页签、菜单、下拉选择框、单选组、弹窗的按键遵循 APG 的对应模式，见 [interactions.md](./interactions.md) 3.3 节。
-- 快捷键写在按钮的 `aria-keyshortcuts` 属性与工具提示中；终端主题另外把常用快捷键直接写在界面上。
+- 快捷键写在按钮的 `aria-keyshortcuts` 属性中，并列在设置的快捷键页；终端主题另外把常用快捷键直接写在界面上。按钮不加悬停提示（本次提出）。
 - 全局快捷键可以在设置中重新绑定，冲突时给出原因（现有）。
 
 ## 四、指针目标的尺寸
@@ -83,7 +83,7 @@ SideNotes 的小号图标按钮之间都留 2px（`--sn-space-1`），中心距�
 | 问号说明 | 按钮名称为「某某说明」，带 `aria-expanded`；说明打开时用 `aria-describedby` 指向 `tooltip` |
 | 调整宽度的手柄 | `separator`，带 `aria-valuenow`、`aria-valuemin`、`aria-valuemax` |
 | 版本号 | 按钮名称写明版本号；有新版本时写明「发现新版本 0.7.3，点击查看更新内容」，更新角标只是装饰（`aria-hidden`） |
-| 工具提示 | `tooltip`，延迟 500ms 出现，同时写入按钮的名称 |
+| 工具提示 | `tooltip`，延迟 500ms 出现；只用于应用图标的大图预览，按钮的名称只写在 `aria-label` 中 |
 
 编辑区沿用现有的实时编辑器，是带 `aria-label`（「编辑记录」）的可编辑区域。
 
