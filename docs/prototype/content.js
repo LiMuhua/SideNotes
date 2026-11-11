@@ -181,6 +181,8 @@
   /** @brief 验证图片来源，图片仅作为 img 内容加载。 @param {string} value 图片地址。 @return {string|null} 安全地址。 */
   function safeImage(value) {
     const source = String(value || '').trim();
+    // 正文中的图片引用 sidenotes-image:（app.js 的 SideNotesImages）：换成随记录保存的图片内容。
+    if (/^sidenotes-image:/i.test(source)) return window.SideNotesImages ? window.SideNotesImages.resolve(source) || null : null;
     if (/^data:image\/(?:png|jpe?g|gif|webp|avif|bmp|svg\+xml)(?:;[^,]*)?,/i.test(source)) return source;
     const link = safeLink(source);
     return link && /^https?:/i.test(link) ? link : null;
@@ -241,7 +243,7 @@
   function renderInline(text, container, depth = 0) {
     if (depth > 8) { container.append(document.createTextNode(text)); return; }
     const plain = [];
-    const candidates = /[\\`*_~\[!]|https?:\/\/|mailto:/gi;
+    const candidates = /[\\`*_~\[!<]|https?:\/\/|mailto:/gi;
     const automaticLink = /(?:https?:\/\/|mailto:)[^\s<>]+/iy;
     const failedClosers = new Map();
     const linkCache = new Map();
@@ -288,6 +290,23 @@
         position = openingEnd;
         continue;
       }
+      // Typora 写法的下划线 <u>…</u>（与现有应用一致）：只识别这一对不带属性的标签，其余 HTML 仍按文字显示。
+      if (character === '<') {
+        if (text.slice(position, position + 3).toLowerCase() === '<u>') {
+          const close = text.toLowerCase().indexOf('</u>', position + 3);
+          if (close > position + 3) {
+            flushText();
+            const underline = element('u');
+            renderInline(text.slice(position + 3, close), underline, depth + 1);
+            container.append(underline);
+            position = close + 4;
+            continue;
+          }
+        }
+        plain.push('<');
+        position += 1;
+        continue;
+      }
       const image = character === '!' && text[position + 1] === '[';
       if (image || character === '[') {
         const labelStart = position + (image ? 2 : 1);
@@ -310,11 +329,12 @@
             const preview = element('button', undefined, 'markdown-image-button');
             preview.type = 'button';
             preview.dataset.action = 'preview-markdown-image';
-            preview.dataset.src = address;
+            // 记下正文中的原地址，附件弹窗据此找到这一段 Markdown；显示的是缩略图，点开弹窗才加载原图。
+            preview.dataset.src = target.target;
             preview.dataset.alt = label;
             preview.setAttribute('aria-label', '放大图片：' + (label || '图片'));
             const picture = element('img', undefined, 'markdown-image');
-            picture.src = address;
+            if (window.SideNotesImages) window.SideNotesImages.show(picture, address); else picture.src = address;
             picture.alt = label;
             picture.loading = 'lazy';
             preview.append(picture);

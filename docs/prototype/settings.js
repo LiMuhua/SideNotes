@@ -1247,8 +1247,8 @@ window.SideNotesSettings = (function createSettingsController() {
     const typography = group('文字');
     typography.classList.add('settings-wide');
     const fontRow = el('div', 'settings-field-grid settings-typography');
-    // 字号 9–16、步长 0.5：常用的 12 落在滑块中间附近（本次提出）。
-    fontRow.append(row('字体', '默认跟随主题；选了具体字体时替换界面与正文的字体，标题与代码的字体仍跟随主题', fontPicker()), row('字号', '', range('字号', 'fontSize', 9, 16, 0.5, ' px')));
+    // 字号 8–24、步长 0.5，默认 12（本次提出）。
+    fontRow.append(row('字体', '默认跟随主题；选了具体字体时替换界面与正文的字体，标题与代码的字体仍跟随主题', fontPicker()), row('字号', '', range('字号', 'fontSize', 8, 24, 0.5, ' px')));
     const preview = el('div', 'settings-font-preview');
     ['随手记下一句话，不打断手头的工作；支持 Markdown 与 #标签。', 'The Quick Brown Fox Jumps Over the Lazy Dog.', '0123456789 · ¥$€ @#%&*?! · 2026-11-08 · -> => != <= >= === //'].forEach(function previewLine(text) { preview.append(el('p', '', text)); });
     typography.append(fontRow, preview);
@@ -1552,10 +1552,20 @@ window.SideNotesSettings = (function createSettingsController() {
     return node;
   }
 
-  /** @brief 路径：等宽小字，放不下时省略中间以外的部分。 @param {string} label 名称。 @param {string} path 路径。 @return {HTMLElement} 路径。 */
+  /**
+   * @brief 路径：等宽小字，只占一行，放不下时末尾省略，不把别的控件挤乱（本次提出）。
+   * @details 放不下时悬停显示完整路径；双击复制完整路径（双击不选中文字）。
+   * @param {string} label 名称。 @param {string} path 路径。 @return {HTMLElement} 路径。
+   */
   function pathText(label, path) {
     const node = el('code', 'settings-path', path);
     node.setAttribute('aria-label', label);
+    node.addEventListener('mouseenter', function fullPath() {
+      if (node.scrollWidth > node.clientWidth) node.title = path;
+      else node.removeAttribute('title');
+    });
+    node.addEventListener('mousedown', function keepSelection(event) { if (event.detail > 1) event.preventDefault(); });
+    node.addEventListener('dblclick', function copyFullPath(event) { event.preventDefault(); copyPath(path); });
     return node;
   }
 
@@ -1699,17 +1709,17 @@ window.SideNotesSettings = (function createSettingsController() {
     directory.append(row('当前目录', '', current));
     dashboard.append(directory);
 
-    // 快照：目录、已有快照与立即创建、列表与恢复。
-    const snapshots = group('快照', '每天自动创建一份；导入、永久删除、迁移与恢复之前各创建一份。保留 24 小时内的全部，7 天内每天一份，4 周内每周一份');
-    snapshots.classList.add('settings-wide');
+    // 快照（布局同现有应用）：目录一行，已有快照与立即创建一行，下面是带边框的快照列表。
+    const snapshots = group('快照', '每天自动创建；导入、永久删除、迁移与恢复之前也会创建');
+    snapshots.classList.add('settings-wide', 'snapshot-group');
     const folder = el('span', 'settings-inline-value is-grow');
     folder.append(pathText('快照目录', snapshotDirectory()), action('打开目录', function openSnapshots() { copyPath(snapshotDirectory()); }, 'folder', 'icon-button'), action('更换', async function changeSnapshots() { const name = await pickDirectory(); if (name && save({ snapshotDirectory: name })) { renderPanel(); toast('快照目录已更换，之后的快照保存在这里'); } }, 'edit'));
     if (state.settings.snapshotDirectory) folder.append(action('恢复默认', function resetSnapshots() { if (save({ snapshotDirectory: '' })) { renderPanel(); toast('已改回数据目录下的 snapshots 文件夹'); } }, 'restore'));
-    snapshots.append(row('快照目录', '', folder));
+    snapshots.append(row('快照目录', '放到另一块硬盘，硬盘损坏时也能找回数据', folder));
     const list = readSnapshots();
     const existing = el('span', 'settings-inline-value');
-    existing.append(el('span', 'settings-value', list.length + ' 份'), action('立即创建', function snapshotNow() { const failed = createSnapshot('manual'); if (failed) toast('快照未创建：' + failed, null, true); else { renderPanel(); toast('已创建快照'); } }, 'plus'));
-    snapshots.append(row('已有快照', '', existing));
+    existing.append(el('span', 'settings-value', list.length + ' 份 · 附件 ' + stats.count + ' 个，' + formatBytes(stats.bytes)), action('立即创建', function snapshotNow() { const failed = createSnapshot('manual'); if (failed) toast('快照未创建：' + failed, null, true); else { renderPanel(); toast('已创建快照'); } }, 'plus'));
+    snapshots.append(row('已有快照', '保留 24 小时内的全部，7 天内每天一份，4 周内每周一份', existing));
     if (list.length) {
       const items = el('ul', 'snapshot-list');
       items.setAttribute('aria-label', '快照列表');
@@ -2070,5 +2080,15 @@ window.SideNotesSettings = (function createSettingsController() {
   /** 打开独立回收站分类。 */
   function openTrash() { open('trash'); }
 
-  return { open: open, apply: apply, openTrash: openTrash, dataChanged: dataChanged, backupNow: backupNow, status: status, createSnapshot: createSnapshot, closeFloating: function close() { stopRecording(); closeFloating(); } };
+  /** @brief 搜索快捷键：回收站页打开时聚焦回收站的搜索框（本次提出）。 @return {boolean} 是否处理。 */
+  function focusSearch() {
+    if (!activeDialog || currentSection !== 'trash') return false;
+    const search = document.querySelector('.settings-modal .settings-trash-toolbar .settings-search input');
+    if (!search) return false;
+    search.focus();
+    search.select();
+    return true;
+  }
+
+  return { open: open, apply: apply, openTrash: openTrash, focusSearch: focusSearch, dataChanged: dataChanged, backupNow: backupNow, status: status, createSnapshot: createSnapshot, closeFloating: function close() { stopRecording(); closeFloating(); } };
 })();

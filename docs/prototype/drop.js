@@ -48,7 +48,7 @@
       if (!IMAGE_TYPES.test(file.type)) { reject(new Error('支持 PNG、JPG、GIF、WebP 和 SVG 图片')); return; }
       if (file.size > MAX_IMAGE_BYTES) { reject(new Error('单张图片需小于 2 MB，请压缩后再添加')); return; }
       const reader = new FileReader();
-      reader.onload = function imageLoaded() { resolve({ id: createId(), name: file.name || '拖入的图片.png', type: file.type, data: String(reader.result) }); };
+      reader.onload = function imageLoaded() { resolve(window.SideNotesImages.register({ id: createId(), name: file.name || '拖入的图片.png', type: file.type, data: String(reader.result), inline: true })); };
       reader.onerror = function imageFailed() { reject(new Error('图片读取失败，请重新拖入')); };
       reader.onabort = function imageAborted() { reject(new Error('图片读取已取消')); };
       reader.readAsDataURL(file);
@@ -67,7 +67,7 @@
 
   /* ==================== 对外入口 ==================== */
 
-  /** @brief 准备拖入内容；同步抓取访问入口后再异步读取图片。 @param {DataTransfer} transfer 拖放数据。 @return {Promise<{text:string,images:object[],errors:string[]}>} 可插入内容及可显示的局部失败提示。 */
+  /** @brief 准备拖入内容；同步抓取访问入口后再异步读取图片。 @param {DataTransfer} transfer 拖放数据。 @return {Promise<{text:string,images:object[],errors:string[]}>} 可插入的正文（图片与文件的引用各占一行）、图片内容及可显示的局部失败提示。 */
   async function prepare(transfer) {
     const captured = snapshot(transfer);
     const result = { text: '', images: [], errors: [] };
@@ -79,14 +79,15 @@
       if (!file || typeof file.slice !== 'function') throw new Error('不支持拖入文件夹，请选择文件');
       const handle = handles[index] && handles[index].kind === 'file' ? handles[index] : null;
       if (handles[index] && handles[index].kind === 'directory') throw new Error('不支持拖入文件夹，请选择文件');
-      if (/^image\//i.test(file.type)) return { image: await readImage(file) };
+      // 图片与文件一样写进正文，插在光标处（与现有应用一致）；图片内容随记录保存，正文中是 sidenotes-image: 引用（见 app.js 的 SideNotesImages）。
+      if (/^image\//i.test(file.type)) { const image = await readImage(file); return { image: image, reference: window.SideNotesImages.markdown(image) }; }
       const target = window.NoteContent.createFileReference(file, handle);
       return { reference: '[' + escapeLabel(file.name) + '](' + target + ')' };
     }));
     prepared.forEach(function collectFile(item, index) {
-      if (item.status === 'rejected') result.errors.push(fileError(captured.files[index], item.reason));
-      else if (item.value.image) result.images.push(item.value.image);
-      else references.push(item.value.reference);
+      if (item.status === 'rejected') { result.errors.push(fileError(captured.files[index], item.reason)); return; }
+      if (item.value.image) result.images.push(item.value.image);
+      references.push(item.value.reference);
     });
     result.text = references.join('\n');
     return result;

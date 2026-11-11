@@ -1,5 +1,5 @@
 // 把现有应用 src/core 中的纯函数模块转译成交互原型可直接加载的脚本（挂到 window 上），逻辑不改：
-// - shortcuts.ts → shortcuts.js（window.SideNotesShortcuts），命令表中加上设计系统提出的「打开设置」；
+// - shortcuts.ts → shortcuts.js（window.SideNotesShortcuts），命令表中加上设计系统提出的「打开设置」与「关闭全部记录窗口」；
 // - markdown-commands.ts 与 files.ts 中的三个函数 → markdown-commands.js（window.MarkdownCommands）。
 // 用法：在本仓库根目录执行 node docs/prototype/tools/sync-core.mjs <现有应用仓库的根目录>
 // 需要本仓库的 node_modules 中有 typescript；应用更新这些模块后重新执行，覆盖生成的两个文件。
@@ -72,11 +72,17 @@ function wrap(header, globalName, body, names) {
   let source = readFileSync(join(appRoot, 'src/core/shortcuts.ts'), 'utf-8');
   const search = "  { id: 'search', label: '搜索记录与标签', group: 'app', defaultKeys: 'Ctrl+F' },\n";
   if (!source.includes(search)) throw new Error('shortcuts.ts 的命令表变了');
-  // 「打开设置」是设计系统提出的应用内快捷键（Playground 的 shortcuts.ts），现有应用 0.7.3 还没有。
-  source = source.replace(search, search + "  // 本次提出：打开设置（Playground 的 shortcuts.ts），现有应用 0.7.3 还没有这一项。\n  { id: 'settings', label: '打开设置', group: 'app', defaultKeys: 'Ctrl+,' },\n");
-  source = source.replace(/\n  \| 'search'\n/, "\n  | 'search'\n  | 'settings'\n");
+  // 「打开设置」与「关闭全部记录窗口」是设计系统提出的应用内快捷键，现有应用 0.7.3 还没有。
+  // 关闭全部记录窗口默认 Alt+Shift+W：浏览器保留了 Ctrl+W 与 Ctrl+Shift+W，原型中按不到。
+  source = source.replace(
+    search,
+    search +
+      "  // 本次提出：打开设置（Playground 的 shortcuts.ts），现有应用 0.7.3 还没有这一项。\n  { id: 'settings', label: '打开设置', group: 'app', defaultKeys: 'Ctrl+,' },\n" +
+      "  // 本次提出：关闭全部记录窗口（原型的记录窗口），现有应用 0.7.3 还没有记录窗口。\n  { id: 'closeWindows', label: '关闭全部记录窗口', group: 'app', defaultKeys: 'Alt+Shift+W' },\n",
+  );
+  source = source.replace(/\n  \| 'search'\n/, "\n  | 'search'\n  | 'settings'\n  | 'closeWindows'\n");
   const { code, names } = unexport(transpile(source));
-  const header = `/**\n * 快捷键：可以重新绑定的命令、按键的规范写法、事件匹配与冲突检查。\n * 由现有应用 0.7.3 的 src/core/shortcuts.ts 转译而来，逻辑不改；只在命令表中加了「打开设置」（本次提出）。\n * 应用更新快捷键时，重新转译覆盖本文件。\n */`;
+  const header = `/**\n * 快捷键：可以重新绑定的命令、按键的规范写法、事件匹配与冲突检查。\n * 由现有应用 0.7.3 的 src/core/shortcuts.ts 转译而来，逻辑不改；只在命令表中加了「打开设置」与「关闭全部记录窗口」（本次提出）。\n * 应用更新快捷键时，重新转译覆盖本文件。\n */`;
   writeFileSync(join(prototypeRoot, 'shortcuts.js'), wrap(header, 'SideNotesShortcuts', code, names));
   console.log('shortcuts.js', names.length);
 }

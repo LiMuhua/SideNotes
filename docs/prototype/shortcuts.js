@@ -2,7 +2,7 @@
 
 /**
  * 快捷键：可以重新绑定的命令、按键的规范写法、事件匹配与冲突检查。
- * 由现有应用 0.7.3 的 src/core/shortcuts.ts 转译而来，逻辑不改；只在命令表中加了「打开设置」（本次提出）。
+ * 由现有应用 0.7.3 的 src/core/shortcuts.ts 转译而来，逻辑不改；只在命令表中加了「打开设置」与「关闭全部记录窗口」（本次提出）。
  * 应用更新快捷键时，重新转译覆盖本文件。
  */
 (function exposeSideNotesShortcuts() {
@@ -21,6 +21,8 @@
       { id: 'search', label: '搜索记录与标签', group: 'app', defaultKeys: 'Ctrl+F' },
       // 本次提出：打开设置（Playground 的 shortcuts.ts），现有应用 0.7.3 还没有这一项。
       { id: 'settings', label: '打开设置', group: 'app', defaultKeys: 'Ctrl+,' },
+      // 本次提出：关闭全部记录窗口（原型的记录窗口），现有应用 0.7.3 还没有记录窗口。
+      { id: 'closeWindows', label: '关闭全部记录窗口', group: 'app', defaultKeys: 'Alt+Shift+W' },
       { id: 'save', label: '保存记录', group: 'app', defaultKeys: 'Ctrl+Enter' },
       { id: 'bold', label: '加粗', group: 'format', defaultKeys: 'Ctrl+B' },
       { id: 'italic', label: '斜体', group: 'format', defaultKeys: 'Ctrl+I' },

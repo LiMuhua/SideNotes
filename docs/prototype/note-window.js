@@ -3,20 +3,26 @@
 /**
  * @brief 记录窗口（本次提出）：卡片拖出侧栏或点「展开全文」时，在桌面上打开一个可以移动、缩放与置顶的窗口，显示完整的记录。
  * @details 两个入口共用这一个组件，只是出场动画不同：
- * - 拖出侧栏：窗口从松开处的拖影（微微倾斜的卡片）展开到窗口大小，同时摆正，最后轻轻落定；
+ * - 拖出侧栏：窗口从松开处倾斜的拖影展开到窗口大小，同时摆正，最后轻轻落定；拖出的窗口默认置顶；
  * - 展开全文：窗口从卡片在侧栏中的位置向桌面一侧滑出并放大。
- * 每条记录只开一个窗口，再次打开时把它提到最前。标题栏拖动窗口，四边与四角缩放；双击正文编辑，
- * Ctrl+Enter（保存快捷键）或点到窗口外保存，Esc 取消编辑；不在编辑时 Esc 关闭窗口。
+ * 关闭时窗口缩小并滑回侧栏中原来的卡片（卡片看不见时原地淡出）。窗口大小按内容决定，留一点白，长文不超过视口的七成高。
+ * 一个窗口可以有多个标签页，每条记录只在一个标签页中打开：多选拖出时放进同一个窗口；把卡片拖到已开的窗口上、
+ * 把窗口的标题栏拖到另一个窗口的标题栏上、或把标签页拖到另一个窗口，都会合并成标签页；标签页拖到窗口外则拆成新窗口。
+ * 「关闭全部记录窗口」有快捷键（默认 Alt+Shift+W，可在设置中更换）。
+ * 标题栏拖动窗口，四边与四角缩放；双击正文编辑，Ctrl+Enter（保存快捷键）或点到窗口外保存，Esc 取消编辑；
+ * 不在编辑时 Esc 关闭当前标签页，只剩一个时关闭窗口。
  * 置顶的窗口叠在侧栏与速记浮窗之上；没有置顶的窗口在它们之下，点击时提到其余窗口之前。
  * 窗口随字号整页缩放（样式中带 zoom），位置与尺寸按视口坐标保存，写入样式时除以缩放倍数。
  */
 window.NoteWindows = (function createNoteWindows() {
   const MIN_WIDTH = 320;
-  const MIN_HEIGHT = 220;
+  const MIN_HEIGHT = 140;
   const MARGIN = 12;
+  const DRAG_TILT = -2.5; // 与拖影（.card-drag-ghost）的倾斜角度一致。
   const EDGES = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
-  const windows = new Map();
+  const windows = new Map(); // 窗口标识 → 窗口。
   let order = 0;
+  let sequence = 0;
   let gesture = null;
 
   /** @return {number} 整页缩放倍数（字号 ÷ 13）。 */
@@ -40,6 +46,33 @@ window.NoteWindows = (function createNoteWindows() {
 
   /** @brief 把数值限制在范围内。 @param {number} value 数值。 @param {number} min 下限。 @param {number} max 上限。 @return {number} 结果。 */
   function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
+
+  /** @brief 查找记录。 @param {string} id 记录。 @return {object|null} 记录。 */
+  function noteOf(id) { return state.notes.find(function same(item) { return item.id === id; }) || null; }
+
+  /** @brief 打开了这条记录的窗口。 @param {string} id 记录。 @return {object|null} 窗口。 */
+  function windowOf(id) { return Array.from(windows.values()).find(function has(entry) { return entry.tabs.includes(id); }) || null; }
+
+  /** @return {Array} 窗口，最前面的在前。 */
+  function frontToBack() { return Array.from(windows.values()).sort(function byOrder(a, b) { return b.order - a.order; }); }
+
+  /** @brief 指针下面的窗口（可以排除一个）。 @param {{x:number,y:number}} point 视口坐标。 @param {object|null} except 排除的窗口。 @param {boolean} headerOnly 只认标题栏。 @return {object|null} 窗口。 */
+  function windowAt(point, except = null, headerOnly = false) {
+    return frontToBack().find(function hit(entry) {
+      if (entry === except || entry.closing) return false;
+      const box = (headerOnly ? entry.header : entry.node).getBoundingClientRect();
+      return point.x >= box.left && point.x <= box.right && point.y >= box.top && point.y <= box.bottom;
+    }) || null;
+  }
+
+  /** @brief 卡片在侧栏列表中看得见的位置：展开与关闭的动画从这里出发、回到这里。 @param {string} id 记录。 @return {DOMRect|null} 矩形。 */
+  function cardRect(id) {
+    if (!elements.sidebar || !elements.sidebar.classList.contains('open') || elements.sidebar.inert) return null;
+    const card = Array.from(elements.noteList.querySelectorAll('.note-card')).find(function same(node) { return node.dataset.noteId === id; });
+    if (!card) return null;
+    const rect = card.getBoundingClientRect(), list = elements.noteList.getBoundingClientRect();
+    return rect.width && rect.bottom > list.top && rect.top < list.bottom ? rect : null;
+  }
 
   /** @brief 窗口的位置与尺寸写入样式。 @param {object} entry 窗口。 */
   function apply(entry) {
@@ -66,56 +99,40 @@ window.NoteWindows = (function createNoteWindows() {
     restack();
   }
 
-  /** @brief 新窗口的默认大小：适合长文，按视口限制。 @return {{width:number,height:number}} 尺寸。 */
-  function defaultSize() {
-    const view = viewport();
-    return { width: clamp(Math.round(view.width * 0.42), MIN_WIDTH, 640), height: clamp(Math.round(view.height * 0.72), MIN_HEIGHT, 760) };
+  /** @brief 轻轻放大一下，表示窗口已经开着或刚收下了标签页。 @param {object} entry 窗口。 */
+  function pulse(entry) {
+    if (reducedMotion() || typeof entry.node.animate !== 'function') return;
+    entry.node.animate([{ transform: 'none' }, { transform: 'scale(1.015)' }, { transform: 'none' }], { duration: duration('--sn-duration-normal'), easing: easing('--sn-ease-standard') });
   }
 
-  /**
-   * @brief 新窗口的位置：拖出时以松开处为中心，标题栏在指针下；展开全文时放在侧栏旁边、与卡片同高。
-   * 都限制在视口内，并尽量不压住侧栏；与已开的窗口重叠时错开一点。
-   * @param {object} entry 窗口。 @param {object} options point 松开处，from 来源矩形。
-   */
-  function position(entry, options) {
-    const view = viewport(), sidebar = elements.sidebar && elements.sidebar.classList.contains('open') ? elements.sidebar.getBoundingClientRect() : null;
-    const rightEdge = !state.settings || state.settings.edge !== 'left';
-    let x, y;
-    if (options.point) {
-      x = options.point.x - entry.width / 2;
-      y = options.point.y - 20;
-    } else {
-      const from = options.from || { top: view.height / 4 };
-      x = sidebar ? (rightEdge ? sidebar.left - entry.width - MARGIN * 2 : sidebar.right + MARGIN * 2) : (view.width - entry.width) / 2;
-      y = from.top - MARGIN * 3;
-    }
-    if (sidebar) {
-      if (rightEdge && x + entry.width > sidebar.left - MARGIN) x = Math.max(MARGIN, sidebar.left - MARGIN - entry.width);
-      if (!rightEdge && x < sidebar.right + MARGIN) x = Math.min(view.width - entry.width - MARGIN, sidebar.right + MARGIN);
-    }
-    // 与已开的窗口左上角太近时错开。
-    for (let step = 0; step < 8 && Array.from(windows.values()).some(function near(other) { return other !== entry && Math.abs(other.x - x) < 16 && Math.abs(other.y - y) < 16; }); step += 1) { x += 24; y += 24; }
-    entry.x = clamp(x, MARGIN, Math.max(MARGIN, view.width - entry.width - MARGIN));
-    entry.y = clamp(y, MARGIN, Math.max(MARGIN, view.height - entry.height - MARGIN));
+  /** @brief 置顶或取消置顶，按钮的按下状态同步。 @param {object} entry 窗口。 @param {boolean} pinned 是否置顶。 */
+  function setPinned(entry, pinned) {
+    entry.pinned = pinned;
+    entry.pin.setAttribute('aria-pressed', String(pinned));
+    entry.pin.setAttribute('aria-label', pinned ? '取消置顶窗口' : '置顶窗口');
+    entry.node.classList.toggle('is-pinned', pinned);
+    restack();
   }
 
-  /** @brief 创建窗口的结构与事件。 @param {object} note 记录。 @return {object} 窗口。 */
-  function create(note) {
+  /** @brief 创建窗口的结构与事件（还没有标签页）。 @return {object} 窗口。 */
+  function create() {
     const node = el('section', 'note-window');
-    node.dataset.noteId = note.id;
     node.setAttribute('role', 'dialog');
     node.tabIndex = -1;
     const header = el('header', 'note-window-header');
     const emoji = el('span', 'note-window-emoji');
     emoji.setAttribute('aria-hidden', 'true');
     const title = el('h2', 'note-window-title');
+    const strip = el('div', 'note-window-tabs');
+    strip.setAttribute('role', 'tablist');
     const actions = el('div', 'window-actions');
     const pin = button('置顶窗口', '', 'pin', 'icon-button note-window-pin');
     pin.setAttribute('aria-pressed', 'false');
     const close = button('关闭窗口', '', 'x', 'icon-button');
     actions.append(pin, close);
-    header.append(emoji, title, actions);
+    header.append(emoji, title, strip, actions);
     const body = el('div', 'note-window-body');
+    body.setAttribute('role', 'tabpanel');
     node.append(header, body);
     EDGES.forEach(function handle(edge) {
       const grip = el('div', 'note-window-resize');
@@ -123,19 +140,14 @@ window.NoteWindows = (function createNoteWindows() {
       grip.setAttribute('aria-hidden', 'true');
       node.append(grip);
     });
-    const entry = { id: note.id, node: node, header: header, emoji: emoji, titleNode: title, body: body, pin: pin, x: 0, y: 0, width: 0, height: 0, pinned: false, editing: null, order: ++order };
+    const entry = { id: 'window-' + (++sequence), node: node, header: header, emoji: emoji, titleNode: title, strip: strip, body: body, pin: pin, tabs: [], active: '', x: 0, y: 0, width: 0, height: 0, pinned: false, editing: null, closing: false, order: ++order };
+    node.dataset.windowId = entry.id;
 
-    pin.addEventListener('click', function togglePin() {
-      entry.pinned = !entry.pinned;
-      pin.setAttribute('aria-pressed', String(entry.pinned));
-      pin.setAttribute('aria-label', entry.pinned ? '取消置顶窗口' : '置顶窗口');
-      node.classList.toggle('is-pinned', entry.pinned);
-      bringToFront(entry);
-    });
+    pin.addEventListener('click', function togglePin() { setPinned(entry, !entry.pinned); bringToFront(entry); });
     close.addEventListener('click', function closeWindow() { closeEntry(entry); });
     node.addEventListener('pointerdown', function activate() { if (!entry.node.classList.contains('is-front')) bringToFront(entry); }, true);
-    header.addEventListener('pointerdown', function startMove(event) { if (!event.target.closest('button')) startGesture(entry, event, 'move'); });
-    header.addEventListener('dblclick', function toggleSize(event) { if (!event.target.closest('button')) maximize(entry); });
+    header.addEventListener('pointerdown', function startMove(event) { if (!event.target.closest('button,.note-window-tab')) startGesture(entry, event, 'move'); });
+    header.addEventListener('dblclick', function toggleSize(event) { if (!event.target.closest('button,.note-window-tab')) maximize(entry); });
     node.querySelectorAll('.note-window-resize').forEach(function grip(handle) { handle.addEventListener('pointerdown', function startResize(event) { startGesture(entry, event, handle.dataset.edge); }); });
     node.addEventListener('pointermove', moveGesture);
     node.addEventListener('pointerup', endGesture);
@@ -151,7 +163,7 @@ window.NoteWindows = (function createNoteWindows() {
       if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
-        if (entry.editing) finishEditing(entry, false); else closeEntry(entry);
+        if (entry.editing) finishEditing(entry, false); else closeTab(entry, entry.active);
       } else if (save && entry.editing) {
         event.preventDefault();
         event.stopPropagation();
@@ -164,23 +176,64 @@ window.NoteWindows = (function createNoteWindows() {
     return entry;
   }
 
-  /** @brief 写出窗口内容：标题、正文与标签；编辑中不重绘正文。记录被删除或移入回收站时关闭窗口。 @param {object} entry 窗口。 */
-  function render(entry) {
-    const note = state.notes.find(function same(item) { return item.id === entry.id; });
-    if (!note || note.status === 'trash') { closeEntry(entry, { animate: false }); return; }
-    const title = noteTitle(note);
-    entry.emoji.textContent = note.emoji || '📝';
+  /** @brief 写出标签页：两个以上时标题栏换成标签页，只有一个时仍写标题。 @param {object} entry 窗口。 */
+  function renderTabs(entry) {
+    const many = entry.tabs.length > 1;
+    entry.node.classList.toggle('has-tabs', many);
+    const note = noteOf(entry.active);
+    const title = note ? noteTitle(note) : '';
+    entry.emoji.textContent = note ? note.emoji || '📝' : '';
     entry.titleNode.textContent = title;
-    entry.node.setAttribute('aria-label', title);
+    entry.node.setAttribute('aria-label', many ? entry.tabs.length + ' 条记录' : title);
+    if (!many) { entry.strip.replaceChildren(); return; }
+    entry.strip.replaceChildren(...entry.tabs.map(function tab(id) {
+      const item = noteOf(id), name = item ? noteTitle(item) : '';
+      const node = el('div', 'note-window-tab' + (id === entry.active ? ' is-active' : ''));
+      node.dataset.noteId = id;
+      node.setAttribute('role', 'tab');
+      node.setAttribute('aria-selected', String(id === entry.active));
+      node.setAttribute('aria-label', name);
+      node.tabIndex = id === entry.active ? 0 : -1;
+      const mark = el('span', 'note-window-tab-emoji', item ? item.emoji || '📝' : '');
+      mark.setAttribute('aria-hidden', 'true');
+      const close = button('关闭标签页：' + name, '', 'x', 'icon-button note-window-tab-close');
+      close.tabIndex = -1;
+      close.addEventListener('click', function closeThis(event) { event.stopPropagation(); closeTab(entry, id); });
+      node.append(mark, el('span', 'note-window-tab-title', name), close);
+      node.addEventListener('click', function choose() { activate(entry, id); });
+      node.addEventListener('auxclick', function middle(event) { if (event.button === 1) { event.preventDefault(); closeTab(entry, id); } });
+      node.addEventListener('pointerdown', function startTabDrag(event) { if (!event.target.closest('button')) startGesture(entry, event, 'tab', id); });
+      node.addEventListener('keydown', function tabKeys(event) {
+        const index = entry.tabs.indexOf(id), next = event.key === 'ArrowRight' ? entry.tabs[(index + 1) % entry.tabs.length] : event.key === 'ArrowLeft' ? entry.tabs[(index - 1 + entry.tabs.length) % entry.tabs.length] : '';
+        if (next) { event.preventDefault(); activate(entry, next); const target = entry.strip.querySelector('.note-window-tab.is-active'); if (target) target.focus(); }
+        else if (event.key === 'Delete') { event.preventDefault(); closeTab(entry, id); }
+      });
+      return node;
+    }));
+    const current = entry.strip.querySelector('.note-window-tab.is-active');
+    if (current && current.scrollIntoView) current.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+
+  /** @brief 写出当前标签页的内容：正文与标签；编辑中不重绘正文。记录被删除或移入回收站时关掉它的标签页。 @param {object} entry 窗口。 */
+  function render(entry) {
+    const gone = entry.tabs.filter(function missing(id) { const note = noteOf(id); return !note || note.status === 'trash'; });
+    if (gone.length) {
+      entry.tabs = entry.tabs.filter(function keep(id) { return !gone.includes(id); });
+      if (!entry.tabs.length) { closeEntry(entry, { animate: false }); return; }
+      if (!entry.tabs.includes(entry.active)) { entry.active = entry.tabs[0]; entry.editing = null; entry.node.classList.remove('is-editing'); }
+    }
+    renderTabs(entry);
     if (entry.editing) return;
+    const note = noteOf(entry.active);
+    if (!note) return;
     const parts = noteParts(note), display = noteDisplay(note);
     const content = el('div', 'note-window-content markdown-body');
-    // 标题已经写在标题栏里，正文不再重复首行（与卡片相同）。
+    // 标题已经写在标题栏或标签页里，正文不再重复首行（与卡片相同）。
     window.NoteContent.renderMarkdown(display.body, content, { onTaskToggle: function toggleTask(index, checked) {
       const changed = display.body.slice(0, index) + (checked ? 'x' : ' ') + display.body.slice(index + 1);
       return updateNote(note.id, { text: window.NoteContent.compose(display.prefix + changed, parts.tags) });
     } });
-    note.images.forEach(function attachment(image) {
+    stripImages(note).forEach(function attachment(image) {
       const preview = button('预览图片：' + image.name, 'preview-image', '', 'note-image-button');
       preview.dataset.imageId = image.id;
       const picture = el('img', 'note-image');
@@ -195,22 +248,75 @@ window.NoteWindows = (function createNoteWindows() {
       parts.tags.forEach(function tag(name) { const chip = button('#' + name, 'filter-tag', '', 'tag-chip'); chip.dataset.tag = name; tags.append(chip); });
       nodes.push(tags);
     }
-    const scroll = entry.body.scrollTop;
+    const keep = entry.body.dataset.noteId === note.id ? entry.body.scrollTop : 0;
     entry.body.replaceChildren(...nodes);
-    entry.body.scrollTop = scroll;
+    entry.body.dataset.noteId = note.id;
+    entry.body.scrollTop = keep;
   }
 
-  /** @brief 在窗口中编辑：正文换成实时 Markdown 编辑器，填满窗口。 @param {object} entry 窗口。 */
+  /** @brief 切换到一个标签页；正在编辑的先保存。 @param {object} entry 窗口。 @param {string} id 记录。 @return {boolean} 是否切换。 */
+  function activate(entry, id) {
+    if (!entry.tabs.includes(id)) return false;
+    if (entry.active === id) { renderTabs(entry); return true; }
+    if (entry.editing && !finishEditing(entry, true)) return false;
+    entry.active = id;
+    render(entry);
+    return true;
+  }
+
+  /**
+   * @brief 把记录放进窗口的标签页：已经在别的窗口中的先从那里移出（那个窗口空了就收起），最后一条成为当前标签页。
+   * @param {object} entry 窗口。 @param {Array<string>} ids 记录。 @param {number} at 插入位置，默认放在最后。
+   */
+  function addTabs(entry, ids, at = -1) {
+    const valid = ids.filter(function usable(id) { const note = noteOf(id); return note && note.status !== 'trash'; });
+    if (!valid.length) return;
+    valid.forEach(function move(id) {
+      const owner = windowOf(id);
+      if (owner && owner !== entry) detachTab(owner, id);
+      if (owner === entry) entry.tabs.splice(entry.tabs.indexOf(id), 1);
+    });
+    const index = at < 0 || at > entry.tabs.length ? entry.tabs.length : at;
+    entry.tabs.splice(index, 0, ...valid);
+    if (entry.editing && !finishEditing(entry, true)) { renderTabs(entry); return; }
+    entry.active = valid[valid.length - 1];
+    render(entry);
+  }
+
+  /** @brief 从窗口中拿走一个标签页（合并到别处时）；窗口空了就直接收起，不播放关闭动画。 @param {object} entry 窗口。 @param {string} id 记录。 */
+  function detachTab(entry, id) {
+    if (entry.editing && entry.active === id && !finishEditing(entry, true)) return;
+    entry.tabs = entry.tabs.filter(function keep(item) { return item !== id; });
+    if (!entry.tabs.length) { closeEntry(entry, { animate: false }); return; }
+    if (entry.active === id) entry.active = entry.tabs[0];
+    render(entry);
+  }
+
+  /** @brief 关闭一个标签页：只剩它时关闭整个窗口。 @param {object} entry 窗口。 @param {string} id 记录。 */
+  function closeTab(entry, id) {
+    if (entry.tabs.length <= 1) { closeEntry(entry); return; }
+    if (entry.editing && entry.active === id && !finishEditing(entry, true)) return;
+    const index = entry.tabs.indexOf(id);
+    entry.tabs.splice(index, 1);
+    if (entry.active === id) entry.active = entry.tabs[Math.min(index, entry.tabs.length - 1)];
+    render(entry);
+    const current = entry.strip.querySelector('.note-window-tab.is-active');
+    if (current && entry.node.contains(document.activeElement)) current.focus({ preventScroll: true });
+    else entry.node.focus({ preventScroll: true });
+  }
+
+  /** @brief 在窗口中编辑当前标签页：正文换成实时 Markdown 编辑器，填满窗口。 @param {object} entry 窗口。 */
   function beginEditing(entry) {
-    const note = state.notes.find(function same(item) { return item.id === entry.id; });
+    const note = noteOf(entry.active);
     if (!note) return;
     // 同一条记录正在侧栏中编辑时，先保存那边的修改。
-    if (ui.editing && ui.editing.id === entry.id && !finishEdit()) return;
-    entry.editing = { text: note.text, original: note.text };
+    if (ui.editing && ui.editing.id === note.id && !finishEdit()) return;
+    entry.editing = { id: note.id, text: note.text, original: note.text };
     const input = el('textarea', 'note-window-input');
     input.value = note.text;
     input.setAttribute('aria-label', '编辑记录');
     entry.body.replaceChildren(input);
+    delete entry.body.dataset.noteId;
     entry.node.classList.add('is-editing');
     if (window.LiveMarkdown) window.LiveMarkdown.attach(input, { value: note.text, minHeight: 0, maxHeight: 'none' });
     input.addEventListener('input', function track() { entry.editing.text = input.liveMarkdown ? input.liveMarkdown.getValue() : input.value; });
@@ -226,34 +332,65 @@ window.NoteWindows = (function createNoteWindows() {
   function finishEditing(entry, commit) {
     if (!entry.editing) return true;
     const editing = entry.editing;
-    if (commit && editing.text.trim() && editing.text !== editing.original && !updateNote(entry.id, { text: window.NoteContent.canonicalize(editing.text) })) return false;
+    if (commit && editing.text.trim() && editing.text !== editing.original && !updateNote(editing.id, { text: window.NoteContent.canonicalize(editing.text) })) return false;
     const input = entry.body.querySelector('textarea');
     if (input && input.liveMarkdown) input.liveMarkdown.destroy();
     entry.editing = null;
     entry.node.classList.remove('is-editing');
     render(entry);
-    if (entry.node.isConnected) entry.node.focus({ preventScroll: true });
+    if (entry.node.isConnected && !entry.closing) entry.node.focus({ preventScroll: true });
     return true;
   }
 
-  /** @brief 开始移动或缩放。 @param {object} entry 窗口。 @param {PointerEvent} event 按下。 @param {string} mode move 或缩放的边。 */
-  function startGesture(entry, event, mode) {
+  /**
+   * @brief 开始移动、缩放或拖动标签页。
+   * @param {object} entry 窗口。 @param {PointerEvent} event 按下。 @param {string} mode move、tab 或缩放的边。 @param {string} tab 拖动的标签页。
+   */
+  function startGesture(entry, event, mode, tab = '') {
     if (event.button !== 0 || gesture) return;
-    event.preventDefault();
+    if (mode !== 'tab') event.preventDefault();
     bringToFront(entry);
-    gesture = { entry: entry, mode: mode, pointerId: event.pointerId, x: event.clientX, y: event.clientY, start: { x: entry.x, y: entry.y, width: entry.width, height: entry.height }, target: event.currentTarget };
+    gesture = { entry: entry, mode: mode, tab: tab, pointerId: event.pointerId, x: event.clientX, y: event.clientY, start: { x: entry.x, y: entry.y, width: entry.width, height: entry.height }, target: event.currentTarget, active: mode !== 'tab', merge: null };
     try { event.currentTarget.setPointerCapture(event.pointerId); } catch (error) { /* 指针失效时由 pointercancel 收尾。 */ }
-    entry.node.classList.add(mode === 'move' ? 'is-moving' : 'is-resizing');
+    if (mode !== 'tab') entry.node.classList.add(mode === 'move' ? 'is-moving' : 'is-resizing');
     if (typeof cancelHide === 'function') cancelHide();
   }
 
-  /** @brief 跟随指针移动或缩放，标题栏始终留在视口内。 @param {PointerEvent} event 移动。 */
+  /** @brief 标记合并的目标窗口（标题栏换成浅强调色）。 @param {object|null} target 窗口。 */
+  function markMerge(target) {
+    if (gesture.merge === target) return;
+    if (gesture.merge) gesture.merge.node.classList.remove('is-merge-target');
+    gesture.merge = target;
+    if (target) target.node.classList.add('is-merge-target');
+  }
+
+  /** @brief 跟随指针移动、缩放或拖动标签页；标题栏始终留在视口内。 @param {PointerEvent} event 移动。 */
   function moveGesture(event) {
     if (!gesture || event.pointerId !== gesture.pointerId) return;
-    const dx = event.clientX - gesture.x, dy = event.clientY - gesture.y, start = gesture.start, entry = gesture.entry, view = viewport();
+    const dx = event.clientX - gesture.x, dy = event.clientY - gesture.y, start = gesture.start, entry = gesture.entry, view = viewport(), point = { x: event.clientX, y: event.clientY };
+    if (gesture.mode === 'tab') {
+      if (!gesture.active) {
+        if (Math.hypot(dx, dy) < 5) return;
+        gesture.active = true;
+        const source = gesture.target.getBoundingClientRect();
+        gesture.ghost = el('div', 'note-window-tab-ghost');
+        gesture.ghost.setAttribute('aria-hidden', 'true');
+        gesture.ghost.append(gesture.target.cloneNode(true));
+        gesture.grab = { x: event.clientX - source.left, y: event.clientY - source.top };
+        document.body.append(gesture.ghost);
+        entry.node.classList.add('is-dragging-tab');
+      }
+      const z = zoom();
+      gesture.ghost.style.left = (point.x - gesture.grab.x) / z + 'px';
+      gesture.ghost.style.top = (point.y - gesture.grab.y) / z + 'px';
+      markMerge(windowAt(point, entry, true));
+      return;
+    }
     if (gesture.mode === 'move') {
       entry.x = clamp(start.x + dx, 80 - start.width, view.width - 80);
       entry.y = clamp(start.y + dy, 0, view.height - 40);
+      // 标题栏拖到另一个窗口的标题栏上：松开后合并成标签页。
+      markMerge(windowAt(point, entry, true));
     } else {
       const mode = gesture.mode;
       if (mode.includes('e')) entry.width = clamp(start.width + dx, MIN_WIDTH, view.width - start.x);
@@ -265,12 +402,55 @@ window.NoteWindows = (function createNoteWindows() {
     apply(entry);
   }
 
-  /** @brief 结束移动或缩放。 @param {PointerEvent} event 松开。 */
+  /** @brief 标签页在同一个窗口的标签栏里的落点。 @param {object} entry 窗口。 @param {number} x 指针横坐标。 @return {number} 插入位置。 */
+  function tabIndexAt(entry, x) {
+    const tabs = Array.from(entry.strip.querySelectorAll('.note-window-tab'));
+    const index = tabs.findIndex(function before(tab) { const box = tab.getBoundingClientRect(); return x < box.left + box.width / 2; });
+    return index < 0 ? tabs.length : index;
+  }
+
+  /** @brief 结束移动、缩放或拖动标签页：落在别的窗口标题栏上时合并，标签页拖到窗口外时拆成新窗口。 @param {PointerEvent} event 松开。 */
   function endGesture(event) {
     if (!gesture || event.pointerId !== gesture.pointerId) return;
-    try { if (gesture.target.hasPointerCapture(event.pointerId)) gesture.target.releasePointerCapture(event.pointerId); } catch (error) { /* 已经释放。 */ }
-    gesture.entry.node.classList.remove('is-moving', 'is-resizing');
+    const done = gesture, entry = done.entry, point = { x: event.clientX, y: event.clientY };
+    try { if (done.target.hasPointerCapture(event.pointerId)) done.target.releasePointerCapture(event.pointerId); } catch (error) { /* 已经释放。 */ }
+    entry.node.classList.remove('is-moving', 'is-resizing', 'is-dragging-tab');
+    if (done.merge) done.merge.node.classList.remove('is-merge-target');
+    if (done.ghost) done.ghost.remove();
     gesture = null;
+    if (event.type === 'pointercancel') return;
+    if (done.mode === 'move' && done.merge) {
+      const target = done.merge, ids = entry.tabs.slice();
+      if (entry.editing && !finishEditing(entry, true)) return;
+      addTabs(target, ids, tabIndexAt(target, point.x));
+      bringToFront(target);
+      pulse(target);
+      target.node.focus({ preventScroll: true });
+      return;
+    }
+    if (done.mode !== 'tab' || !done.active) return;
+    if (done.merge) {
+      addTabs(done.merge, [done.tab], tabIndexAt(done.merge, point.x));
+      bringToFront(done.merge);
+      pulse(done.merge);
+      return;
+    }
+    const header = entry.header.getBoundingClientRect();
+    if (point.y >= header.top - MARGIN && point.y <= header.bottom + MARGIN && point.x >= header.left && point.x <= header.right) {
+      // 在本窗口的标签栏里松开：调整标签页的顺序。
+      const from = entry.tabs.indexOf(done.tab);
+      let to = tabIndexAt(entry, point.x);
+      if (to > from) to -= 1;
+      entry.tabs.splice(from, 1);
+      entry.tabs.splice(to, 0, done.tab);
+      renderTabs(entry);
+      return;
+    }
+    // 拖到窗口外：拆成新窗口，标题栏落在松开处。
+    if (entry.tabs.length < 2) return;
+    if (entry.editing && entry.active === done.tab && !finishEditing(entry, true)) return;
+    detachTab(entry, done.tab);
+    open(done.tab, { kind: 'detach', point: point, width: entry.width, pinned: entry.pinned });
   }
 
   /** @brief 双击标题栏：放大到视口（侧栏之外），再双击还原。 @param {object} entry 窗口。 */
@@ -309,55 +489,133 @@ window.NoteWindows = (function createNoteWindows() {
   }
 
   /**
-   * @brief 打开记录窗口；已经开着时提到最前。
-   * @param {string} id 记录。 @param {object} options from 来源矩形（展开全文时是卡片），point 松开处（拖出时），ghost 拖影矩形，kind expand 或 drop。
+   * @brief 新窗口的大小：宽度比来源的卡片宽一些，高度按内容决定并留一点白；长文不超过视口的七成高（本次提出）。
+   * @param {object} entry 窗口（内容已经写好）。 @param {object} options from 或 ghost 来源矩形，width 指定的宽度。
+   */
+  function fitSize(entry, options) {
+    const view = viewport(), z = zoom(), source = options.ghost || options.from;
+    const base = options.width || (source ? source.width * 1.25 : 440 * z);
+    entry.width = clamp(Math.round(base), Math.min(MIN_WIDTH, view.width - MARGIN * 2), Math.max(MIN_WIDTH, Math.min(640 * z, view.width - MARGIN * 2)));
+    entry.height = MIN_HEIGHT;
+    apply(entry);
+    const header = entry.header.getBoundingClientRect().height, style = window.getComputedStyle(entry.body);
+    const first = entry.body.firstElementChild, last = entry.body.lastElementChild;
+    const content = first && last ? last.getBoundingClientRect().bottom - first.getBoundingClientRect().top : 0;
+    const padding = (parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)) * z, border = 2 * z;
+    entry.height = clamp(Math.ceil(header + content + padding + border), MIN_HEIGHT, Math.max(MIN_HEIGHT, Math.round(view.height * 0.72)));
+  }
+
+  /**
+   * @brief 新窗口的位置：拖出时标题栏在松开处；展开全文时放在侧栏旁边、与卡片同高。
+   * 都限制在视口内，并尽量不压住侧栏；与已开的窗口重叠时错开一点。
+   * @param {object} entry 窗口。 @param {object} options point 松开处，from 来源矩形。
+   */
+  function position(entry, options) {
+    const view = viewport(), sidebar = elements.sidebar && elements.sidebar.classList.contains('open') ? elements.sidebar.getBoundingClientRect() : null;
+    const rightEdge = !state.settings || state.settings.edge !== 'left';
+    let x, y;
+    if (options.point) {
+      x = options.point.x - entry.width / 2;
+      y = options.point.y - 20;
+    } else {
+      const from = options.from || { top: view.height / 4 };
+      x = sidebar ? (rightEdge ? sidebar.left - entry.width - MARGIN * 2 : sidebar.right + MARGIN * 2) : (view.width - entry.width) / 2;
+      y = from.top - MARGIN * 3;
+    }
+    if (sidebar) {
+      if (rightEdge && x + entry.width > sidebar.left - MARGIN) x = Math.max(MARGIN, sidebar.left - MARGIN - entry.width);
+      if (!rightEdge && x < sidebar.right + MARGIN) x = Math.min(view.width - entry.width - MARGIN, sidebar.right + MARGIN);
+    }
+    // 与已开的窗口左上角太近时错开。
+    for (let step = 0; step < 8 && Array.from(windows.values()).some(function near(other) { return other !== entry && Math.abs(other.x - x) < 16 && Math.abs(other.y - y) < 16; }); step += 1) { x += 24; y += 24; }
+    entry.x = clamp(x, MARGIN, Math.max(MARGIN, view.width - entry.width - MARGIN));
+    entry.y = clamp(y, MARGIN, Math.max(MARGIN, view.height - entry.height - MARGIN));
+  }
+
+  /**
+   * @brief 打开记录窗口；已经在某个窗口中时切到它的标签页并提到最前。
+   * @param {string} id 记录。 @param {object} options kind（expand、drop、detach），from 来源矩形（展开全文时是卡片），point 松开处，
+   * ghost 拖影矩形，tabs 一起放进这个窗口的其它记录，pinned 是否置顶，width 指定宽度。
    * @return {object|null} 窗口。
    */
   function open(id, options = {}) {
-    const note = state.notes.find(function same(item) { return item.id === id; });
+    const note = noteOf(id);
     if (!note) return null;
-    let entry = windows.get(id);
-    if (entry) {
-      bringToFront(entry);
-      entry.node.focus({ preventScroll: true });
-      if (!reducedMotion() && typeof entry.node.animate === 'function') entry.node.animate([{ transform: 'none' }, { transform: 'scale(1.015)' }, { transform: 'none' }], { duration: duration('--sn-duration-normal'), easing: easing('--sn-ease-standard') });
-      return entry;
+    const existing = windowOf(id);
+    if (existing && !options.tabs) {
+      activate(existing, id);
+      bringToFront(existing);
+      existing.node.focus({ preventScroll: true });
+      pulse(existing);
+      return existing;
     }
-    entry = create(note);
-    windows.set(id, entry);
-    const size = defaultSize();
-    entry.width = size.width;
-    entry.height = size.height;
-    position(entry, options);
+    const entry = create();
+    windows.set(entry.id, entry);
+    entry.tabs = [];
     document.body.append(entry.node);
+    addTabs(entry, [id].concat(options.tabs || []).filter(function unique(item, index, list) { return list.indexOf(item) === index; }));
+    activate(entry, id);
+    setPinned(entry, Boolean(options.pinned));
+    fitSize(entry, options);
+    position(entry, options);
     apply(entry);
     restack();
-    render(entry);
-    if (options.kind === 'drop') morph(entry, options.ghost, { duration: duration('--sn-duration-slow') * 1.6, easing: easing('--sn-ease-standard'), rotate: -1, opacity: 0.9, settle: true });
-    else morph(entry, options.from, { duration: duration('--sn-duration-slow') * 1.3, easing: easing('--sn-ease-enter'), opacity: 0.5 });
+    if (options.kind === 'drop') morph(entry, options.ghost, { duration: duration('--sn-duration-slow') * 1.6, easing: easing('--sn-ease-standard'), rotate: DRAG_TILT, opacity: 0.9, settle: true });
+    else if (options.kind === 'expand') morph(entry, options.from, { duration: duration('--sn-duration-slow') * 1.3, easing: easing('--sn-ease-enter'), opacity: 0.5 });
     entry.node.focus({ preventScroll: true });
     return entry;
   }
 
   /**
-   * @brief 拖出侧栏松开后打开窗口：多选时每条一个，依次错开。
+   * @brief 拖出侧栏松开后打开窗口（拖出的窗口默认置顶）：落在已开的窗口上时放进它的标签页，否则多选的几条放进同一个新窗口。
    * @param {Iterable<string>} ids 记录。 @param {{x:number,y:number}} point 松开处。 @param {DOMRect|null} ghost 拖影矩形。
    */
   function openFromDrag(ids, point, ghost) {
-    Array.from(ids).slice(0, 6).forEach(function each(id, index) {
-      open(id, { kind: 'drop', point: { x: point.x + index * 24, y: point.y + index * 24 }, ghost: ghost });
-    });
+    const list = Array.from(ids).filter(function usable(id) { return noteOf(id); }).slice(0, 12);
+    if (!list.length) return;
+    const target = windowAt(point);
+    if (target) {
+      addTabs(target, list, target.node.classList.contains('has-tabs') ? tabIndexAt(target, point.x) : -1);
+      bringToFront(target);
+      pulse(target);
+      target.node.focus({ preventScroll: true });
+      return;
+    }
+    open(list[0], { kind: 'drop', point: point, ghost: ghost, tabs: list.slice(1), pinned: true });
   }
 
-  /** @brief 关闭窗口：先结束编辑（保存），再淡出。 @param {object} entry 窗口。 @param {object} options animate 是否播放关闭动画。 */
+  /**
+   * @brief 关闭窗口：先结束编辑（保存），再缩小并滑回侧栏中当前标签页的卡片，卡片看不见时原地淡出。
+   * @param {object} entry 窗口。 @param {object} options animate 是否播放关闭动画。
+   */
   function closeEntry(entry, options = {}) {
-    if (!windows.has(entry.id)) return;
+    if (!windows.has(entry.id) || entry.closing) return;
     if (entry.editing && options.animate !== false && !finishEditing(entry, true)) return;
+    entry.closing = true;
     windows.delete(entry.id);
-    const remove = function remove() { entry.node.remove(); };
-    if (options.animate === false || reducedMotion() || typeof entry.node.animate !== 'function') remove();
-    else entry.node.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(0.97)' }], { duration: duration('--sn-duration-fast'), easing: easing('--sn-ease-exit') }).finished.then(remove, remove);
     restack();
+    const remove = function remove() { entry.node.remove(); };
+    if (options.animate === false || reducedMotion() || typeof entry.node.animate !== 'function') { remove(); return; }
+    const from = entry.node.getBoundingClientRect(), to = cardRect(entry.active), z = zoom();
+    entry.node.style.pointerEvents = 'none';
+    if (to && from.width && from.height) {
+      // 类似程序坞收起窗口，但不扭曲：缩小并滑回原来的卡片，快到时淡出。
+      const dx = (to.left - from.left) / z, dy = (to.top - from.top) / z, sx = to.width / from.width, sy = to.height / from.height;
+      entry.node.animate([
+        { transformOrigin: '0 0', transform: 'none', opacity: 1 },
+        { offset: 0.8, transformOrigin: '0 0', transform: 'translate(' + dx + 'px, ' + dy + 'px) scale(' + sx + ', ' + sy + ')', opacity: 0.85 },
+        { transformOrigin: '0 0', transform: 'translate(' + dx + 'px, ' + dy + 'px) scale(' + sx + ', ' + sy + ')', opacity: 0 }
+      ], { duration: duration('--sn-duration-slow') * 1.3, easing: easing('--sn-ease-standard') }).finished.then(remove, remove);
+      return;
+    }
+    entry.node.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(0.97)' }], { duration: duration('--sn-duration-fast'), easing: easing('--sn-ease-exit') }).finished.then(remove, remove);
+  }
+
+  /** @brief 关闭全部记录窗口（快捷键「关闭全部记录窗口」）。 @return {boolean} 是否有窗口被关闭。 */
+  function closeAll() {
+    const list = Array.from(windows.values());
+    list.forEach(function close(entry) { closeEntry(entry); });
+    return list.length > 0;
   }
 
   /** 记录变化后重绘打开的窗口（app.js 的 renderNotes 末尾调用）。 */
@@ -371,7 +629,9 @@ window.NoteWindows = (function createNoteWindows() {
   return Object.freeze({
     open: open,
     openFromDrag: openFromDrag,
+    closeAll: closeAll,
     refresh: refresh,
+    count: function count() { return windows.size; },
     isDragging: function isDragging() { return Boolean(gesture); },
     owns: function owns(target) { return Boolean(target && target.closest && target.closest('.note-window')); }
   });

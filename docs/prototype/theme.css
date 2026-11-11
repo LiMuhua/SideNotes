@@ -869,8 +869,8 @@ img.brand-mark.is-small {
 
 /* ---------- 新建卡片 ----------
  * 固定在记录列表之上，独占顶部的一块区域，列表滚动时卡片从它下方移出（app.js 把它放在列表之前）。
- * 平时只是一行占位，获得焦点或有内容时底部才出现工具栏；获得焦点时与编辑中的卡片一样换成编辑底色并浮起，
- * 边框不变、不用强调色，也不加外圈（editing.md 第二节）。 */
+ * 底部的工具栏一直显示，不随焦点收起展开（2026-11-11 第二次反馈：点工具栏一行时卡片会收起）；
+ * 获得焦点时与编辑中的卡片一样换成编辑底色并浮起，边框不变、不用强调色，也不加外圈（editing.md 第二节）。 */
 .sidebar > #quick-composer.sidebar-composer {
   position: relative;
   flex: none;
@@ -913,10 +913,6 @@ img.brand-mark.is-small {
   padding: 0;
   border: 0;
   background: transparent;
-}
-
-#quick-composer:not(:focus-within):has(.live-markdown-editor.is-empty) .composer-footer {
-  display: none;
 }
 
 .composer-tools,
@@ -1486,13 +1482,37 @@ mark {
   box-shadow: 0 0 0 var(--sn-focus-ring-width) var(--sn-color-accent-subtle);
 }
 
-:is(.markdown-image-button, .md-editor-image) .markdown-image {
+/* 缩略图：整张图都看得见（按比例缩小，不裁切），高度上限与现有应用一致；显示的是缩小的副本，点开附件弹窗才加载原图（本次提出）。 */
+:is(.markdown-image-button, .md-editor-image) .markdown-image,
+.markdown-body .note-image-button .note-image,
+.note-window-content .note-image-button .note-image {
   display: block;
+  width: auto;
   max-width: 100%;
+  height: auto;
   max-height: 150px; /* 固定：缩略图高度与现有应用一致 */
+  margin: 0;
   border: var(--sn-border-width) solid var(--sn-color-border-subtle);
   border-radius: var(--sn-radius-sm);
-  object-fit: cover;
+  object-fit: contain;
+}
+
+/* 大图的缩略图还在生成：先占一块缩略图大小的底色。 */
+img.is-thumbnail-pending {
+  min-width: calc(var(--sn-control-height) * 4);
+  min-height: calc(var(--sn-control-height) * 3);
+  background: var(--sn-color-surface-sunken);
+}
+
+.markdown-body .note-image-button {
+  display: inline-flex;
+  width: auto;
+  max-width: 100%;
+  margin: var(--sn-space-2) var(--sn-space-2) 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
 }
 
 .markdown-body .note-image,
@@ -1722,7 +1742,11 @@ mark {
   font-size: 0.8em;
   line-height: 1;
   text-indent: 0;
-  vertical-align: -0.12em;
+  /* 居中对齐（middle）与方框里有没有勾无关，勾选前后不上下跳；字体的 x 高度偏小，再上移一点，
+   * 与卡片中的待办方框一样对齐文字的中线，不比文字低。 */
+  position: relative;
+  top: -0.3em;
+  vertical-align: middle;
 }
 
 .live-markdown-editor .md-task-checkbox[aria-checked='true'] {
@@ -2278,12 +2302,12 @@ mark {
 
 /* ---------- 设置窗口 ----------
  * 与 Playground 的设置窗口相同（windows.css 与 controls.css），布局沿用现有应用 0.7.3：
- * 窗口 960 × 720，不随字号变化，内容按字号缩放；窄的分类栏，当前项浮起、图标用强调色；
+ * 窗口 880 × 720（与现有应用相同），不随字号变化，内容按字号缩放；窄的分类栏，当前项浮起、图标用强调色；
  * 页面由分组卡片组成，相关的设置放在同一张卡片里，一行可以放几项，项与项之间一条很淡的竖线，说明收在名称后的问号里。 */
 .modal.settings-modal {
   display: flex;
   flex-direction: column;
-  width: min(calc(960px / var(--app-zoom, 1)), calc((100vw - var(--sn-space-6)) / var(--app-zoom, 1))); /* 固定：设置窗口的窗口尺寸 */
+  width: min(calc(880px / var(--app-zoom, 1)), calc((100vw - var(--sn-space-6)) / var(--app-zoom, 1))); /* 固定：设置窗口的窗口尺寸 */
   height: min(calc(720px / var(--app-zoom, 1)), calc((100dvh - var(--sn-space-6)) / var(--app-zoom, 1))); /* 固定：设置窗口的窗口尺寸 */
   max-width: none;
   max-height: none;
@@ -4124,19 +4148,17 @@ body[data-edge='left'] .toast-region {
 }
 
 /* ---------- 编辑中的卡片保留高亮（本次提出） ----------
- * 编辑中的卡片与悬停、选中的卡片一样带强调色边框与外圈（窗格的标题栏顶部一条强调色线），同时换成编辑底色并浮起；
- * 编辑区里的输入面仍不加框。此前编辑中去掉了高亮，看不出正在编辑的是哪一张。 */
+ * 编辑中的卡片只有一圈强调色边框，同时换成编辑底色并浮起；不叠外圈，窗格的标题栏也不画顶部的强调色线，
+ * 几条线挨在一起像一层内衬（2026-11-11 第二次反馈）。编辑区里的输入面仍不加框。 */
 .note-list .note-card.is-editing,
 [data-sn-entries='panes'] .note-list .note-card.is-editing {
   --local-overlay: transparent;
-  --local-shadow: var(--sn-shadow-card-active), var(--sn-shadow-editing);
+  --local-shadow: var(--sn-shadow-editing);
   border-color: var(--sn-color-accent);
 }
 
 [data-sn-entries='panes'] .note-list .note-card.is-editing > .note-header {
-  background:
-    linear-gradient(var(--sn-color-accent), var(--sn-color-accent)) top / 100% var(--sn-focus-ring-width) no-repeat,
-    var(--sn-color-card-head-active);
+  background: var(--sn-color-card-head-active);
 }
 
 [data-sn-entries='tiles'] .note-list .note-card.is-editing::after {
@@ -4144,8 +4166,9 @@ body[data-edge='left'] .toast-region {
 }
 
 /* ---------- 拖动排序（Playground 的 sn-drag-ghost 与 sn-drop-line） ----------
- * 拖影是卡片本身的副本：向右错开、微微倾斜、浮起；拖出侧栏时摆正并放大一点，松开后在那里打开记录窗口。
- * 插入线是一条强调色的线，左端一个小圆点，不写说明文字。被拖动的卡片原地变淡，不加虚线框。 */
+ * 拖影是卡片本身的副本：向右错开、倾斜、浮起；多选时后面叠着一两张卡片的边。拖出侧栏时保持倾斜并放大一点，
+ * 松开后在那里打开记录窗口（窗口从倾斜的拖影展开、摆正）。插入线是一条强调色的线，左端一个小圆点，不写说明文字。
+ * 被拖动的卡片原地变淡，不加虚线框。 */
 .card-drag-ghost.note-list {
   position: fixed;
   left: 0;
@@ -4162,7 +4185,7 @@ body[data-edge='left'] .toast-region {
   opacity: 0.9;
   white-space: normal;
   pointer-events: none;
-  transform: translateX(var(--sn-space-6)) rotate(-1deg);
+  transform: translateX(var(--sn-space-6)) rotate(-2.5deg);
   transform-origin: 50% 50%;
   transition: transform var(--sn-duration-normal) var(--sn-ease-standard);
   zoom: var(--app-zoom, 1);
@@ -4175,7 +4198,24 @@ body[data-edge='left'] .toast-region {
 
 .card-drag-ghost.note-list.is-window {
   opacity: 1;
-  transform: rotate(0deg) scale(1.04);
+  transform: translateX(var(--sn-space-6)) rotate(-2.5deg) scale(1.04);
+}
+
+/* 多选的一叠：卡片的边框与底色，越往后错开越多、转得越正。 */
+.card-drag-stack {
+  position: absolute;
+  inset: 0;
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-card-radius);
+  background: var(--sn-color-card);
+  box-shadow: var(--sn-shadow-md);
+  transform:
+    translate(calc(var(--local-layer) * var(--sn-space-3)), calc(var(--local-layer) * var(--sn-space-2)))
+    rotate(calc(var(--local-layer) * 2deg));
+}
+
+.card-drag-ghost.note-list > .note-card {
+  position: relative;
 }
 
 .card-drag-count {
@@ -4448,6 +4488,11 @@ body[data-edge='left'] .toast-region {
   outline: none;
 }
 
+/* 当前操作的窗口：边框带一点点强调色（本次提出）。 */
+.note-window:focus-within {
+  border-color: color-mix(in srgb, var(--sn-color-accent) 45%, var(--sn-color-border));
+}
+
 .note-window-header {
   display: flex;
   flex: none;
@@ -4505,18 +4550,12 @@ body[data-edge='left'] .toast-region {
 }
 
 .note-window-content .note-image-button {
-  display: block;
+  display: inline-flex;
   margin-top: var(--sn-space-4);
   padding: 0;
   border: 0;
   background: transparent;
   cursor: zoom-in;
-}
-
-.note-window-content .note-image {
-  display: block;
-  max-width: 100%;
-  border-radius: var(--sn-radius-sm);
 }
 
 .note-window-tags {
@@ -4559,6 +4598,123 @@ body[data-edge='left'] .toast-region {
   max-height: none;
   padding: 0;
   overflow-y: auto;
+}
+
+/* 标签页（本次提出）：两个以上时标题栏换成标签页，当前一页与窗口正文连成一片；
+ * 标签页可以拖到别的窗口合并、拖到窗口外拆开；拖动窗口或卡片到别的窗口标题栏上时，那里换成浅强调色。 */
+.note-window-tabs {
+  display: none;
+  flex: 1;
+  align-items: flex-end;
+  align-self: stretch;
+  gap: var(--sn-space-1);
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.note-window.has-tabs .note-window-tabs {
+  display: flex;
+}
+
+.note-window.has-tabs :is(.note-window-emoji, .note-window-title) {
+  display: none;
+}
+
+.note-window.has-tabs .note-window-header {
+  padding-left: var(--sn-space-3);
+}
+
+.note-window-tab {
+  position: relative;
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--sn-space-2);
+  min-width: calc(var(--sn-control-height) * 2.5);
+  max-width: calc(var(--sn-control-height) * 7);
+  height: calc(var(--sn-header-height) - var(--sn-space-3));
+  margin-bottom: calc(var(--sn-border-width) * -1);
+  padding: 0 var(--sn-space-1) 0 var(--sn-space-4);
+  border: var(--sn-border-width) solid transparent;
+  border-bottom: 0;
+  border-radius: var(--sn-radius-md) var(--sn-radius-md) 0 0;
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+  cursor: pointer;
+}
+
+.note-window-tab:hover {
+  background: var(--sn-color-hover);
+  color: var(--sn-color-text);
+}
+
+.note-window-tab.is-active {
+  border-color: var(--sn-color-border-subtle);
+  background: var(--sn-color-card);
+  color: var(--sn-color-text);
+  font-weight: var(--sn-font-weight-medium);
+}
+
+.note-window.is-editing .note-window-tab.is-active {
+  background: var(--sn-color-editing);
+}
+
+.note-window-tab:focus-visible {
+  outline: var(--sn-focus-ring-width) solid var(--sn-color-focus);
+  outline-offset: calc(var(--sn-focus-ring-width) * -1);
+}
+
+.note-window-tab-emoji {
+  flex: none;
+  line-height: 1;
+}
+
+.note-window-tab-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-window-tab .note-window-tab-close {
+  flex: none;
+  width: var(--sn-control-height-sm);
+  height: var(--sn-control-height-sm);
+  opacity: 0;
+}
+
+.note-window-tab:is(:hover, .is-active, :focus-within) .note-window-tab-close {
+  opacity: 1;
+}
+
+.note-window-tab .note-window-tab-close svg.icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.note-window.is-merge-target .note-window-header {
+  background: var(--sn-color-accent-subtle);
+}
+
+.note-window-tab-ghost {
+  position: fixed;
+  z-index: var(--sn-z-tooltip);
+  pointer-events: none;
+  opacity: 0.9;
+  transform: rotate(-2.5deg);
+  zoom: var(--app-zoom, 1);
+}
+
+.note-window-tab-ghost .note-window-tab {
+  border-color: var(--sn-color-border);
+  border-bottom: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-card);
+  box-shadow: var(--sn-shadow-lg);
+  color: var(--sn-color-text);
+  font-family: var(--sn-font-ui);
 }
 
 /* 缩放手柄：四边是细条，四角是小方块，看不见，只换指针形状。 */
@@ -5122,6 +5278,104 @@ body[data-edge='left'] .toast-region {
 
 .settings-modal .trash-retention .settings-row-label {
   display: inline;
+}
+
+/* ---------- 设置窗口：第二次反馈的调整（2026-11-11） ---------- */
+
+/* 明暗模式与主题两行卡片的总宽相同（不必逐张对齐），比整行窄，下面的设置不再被它们撑宽。 */
+.settings-modal :is(.theme-grid, .surface-choice-grid) {
+  width: min(100%, calc(var(--sn-space-10) * 12));
+}
+
+.settings-modal .theme-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* 控件用常规尺寸：小号按钮又扁又小；下拉框、输入框与组合框随之加高，同一行的控件一样高。 */
+.settings-modal .button,
+.settings-confirm-dialog .button {
+  gap: var(--sn-space-3);
+  height: var(--sn-control-height);
+  padding: 0 var(--sn-space-5);
+  font-size: var(--sn-font-size-md);
+}
+
+.settings-modal :is(select.form-control, select, .select-box, .settings-combobox, .font-combobox-field, input[type='number']),
+.settings-modal input.form-control:not([type='number']):not(.font-combobox-field > *),
+.settings-modal .settings-trash-toolbar .settings-search {
+  height: var(--sn-control-height);
+}
+
+.settings-modal .settings-combobox-toggle {
+  width: var(--sn-control-height);
+}
+
+.settings-modal :is(.settings-inline-value, .data-row-controls, .settings-actions) > .icon-button {
+  flex: none;
+  width: var(--sn-control-height);
+  height: var(--sn-control-height);
+}
+
+.settings-modal .settings-trash-toolbar .settings-search {
+  font-size: var(--sn-font-size-md);
+}
+
+/* 路径只占一行，放不下时末尾省略；后面的按钮紧跟在路径之后，不推到最右。 */
+.settings-modal .settings-path,
+.settings-modal .settings-inline-value .settings-path {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+}
+
+/* 快照（布局同现有应用）：列表是一块带边框的区域，一行一份：时间、原因、条数与大小、恢复；份数多时在框内滚动。 */
+.settings-modal .snapshot-list {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(var(--sn-control-height) * 8);
+  margin: var(--sn-space-4) 0 0;
+  padding: 0;
+  overflow-y: auto;
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-surface-sunken);
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+.settings-modal .snapshot-item {
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1.2fr) auto;
+  gap: var(--sn-space-4);
+  min-height: 0;
+  padding: var(--sn-space-2) var(--sn-space-2) var(--sn-space-2) var(--sn-space-5);
+}
+
+.settings-modal .snapshot-item + .snapshot-item {
+  border-top: var(--sn-border-width) solid var(--sn-color-border-subtle);
+}
+
+.settings-modal .snapshot-time {
+  color: var(--sn-color-text);
+  white-space: nowrap;
+}
+
+.settings-modal :is(.snapshot-reason, .snapshot-meta) {
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-modal .snapshot-reason {
+  color: var(--sn-color-text-secondary);
+}
+
+.settings-modal .snapshot-meta {
+  color: var(--sn-color-text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- 减少动态效果 ---------- */

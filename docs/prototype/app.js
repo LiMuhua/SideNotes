@@ -22,6 +22,70 @@ const ui = { tab: 'workspace', query: '', editing: null, composer: false, locked
 let state;
 const noteParseCache = new WeakMap(); // 同一记录的标签解析供列表、筛选与卡片复用。
 
+/* ==================== 正文中的图片与缩略图（本次提出） ==================== */
+
+/**
+ * @brief 正文中的图片：与现有应用一样写在光标处（![名称](地址)），新建、编辑与拖入都一样；
+ * 浏览器不能把文件复制到数据目录，图片内容仍随记录保存在 images 中，正文里写 sidenotes-image:<标识>?name=<名称>。
+ * 旧记录里不在正文中的图片仍显示在缩略条中（stripImages）。
+ * @details 卡片、记录窗口与编辑面中的图片显示缩小的副本（最长边 THUMB_SIZE），点开附件弹窗才加载原图。
+ */
+window.SideNotesImages=(function createImageRegistry(){
+  const TOKEN=/^sidenotes-image:([a-z0-9-]+)(?:\?name=[^\s)]*)?$/i;
+  const THUMB_SIZE=480; // 缩略图最长边（像素），高分屏上显示 150 也够清楚。
+  const SMALL_IMAGE=160*1024; // 小于这个大小的图片直接显示原图。
+  const PLACEHOLDER='data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+  const known=new Map(); // 标识 → 图片。
+  const thumbnails=new Map(); // 原图地址 → 缩略图地址或生成中的 Promise。
+  /** @brief 按标识找图片：新读取的、编辑中的、草稿里的与各条记录中的。 @param {string} id 标识。 @return {object|null} 图片。 */
+  function find(id){
+    if(known.has(id))return known.get(id);
+    const lists=[ui.editing?ui.editing.images:[],state&&state.draft?state.draft.images:[]].concat(state?state.notes.map(function images(note){return note.images||[];}):[]);
+    for(const list of lists){const found=list.find(function same(image){return image&&image.id===id;});if(found){known.set(id,found);return found;}}
+    return null;
+  }
+  /** @brief 登记新读取的图片，正文中的引用马上能显示。 @param {object} image 图片。 @return {object} 同一张图片。 */
+  function register(image){if(image&&image.id)known.set(image.id,image);return image;}
+  /** @brief 图片的 Markdown：名称去掉扩展名并转义。 @param {object} image 图片。 @return {string} 引用。 */
+  function markdown(image){const name=String(image.name||'图片');return '!['+name.replace(/\.[^.]+$/,'').replace(/[\r\n]+/g,' ').replace(/([\\\[\]])/g,'\\$1')+'](sidenotes-image:'+image.id+'?name='+encodeURIComponent(name).replace(/[!'()*]/g,function encode(character){return '%'+character.charCodeAt(0).toString(16).toUpperCase();})+')';}
+  /** @brief 正文中的地址对应的图片。 @param {string} value 地址。 @return {object|null} 图片。 */
+  function imageOf(value){const match=TOKEN.exec(String(value||'').trim());return match?find(match[1]):null;}
+  /** @brief 正文中的地址换成可以显示的地址：sidenotes-image: 换成图片内容，其余原样返回。 @param {string} value 地址。 @return {string} 地址，找不到图片时为空串。 */
+  function resolve(value){if(!TOKEN.test(String(value||'').trim()))return String(value||'');const image=imageOf(value);return image?image.data:'';}
+  /** @brief 生成缩略图：画到最长边 THUMB_SIZE 的画布上；画不了（远程图片等）时用原图。 @param {string} src 原图。 @return {Promise<string>} 缩略图地址。 */
+  function make(src){
+    return new Promise(function thumbnailPromise(done){
+      const image=new Image();image.decoding='async';
+      image.onload=function loaded(){
+        const scale=Math.min(1,THUMB_SIZE/Math.max(image.naturalWidth||1,image.naturalHeight||1));if(scale>=1){done(src);return;}
+        try{const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));const context=canvas.getContext('2d');context.imageSmoothingQuality='high';context.drawImage(image,0,0,canvas.width,canvas.height);done(canvas.toDataURL('image/webp',0.86));}
+        catch(error){done(src);}
+      };
+      image.onerror=function failed(){done(src);};image.src=src;
+    });
+  }
+  /**
+   * @brief 让图片元素显示缩略图：已有缩略图时直接用；大图先显示占位，缩略图生成后换上；小图、矢量图与远程图片用原图。
+   * @param {HTMLImageElement} picture 图片元素。 @param {string} src 原图。
+   */
+  function show(picture,src){
+    picture.dataset.fullSrc=src;
+    if(!/^data:image\/(?!svg)/i.test(src)||src.length<SMALL_IMAGE*1.37){picture.src=src;return;}
+    const ready=thumbnails.get(src);
+    if(typeof ready==='string'){picture.src=ready;return;}
+    picture.src=PLACEHOLDER;picture.classList.add('is-thumbnail-pending');
+    const pending=ready||make(src);thumbnails.set(src,pending);
+    pending.then(function swap(thumb){thumbnails.set(src,thumb);if(picture.dataset.fullSrc===src){picture.src=thumb;picture.classList.remove('is-thumbnail-pending');}});
+  }
+  return Object.freeze({register:register,markdown:markdown,imageOf:imageOf,resolve:resolve,show:show});
+})();
+
+/**
+ * @brief 保存时丢掉正文中已经删掉引用的图片；旧记录的缩略条图片（不是 inline）保留。
+ * @param {string} text 正文。 @param {Array} images 图片。 @return {Array} 保留的图片。
+ */
+function keepReferencedImages(text,images){return (images||[]).filter(function referenced(image){return !image.inline||String(text).includes('sidenotes-image:'+image.id);});}
+
 /** @brief 创建 DOM 元素并安全设置文字。 @param {string} tag 标签。 @param {string} className 样式。 @param {string} text 文字。 @return {HTMLElement} 元素。 */
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -105,8 +169,8 @@ function normalizeSettings(value = {}) {
     fontFamily: surfaces.normalizeFontFamily(value.fontFamily, value.version),
     // 应用图标：内置图标的 id，或 custom 表示上传的图片（图片单独保存，见 app-icons.js）。
     appIcon: window.SideNotesAppIcons.normalize(value.appIcon),
-    // 字号 9–16，步长 0.5，默认 12：常用的 12 落在滑块中间附近（本次提出；现有应用为 12–20，步长 1，默认 16）。
-    fontSize: Number.isFinite(Number(value.fontSize)) && value.fontSize !== null && value.fontSize !== '' ? Math.max(9,Math.min(16,Math.round(Number(value.fontSize)*2)/2)) : 12,
+    // 字号 8–24，步长 0.5，默认 12（本次提出；现有应用为 12–20，步长 1，默认 16）。
+    fontSize: Number.isFinite(Number(value.fontSize)) && value.fontSize !== null && value.fontSize !== '' ? Math.max(8,Math.min(24,Math.round(Number(value.fontSize)*2)/2)) : 12,
     // 侧栏宽度 360–720，按 4px 取整，默认 400（本次提出；现有应用默认 416）。
     edge: value.edge === 'left' ? 'left' : 'right', width: Math.min(720,Math.max(360,Math.round((Number(value.width)||400)/4)*4)),
     // 出入动画、卡片高度与通知位置：取值范围与默认值同现有应用（src/core/settings.ts）。
@@ -265,7 +329,7 @@ function renderCard(note) {
   const content=el('div','note-content markdown-body');
   const displayBody=first<0?'':fullBody?parsed.body:lines.slice(first+1).join('\n');
   window.NoteContent.renderMarkdown(displayBody,content,{onTaskToggle:function toggleCardTask(index,checked){const changed=displayBody.slice(0,index)+(checked?'x':' ')+displayBody.slice(index+1),prefix=fullBody||first<0?'':lines.slice(0,first+1).join('\n')+'\n';return updateNote(note.id,{text:window.NoteContent.compose(prefix+changed,parsed.tags)});}});
-  note.images.forEach(function renderAttachment(attachment){const preview=button('预览图片：'+attachment.name,'preview-image','', 'note-image-button');preview.dataset.imageId=attachment.id;const image=el('img','note-image');image.src=attachment.data;image.alt=attachment.name;image.loading='lazy';preview.append(image);content.append(preview);});
+  stripImages(note).forEach(function renderAttachment(attachment){const preview=button('预览图片：'+attachment.name,'preview-image','', 'note-image-button');preview.dataset.imageId=attachment.id;const image=el('img','note-image');window.SideNotesImages.show(image,attachment.data);image.alt=attachment.name;image.loading='lazy';preview.append(image);content.append(preview);});
   // 只有标题行的记录不留正文区，与收起的记录一样只剩标题行。
   if(content.childNodes.length)card.append(content);else card.classList.add('is-single');
   const expanded=button('展开全文','open-note','chevron-down','note-expand');card.append(expanded);
@@ -324,12 +388,15 @@ function createComposer() {
   tools.append(button('添加图片','attach-image','image'),button('引用文件','attach-file','file'));
   // 字数紧跟附件工具；终端主题在同一位置写出 Ctrl+Enter（由样式按 data-sn-shortcuts 切换），见 components.md 1.6。
   const count=el('span','composer-count','0 字');elements.composerCount=count;
-  actions.append(keyHint(['Ctrl','Enter']),button('收起输入 · Esc','close-composer','x'),button('保存记录，保持侧栏展开','save-sidebar-note','check','composer-submit icon-button primary'));
+  // 工具栏一直显示，没有收起按钮（本次提出）；Esc 仍然离开输入。
+  actions.append(keyHint(['Ctrl','Enter']),button('保存记录，保持侧栏展开','save-sidebar-note','check','composer-submit icon-button primary'));
   footer.append(tools,count,actions);composer.append(input,attachments,footer);
   // 新建卡片独占列表上方的一块区域，不随列表滚动（与 Design Playground 相同），列表滚动时卡片从它下方移出。
   elements.noteList.before(composer);
   elements.sidebarDraft=input;elements.sidebarComposer=composer;elements.sidebarAttachments=attachments;
   input.addEventListener('focus',function activateInput(){ui.composer=true;composer.classList.add('is-active');cancelHide();resizeDraftInput();});
+  // 点工具栏的空白处或卡片边缘时焦点留在输入区，卡片不闪一下失焦的样子。
+  composer.addEventListener('mousedown',function keepComposerFocus(event){if(event.button!==0||event.target.closest('button,a,input,textarea,[contenteditable="true"]'))return;event.preventDefault();const editor=input.liveMarkdown;if(editor&&!editor.hasFocus())editor.focus();else if(!editor&&document.activeElement!==input)input.focus();});
   input.addEventListener('input',resizeDraftInput);
 }
 
@@ -342,7 +409,7 @@ function renderDraft() {
   if (elements.composerCount) elements.composerCount.textContent = characters;
   [elements.attachmentList, elements.sidebarAttachments].forEach(function renderAttachmentList(list) {
     list.replaceChildren();
-    state.draft.images.forEach(function appendAttachment(attachment) {
+    stripImages(state.draft).forEach(function appendAttachment(attachment) {
       const item = el('div', 'attachment-item');
       const preview = el('button', 'attachment-preview');
       preview.type = 'button';
@@ -350,7 +417,7 @@ function renderDraft() {
       preview.dataset.imageId = attachment.id;
       preview.setAttribute('aria-label', '预览图片：' + attachment.name);
       const image = el('img');
-      image.src = attachment.data;
+      window.SideNotesImages.show(image, attachment.data);
       image.alt = attachment.name;
       preview.append(image);
       const remove = button('移除图片：' + attachment.name, 'remove-draft-image', 'x');
@@ -384,7 +451,7 @@ function saveDraft(origin,options={}){
   if(ui.pendingImages){toast('内容正在读取，请稍候');return;}
   if(!state.draft.text.trim()&&!state.draft.images.length)return;window.clearTimeout(ui.draftTimer);
   const now=Date.now(),targetTab=origin==='sidebar'?ui.tab:'workspace',collapse=Boolean(options.collapse);
-  const note={id:createId(),text:window.NoteContent.canonicalize(state.draft.text),images:state.draft.images.map(function clone(image){return {...image};}),pinned:targetTab==='pinned',status:targetTab==='archive'?'archived':'active',collapsed:false,emoji:window.NoteEmoji.pick(state.notes.map(function current(n){return n.emoji;})),createdAt:now,updatedAt:now};
+  const note={id:createId(),text:window.NoteContent.canonicalize(state.draft.text),images:keepReferencedImages(state.draft.text,state.draft.images).map(function clone(image){return {...image};}),pinned:targetTab==='pinned',status:targetTab==='archive'?'archived':'active',collapsed:false,emoji:window.NoteEmoji.pick(state.notes.map(function current(n){return n.emoji;})),createdAt:now,updatedAt:now};
   if(!persistSnapshot([note,...state.notes],{text:'',images:[],updatedAt:now})){persistDraft();toast('没有保存成功，草稿和图片仍在，可导出备份后重试',null,true);renderDraft();return;}
   ui.composer=false;renderDraft();renderNotes();
   if(origin==='capture'){
@@ -412,7 +479,7 @@ function flushEdit(commit=false){
   const editing=ui.editing,note=state.notes.find(function same(n){return n.id===editing.id;});if(!note)return false;
   if(!editing.text.trim()&&!editing.images.length)return true;
   if(editing.text===editing.originalText&&editing.images.length===editing.originalImages.length&&editing.images.every(function same(image,index){return image.id===editing.originalImages[index].id;}))return true;
-  const next=state.notes.map(function apply(n){return n.id===editing.id?{...n,text:window.NoteContent.canonicalize(editing.text),images:editing.images,updatedAt:Date.now()}:n;});
+  const next=state.notes.map(function apply(n){return n.id===editing.id?{...n,text:window.NoteContent.canonicalize(editing.text),images:keepReferencedImages(editing.text,editing.images),updatedAt:Date.now()}:n;});
   const saved=persistSnapshot(next);ui.editStorageError=!saved;setStorageStatus(ui.storageWriteError);if(!saved)toast('编辑未保存，修改仍保留在输入区',null,true);return saved;
 }
 
@@ -487,7 +554,7 @@ function readImage(file) {
     if (!/^image\/(png|jpeg|gif|webp|svg\+xml)$/.test(file.type)) { reject(new Error('支持 PNG、JPG、GIF、WebP 和 SVG 图片')); return; }
     if (file.size > MAX_IMAGE_BYTES) { reject(new Error('单张图片需小于 2 MB，请压缩后再添加')); return; }
     const reader = new FileReader();
-    reader.onload = function imageLoaded() { resolve({ id: createId(), name: file.name || '粘贴的截图.png', type: file.type, data: String(reader.result) }); };
+    reader.onload = function imageLoaded() { resolve(window.SideNotesImages.register({ id: createId(), name: file.name || '粘贴的截图.png', type: file.type, data: String(reader.result), inline: true })); };
     reader.onerror = function imageFailed() { reject(new Error('图片读取失败，文字草稿已保留')); };
     reader.readAsDataURL(file);
   });
@@ -629,16 +696,26 @@ function attachmentClick(event,context){if(event.ctrlKey||event.metaKey)openAtta
  * @param {object} context 附件上下文。
  */
 function openAttachmentDirect(context){
-  const source=context.image?context.image.data:context.src;
+  const source=context.image?context.image.data:window.SideNotesImages.resolve(context.src);
   if(context.kind==='image'&&source){if(/^data:/i.test(source)){fetch(source).then(function asBlob(response){return response.blob();}).then(function openBlob(blob){const url=URL.createObjectURL(blob);window.open(url,'_blank','noopener,noreferrer');window.setTimeout(function release(){URL.revokeObjectURL(url);},60000);}).catch(function failed(){toast('无法打开：图片读取失败',null,true);});}else window.open(source,'_blank','noopener,noreferrer');return;}
   const entry=context.path&&window.NoteContent.files.get(window.NoteContent.fileKey(context.path));
   if(entry){Promise.resolve(entry.handle?entry.handle.getFile():entry.file).then(function openFile(file){const url=URL.createObjectURL(file);window.open(url,'_blank','noopener,noreferrer');window.setTimeout(function release(){URL.revokeObjectURL(url);},60000);}).catch(function missing(){toast('文件不存在或已移动',null,true);});return;}
   if(context.path)openFileReference(context.path);
 }
 
+/**
+ * @brief 更换正文中的图片时，新图片的内容放进对应的图片列表：编辑中的卡片、草稿或记录本身。
+ * @param {object} context 附件上下文。 @param {object} image 新图片。
+ */
+function adoptImage(context,image){
+  if(context.note&&!context.editor){const current=state.notes.find(function same(note){return note.id===context.note.id;});if(current)updateNote(current.id,{images:current.images.concat(image)});return;}
+  if(ui.editing){const input=elements.noteList.querySelector('textarea[data-edit-id]');if(input&&input.liveMarkdown===context.editor){ui.editing.images=ui.editing.images.concat(image);return;}}
+  state.draft={...state.draft,images:state.draft.images.concat(image)};persistDraft();
+}
+
 /** @brief 下载附件到本机（另存为）。 @param {object} context 附件上下文。 */
 function saveAttachmentAs(context){
-  const source=context.image?context.image.data:context.src,name=context.image?context.image.name:context.label||'附件';
+  const inline=window.SideNotesImages.imageOf(context.src),source=context.image?context.image.data:window.SideNotesImages.resolve(context.src),name=context.image?context.image.name:inline?inline.name:context.label||'附件';
   if(context.kind==='image'&&source){const link=el('a');link.href=source;link.download=name;document.body.append(link);link.click();link.remove();toast('已另存');return;}
   const entry=context.path&&window.NoteContent.files.get(window.NoteContent.fileKey(context.path));
   if(!entry){toast('未能另存：找不到文件',null,true);return;}
@@ -679,9 +756,9 @@ function rewriteImage(context,next,message){
  * @param {object} context 附件上下文：kind、source（strip、edit、draft、text、editor）、note、image、editor、markdown、start、end、src、path、label。
  */
 function openAttachment(context){
-  const image=context.kind==='image',strip=Boolean(context.image),name=strip?context.image.name:context.label||(context.path?window.NoteContent.fileLabel(context.path):'')||(image?'图片':'附件');
+  const image=context.kind==='image',strip=Boolean(context.image),inline=window.SideNotesImages.imageOf(context.src),name=strip?context.image.name:inline?inline.name:context.label||(context.path?window.NoteContent.fileLabel(context.path):'')||(image?'图片':'附件');
   const dialog=openModal(name,'attachment-modal');const heading=dialog.modal.querySelector('.modal-header h2');heading.prepend(icon(image?'image':'file'));
-  const source=strip?context.image.data:context.src;
+  const source=strip?context.image.data:window.SideNotesImages.resolve(context.src);
   if(image&&source){const preview=el('img','attachment-preview-image');preview.src=source;preview.alt=name;dialog.body.append(preview);}
   else{const block=el('div','attachment-file');block.append(icon('file'),el('span','',context.path?window.NoteContent.fileLabel(context.path):name));dialog.body.append(block);}
   let input=null;
@@ -697,7 +774,7 @@ function openAttachment(context){
     try{
       if(strip){const next=await readImage(file);if(rewriteImage(context,{...next,id:context.image.id},'已更换图片'))closeModal();return;}
       let replacement;
-      if(/^image\//.test(file.type)){const next=await readImage(file);replacement='!['+next.name.replace(/\.[^.]+$/,'').replace(/([\\\[\]])/g,'\\$1')+']('+next.data+')';}
+      if(/^image\//.test(file.type)){const next=await readImage(file);adoptImage(context,next);replacement=window.SideNotesImages.markdown(next);}
       else replacement='['+file.name.replace(/[\r\n]+/g,' ').replace(/([\\\[\]])/g,'\\$1')+']('+window.NoteContent.createFileReference(file,null)+')';
       if(rewriteAttachment(context,replacement,'已修改附件'))closeModal();
     }catch(error){toast('未能更换：'+(error.message||'读取失败'),null,true);}
@@ -744,6 +821,11 @@ async function copyNotes(notes){
 }
 /** @brief 记录的标题：第一行非空文字去掉标记，只有图片时为「图片记录」。 @param {object} note 记录。 @return {string} 标题。 */
 function noteTitle(note){const line=noteParts(note).body.split('\n').find(function nonempty(text){return text.trim();});return line?line.replace(/^\s*(?:#{1,6}\s+|>\s*|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+)/,'').replace(/[*`~]/g,'').trim()||'记录':note.images.length?'图片记录':'记录';}
+/**
+ * @brief 缩略条中的图片：旧记录里不在正文中的图片。正文里引用的图片（inline）在原处显示，删掉引用后也不再出现在缩略条。
+ * @param {object} note 记录、草稿或编辑事务。 @return {Array} 图片。
+ */
+function stripImages(note){return (note&&note.images||[]).filter(function legacy(image){return !image.inline;});}
 /** @brief 卡片与记录窗口显示的正文：首行做了标题时不再重复，首行是代码、列表、引用等结构时整段显示（与 renderCard 相同）。 @param {object} note 记录。 @return {{body:string,prefix:string}} 显示的正文，以及勾选待办时补回的前缀。 */
 function noteDisplay(note){const parsed=noteParts(note),lines=parsed.body.split('\n'),first=lines.findIndex(function nonempty(line){return Boolean(line.trim());}),firstLine=first<0?'':lines[first];const fullBody=firstLine.length>120||/^\s*(?:`{3,}|~{3,}|!\[|>|(?:-\s*){3,}$|(?:_\s*){3,}$|(?:\*\s*){3,}$)|^(?: {4}|\t)|^\s*[-*+]\s|^\s*\d+[.)]\s/.test(firstLine)||Boolean(window.NoteContent.filePath(firstLine));return {body:first<0?'':fullBody?parsed.body:lines.slice(first+1).join('\n'),prefix:fullBody||first<0?'':lines.slice(0,first+1).join('\n')+'\n'};}
 /** @brief 展示浏览器不能写入原生文件剪贴板的真实附件交接入口。 @param {object} note 记录。 @param {object} result 复制结果。 */
@@ -872,7 +954,6 @@ function handleAction(event) {
     case 'hide-capture':hideCapture();break;
     case 'lock-sidebar':ui.locked=!ui.locked;control.setAttribute('aria-pressed',String(ui.locked));control.setAttribute('aria-label',ui.locked?'取消固定侧栏':'固定侧栏');control.replaceChildren(icon('pin'));if(ui.locked){cancelHide();queueComposerFocus();}break;
     case 'new-note':if(finishEdit()){showSidebar();ui.composer=true;renderDraft();elements.sidebarDraft.focus();}break;
-    case 'close-composer':ui.composer=false;persistDraft();elements.sidebarDraft.blur();renderDraft();break;
     case 'capture-to-sidebar':hideCapture();showSidebar();ui.composer=true;renderDraft();elements.sidebarDraft.focus();break;
     case 'save-note':saveDraft('capture');break;case 'save-sidebar-note':saveDraft('sidebar');break;
     case 'attach-image':ui.attachmentTarget=control.closest('#capture')?'capture':'draft';elements.imagePicker.click();break;
@@ -959,6 +1040,25 @@ function handleCardKeyboard(event){
   if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();setCurrentCard(note.id);const box=card.getBoundingClientRect();if(window.NoteMenus)window.NoteMenus.open(note,{clientX:box.left+24,clientY:box.top+32});}
 }
 
+/**
+ * @brief 焦点不在卡片上时，用方向键与 Enter 操作高亮的卡片（本次提出）。
+ * @details 只在侧栏展开、没有编辑、焦点不在输入框与按钮等自己处理按键的控件上时生效；
+ * 移动后焦点落到卡片上，接下来的按键由卡片自己处理（handleCardKeyboard）。
+ * @param {KeyboardEvent} event 按键。 @return {boolean} 是否处理。
+ */
+function handleCurrentCardKey(event){
+  if(event.altKey||event.ctrlKey||event.metaKey||event.shiftKey||!['ArrowUp','ArrowDown','Enter'].includes(event.key))return false;
+  if(!ui.currentId||ui.editing||!elements.sidebar.classList.contains('open')||elements.sidebar.inert)return false;
+  const target=event.target;if(target&&target.closest&&target.closest('input,textarea,select,button,a[href],[contenteditable="true"],[role="menu"],[role="listbox"],.note-window'))return false;
+  const card=currentCardElement();if(!card)return false;
+  event.preventDefault();
+  if(event.key==='Enter'){ui.skipCardClick=false;beginEdit(card.dataset.noteId);return true;}
+  const cards=Array.from(elements.noteList.querySelectorAll('.note-card')),index=cards.indexOf(card);
+  const next=cards[event.key==='ArrowDown'?Math.min(cards.length-1,index+1):Math.max(0,index-1)];
+  if(next)setCurrentCard(next.dataset.noteId,{focus:true});
+  return true;
+}
+
 /** @brief 页签按 WAI-ARIA 页签模式：← → 切换并立即显示，Home、End 到两端。 @param {KeyboardEvent} event 按键。 */
 function handleTabKeyboard(event){
   const tabs=Array.from(document.querySelectorAll('.sidebar-tabs [role="tab"]')),index=tabs.indexOf(event.target);
@@ -1002,12 +1102,16 @@ function handleKeyboard(event){
   const escape=event.key==='Escape';
   if(ui.modal){
     if(escape){event.preventDefault();closeModal();}
+    // 回收站页中按搜索快捷键聚焦回收站的搜索框（本次提出）。
+    if(ui.modal==='settings-modal'&&shortcut(event,'search')&&window.SideNotesSettings&&window.SideNotesSettings.focusSearch()){event.preventDefault();return;}
     if(event.key==='Tab'){
       const controls=Array.from(elements.modalRoot.querySelectorAll('button,a[href],input,textarea,select,[tabindex="0"]')).filter(function enabled(n){return !n.disabled&&!n.hidden;});
       if(!controls.length)return;const first=controls[0],last=controls[controls.length-1];
       if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
     }return;
   }
+  // 关闭全部记录窗口（本次提出），编辑中同样可用。
+  if(shortcut(event,'closeWindows')&&window.NoteWindows&&window.NoteWindows.count()){event.preventDefault();window.NoteWindows.closeAll();return;}
   if(escape&&window.NoteMenus&&window.NoteMenus.isOpen()){event.preventDefault();window.NoteMenus.close();return;}
   if(escape&&window.NoteInteractions&&window.NoteInteractions.isBusy()){event.preventDefault();window.NoteInteractions.cancelGesture();return;}
   if(escape&&ui.resizing){event.preventDefault();finishSidebarResize(false);return;}
@@ -1021,6 +1125,8 @@ function handleKeyboard(event){
   // Ctrl+, 打开设置（本次提出），编辑中同样可用；Ctrl+C 复制高亮或多选的记录，有选中文字时保留浏览器的复制。
   if(shortcut(event,'settings')){event.preventDefault();openSettings();return;}
   if((event.ctrlKey||event.metaKey)&&!event.shiftKey&&!event.altKey&&event.code==='KeyC'&&!ui.editing){const typing=event.target&&event.target.closest&&event.target.closest('input,textarea,select,[contenteditable="true"]'),selection=window.getSelection&&window.getSelection();if(!typing&&!(selection&&String(selection).trim())&&copyCurrentOrSelected()){event.preventDefault();return;}}
+  // 高亮了卡片而焦点不在卡片上（悬停高亮、编辑或菜单结束后），↑ ↓ 同样移动高亮并把焦点移到卡片上，Enter 编辑（本次提出）。
+  if(handleCurrentCardKey(event))return;
   if(!ui.sortPress&&(event.key==='Enter'||event.key===' ')){ui.skipCardClick=false;ui.consumeClick=false;}
   if(shortcut(event,'search')||shortcut(event,'newNote')){
     event.preventDefault();ui.skipCardClick=false;if(shortcut(event,'search'))toggleSearch(true);else{if(!finishEdit())return;showSidebar({focus:false});focusNewComposer();}return;
@@ -1356,17 +1462,50 @@ function dropRange(event,input){
   if(editor.element.contains(event.target))return editor.readSelection();
   return {start:editor.getValue().length,end:editor.getValue().length,direction:'none'};
 }
-/** @brief 在原文范围插入拖入文本，未定位时追加独立段落。 @param {string} source 原文。 @param {string} text 新文本。 @param {object|null} range 插入范围。 @return {object} 合并内容及光标位置。 */
+/** @brief 末尾标签行的起点：最后一个非空行只有 #标签 时就是标签行。 @param {string} source 原文。 @return {number} 起点，没有标签行时为 -1。 */
+function tagLineStart(source){
+  const match=/(?:^|\n)([\t ]*#[\p{L}\p{N}_-]+(?:[\t ]+#[\p{L}\p{N}_-]+)*[\t ]*)\s*$/u.exec(source);
+  return match?match.index+(match[0].startsWith('\n')?1:0):-1;
+}
+/**
+ * @brief 在原文范围插入拖入或选择的附件与文本，未定位时追加独立段落。
+ * 标签固定在最后一行：插入位置落在标签行或它之后时，改为标签行之前的单独一段（本次提出）。
+ * @param {string} source 原文。 @param {string} text 新文本。 @param {object|null} range 插入范围。 @return {object} 合并内容及光标位置。
+ */
 function insertDroppedText(source,text,range){
   if(!text)return {text:source,caret:range?range.end:source.length};
+  const tags=tagLineStart(source);
+  if(tags>=0&&(!range||range.start>=tags)){
+    const before=source.slice(0,tags),prefix=!before||before.endsWith('\n\n')?'':'\n';
+    return {text:before+prefix+text+'\n\n'+source.slice(tags),caret:before.length+prefix.length+text.length};
+  }
   if(range){const start=Math.max(0,Math.min(source.length,range.start)),end=Math.max(start,Math.min(source.length,range.end));return {text:source.slice(0,start)+text+source.slice(end),caret:start+text.length};}
   const prefix=source?(source.endsWith('\n\n')?'':source.endsWith('\n')?'\n':'\n\n'):'';
   return {text:source+prefix+text,caret:source.length+prefix.length+text.length};
 }
+/**
+ * @brief 文本中引用了、目标列表里还没有的图片（从别的记录拖来的图片引用），一并放进目标列表，保存后仍能显示。
+ * @param {string} text 插入的文本。 @param {Array} images 目标已有的图片。 @return {Array} 要补进去的图片。
+ */
+function referencedImages(text,images){
+  const ids=new Set((images||[]).map(function id(image){return image.id;})),found=[];
+  for(const match of String(text||'').matchAll(/sidenotes-image:([a-z0-9-]+)/gi)){if(ids.has(match[1]))continue;const image=window.SideNotesImages.imageOf('sidenotes-image:'+match[1]);if(image){ids.add(match[1]);found.push({...image});}}
+  return found;
+}
+/**
+ * @brief 一条记录最多 12 张图片：超出的图片不插入，正文中的引用一并去掉。
+ * @param {object} payload 文本和图片。 @param {number} available 还能放几张。 @return {object} 处理后的内容。
+ */
+function limitPayloadImages(payload,available){
+  if(payload.images.length<=available)return payload;
+  const dropped=new Set(payload.images.slice(available).map(function id(image){return image.id;}));
+  toast('一条记录最多12张图片，超出的图片未插入',null,true);
+  return {...payload,images:payload.images.slice(0,available),text:payload.text.split('\n').filter(function keep(line){const match=/sidenotes-image:([a-z0-9-]+)/i.exec(line);return !(match&&dropped.has(match[1]));}).join('\n')};
+}
 /** @brief 将读取后的拖入结果加入共享草稿。 @param {object} payload 文本和图片。 @param {object|null} range 原文范围。 @param {HTMLTextAreaElement} input 输入源。 */
 function applyDraftDrop(payload,range,input){
-  const available=Math.max(0,12-state.draft.images.length),images=payload.images.slice(0,available);
-  if(images.length<payload.images.length)toast('一条记录最多添加12张图片，超出的图片未插入',null,true);
+  payload=limitPayloadImages({...payload,images:payload.images.concat(referencedImages(payload.text,state.draft.images.concat(payload.images)))},Math.max(0,12-state.draft.images.length));
+  const images=payload.images;
   const inserted=insertDroppedText(state.draft.text,payload.text,range);
   if(inserted.text!==state.draft.text&&input&&input.liveMarkdown)input.liveMarkdown.remember(range||input.liveMarkdown.readSelection());
   ui.draftDirty=true;state.draft={text:inserted.text,images:state.draft.images.concat(images),updatedAt:Date.now()};
@@ -1377,6 +1516,9 @@ function applyDraftDrop(payload,range,input){
 async function receiveContentDrop(event){
   const target=dropTarget(event);if(!target||!window.NoteDrop||event.sideNotesDropHandled)return;
   if(ui.sortPress&&ui.sortPress.active)return;
+  // 编辑面中拖动附件或文字，落在同一个编辑面时移到落点（editor.js 的 moveText），不是复制一份（本次提出）。
+  const moving=window.LiveMarkdown&&window.LiveMarkdown.dragSource();
+  if(moving){const host=target.dataset.noteId?target.querySelector('textarea.note-edit-input'):target===elements.capture?elements.draftInput:elements.sidebarDraft,editor=host&&host.liveMarkdown;if(editor&&editor===moving.editor){event.preventDefault();event.stopPropagation();event.sideNotesDropHandled=true;target.classList.remove('is-drop-target');editor.moveText(moving.start,moving.end,editor.offsetAt(event.clientX,event.clientY));window.LiveMarkdown.endDrag();return;}}
   event.preventDefault();event.stopPropagation();event.sideNotesDropHandled=true;window.clearTimeout(ui.clickTimer);window.clearTimeout(ui.tagClickTimer);ui.clickTimer=0;target.classList.remove('is-drop-target');
   if(!finishTagRename(false))return;closeExpandedTags();
   const id=target.dataset.noteId,input=id?target.querySelector('textarea.note-edit-input'):target===elements.capture?elements.draftInput:elements.sidebarDraft;
@@ -1393,8 +1535,8 @@ async function receiveContentDrop(event){
     if(ui.editing&&ui.editing.id!==id&&!finishEdit()){applyDraftDrop(payload,null,elements.sidebarDraft);toast('当前编辑未保存，拖入内容已放入新增草稿',null,true);return;}
     const note=state.notes.find(function same(n){return n.id===id;});if(!note||note.status==='trash'){applyDraftDrop(payload,null,elements.sidebarDraft);toast('原记录不可用，拖入内容已放入新增草稿',null,true);return;}
     const editing=ui.editing&&ui.editing.id===id,source=editing?ui.editing.text:note.text;
-    const inserted=insertDroppedText(source,payload.text,source===before?range:null),available=Math.max(0,12-note.images.length),images=payload.images.slice(0,available);
-    if(images.length<payload.images.length)toast('一条记录最多添加12张图片，超出的图片未插入',null,true);
+    const limited=limitPayloadImages({...payload,images:payload.images.concat(referencedImages(payload.text,note.images.concat(payload.images)))},Math.max(0,12-note.images.length)),images=limited.images;
+    const inserted=insertDroppedText(source,limited.text,source===before?range:null);
     const next={...note,text:window.NoteContent.canonicalize(inserted.text),images:note.images.concat(images),updatedAt:Date.now()};
     if(!persistSnapshot(state.notes.map(function replace(n){return n.id===id?next:n;}))){applyDraftDrop(payload,null,elements.sidebarDraft);toast('原记录未修改，拖入内容保留在新增草稿中',null,true);return;}
     if(editing){ui.editing.text=inserted.text;ui.editStorageError=false;const current=elements.noteList.querySelector('textarea[data-edit-id]');if(current&&current.liveMarkdown){if(current.liveMarkdown.getValue()!==inserted.text)current.liveMarkdown.remember(current.liveMarkdown.readSelection());current.liveMarkdown.setValue(inserted.text);current.focus();current.setSelectionRange(inserted.caret,inserted.caret);}}
@@ -1424,15 +1566,16 @@ function cancelEdit(){
 /** @brief 渲染编辑事务中的图片，不移动正文光标。 @param {HTMLElement} card 编辑卡片。 */
 function renderEditAttachments(card){
   if(!ui.editing)return;let list=card.querySelector('.note-edit-attachments');if(!list){list=el('div','attachment-list note-edit-attachments');card.insertBefore(list,card.querySelector('.note-edit-actions'));}list.replaceChildren();
-  ui.editing.images.forEach(function item(image){const wrap=el('div','attachment-item'),preview=button('预览 '+image.name,'preview-edit-image','','attachment-preview note-image-button');preview.dataset.imageId=image.id;const picture=el('img');picture.src=image.data;picture.alt=image.name;preview.append(picture);const remove=button('移除 '+image.name,'remove-edit-image','x');remove.classList.add('attachment-remove');remove.dataset.imageId=image.id;wrap.append(preview,remove);list.append(wrap);});
+  stripImages(ui.editing).forEach(function item(image){const wrap=el('div','attachment-item'),preview=button('预览 '+image.name,'preview-edit-image','','attachment-preview note-image-button');preview.dataset.imageId=image.id;const picture=el('img');window.SideNotesImages.show(picture,image.data);picture.alt=image.name;preview.append(picture);const remove=button('移除 '+image.name,'remove-edit-image','x');remove.classList.add('attachment-remove');remove.dataset.imageId=image.id;wrap.append(preview,remove);list.append(wrap);});
 }
 /** @brief 移除尚未提交的图片。 @param {string} id 图片标识。 */
 function removeEditImage(id){if(!ui.editing)return;ui.editing.images=ui.editing.images.filter(function keep(image){return image.id!==id;});const card=elements.noteList.querySelector('.note-card.is-editing');if(card)renderEditAttachments(card);}
 /** @brief 把文件和文本加入编辑事务，确认前不写入记录。 @param {object} payload 拖入内容。 @param {object|null} range 原文范围。 */
 function applyEditPayload(payload,range=null){
   if(!ui.editing)return;const editing=ui.editing,input=elements.noteList.querySelector('textarea[data-edit-id]'),editor=input&&input.liveMarkdown;
-  const inserted=insertDroppedText(editing.text,payload.text,range),available=Math.max(0,12-editing.images.length);if(payload.images.length>available)toast('一条记录最多12张图片，超出的图片未插入',null,true);
-  if(editor&&inserted.text!==editing.text)editor.remember(editor.readSelection());editing.text=inserted.text;editing.images=editing.images.concat(payload.images.slice(0,available));
+  payload=limitPayloadImages({...payload,images:payload.images.concat(referencedImages(payload.text,editing.images.concat(payload.images)))},Math.max(0,12-editing.images.length));
+  const inserted=insertDroppedText(editing.text,payload.text,range);
+  if(editor&&inserted.text!==editing.text)editor.remember(editor.readSelection());editing.text=inserted.text;editing.images=editing.images.concat(payload.images);
   if(editor){editor.setValue(inserted.text);editor.focus();editor.setSelectionRange(inserted.caret,inserted.caret);}const card=elements.noteList.querySelector('.note-card.is-editing');if(card)renderEditAttachments(card);
 }
 

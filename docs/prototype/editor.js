@@ -4,6 +4,7 @@
 (function exposeLiveMarkdown() {
   let focusedEditor = null; // 当前正在编辑的实例，避免为每张卡片保留全局监听器。
   let selectionFrame = 0; // 合并同一帧中的选区变化。
+  let activeDrag = null; // 从编辑面中拖出的一段原文（附件或选中的文字）：落在同一个编辑面时移动，不是复制。
   let editorSequence = 0; // 无 id 输入框的关联编号。
 
   /* ==================== 原文与安全 DOM 工具 ==================== */
@@ -32,6 +33,8 @@
 
   /** @brief 取得允许显示的图片地址。 @param {string} value 地址。 @return {string|null} 安全地址。 */
   function imageAddress(value) {
+    // 正文中的图片引用 sidenotes-image:（app.js 的 SideNotesImages）：换成随记录保存的图片内容。
+    if (/^sidenotes-image:/i.test(value)) return window.SideNotesImages ? window.SideNotesImages.resolve(value) || null : null;
     if (/^data:image\/(?:png|jpe?g|gif|webp|avif|bmp)(?:;[^,]*)?,/i.test(value)) return value;
     try {
       const url = new URL(value);
@@ -148,6 +151,21 @@
           continue;
         }
       }
+      // Typora 写法的下划线 <u>…</u>（与现有应用的 editor.ts 一致）：只识别这一对不带属性的标签，其余 HTML 仍按文字显示。
+      if (character === '<' && text.slice(index, index + 3).toLowerCase() === '<u>') {
+        const close = text.toLowerCase().indexOf('</u>', index + 3);
+        if (close > index + 3) {
+          flush();
+          const group = { start: start + index, end: start + close + 4 };
+          syntax(parent, text.slice(index, index + 3), caret, start + index, group);
+          const underline = element('u');
+          renderInline(text.slice(index + 3, close), underline, caret, start + index + 3, depth + 1);
+          parent.append(underline);
+          syntax(parent, text.slice(close, close + 4), caret, start + close, group);
+          index = close + 4;
+          continue;
+        }
+      }
       if (character === '*' || character === '_' || character === '~') {
         const markers = character !== '~' && text.slice(index, index + 3) === character.repeat(3) ? [character.repeat(3), character.repeat(2)] : text[index + 1] === character ? [character + character] : [];
         if (character !== '~') markers.push(character);
@@ -197,17 +215,18 @@
                 const preview = element('button', 'md-editor-image');
                 preview.type = 'button';
                 preview.tabIndex = -1;
+                preview.draggable = true;
                 preview.contentEditable = 'false';
                 preview.dataset.mdDecoration = '';
                 preview.dataset.mdAttachment = 'image';
                 preview.dataset.mdStart = String(start + index);
                 preview.dataset.mdEnd = String(start + end);
-                preview.dataset.src = address;
+                preview.dataset.src = target;
                 preview.dataset.alt = label;
                 preview.setAttribute('aria-label', '图片：' + (label || '图片'));
                 parent.append(preview);
                 const picture = element('img', 'markdown-image');
-                picture.src = address;
+                if (window.SideNotesImages) window.SideNotesImages.show(picture, address); else picture.src = address;
                 picture.alt = label;
                 picture.loading = 'lazy';
                 picture.draggable = false;
@@ -222,6 +241,7 @@
               const chip = element('button', 'md-attachment-chip');
               chip.type = 'button';
               chip.tabIndex = -1;
+              chip.draggable = true;
               chip.contentEditable = 'false';
               chip.dataset.mdDecoration = '';
               chip.dataset.mdAttachment = 'file';
@@ -482,11 +502,20 @@
       } });
       let node;
       let last = null;
+      let fallback = null;
       while ((node = walker.nextNode())) {
         last = node;
+        // 隐藏的标记（列表项头、待办标记等）里放不了光标：落在它的边界上时放到后面第一段可见文字的开头。
+        if (node.parentElement && node.parentElement.closest('.md-syntax[hidden]')) {
+          if (remaining > 0 && remaining < node.length) return { node: node, offset: remaining };
+          if (!fallback && remaining <= node.length) fallback = { node: node, offset: remaining };
+          remaining = Math.max(0, remaining - node.length);
+          continue;
+        }
         if (remaining <= node.length) return { node: node, offset: remaining };
         remaining -= node.length;
       }
+      if (fallback) return fallback;
       return last ? { node: last, offset: last.length } : { node: line, offset: 0 };
     }
 
@@ -513,10 +542,30 @@
       if (this.textarea && this.nativeSetSelection) this.nativeSetSelection.call(this.textarea, this.selection.start, this.selection.end, this.selection.direction);
     }
 
+    /**
+     * @brief 光标落在列表项或待办的项头上（圆点、序号或复选框之前）时移到正文开头：项头不能编辑，只能整体删去（本次提出）。
+     * @details 从正文开头往左移时跳到上一行末尾；选中一段文字时不处理。
+     * @param {object} next 新的选区。 @param {object} previous 之前的选区。 @return {object|null} 改过的选区，不用改时为 null。
+     */
+    clampToContent(next, previous) {
+      if (next.start !== next.end) return null;
+      const lines = splitLines(this.value), index = this.lineAt(next.end), line = lines[index];
+      const item = line && line.text.match(/^(\s{0,3})([-+*]|\d+[.)])([\t ]+)(\[[ xX]\][\t ]+)?/);
+      if (!item || (window.MarkdownCommands && window.MarkdownCommands.inCode(this.value, line.start))) return null;
+      const content = line.start + item[0].length;
+      if (next.end >= content) return null;
+      const leaving = previous && previous.start === previous.end && previous.end === content && index > 0;
+      const caret = leaving ? lines[index - 1].end : content;
+      return { start: caret, end: caret, direction: 'none' };
+    }
+
     /** 同步原文选区，仅在标记边界或所在行变化时重排。 */
     selectionChanged() {
       if (this.destroyed || this.rendering || this.composing || !this.hasFocus()) return;
+      const previous = this.selection;
       this.selection = this.readSelection();
+      const clamped = this.clampToContent(this.selection, previous);
+      if (clamped) { this.selection = clamped; this.restoreSelection(clamped); }
       this.syncTextareaSelection();
       const active = this.lineAt(this.selection.direction === 'backward' ? this.selection.start : this.selection.end);
       this.activeLine = active;
@@ -740,6 +789,33 @@
       navigator.clipboard.readText().catch(function denied() { return ''; }).then(function read(text) { apply(String(text || '')); });
     }
 
+    /** @brief 视口坐标处的原文位置（拖放的落点）。 @param {number} x 横坐标。 @param {number} y 纵坐标。 @return {number} 原文偏移，取不到时是末尾。 */
+    offsetAt(x, y) {
+      const point = document.caretPositionFromPoint ? document.caretPositionFromPoint(x, y) : null;
+      const range = !point && document.caretRangeFromPoint ? document.caretRangeFromPoint(x, y) : null;
+      const offset = point ? this.sourceOffset(point.offsetNode, point.offset) : range ? this.sourceOffset(range.startContainer, range.startOffset) : null;
+      return offset === null ? this.value.length : offset;
+    }
+
+    /**
+     * @brief 把一段原文移到另一个位置（编辑面中拖动附件或文字），记入撤销历史；落点在这段原文之内时不动。
+     * @param {number} start 起点。 @param {number} end 终点。 @param {number} target 落点（按移动前的原文计）。 @return {boolean} 是否移动。
+     */
+    moveText(start, end, target) {
+      if (!(end > start) || target >= start && target <= end || this.value.slice(start, end) === '') return false;
+      const text = this.value.slice(start, end);
+      this.remember({ start: start, end: end, direction: 'none' });
+      const rest = this.value.slice(0, start) + this.value.slice(end);
+      const at = target > end ? target - text.length : target;
+      this.value = rest.slice(0, at) + text + rest.slice(at);
+      const caret = at + text.length;
+      this.selection = { start: caret, end: caret, direction: 'none' };
+      this.activeLine = this.lineAt(caret);
+      this.render(this.selection);
+      this.notify();
+      return true;
+    }
+
     /** @brief 以原文片段替换选区并重新排版。 @param {string} text 插入文本。 @param {object} range 原文选区。 */
     replace(text, range = this.readSelection()) {
       this.remember(range);
@@ -921,8 +997,26 @@
         event.clipboardData.setData('text/plain', this.value.slice(range.start, range.end));
         this.replace('', range);
       });
+      // 从编辑面中拖动附件或选中的文字：记下原文范围，落在同一个编辑面时移到落点（本次提出：此前会复制一份）。
+      this.listen(this.element, 'dragstart', (event) => {
+        if (!event.dataTransfer) return;
+        const attachment = event.target.closest && event.target.closest('[data-md-attachment]');
+        const range = attachment ? { start: Number(attachment.dataset.mdStart), end: Number(attachment.dataset.mdEnd) } : this.clipboardRange();
+        if (!(range.end > range.start)) return;
+        activeDrag = { editor: this, start: range.start, end: range.end, text: this.value.slice(range.start, range.end) };
+        event.dataTransfer.setData('text/plain', activeDrag.text);
+        event.dataTransfer.effectAllowed = 'copyMove';
+      });
+      this.listen(this.element, 'dragend', () => { window.setTimeout(function clearDrag() { activeDrag = null; }, 0); });
       this.listen(this.element, 'drop', (event) => {
         if (!event.dataTransfer || event.defaultPrevented || event.sideNotesDropHandled) return;
+        if (activeDrag && activeDrag.editor === this) {
+          event.preventDefault();
+          event.sideNotesDropHandled = true;
+          this.moveText(activeDrag.start, activeDrag.end, this.offsetAt(event.clientX, event.clientY));
+          activeDrag = null;
+          return;
+        }
         // 文件由应用附件流程处理；独立编辑器只接收纯文本，避免重复插入。
         if (event.dataTransfer.files.length) return;
         const text = event.dataTransfer.getData('text/plain');
@@ -973,5 +1067,5 @@
     });
   });
 
-  window.LiveMarkdown = Object.freeze({ create: create, attach: attach });
+  window.LiveMarkdown = Object.freeze({ create: create, attach: attach, dragSource: function dragSource() { return activeDrag; }, endDrag: function endDrag() { activeDrag = null; } });
 })();

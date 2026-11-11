@@ -155,11 +155,13 @@
     gesture.ids=selected.has(gesture.id)&&selected.size?new Set(selectedIds()):new Set([gesture.id]);
     document.body.classList.add('is-sorting-cards');elements.noteList.querySelectorAll('.note-card').forEach(function mark(card){card.classList.toggle('is-sorting-member',gesture.ids.has(card.dataset.noteId));});
     const selection=window.getSelection();if(selection&&selection.removeAllRanges)selection.removeAllRanges();
-    // 拖影是卡片本身的副本：向右错开、微微倾斜、浮起（Playground 的 sn-drag-ghost）；拖出侧栏时摆正并放大一点，表示松开后成为窗口。
+    // 拖影是卡片本身的副本：向右错开、倾斜、浮起（Playground 的 sn-drag-ghost）；拖出侧栏时保持倾斜并放大一点，表示松开后成为窗口。
     // 副本放进带 note-list 类的外壳，卡片的样式照常生效；多选时右上角写出条数。说明文字只留给读屏（gesture.label 不放进页面）。
     const source=gesture.card.getBoundingClientRect(),zoom=parseFloat(window.getComputedStyle(elements.sidebar).zoom)||1;
     gesture.grabX=gesture.startX-source.left;gesture.grabY=gesture.startY-source.top;gesture.zoom=zoom;
     gesture.ghost=el('div','card-drag-ghost note-list');gesture.ghost.setAttribute('aria-hidden','true');gesture.ghost.style.width=source.width/zoom+'px';
+    // 多选时副本后面叠一两张卡片的边，错开并转开一点，像拿起一叠卡片（本次提出）。
+    for(let layer=Math.min(2,gesture.ids.size-1);layer>0;layer-=1){const stack=el('div','card-drag-stack');stack.style.setProperty('--local-layer',String(layer));gesture.ghost.append(stack);}
     const copy=gesture.card.cloneNode(true);copy.classList.remove('is-sort-pending','is-sorting','is-sorting-member','drop-before','drop-after','is-selected');copy.classList.add('is-current');copy.removeAttribute('id');copy.querySelectorAll('[id]').forEach(function strip(node){node.removeAttribute('id');});gesture.ghost.append(copy);
     if(gesture.ids.size>1)gesture.ghost.append(el('span','card-drag-count',String(gesture.ids.size)));
     gesture.label=el('span','');
