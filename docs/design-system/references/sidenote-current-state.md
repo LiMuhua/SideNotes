@@ -134,7 +134,7 @@
 
 ## 十、对 Design Playground 的约束
 
-- 使用独立的开发入口（`/design-playground`，`pnpm playground` 在 1430 端口启动），不改动 `src/main.tsx` 的窗口角色判断，不进入正式构建。
+- 使用独立的开发入口（`/design-system/playground/`，`pnpm playground` 在 1430 端口启动；2026-11-10 以前为 `/design-playground`），不改动 `src/main.tsx` 的窗口角色判断，不进入正式构建。
 - 不引入 `prototype.css`：它在 `:root` 与 `body` 上设置了全局字体、背景和溢出，会把旧样式带进 Playground。
 - 复用 `src/core` 中的纯函数、`Markdown` 组件与实时编辑器。
 - 只使用内存中的示例数据，不调用 `src/core/bridge.ts` 的桌面命令，不读写数据库。
