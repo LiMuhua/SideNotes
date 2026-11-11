@@ -644,15 +644,12 @@
   box-shadow: var(--sn-shadow-editing);
 }
 
+/* 工具栏一直显示，不随焦点收起展开（本次提出：点工具栏一行时新建卡片会收起）。 */
 .sn-composer-bar {
-  display: none;
+  display: flex;
   align-items: center;
   gap: var(--sn-space-1);
   margin-top: var(--sn-space-3);
-}
-
-.sn-composer.is-open .sn-composer-bar {
-  display: flex;
 }
 
 .sn-composer-tools {
@@ -816,20 +813,19 @@
   outline-offset: calc(var(--sn-focus-ring-width) * -1);
 }
 
-/* 编辑中的卡片是视觉焦点：保留与悬停、选中相同的高亮（强调色边框与外圈，窗格的标题栏顶部一条强调色线），
- * 换成编辑底色并浮起（令牌 --sn-shadow-editing），其余卡片变淡，悬停恢复（T21）。编辑区里的输入面不加框（本次提出：此前编辑中去掉了高亮）。 */
+/* 编辑中的卡片是视觉焦点：一圈强调色边框，换成编辑底色并浮起（令牌 --sn-shadow-editing），其余卡片变淡，悬停恢复（T21）。
+ * 不叠悬停时的外圈，窗格的标题栏也不画顶部的强调色线：几条线挨在一起像一层内衬（2026-11-11 第二次反馈）。
+ * 编辑区里的输入面不加框。 */
 .sn-note-list .sn-note.is-editing {
   --local-overlay: transparent;
-  --local-shadow: var(--sn-shadow-card-active), var(--sn-shadow-editing);
+  --local-shadow: var(--sn-shadow-editing);
   z-index: 1;
   border-color: var(--sn-color-accent);
   background-color: var(--sn-color-editing);
 }
 
 .sn-note-list.is-panes .sn-note.is-editing .sn-note-head {
-  background:
-    linear-gradient(var(--sn-color-accent), var(--sn-color-accent)) top / 100% var(--sn-focus-ring-width) no-repeat,
-    var(--sn-color-card-head-active);
+  background: var(--sn-color-card-head-active);
 }
 
 .sn-note-list.is-tiles .sn-note.is-editing::before {
@@ -1053,11 +1049,48 @@
   transform: translate(-50%, -50%);
 }
 
+/* 拖影：卡片的副本向右错开、倾斜、浮起；多选时后面叠着一两张卡片的边（本次提出：倾斜加大，增加堆叠）。 */
 .sn-drag-ghost {
+  position: relative;
   opacity: 0.9;
-  transform: translateX(var(--sn-space-6)) rotate(-1deg);
+  transform: translateX(var(--sn-space-6)) rotate(-2.5deg);
   box-shadow: var(--sn-shadow-lg);
   pointer-events: none;
+}
+
+.sn-drag-ghost > .sn-note {
+  position: relative;
+}
+
+.sn-drag-stack {
+  position: absolute;
+  inset: 0;
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-card-radius);
+  background: var(--sn-color-card);
+  box-shadow: var(--sn-shadow-md);
+  transform:
+    translate(calc(var(--local-layer) * var(--sn-space-3)), calc(var(--local-layer) * var(--sn-space-2)))
+    rotate(calc(var(--local-layer) * 2deg));
+}
+
+.sn-drag-count {
+  position: absolute;
+  top: calc(var(--sn-space-3) * -1);
+  right: calc(var(--sn-space-3) * -1);
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: calc(var(--sn-icon-size) + var(--sn-space-2));
+  height: calc(var(--sn-icon-size) + var(--sn-space-2));
+  padding: 0 var(--sn-space-2);
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-accent);
+  color: var(--sn-color-on-accent);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+  font-weight: var(--sn-font-weight-semibold);
 }
 
 .sn-trash-zone {

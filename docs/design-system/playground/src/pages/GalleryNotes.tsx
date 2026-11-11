@@ -2,7 +2,7 @@
  * 组件页：侧栏专有的组件与状态。卡片的各种状态都用真实的 NoteCard 渲染，只是把回调换成空操作。
  */
 
-import { useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import type { Note } from '@/core/types';
 import { notesInTab, useNotes, useSidebarView } from '../model/notes';
 import { Composer } from '../app/Composer';
@@ -133,12 +133,15 @@ export function NotesSection() {
           ) : null}
         </div>
       </Demo>
-      <Demo title="拖动排序（示意）" note="按住卡片拖动：插入线标出落点，拖到页签移过去，拖到底部的回收站区域删除，都可以撤销。" wide>
+      <Demo title="拖动排序（示意）" note="按住卡片拖动：插入线标出落点，拖到页签移过去，拖到底部的回收站区域删除，都可以撤销。多选拖动时拖影后面叠着卡片，右上角写条数。" wide>
         <PanelSample list className="is-dragging-demo">
           <StaticCard note={pick(5)} />
           <div className="sn-drop-line" aria-hidden="true" />
           <div className="sn-drag-ghost" aria-hidden="true">
+            <span className="sn-drag-stack" style={{ '--local-layer': 2 } as CSSProperties} />
+            <span className="sn-drag-stack" style={{ '--local-layer': 1 } as CSSProperties} />
             <StaticCard note={pick(6)} active />
+            <span className="sn-drag-count">3</span>
           </div>
           <StaticCard note={pick(7)} />
           <div className="sn-trash-zone is-over" aria-hidden="true">

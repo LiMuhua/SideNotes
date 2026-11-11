@@ -91,7 +91,6 @@ export function DataPanel() {
           <Field label="存储位置">
             <Select
               aria-label="数据存储位置"
-              size="sm"
               value={settings.storageLocation}
               onChange={(storageLocation) => updateSettings({ storageLocation })}
               options={LOCATIONS.map(({ value, label }) => ({ value, label }))}
@@ -99,7 +98,7 @@ export function DataPanel() {
           </Field>
           <Field label="附件" help="不再被任何记录引用的附件会自动清理">
             <span className="sn-set-value">5 个 · 1.2 MB</span>
-            <Button size="sm" variant="secondary" icon="trash" onClick={() => toast({ message: '没有未引用的附件', tone: 'success' })}>
+            <Button variant="secondary" icon="trash" onClick={() => toast({ message: '没有未引用的附件', tone: 'success' })}>
               立即清理
             </Button>
           </Field>
@@ -108,14 +107,13 @@ export function DataPanel() {
           <FieldRow>
             <Field label="自定义目录" grow>
               <TextInput
-                inputSize="sm"
                 className="sn-set-data-input"
                 aria-label="自定义数据目录"
                 placeholder="例如 D:\SideNotes"
                 defaultValue={settings.customDirectory}
                 onBlur={(event) => updateSettings({ customDirectory: event.target.value.slice(0, 500) })}
               />
-              <Button size="sm" variant="secondary" icon="folder" onClick={() => demo('选择目录')}>
+              <Button variant="secondary" icon="folder" onClick={() => demo('选择目录')}>
                 选择目录
               </Button>
             </Field>
@@ -126,7 +124,6 @@ export function DataPanel() {
             <Field label="迁移到" help="数据库与附件复制到这里，之后的记录保存在这里；原目录保留作为备份" grow>
               <PathText label="迁移的目标目录" path={target} />
               <Button
-                size="sm"
                 variant="primary"
                 icon="upload"
                 onClick={() => {
@@ -142,7 +139,7 @@ export function DataPanel() {
         <FieldRow>
           <Field label="当前目录" grow>
             <PathText label="当前数据目录" path={currentPath} />
-            <IconButton icon="folder" label="打开目录" size="sm" onClick={() => demo('打开目录')} />
+            <IconButton icon="folder" label="打开目录" onClick={() => demo('打开目录')} />
           </Field>
         </FieldRow>
       </SettingsCard>
@@ -151,8 +148,8 @@ export function DataPanel() {
         <FieldRow>
           <Field label="快照目录" grow>
             <PathText label="快照目录" path={`${currentPath}\\snapshots`} />
-            <IconButton icon="folder" label="打开目录" size="sm" onClick={() => demo('打开目录')} />
-            <Button size="sm" variant="secondary" icon="edit" onClick={() => demo('更换快照目录')}>
+            <IconButton icon="folder" label="打开目录" onClick={() => demo('打开目录')} />
+            <Button variant="secondary" icon="edit" onClick={() => demo('更换快照目录')}>
               更换
             </Button>
           </Field>
@@ -160,7 +157,7 @@ export function DataPanel() {
         <FieldRow>
           <Field label="已有快照">
             <span className="sn-set-value">{`${SNAPSHOTS.length} 份 · 附件 5 个，1.2 MB`}</span>
-            <Button size="sm" variant="secondary" icon="plus" onClick={() => toast({ message: '已创建快照（示例）', tone: 'success' })}>
+            <Button variant="secondary" icon="plus" onClick={() => toast({ message: '已创建快照（示例）', tone: 'success' })}>
               立即创建
             </Button>
           </Field>
@@ -173,7 +170,7 @@ export function DataPanel() {
               <span className="sn-snapshot-meta">
                 {snapshot.notes} 条 · {snapshot.size}
               </span>
-              <Button size="sm" variant="secondary" onClick={() => demo('从快照恢复')}>
+              <Button variant="secondary" onClick={() => demo('从快照恢复')}>
                 恢复
               </Button>
             </li>
@@ -184,10 +181,10 @@ export function DataPanel() {
       <SettingsCard title="导入与导出">
         <FieldRow>
           <Field label="本地备份" help="导出为一个文件夹，含附件；导入时合并到现有记录，附件一同拷回">
-            <Button size="sm" variant="secondary" icon="download" onClick={() => demo('导出备份')}>
+            <Button variant="secondary" icon="download" onClick={() => demo('导出备份')}>
               导出备份
             </Button>
-            <Button size="sm" variant="secondary" icon="upload" onClick={() => demo('导入备份')}>
+            <Button variant="secondary" icon="upload" onClick={() => demo('导入备份')}>
               导入备份
             </Button>
           </Field>
@@ -218,7 +215,6 @@ export function DataPanel() {
           <DataRow label="WebDAV 地址">
             <TextInput
               key="endpoint"
-              inputSize="sm"
               className="sn-set-data-input"
               aria-label="NAS WebDAV 地址"
               placeholder="https://nas.example.com:5006"
@@ -230,7 +226,6 @@ export function DataPanel() {
         <DataRow label="账户">
           <TextInput
             key={`account-${cloud.provider}`}
-            inputSize="sm"
             className="sn-set-data-input"
             aria-label="同步账户标识"
             placeholder={cloud.provider === 'synology' ? 'NAS 用户名' : '账户邮箱'}
@@ -241,7 +236,6 @@ export function DataPanel() {
         <DataRow label="远程文件夹">
           <TextInput
             key="folder"
-            inputSize="sm"
             className="sn-set-data-input"
             aria-label="云端备份文件夹"
             placeholder="SideNotes"
@@ -250,13 +244,12 @@ export function DataPanel() {
           />
         </DataRow>
         <DataRow label="状态" value={<span className={cx(cloud.enabled && 'sn-set-warning')}>{cloud.enabled ? '已启用，暂不上传' : '未启用'}</span>}>
-          <Button size="sm" variant="secondary" icon="cloud" onClick={() => toast({ message: cloud.enabled ? '云端服务尚未接入桌面版，可先导出本地备份' : '请先启用自动备份' })}>
+          <Button variant="secondary" icon="cloud" onClick={() => toast({ message: cloud.enabled ? '云端服务尚未接入桌面版，可先导出本地备份' : '请先启用自动备份' })}>
             云端备份
           </Button>
         </DataRow>
         <DataRow label="失败通知">
           <Button
-            size="sm"
             variant="secondary"
             icon="bell"
             onClick={() => {
@@ -340,11 +333,10 @@ export function TrashPanel() {
   return (
     <SettingsPage title="回收站">
       <div className="sn-trash-toolbar">
-        <SearchInput value={query} onValueChange={setQuery} placeholder="搜索回收站" aria-label="搜索回收站" inputSize="sm" />
-        <Select aria-label="回收站标签筛选" size="sm" value={activeTag} onChange={setTag} options={[{ value: '', label: '全部标签' }, ...tagOptions.map((item) => ({ value: item, label: `#${item}` }))]} />
+        <SearchInput value={query} onValueChange={setQuery} placeholder="搜索回收站" aria-label="搜索回收站" />
+        <Select aria-label="回收站标签筛选" value={activeTag} onChange={setTag} options={[{ value: '', label: '全部标签' }, ...tagOptions.map((item) => ({ value: item, label: `#${item}` }))]} />
         <Select
           aria-label="回收站到期筛选"
-          size="sm"
           value={view}
           onChange={setView}
           options={[
@@ -359,10 +351,10 @@ export function TrashPanel() {
         </span>
         {retention}
         <span className="sn-spacer" />
-        <Button size="sm" variant="secondary" icon="restore" disabled={!visible.length} onClick={() => setConfirm({ kind: 'restore', notes: visible })}>
+        <Button variant="secondary" icon="restore" disabled={!visible.length} onClick={() => setConfirm({ kind: 'restore', notes: visible })}>
           恢复筛选结果
         </Button>
-        <Button size="sm" variant="secondary" icon="trash" disabled={!overdue.length} onClick={() => setConfirm({ kind: 'delete', notes: overdue })}>
+        <Button variant="secondary" icon="trash" disabled={!overdue.length} onClick={() => setConfirm({ kind: 'delete', notes: overdue })}>
           清理到期项
         </Button>
       </div>

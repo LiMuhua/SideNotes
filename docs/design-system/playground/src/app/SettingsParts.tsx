@@ -73,10 +73,35 @@ export function DataRow({ label, help, value, children }: { label: string; help?
   );
 }
 
-/** 目录路径：等宽字体，过长时在中间省略，悬停显示全文。 */
+/**
+ * 目录路径：等宽字体，只占一行，放不下时末尾省略，不把别的控件挤乱；按钮紧跟在路径之后。
+ * 放不下时悬停显示完整路径，双击复制完整路径（双击不选中文字）（本次提出）。
+ */
 export function PathText({ label, path }: { label: string; path: string }) {
+  const toast = useToast();
   return (
-    <code className="sn-set-path" aria-label={label}>
+    <code
+      className="sn-set-path"
+      aria-label={label}
+      onMouseEnter={(event) => {
+        const node = event.currentTarget;
+        if (node.scrollWidth > node.clientWidth) node.title = path;
+        else node.removeAttribute('title');
+      }}
+      onMouseDown={(event) => {
+        if (event.detail > 1) event.preventDefault();
+      }}
+      onDoubleClick={() => {
+        if (!navigator.clipboard) {
+          toast({ message: '无法复制目录路径', tone: 'danger' });
+          return;
+        }
+        navigator.clipboard.writeText(path).then(
+          () => toast({ message: '已复制目录路径', tone: 'success' }),
+          () => toast({ message: '无法复制目录路径', tone: 'danger' }),
+        );
+      }}
+    >
       {path}
     </code>
   );

@@ -458,12 +458,13 @@
   gap: var(--sn-space-5) var(--sn-space-6);
 }
 
-/* 选项卡片：明暗模式与主题，预览用所示主题与明暗模式的令牌绘制。 */
-/* 明暗模式的三张卡片与主题卡片同宽（排在五列的前三列），不把这一行撑满（本次提出）。 */
+/* 选项卡片：明暗模式与主题，预览用所示主题与明暗模式的令牌绘制。
+ * 两行卡片的总宽相同（不必逐张对齐），比整行窄，下面的设置不再被它们撑宽（本次提出）。 */
 .sn-choice-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--sn-space-4);
+  width: min(100%, calc(var(--sn-space-10) * 12));
 }
 
 .sn-choice-grid.is-five {
@@ -860,6 +861,7 @@ button.sn-shortcut-key:hover {
 
 .sn-set-path {
   display: block;
+  cursor: default;
   overflow: hidden;
   color: var(--sn-color-text-secondary);
   font-family: var(--sn-font-code);
@@ -873,25 +875,46 @@ button.sn-shortcut-key:hover {
   color: var(--sn-color-warning);
 }
 
+/* 快照列表（布局同现有应用）：带边框的一块，一行一份：时间、原因、条数与大小、恢复；份数多时在框内滚动。 */
 .sn-snapshot-list {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(var(--sn-control-height) * 8);
   margin: 0;
-  padding: var(--sn-space-2) 0 0;
-  border-top: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  padding: 0;
+  overflow-y: auto;
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-surface-sunken);
   list-style: none;
+  scrollbar-width: thin;
 }
 
 .sn-snapshot {
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1.2fr) auto;
   align-items: center;
-  gap: var(--sn-space-5);
-  min-height: var(--sn-control-height);
+  gap: var(--sn-space-4);
+  padding: var(--sn-space-2) var(--sn-space-2) var(--sn-space-2) var(--sn-space-5);
   font-size: var(--sn-font-size-sm);
 }
 
+.sn-snapshot + .sn-snapshot {
+  border-top: var(--sn-border-width) solid var(--sn-color-border-subtle);
+}
+
 .sn-snapshot-time {
+  color: var(--sn-color-text);
   font-family: var(--sn-font-meta);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.sn-snapshot-reason,
+.sn-snapshot-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sn-snapshot-reason {
@@ -900,7 +923,7 @@ button.sn-shortcut-key:hover {
 
 .sn-snapshot-meta {
   color: var(--sn-color-text-muted);
-  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 /* 云端备份的服务：三张选项卡片。 */

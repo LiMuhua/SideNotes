@@ -174,7 +174,7 @@ export function AppearancePanel() {
       <SettingsCard title="侧栏">
         <FieldRow>
           <Field label="显示位置">
-            <Select aria-label="触发边缘" size="sm" value={settings.edge} onChange={(edge) => updateSettings({ edge })} options={EDGES} />
+            <Select aria-label="触发边缘" value={settings.edge} onChange={(edge) => updateSettings({ edge })} options={EDGES} />
           </Field>
           <Field label="移出后收起">
             <Combobox
@@ -208,7 +208,7 @@ export function AppearancePanel() {
 
       <SettingsCard title="其它">
         <FieldRow>
-          <Field label="列表加载">
+          <Field label="列表加载" help="滚动到列表底部时按批加载">
             <Switch label="滚动按需加载" hideLabel checked={settings.lazyLoading} onChange={(lazyLoading) => updateSettings({ lazyLoading })} />
             <NumberInput
               label="每批加载记录数"
@@ -237,7 +237,7 @@ export function AppearancePanel() {
             <span className="sn-set-unit">条</span>
           </Field>
           <Field label="通知位置">
-            <Select aria-label="通知弹出位置" size="sm" value={settings.toastPosition} onChange={(toastPosition) => updateSettings({ toastPosition })} options={TOAST_POSITIONS} />
+            <Select aria-label="通知弹出位置" value={settings.toastPosition} onChange={(toastPosition) => updateSettings({ toastPosition })} options={TOAST_POSITIONS} />
           </Field>
         </FieldRow>
       </SettingsCard>
@@ -367,7 +367,6 @@ export function ShortcutsPanel() {
       title="快捷键"
       aside={
         <Button
-          size="sm"
           variant="secondary"
           icon="restore"
           disabled={!changed}
