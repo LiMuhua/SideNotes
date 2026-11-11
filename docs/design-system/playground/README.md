@@ -10,7 +10,7 @@ SideNotes 设计系统的交互式预览：在模拟的桌面上运行侧栏、�
 pnpm playground
 ```
 
-命令会自动在浏览器打开 `http://localhost:1430/design-playground`。Playground 固定使用 1430 端口（`--strictPort`），端口被占用时直接报错，不会改用其他端口；应用的开发服务器使用 1420，两者可以同时运行，方便对照实际应用。
+命令会自动在浏览器打开 `http://localhost:1430/design-system/playground/`。同一个服务还提供交互原型：`http://localhost:1430/prototype/`（地址去掉了 `docs` 一层，见 `vite.config.ts` 中的 `sidenotes-design-playground` 插件）。Playground 固定使用 1430 端口（`--strictPort`），端口被占用时直接报错，不会改用其他端口；应用的开发服务器使用 1420，两者可以同时运行，方便对照实际应用。
 
 ## 页面
 
@@ -39,7 +39,7 @@ pnpm playground
 
 另外，`frame=bare` 只显示预览区并按 1:1 显示，用于截图。「重置示例数据」恢复 21 条示例记录与默认设置。
 
-例如，深色的磨砂玻璃放在繁杂的壁纸上：`http://localhost:1430/design-playground?surface=glass&theme=dark&wallpaper=busy`。
+例如，深色的磨砂玻璃放在繁杂的壁纸上：`http://localhost:1430/design-system/playground/?surface=glass&theme=dark&wallpaper=busy`。
 
 ## 在模拟桌面中操作
 
@@ -53,7 +53,7 @@ pnpm playground
 
 | 位置 | 内容 |
 | --- | --- |
-| `index.html` | 页面入口，开发服务器把 `/design-playground` 转到这里（`vite.config.ts` 中的 `sidenotes-design-playground` 插件） |
+| `index.html` | 页面入口，开发服务器把 `/design-system/playground/` 转到这里（`vite.config.ts` 中的 `sidenotes-design-playground` 插件去掉地址中的 `docs` 一层） |
 | `src/app/` | 桌面场景与三个窗口：侧栏、记录卡片、新建卡片、菜单与弹窗、速记浮窗、设置窗口 |
 | `src/model/` | 内存中的记录与设置，规则沿用 `src/core`；以及内置应用图标的清单（`model/appIcons.ts`，引用 `src-tauri/icons/builtin/`） |
 | `src/ui/` | 通用组件（按钮、菜单、弹窗、输入框等）、滚轮调整数值与令牌作用域 |

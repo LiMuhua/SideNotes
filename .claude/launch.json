@@ -2,12 +2,6 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "prototype",
-      "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "1431", "--bind", "127.0.0.1"],
-      "port": 1431
-    },
-    {
       "name": "app",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["dev"],

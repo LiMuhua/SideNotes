@@ -1,5 +1,5 @@
 /**
- * Design Playground 入口（页面 docs/design-system/playground/index.html，开发服务器地址 /design-playground）。
+ * Design Playground 入口（页面 docs/design-system/playground/index.html，开发服务器地址 /design-system/playground/）。
  *
  * 只在开发服务器中访问，不进入正式构建（vite build 只打包 index.html），
  * 也不改动 src/main.tsx 的窗口角色判断。数据全部是内存中的示例数据。

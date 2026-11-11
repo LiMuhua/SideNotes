@@ -32,24 +32,31 @@ const stripViewportMedia = {
 };
 
 /**
- * 开发服务器把 /design-playground 转到设计系统目录中的 Playground 页面。
+ * 开发服务器去掉地址中的 docs 一层：/prototype/ 是交互原型，/design-system/playground/ 是 Playground。
  *
- * 页面与源码一起放在 docs/design-system/playground/，仓库根目录只保留应用自己的 index.html。
- * 这里只改写请求路径，地址栏与地址参数保持不变，`pnpm playground` 打开的地址也不用改。
- * 只在开发服务器中生效；vite build 只打包根目录的 index.html，Playground 不进入正式构建。
+ * 两个页面都在 docs/ 下，这里只改写请求路径，地址栏与地址参数保持不变。
+ * 服务目录仍是仓库根目录：原型引用的内置字体（src/styles/）与应用图标（src-tauri/icons/builtin/）在 docs 之外，
+ * 页面中的 ../../ 在地址里退到根为止，正好落到这两个目录，不必复制资源。
+ * 只在开发服务器中生效；vite build 只打包根目录的 index.html，原型与 Playground 都不进入正式构建。
  */
-const designPlaygroundPage = '/docs/design-system/playground/index.html';
+const docsPrefixes = ['/prototype/', '/design-system/'];
+const docsPages = ['/prototype', '/design-system/playground'];
 const designPlayground: Plugin = {
   name: 'sidenotes-design-playground',
   apply: 'serve',
   configureServer(server) {
-    server.middlewares.use((req, _res, next) => {
+    server.middlewares.use((req, res, next) => {
       const url = req.url ?? '';
       const queryStart = url.indexOf('?');
       const pathname = queryStart === -1 ? url : url.slice(0, queryStart);
-      if (pathname === '/design-playground' || pathname === '/design-playground/') {
-        req.url = designPlaygroundPage + (queryStart === -1 ? '' : url.slice(queryStart));
+      // 页面地址缺少末尾的斜杠时先补上，页面中的相对路径才会按目录解析。
+      if (docsPages.includes(pathname)) {
+        res.statusCode = 302;
+        res.setHeader('Location', pathname + '/' + (queryStart === -1 ? '' : url.slice(queryStart)));
+        res.end();
+        return;
       }
+      if (docsPrefixes.some((prefix) => pathname.startsWith(prefix))) req.url = '/docs' + url;
       next();
     });
   },
