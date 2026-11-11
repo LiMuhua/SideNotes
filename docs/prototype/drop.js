@@ -67,12 +67,13 @@
 
   /* ==================== 对外入口 ==================== */
 
-  /** @brief 准备拖入内容；同步抓取访问入口后再异步读取图片。 @param {DataTransfer} transfer 拖放数据。 @return {Promise<{text:string,images:object[],errors:string[]}>} 可插入的正文（图片与文件的引用各占一行）、图片内容及可显示的局部失败提示。 */
+  /** @brief 准备拖入内容；同步抓取访问入口后再异步读取图片。 @param {DataTransfer} transfer 拖放数据。 @return {Promise<{text:string,images:object[],errors:string[],attachment:boolean}>} 可插入的正文（图片与文件的引用各占一行）、图片内容、可显示的局部失败提示，以及正文是否为附件引用（附件不插进标题行，见 app.js 的 insertDroppedText）。 */
   async function prepare(transfer) {
     const captured = snapshot(transfer);
-    const result = { text: '', images: [], errors: [] };
+    const result = { text: '', images: [], errors: [], attachment: false };
     if (captured.rejectedDirectories) result.errors.push('不支持拖入文件夹，请选择文件');
     if (!captured.files.length) { result.text = captured.rejectedDirectories ? '' : captured.text; return result; }
+    result.attachment = true;
     const references = [];
     const handles = await Promise.all(captured.handles);
     const prepared = await Promise.allSettled(captured.files.map(async function prepareFile(file, index) {

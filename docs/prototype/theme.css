@@ -1760,13 +1760,46 @@ img.is-thumbnail-pending {
   user-select: none;
 }
 
-.live-markdown-editor .md-editor-image {
+:is(.live-markdown-editor, .md-drag-ghost) .md-editor-image {
   display: inline-flex;
   margin: var(--sn-space-2) 0;
   padding: 0;
   overflow: hidden;
   border-radius: var(--sn-radius-sm);
   background: var(--sn-color-surface-sunken);
+}
+
+/* 拖动编辑面中的附件调整位置（本次提出）：原处变淡，拖影是附件的副本，与卡片拖影同样倾斜、浮起；插入线沿用卡片排序的 card-drop-guide。 */
+.live-markdown-editor .is-drag-source {
+  opacity: var(--sn-opacity-disabled);
+}
+
+.md-drag-ghost {
+  position: fixed;
+  z-index: var(--sn-z-tooltip);
+  color: var(--sn-color-text);
+  font-family: var(--sn-font-ui);
+  font-size: var(--sn-font-size-md);
+  line-height: var(--sn-line-height-normal);
+  pointer-events: none;
+  opacity: 0.9;
+  transform: rotate(-2.5deg);
+  transform-origin: 0 0;
+  zoom: var(--app-zoom, 1);
+}
+
+.md-drag-ghost > * {
+  box-shadow: var(--sn-shadow-lg);
+}
+
+.md-drag-ghost .md-editor-image {
+  margin: 0;
+}
+
+body.is-dragging-attachment,
+body.is-dragging-attachment * {
+  cursor: grabbing !important;
+  user-select: none !important;
 }
 
 /* 卡片编辑：编辑区与底部的工具栏之间留一点空。 */
@@ -2302,15 +2335,21 @@ img.is-thumbnail-pending {
 
 /* ---------- 设置窗口 ----------
  * 与 Playground 的设置窗口相同（windows.css 与 controls.css），布局沿用现有应用 0.7.3：
- * 窗口 880 × 720（与现有应用相同），不随字号变化，内容按字号缩放；窄的分类栏，当前项浮起、图标用强调色；
- * 页面由分组卡片组成，相关的设置放在同一张卡片里，一行可以放几项，项与项之间一条很淡的竖线，说明收在名称后的问号里。 */
+ * 窗口宽 880（与现有应用相同），不随字号变化，内容按字号缩放；窄的分类栏，当前项浮起、图标用强调色；
+ * 页面由分组卡片组成，相关的设置放在同一张卡片里，一行可以放几项，项与项之间一条很淡的竖线，说明收在名称后的问号里。
+ * 高度随内容（本次提出）：最高 600，内容多的分类在页面里滚动，不把窗口撑高；内容少的分类窗口跟着变矮，最矮 360，不留大片空白。
+ * 上边固定在最高时居中的位置，切换分类时标题栏不动，只有下边伸缩。 */
 .modal.settings-modal {
+  position: relative;
   display: flex;
   flex-direction: column;
+  align-self: flex-start;
   width: min(calc(880px / var(--app-zoom, 1)), calc((100vw - var(--sn-space-6)) / var(--app-zoom, 1))); /* 固定：设置窗口的窗口尺寸 */
-  height: min(calc(720px / var(--app-zoom, 1)), calc((100dvh - var(--sn-space-6)) / var(--app-zoom, 1))); /* 固定：设置窗口的窗口尺寸 */
+  height: auto;
+  min-height: min(calc(360px / var(--app-zoom, 1)), calc((100dvh - 40px) / var(--app-zoom, 1))); /* 固定：内容少时的最小高度；遮罩上下各留 20 */
+  max-height: min(calc(600px / var(--app-zoom, 1)), calc((100dvh - 40px) / var(--app-zoom, 1))); /* 固定：设置窗口的最大高度；遮罩上下各留 20 */
   max-width: none;
-  max-height: none;
+  margin-top: calc(max(0px, (100dvh - 640px) / 2) / var(--app-zoom, 1)); /* 固定：最大高度 600 加遮罩上下各 20 的内边距 */
   padding: 0;
   overflow: hidden;
   border: var(--sn-border-width) solid var(--sn-color-border);
@@ -2474,6 +2513,45 @@ img.is-thumbnail-pending {
   font-weight: var(--sn-title-weight);
   letter-spacing: var(--sn-title-tracking);
   line-height: var(--sn-line-height-tight);
+}
+
+/* 页面的最大宽度与 Playground 的 sn-set-page 相同：弹窗宽度的 1.6 倍（含页面内边距），居中（本次提出：此前原型没有这条，
+ * 小字号下页面铺满整个面板，主题示例下面的字体、滑块与分组都被拉得很宽；现在各组与示例在同一栏宽内）。 */
+.modal.settings-modal .settings-panel > * {
+  max-width: calc(var(--sn-dialog-width) * 1.6 - var(--sn-space-5) * 2);
+  margin-right: auto;
+  margin-left: auto;
+}
+
+/* 设置窗口自己的提示条（本次提出）：设置中的操作（复制路径、恢复记录等）提示在设置窗口里，不再出现在侧栏；
+ * 位置按「通知位置」：顶部正中在标题栏下方，右上角，或底部正中。 */
+.modal.settings-modal > .toast-region.settings-toast-region {
+  position: absolute;
+  z-index: 5;
+  top: calc(var(--sn-header-height) + var(--sn-space-4));
+  right: auto;
+  bottom: auto;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sn-space-3);
+  width: max-content;
+  max-width: calc(100% - var(--sn-space-8) * 2);
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+[data-sn-toast='top-right'] .modal.settings-modal > .toast-region.settings-toast-region {
+  right: var(--sn-space-6);
+  left: auto;
+  align-items: flex-end;
+  transform: none;
+}
+
+[data-sn-toast='bottom-center'] .modal.settings-modal > .toast-region.settings-toast-region {
+  top: auto;
+  bottom: var(--sn-space-6);
 }
 
 /* 卡片网格：默认占满一行，快捷键页的两张卡片并排。 */
@@ -3541,7 +3619,8 @@ img.is-thumbnail-pending {
 
 .settings-modal .about-hero ~ :is(.settings-group, .settings-card) {
   gap: var(--sn-space-4);
-  margin: 0 0 var(--sn-space-5);
+  margin-top: 0;
+  margin-bottom: var(--sn-space-5);
   padding: 0;
   border: 0;
   background: transparent;
@@ -4166,10 +4245,12 @@ body[data-edge='left'] .toast-region {
 }
 
 /* ---------- 拖动排序（Playground 的 sn-drag-ghost 与 sn-drop-line） ----------
- * 拖影是卡片本身的副本：向右错开、倾斜、浮起；多选时后面叠着一两张卡片的边。拖出侧栏时保持倾斜并放大一点，
+ * 拖影是卡片本身的副本：向右错开、倾斜、浮起；多选时是一叠真实的卡片（本次提出）：后面两层是其它选中卡片的副本，往右上错开、转开一点，
+ * 露出它们的标题栏，右上角写条数；开始拖动时看得见的选中卡片从列表飞进这一叠（.card-drag-flyer）。拖出侧栏时保持倾斜并放大一点，
  * 松开后在那里打开记录窗口（窗口从倾斜的拖影展开、摆正）。插入线是一条强调色的线，左端一个小圆点，不写说明文字。
  * 被拖动的卡片原地变淡，不加虚线框。 */
-.card-drag-ghost.note-list {
+.card-drag-ghost.note-list,
+.card-drag-flyer.note-list {
   position: fixed;
   left: 0;
   top: 0;
@@ -4182,16 +4263,24 @@ body[data-edge='left'] .toast-region {
   border: 0;
   background: transparent;
   box-shadow: none;
-  opacity: 0.9;
   white-space: normal;
   pointer-events: none;
-  transform: translateX(var(--sn-space-6)) rotate(-2.5deg);
-  transform-origin: 50% 50%;
-  transition: transform var(--sn-duration-normal) var(--sn-ease-standard);
   zoom: var(--app-zoom, 1);
 }
 
-.card-drag-ghost.note-list > .note-card {
+.card-drag-ghost.note-list {
+  opacity: 0.94;
+  transform: translateX(var(--sn-space-6)) rotate(-2.5deg);
+  transform-origin: 50% 50%;
+  transition: transform var(--sn-duration-normal) var(--sn-ease-standard);
+}
+
+/* 飞进拖影的卡片在拖影之下，到了就并进那一叠。 */
+.card-drag-flyer.note-list {
+  z-index: calc(var(--sn-z-tooltip) - 1);
+}
+
+:is(.card-drag-ghost, .card-drag-flyer).note-list > .note-card {
   --local-shadow: var(--sn-shadow-lg);
   margin: 0;
 }
@@ -4201,20 +4290,22 @@ body[data-edge='left'] .toast-region {
   transform: translateX(var(--sn-space-6)) rotate(-2.5deg) scale(1.04);
 }
 
-/* 多选的一叠：卡片的边框与底色，越往后错开越多、转得越正。 */
-.card-drag-stack {
+/* 后面几层：与最上面的卡片一样大（更长的部分裁掉），越往后往右上错开越多、转得越多，卡片的标题栏从上边露出来。 */
+.card-drag-ghost.note-list > .card-drag-layer {
+  --local-shadow: var(--sn-shadow-md);
   position: absolute;
-  inset: 0;
-  border: var(--sn-border-width) solid var(--sn-color-border);
-  border-radius: var(--sn-card-radius);
-  background: var(--sn-color-card);
-  box-shadow: var(--sn-shadow-md);
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+  overflow: hidden;
   transform:
-    translate(calc(var(--local-layer) * var(--sn-space-3)), calc(var(--local-layer) * var(--sn-space-2)))
-    rotate(calc(var(--local-layer) * 2deg));
+    translate(calc(var(--local-layer) * var(--sn-space-4) * 1.25), calc(var(--local-layer) * var(--sn-space-4) * -1.6))
+    rotate(calc(var(--local-layer) * 2.5deg));
+  transform-origin: 50% 50%;
 }
 
-.card-drag-ghost.note-list > .note-card {
+.card-drag-ghost.note-list > .note-card:not(.card-drag-layer) {
   position: relative;
 }
 
@@ -4364,7 +4455,7 @@ body[data-edge='left'] .toast-region {
   color: var(--sn-color-on-accent);
 }
 
-.live-markdown-editor .md-attachment-chip,
+:is(.live-markdown-editor, .md-drag-ghost) .md-attachment-chip,
 .markdown-body .file-reference {
   display: inline-flex;
   align-items: center;
@@ -4387,7 +4478,7 @@ body[data-edge='left'] .toast-region {
   cursor: pointer;
 }
 
-.live-markdown-editor .md-attachment-chip svg.icon,
+:is(.live-markdown-editor, .md-drag-ghost) .md-attachment-chip svg.icon,
 .markdown-body .file-reference svg.icon {
   flex: none;
   width: var(--sn-icon-size-sm);
@@ -4401,7 +4492,12 @@ body[data-edge='left'] .toast-region {
   color: var(--sn-color-text);
 }
 
-/* 附件弹窗：标题前一个图片或文件图标；预览最高 320（按 13px 字号计），下面是可以改的 Markdown 原文。 */
+/* 附件弹窗：标题前一个图片或文件图标；预览最高 320（按 13px 字号计），下面是可以改的 Markdown 原文。
+ * 比常规弹窗宽一些：原文整段显示，底栏放得下四个操作与「应用修改」（本次提出）。 */
+.modal.attachment-modal {
+  width: min(calc(var(--sn-dialog-width) * 1.3), calc((100vw - var(--sn-space-6)) / var(--app-zoom, 1)));
+}
+
 .attachment-modal .modal-header h2 {
   display: inline-flex;
   align-items: center;
@@ -4435,16 +4531,29 @@ body[data-edge='left'] .toast-region {
   font-size: var(--sn-font-size-md);
 }
 
+/* 原文改得不再是单个附件时，预览按卡片的排版显示这段 Markdown；图片地址取不到时显示图片块。 */
+.attachment-modal .attachment-preview-text {
+  min-height: var(--sn-control-height);
+  padding: var(--sn-space-4) var(--sn-space-5);
+  border: var(--sn-border-width) dashed var(--sn-color-border);
+  border-radius: var(--sn-radius-md);
+  color: var(--sn-color-text);
+  overflow-wrap: anywhere;
+}
+
+.attachment-modal .attachment-file.is-missing {
+  color: var(--sn-color-text-muted);
+}
+
+/* Markdown 原文：名称在上，下面整行一个输入框，随内容加高、长地址折行，不出现滚动条（本次提出）。 */
 .attachment-modal .attachment-source {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: var(--sn-space-2) var(--sn-space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sn-space-2);
   margin-top: var(--sn-space-5);
 }
 
 .attachment-modal .attachment-source-label {
-  grid-column: 1 / -1;
   color: var(--sn-color-text-secondary);
   font-size: var(--sn-font-size-sm);
 }
@@ -4453,16 +4562,29 @@ body[data-edge='left'] .toast-region {
   box-sizing: border-box;
   width: 100%;
   max-width: none;
-  min-height: 0;
-  padding: var(--sn-space-3) var(--sn-space-4);
+  min-height: calc(var(--sn-control-height) * 2.5);
+  margin: 0;
+  padding: var(--sn-space-4) var(--sn-space-5);
+  overflow: hidden;
   font-family: var(--sn-font-code);
   font-size: var(--sn-font-size-sm);
-  resize: vertical;
+  line-height: var(--sn-line-height-normal);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  resize: none;
+}
+
+/* 底栏：左侧是打开、更换、另存为与删除，右侧是主要操作「应用修改」。 */
+.attachment-modal .modal-footer {
+  justify-content: flex-start;
 }
 
 .attachment-modal .modal-footer .attachment-delete {
-  margin-left: auto;
   color: var(--sn-color-danger);
+}
+
+.attachment-modal .modal-footer .attachment-apply {
+  margin-left: auto;
 }
 
 /* ---------- 记录窗口（note-window.js，本次提出） ----------
@@ -4488,9 +4610,13 @@ body[data-edge='left'] .toast-region {
   outline: none;
 }
 
-/* 当前操作的窗口：边框带一点点强调色（本次提出）。 */
+/* 当前操作的窗口：边框带一点强调色，外面再淡淡一圈，很轻，不像焦点环那样醒目（本次提出）。 */
 .note-window:focus-within {
-  border-color: color-mix(in srgb, var(--sn-color-accent) 45%, var(--sn-color-border));
+  border-color: color-mix(in srgb, var(--sn-color-accent) 40%, var(--sn-color-border));
+  box-shadow:
+    var(--sn-shadow-lg),
+    0 0 0 var(--sn-border-width) color-mix(in srgb, var(--sn-color-accent) 16%, transparent),
+    inset 0 var(--sn-border-width) 0 var(--sn-color-edge-highlight);
 }
 
 .note-window-header {
@@ -4540,10 +4666,16 @@ body[data-edge='left'] .toast-region {
   color: var(--sn-color-accent-text);
 }
 
+/* 置顶时图钉是实心的，与没置顶的空心图钉一眼分开（本次提出）。 */
+.note-window .note-window-pin[aria-pressed='true'] svg.icon {
+  fill: currentColor;
+}
+
+/* 正文四周留白相同；窗口按内容定大小时把它算在内（note-window.js 的 fitSize）。 */
 .note-window-body {
   flex: 1;
   min-height: 0;
-  padding: var(--sn-space-5) var(--sn-panel-padding) var(--sn-space-7);
+  padding: var(--sn-space-5) var(--sn-space-6) var(--sn-space-6);
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--sn-color-border-strong) transparent;
@@ -4601,13 +4733,14 @@ body[data-edge='left'] .toast-region {
 }
 
 /* 标签页（本次提出）：两个以上时标题栏换成标签页，当前一页与窗口正文连成一片；
- * 标签页可以拖到别的窗口合并、拖到窗口外拆开；拖动窗口或卡片到别的窗口标题栏上时，那里换成浅强调色。 */
+ * 标签栏比单页的标题栏高一些，标签页之间留出间距；右侧一块空白（.note-window-grip）按住可以拖动窗口，标签页多了在左边横向滚动。
+ * 标签页可以拖到别的窗口合并、拖到窗口外拆开；拖动窗口、标签页或卡片到别的窗口时，那里的标题栏换成浅强调色，竖线标出插入位置。 */
 .note-window-tabs {
   display: none;
-  flex: 1;
+  flex: 0 1 auto;
   align-items: flex-end;
   align-self: stretch;
-  gap: var(--sn-space-1);
+  gap: var(--sn-space-2);
   min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
@@ -4617,12 +4750,25 @@ body[data-edge='left'] .toast-region {
   display: flex;
 }
 
+.note-window-grip {
+  display: none;
+}
+
+.note-window.has-tabs .note-window-grip {
+  display: block;
+  flex: 1 0 calc(var(--sn-control-height) * 2.5);
+  align-self: stretch;
+}
+
 .note-window.has-tabs :is(.note-window-emoji, .note-window-title) {
   display: none;
 }
 
 .note-window.has-tabs .note-window-header {
-  padding-left: var(--sn-space-3);
+  gap: var(--sn-space-3);
+  height: calc(var(--sn-header-height) + var(--sn-space-4));
+  padding-top: var(--sn-space-4);
+  padding-left: var(--sn-space-4);
 }
 
 .note-window-tab {
@@ -4630,12 +4776,12 @@ body[data-edge='left'] .toast-region {
   display: inline-flex;
   flex: 0 1 auto;
   align-items: center;
-  gap: var(--sn-space-2);
+  gap: var(--sn-space-3);
   min-width: calc(var(--sn-control-height) * 2.5);
   max-width: calc(var(--sn-control-height) * 7);
-  height: calc(var(--sn-header-height) - var(--sn-space-3));
+  height: 100%;
   margin-bottom: calc(var(--sn-border-width) * -1);
-  padding: 0 var(--sn-space-1) 0 var(--sn-space-4);
+  padding: 0 var(--sn-space-2) 0 var(--sn-space-5);
   border: var(--sn-border-width) solid transparent;
   border-bottom: 0;
   border-radius: var(--sn-radius-md) var(--sn-radius-md) 0 0;
@@ -4698,16 +4844,55 @@ body[data-edge='left'] .toast-region {
   background: var(--sn-color-accent-subtle);
 }
 
+/* 正在拖动的标签页原处变淡；标签栏里的插入线是一条强调色的竖线，上端一个小圆点（与卡片排序的插入线同一种样子），
+ * 挂在 body 上、叠在拖影之上，位置与高度由脚本按屏幕坐标写入。 */
+.note-window-tab.is-drag-source {
+  opacity: var(--sn-opacity-disabled);
+}
+
+.note-window-tab-drop {
+  position: fixed;
+  z-index: calc(var(--sn-z-tooltip) + 1);
+  width: var(--sn-focus-ring-width);
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-accent);
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.note-window-tab-drop::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  box-sizing: border-box;
+  width: var(--sn-space-4);
+  height: var(--sn-space-4);
+  border: var(--sn-focus-ring-width) solid var(--sn-color-accent);
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-panel);
+  transform: translate(-50%, -50%);
+}
+
 .note-window-tab-ghost {
   position: fixed;
   z-index: var(--sn-z-tooltip);
   pointer-events: none;
   opacity: 0.9;
   transform: rotate(-2.5deg);
+  transition: transform var(--sn-duration-normal) var(--sn-ease-standard);
   zoom: var(--app-zoom, 1);
 }
 
+/* 拖到窗口外：松开后拆成新窗口，拖影放大一点（与卡片拖出侧栏相同）。 */
+.note-window-tab-ghost.is-detaching {
+  opacity: 1;
+  transform: rotate(-2.5deg) scale(1.06);
+}
+
 .note-window-tab-ghost .note-window-tab {
+  height: calc(var(--sn-header-height) - var(--sn-space-1));
+  opacity: 1;
   border-color: var(--sn-color-border);
   border-bottom: var(--sn-border-width) solid var(--sn-color-border);
   border-radius: var(--sn-radius-md);
@@ -5282,9 +5467,11 @@ body[data-edge='left'] .toast-region {
 
 /* ---------- 设置窗口：第二次反馈的调整（2026-11-11） ---------- */
 
-/* 明暗模式与主题两行卡片的总宽相同（不必逐张对齐），比整行窄，下面的设置不再被它们撑宽。 */
+/* 明暗模式与主题两行卡片的总宽相同（不必逐张对齐），都铺满名称右侧的一栏，右边与下面的滑块、数值框和字体预览对齐。
+ * 页面本身有最大宽度（见 .settings-panel > *），示例与下面的设置都在这一栏宽内，谁也不会把页面撑宽（本次提出：
+ * 第二次反馈时只把这两行限制在 480，页面没有最大宽度，小字号下下面的设置仍铺满整个面板）。 */
 .settings-modal :is(.theme-grid, .surface-choice-grid) {
-  width: min(100%, calc(var(--sn-space-10) * 12));
+  width: 100%;
 }
 
 .settings-modal .theme-grid {

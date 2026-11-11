@@ -3,11 +3,13 @@
 /**
  * @brief 记录窗口（本次提出）：卡片拖出侧栏或点「展开全文」时，在桌面上打开一个可以移动、缩放与置顶的窗口，显示完整的记录。
  * @details 两个入口共用这一个组件，只是出场动画不同：
- * - 拖出侧栏：窗口从松开处倾斜的拖影展开到窗口大小，同时摆正，最后轻轻落定；拖出的窗口默认置顶；
+ * - 拖出侧栏：窗口从松开处倾斜的拖影展开到窗口大小，同时摆正，最后轻轻落定；拖出的窗口（包括从窗口拖出的标签页）默认置顶；
  * - 展开全文：窗口从卡片在侧栏中的位置向桌面一侧滑出并放大。
- * 关闭时窗口缩小并滑回侧栏中原来的卡片（卡片看不见时原地淡出）。窗口大小按内容决定，留一点白，长文不超过视口的七成高。
+ * 关闭时与打开呼应：拖出的窗口先轻轻提起，再倾斜着缩回侧栏中原来的卡片，落下时摆正淡出，卡片轻轻一顿；展开全文的窗口原路滑回。
+ * 卡片看不见时原地提起、倾斜着淡出。窗口大小按内容决定（宽高都是），四周留白，长文不超过视口的六成高。
  * 一个窗口可以有多个标签页，每条记录只在一个标签页中打开：多选拖出时放进同一个窗口；把卡片拖到已开的窗口上、
  * 把窗口的标题栏拖到另一个窗口的标题栏上、或把标签页拖到另一个窗口，都会合并成标签页；标签页拖到窗口外则拆成新窗口。
+ * 拖动时目标窗口的标题栏换成浅强调色，标签栏里一条竖线标出松开后的位置；标签栏右侧留一块空白，按住可以拖动窗口。
  * 「关闭全部记录窗口」有快捷键（默认 Alt+Shift+W，可在设置中更换）。
  * 标题栏拖动窗口，四边与四角缩放；双击正文编辑，Ctrl+Enter（保存快捷键）或点到窗口外保存，Esc 取消编辑；
  * 不在编辑时 Esc 关闭当前标签页，只剩一个时关闭窗口。
@@ -18,12 +20,16 @@ window.NoteWindows = (function createNoteWindows() {
   const MIN_WIDTH = 320;
   const MIN_HEIGHT = 140;
   const MARGIN = 12;
+  const FIT_WIDTH = [280, 560]; // 按内容定宽的上下限（按 13px 字号计，乘以缩放倍数）。
+  const FIT_HEIGHT = 600; // 按内容定高的上限（同上），同时不超过视口的六成。
   const DRAG_TILT = -2.5; // 与拖影（.card-drag-ghost）的倾斜角度一致。
   const EDGES = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
   const windows = new Map(); // 窗口标识 → 窗口。
   let order = 0;
   let sequence = 0;
   let gesture = null;
+  let tabDrop = null; // 标签栏里的插入线（拖动标签页、窗口或卡片到标签栏时）。
+  let hinted = null; // 从侧栏拖来的卡片正落在其上的窗口。
 
   /** @return {number} 整页缩放倍数（字号 ÷ 13）。 */
   function zoom() { return parseFloat(window.getComputedStyle(document.documentElement).getPropertyValue('--app-zoom')) || 1; }
@@ -65,13 +71,19 @@ window.NoteWindows = (function createNoteWindows() {
     }) || null;
   }
 
-  /** @brief 卡片在侧栏列表中看得见的位置：展开与关闭的动画从这里出发、回到这里。 @param {string} id 记录。 @return {DOMRect|null} 矩形。 */
-  function cardRect(id) {
+  /** @brief 侧栏列表中看得见的卡片：展开与关闭的动画从这里出发、回到这里。 @param {string} id 记录。 @return {HTMLElement|null} 卡片。 */
+  function cardElement(id) {
     if (!elements.sidebar || !elements.sidebar.classList.contains('open') || elements.sidebar.inert) return null;
     const card = Array.from(elements.noteList.querySelectorAll('.note-card')).find(function same(node) { return node.dataset.noteId === id; });
     if (!card) return null;
     const rect = card.getBoundingClientRect(), list = elements.noteList.getBoundingClientRect();
-    return rect.width && rect.bottom > list.top && rect.top < list.bottom ? rect : null;
+    return rect.width && rect.bottom > list.top && rect.top < list.bottom ? card : null;
+  }
+
+  /** @brief 卡片在侧栏列表中看得见的位置。 @param {string} id 记录。 @return {DOMRect|null} 矩形。 */
+  function cardRect(id) {
+    const card = cardElement(id);
+    return card ? card.getBoundingClientRect() : null;
   }
 
   /** @brief 窗口的位置与尺寸写入样式。 @param {object} entry 窗口。 */
@@ -125,12 +137,15 @@ window.NoteWindows = (function createNoteWindows() {
     const title = el('h2', 'note-window-title');
     const strip = el('div', 'note-window-tabs');
     strip.setAttribute('role', 'tablist');
+    // 标签栏右侧留一块空白：标签页再多也有地方按住拖动窗口（本次提出）。
+    const grip = el('div', 'note-window-grip');
+    grip.setAttribute('aria-hidden', 'true');
     const actions = el('div', 'window-actions');
     const pin = button('置顶窗口', '', 'pin', 'icon-button note-window-pin');
     pin.setAttribute('aria-pressed', 'false');
     const close = button('关闭窗口', '', 'x', 'icon-button');
     actions.append(pin, close);
-    header.append(emoji, title, strip, actions);
+    header.append(emoji, title, strip, grip, actions);
     const body = el('div', 'note-window-body');
     body.setAttribute('role', 'tabpanel');
     node.append(header, body);
@@ -148,6 +163,12 @@ window.NoteWindows = (function createNoteWindows() {
     node.addEventListener('pointerdown', function activate() { if (!entry.node.classList.contains('is-front')) bringToFront(entry); }, true);
     header.addEventListener('pointerdown', function startMove(event) { if (!event.target.closest('button,.note-window-tab')) startGesture(entry, event, 'move'); });
     header.addEventListener('dblclick', function toggleSize(event) { if (!event.target.closest('button,.note-window-tab')) maximize(entry); });
+    // 标签页放不下时横向滚动：滚轮的上下滚动换成左右。
+    strip.addEventListener('wheel', function scrollTabs(event) {
+      if (strip.scrollWidth <= strip.clientWidth || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+      event.preventDefault();
+      strip.scrollLeft += event.deltaY;
+    }, { passive: false });
     node.querySelectorAll('.note-window-resize').forEach(function grip(handle) { handle.addEventListener('pointerdown', function startResize(event) { startGesture(entry, event, handle.dataset.edge); }); });
     node.addEventListener('pointermove', moveGesture);
     node.addEventListener('pointerup', endGesture);
@@ -321,7 +342,8 @@ window.NoteWindows = (function createNoteWindows() {
     if (window.LiveMarkdown) window.LiveMarkdown.attach(input, { value: note.text, minHeight: 0, maxHeight: 'none' });
     input.addEventListener('input', function track() { entry.editing.text = input.liveMarkdown ? input.liveMarkdown.getValue() : input.value; });
     input.focus({ preventScroll: true });
-    const end = input.liveMarkdown ? input.liveMarkdown.getValue().length : input.value.length;
+    // 与卡片编辑一致，光标放在正文末尾（标签行之前）。
+    const end = window.NoteContent.bodyEnd(input.liveMarkdown ? input.liveMarkdown.getValue() : input.value);
     input.setSelectionRange(end, end);
   }
 
@@ -379,18 +401,27 @@ window.NoteWindows = (function createNoteWindows() {
         gesture.grab = { x: event.clientX - source.left, y: event.clientY - source.top };
         document.body.append(gesture.ghost);
         entry.node.classList.add('is-dragging-tab');
+        gesture.target.classList.add('is-drag-source');
       }
       const z = zoom();
       gesture.ghost.style.left = (point.x - gesture.grab.x) / z + 'px';
       gesture.ghost.style.top = (point.y - gesture.grab.y) / z + 'px';
-      markMerge(windowAt(point, entry, true));
+      const target = windowAt(point, entry, true), own = inTabBand(entry, point);
+      markMerge(target);
+      // 插入线标出松开后的位置：别的窗口的标签栏里，或本窗口的标签栏里（调整顺序）；拖到窗口外时拖影放大一点，表示拆成新窗口。
+      if (target) showTabDrop(target, point.x);
+      else if (own) showTabDrop(entry, point.x, gesture.tab);
+      else hideTabDrop();
+      gesture.ghost.classList.toggle('is-detaching', !target && !own && entry.tabs.length > 1);
       return;
     }
     if (gesture.mode === 'move') {
       entry.x = clamp(start.x + dx, 80 - start.width, view.width - 80);
       entry.y = clamp(start.y + dy, 0, view.height - 40);
-      // 标题栏拖到另一个窗口的标题栏上：松开后合并成标签页。
-      markMerge(windowAt(point, entry, true));
+      // 标题栏拖到另一个窗口的标题栏上：松开后合并成标签页，插入线标出位置。
+      const target = windowAt(point, entry, true);
+      markMerge(target);
+      if (target) showTabDrop(target, point.x); else hideTabDrop();
     } else {
       const mode = gesture.mode;
       if (mode.includes('e')) entry.width = clamp(start.width + dx, MIN_WIDTH, view.width - start.x);
@@ -402,21 +433,76 @@ window.NoteWindows = (function createNoteWindows() {
     apply(entry);
   }
 
-  /** @brief 标签页在同一个窗口的标签栏里的落点。 @param {object} entry 窗口。 @param {number} x 指针横坐标。 @return {number} 插入位置。 */
+  /**
+   * @brief 标签页在窗口标签栏里的落点；只有一个标签页（标题栏写标题）的窗口接在最后。
+   * @param {object} entry 窗口。 @param {number} x 指针横坐标。 @return {number} 插入位置。
+   */
   function tabIndexAt(entry, x) {
     const tabs = Array.from(entry.strip.querySelectorAll('.note-window-tab'));
+    if (!tabs.length) return entry.tabs.length;
     const index = tabs.findIndex(function before(tab) { const box = tab.getBoundingClientRect(); return x < box.left + box.width / 2; });
     return index < 0 ? tabs.length : index;
+  }
+
+  /** @brief 指针在窗口的标签栏一带（上下放宽一点）：在这里松开是调整顺序。 @param {object} entry 窗口。 @param {{x:number,y:number}} point 指针。 @return {boolean} 是否。 */
+  function inTabBand(entry, point) {
+    const header = entry.header.getBoundingClientRect();
+    return point.y >= header.top - MARGIN && point.y <= header.bottom + MARGIN && point.x >= header.left && point.x <= header.right;
+  }
+
+  /**
+   * @brief 标签栏里的插入线（本次提出）：一条强调色的竖线，上端一个小圆点，与卡片排序的插入线同一种样子。
+   * 插入线挂在 body 上、叠在拖影之上，拖影盖在落点上时也看得见。落点与松开时的计算（tabIndexAt）一致；
+   * 在本窗口里放回原处等于没动，不显示。指针靠近标签栏两端时横向滚动。
+   * @param {object} target 窗口。 @param {number} x 指针横坐标。 @param {string} dragged 本窗口里正在拖动的标签页。
+   */
+  function showTabDrop(target, x, dragged = '') {
+    const tabs = Array.from(target.strip.querySelectorAll('.note-window-tab'));
+    if (!target.node.classList.contains('has-tabs') || !tabs.length) { hideTabDrop(); return; }
+    const z = zoom(), strip = target.strip.getBoundingClientRect(), edge = MARGIN * 2 * z;
+    if (target.strip.scrollWidth > target.strip.clientWidth) {
+      if (x < strip.left + edge) target.strip.scrollLeft -= MARGIN;
+      else if (x > strip.right - edge) target.strip.scrollLeft += MARGIN;
+    }
+    const index = tabIndexAt(target, x), from = dragged ? target.tabs.indexOf(dragged) : -1;
+    if (from >= 0 && (index === from || index === from + 1)) { hideTabDrop(); return; }
+    const gap = (parseFloat(window.getComputedStyle(target.strip).columnGap) || 0) * z;
+    const box = tabs[Math.min(index, tabs.length - 1)].getBoundingClientRect();
+    if (!tabDrop) { tabDrop = el('span', 'note-window-tab-drop'); tabDrop.setAttribute('aria-hidden', 'true'); }
+    if (!tabDrop.isConnected) document.body.append(tabDrop);
+    tabDrop.style.left = clamp(index < tabs.length ? box.left - gap / 2 : box.right + gap / 2, strip.left, strip.right) + 'px';
+    tabDrop.style.top = box.top + 'px';
+    tabDrop.style.height = box.height + 'px';
+  }
+
+  /** 收起标签栏里的插入线。 */
+  function hideTabDrop() { if (tabDrop) tabDrop.remove(); }
+
+  /**
+   * @brief 从侧栏拖来的卡片经过窗口时（interactions.js 调用）：那个窗口的标题栏换成浅强调色，有标签页时标出插入位置；point 为空时清除。
+   * @param {{x:number,y:number}|null} point 指针。
+   */
+  function hint(point) {
+    const target = point ? windowAt(point) : null;
+    if (hinted !== target) {
+      if (hinted) hinted.node.classList.remove('is-merge-target');
+      hinted = target;
+      if (target) target.node.classList.add('is-merge-target');
+    }
+    if (target) showTabDrop(target, point.x); else hideTabDrop();
   }
 
   /** @brief 结束移动、缩放或拖动标签页：落在别的窗口标题栏上时合并，标签页拖到窗口外时拆成新窗口。 @param {PointerEvent} event 松开。 */
   function endGesture(event) {
     if (!gesture || event.pointerId !== gesture.pointerId) return;
     const done = gesture, entry = done.entry, point = { x: event.clientX, y: event.clientY };
+    const ghost = done.ghost ? done.ghost.getBoundingClientRect() : null;
     try { if (done.target.hasPointerCapture(event.pointerId)) done.target.releasePointerCapture(event.pointerId); } catch (error) { /* 已经释放。 */ }
     entry.node.classList.remove('is-moving', 'is-resizing', 'is-dragging-tab');
     if (done.merge) done.merge.node.classList.remove('is-merge-target');
     if (done.ghost) done.ghost.remove();
+    if (done.mode === 'tab') done.target.classList.remove('is-drag-source');
+    hideTabDrop();
     gesture = null;
     if (event.type === 'pointercancel') return;
     if (done.mode === 'move' && done.merge) {
@@ -435,8 +521,7 @@ window.NoteWindows = (function createNoteWindows() {
       pulse(done.merge);
       return;
     }
-    const header = entry.header.getBoundingClientRect();
-    if (point.y >= header.top - MARGIN && point.y <= header.bottom + MARGIN && point.x >= header.left && point.x <= header.right) {
+    if (inTabBand(entry, point)) {
       // 在本窗口的标签栏里松开：调整标签页的顺序。
       const from = entry.tabs.indexOf(done.tab);
       let to = tabIndexAt(entry, point.x);
@@ -446,11 +531,11 @@ window.NoteWindows = (function createNoteWindows() {
       renderTabs(entry);
       return;
     }
-    // 拖到窗口外：拆成新窗口，标题栏落在松开处。
+    // 拖到窗口外：拆成新窗口，标题栏落在松开处；与从侧栏拖出的窗口一样从拖影展开，默认置顶。
     if (entry.tabs.length < 2) return;
     if (entry.editing && entry.active === done.tab && !finishEditing(entry, true)) return;
     detachTab(entry, done.tab);
-    open(done.tab, { kind: 'detach', point: point, width: entry.width, pinned: entry.pinned });
+    open(done.tab, { kind: 'detach', point: point, ghost: ghost, pinned: true });
   }
 
   /** @brief 双击标题栏：放大到视口（侧栏之外），再双击还原。 @param {object} entry 窗口。 */
@@ -489,20 +574,20 @@ window.NoteWindows = (function createNoteWindows() {
   }
 
   /**
-   * @brief 新窗口的大小：宽度比来源的卡片宽一些，高度按内容决定并留一点白；长文不超过视口的七成高（本次提出）。
-   * @param {object} entry 窗口（内容已经写好）。 @param {object} options from 或 ghost 来源矩形，width 指定的宽度。
+   * @brief 新窗口的大小按内容决定（本次提出）：先按内容的自然宽度排一次（短的记录窗口就窄一些，长段落折到上限），再按这个宽度量高度；
+   * 四周的留白在样式里（.note-window-body 的内边距）。宽 280–560、高不超过 600（按 13px 字号计）与视口的六成，长文在窗口里滚动。
+   * @param {object} entry 窗口（内容已经写好）。
    */
-  function fitSize(entry, options) {
-    const view = viewport(), z = zoom(), source = options.ghost || options.from;
-    const base = options.width || (source ? source.width * 1.25 : 440 * z);
-    entry.width = clamp(Math.round(base), Math.min(MIN_WIDTH, view.width - MARGIN * 2), Math.max(MIN_WIDTH, Math.min(640 * z, view.width - MARGIN * 2)));
-    entry.height = MIN_HEIGHT;
-    apply(entry);
-    const header = entry.header.getBoundingClientRect().height, style = window.getComputedStyle(entry.body);
-    const first = entry.body.firstElementChild, last = entry.body.lastElementChild;
-    const content = first && last ? last.getBoundingClientRect().bottom - first.getBoundingClientRect().top : 0;
-    const padding = (parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)) * z, border = 2 * z;
-    entry.height = clamp(Math.ceil(header + content + padding + border), MIN_HEIGHT, Math.max(MIN_HEIGHT, Math.round(view.height * 0.72)));
+  function fitSize(entry) {
+    const view = viewport(), z = zoom(), style = entry.node.style;
+    const maxWidth = Math.max(Math.min(MIN_WIDTH, view.width - MARGIN * 2), Math.min(FIT_WIDTH[1] * z, view.width - MARGIN * 2));
+    style.width = 'max-content';
+    style.maxWidth = maxWidth / z + 'px';
+    style.height = 'auto';
+    entry.width = clamp(Math.ceil(entry.node.getBoundingClientRect().width), Math.min(FIT_WIDTH[0] * z, maxWidth), maxWidth);
+    style.maxWidth = '';
+    style.width = entry.width / z + 'px';
+    entry.height = clamp(Math.ceil(entry.node.getBoundingClientRect().height), MIN_HEIGHT, Math.max(MIN_HEIGHT, Math.min(view.height * 0.6, FIT_HEIGHT * z)));
   }
 
   /**
@@ -535,7 +620,7 @@ window.NoteWindows = (function createNoteWindows() {
   /**
    * @brief 打开记录窗口；已经在某个窗口中时切到它的标签页并提到最前。
    * @param {string} id 记录。 @param {object} options kind（expand、drop、detach），from 来源矩形（展开全文时是卡片），point 松开处，
-   * ghost 拖影矩形，tabs 一起放进这个窗口的其它记录，pinned 是否置顶，width 指定宽度。
+   * ghost 拖影矩形，tabs 一起放进这个窗口的其它记录，pinned 是否置顶。
    * @return {object|null} 窗口。
    */
   function open(id, options = {}) {
@@ -550,32 +635,35 @@ window.NoteWindows = (function createNoteWindows() {
       return existing;
     }
     const entry = create();
+    // 怎么打开的决定关闭时怎么回去：拖出的（drop、detach）倾斜着缩回卡片，展开全文的原路滑回。
+    entry.origin = options.kind === 'drop' || options.kind === 'detach' ? 'drag' : 'expand';
     windows.set(entry.id, entry);
     entry.tabs = [];
     document.body.append(entry.node);
     addTabs(entry, [id].concat(options.tabs || []).filter(function unique(item, index, list) { return list.indexOf(item) === index; }));
     activate(entry, id);
     setPinned(entry, Boolean(options.pinned));
-    fitSize(entry, options);
+    fitSize(entry);
     position(entry, options);
     apply(entry);
     restack();
-    if (options.kind === 'drop') morph(entry, options.ghost, { duration: duration('--sn-duration-slow') * 1.6, easing: easing('--sn-ease-standard'), rotate: DRAG_TILT, opacity: 0.9, settle: true });
+    if (entry.origin === 'drag' && options.ghost) morph(entry, options.ghost, { duration: duration('--sn-duration-slow') * 1.6, easing: easing('--sn-ease-standard'), rotate: DRAG_TILT, opacity: 0.9, settle: true });
     else if (options.kind === 'expand') morph(entry, options.from, { duration: duration('--sn-duration-slow') * 1.3, easing: easing('--sn-ease-enter'), opacity: 0.5 });
     entry.node.focus({ preventScroll: true });
     return entry;
   }
 
   /**
-   * @brief 拖出侧栏松开后打开窗口（拖出的窗口默认置顶）：落在已开的窗口上时放进它的标签页，否则多选的几条放进同一个新窗口。
+   * @brief 拖出侧栏松开后打开窗口（拖出的窗口默认置顶）：落在已开的窗口上时放进它的标签页（插入线标出的位置），否则多选的几条放进同一个新窗口。
    * @param {Iterable<string>} ids 记录。 @param {{x:number,y:number}} point 松开处。 @param {DOMRect|null} ghost 拖影矩形。
    */
   function openFromDrag(ids, point, ghost) {
+    hint(null);
     const list = Array.from(ids).filter(function usable(id) { return noteOf(id); }).slice(0, 12);
     if (!list.length) return;
     const target = windowAt(point);
     if (target) {
-      addTabs(target, list, target.node.classList.contains('has-tabs') ? tabIndexAt(target, point.x) : -1);
+      addTabs(target, list, tabIndexAt(target, point.x));
       bringToFront(target);
       pulse(target);
       target.node.focus({ preventScroll: true });
@@ -584,8 +672,17 @@ window.NoteWindows = (function createNoteWindows() {
     open(list[0], { kind: 'drop', point: point, ghost: ghost, tabs: list.slice(1), pinned: true });
   }
 
+  /** @brief 窗口收回卡片后，卡片轻轻一顿，表示记录回到了这里。 @param {string} id 记录。 */
+  function land(id) {
+    const card = cardElement(id);
+    if (!card || reducedMotion() || typeof card.animate !== 'function') return;
+    card.animate([{ transform: 'none' }, { offset: 0.4, transform: 'scale(1.015)' }, { transform: 'none' }], { duration: duration('--sn-duration-normal') * 2, easing: easing('--sn-ease-standard') });
+  }
+
   /**
-   * @brief 关闭窗口：先结束编辑（保存），再缩小并滑回侧栏中当前标签页的卡片，卡片看不见时原地淡出。
+   * @brief 关闭窗口：先结束编辑（保存），再收回侧栏中当前标签页的卡片（本次提出：与打开呼应）。
+   * @details 拖出的窗口是打开的倒放：先轻轻提起，再缩到卡片的大小、倾斜成拖影的样子落向卡片，落下时摆正淡出，卡片轻轻一顿；
+   * 时长与缓动与打开相同。展开全文的窗口原路滑回卡片。卡片看不见时原地提起、倾斜着缩小淡出。
    * @param {object} entry 窗口。 @param {object} options animate 是否播放关闭动画。
    */
   function closeEntry(entry, options = {}) {
@@ -596,19 +693,29 @@ window.NoteWindows = (function createNoteWindows() {
     restack();
     const remove = function remove() { entry.node.remove(); };
     if (options.animate === false || reducedMotion() || typeof entry.node.animate !== 'function') { remove(); return; }
-    const from = entry.node.getBoundingClientRect(), to = cardRect(entry.active), z = zoom();
+    const from = entry.node.getBoundingClientRect(), to = cardRect(entry.active), z = zoom(), id = entry.active, dragged = entry.origin === 'drag';
     entry.node.style.pointerEvents = 'none';
     if (to && from.width && from.height) {
-      // 类似程序坞收起窗口，但不扭曲：缩小并滑回原来的卡片，快到时淡出。
-      const dx = (to.left - from.left) / z, dy = (to.top - from.top) / z, sx = to.width / from.width, sy = to.height / from.height;
-      entry.node.animate([
+      const shrink = 'translate(' + (to.left - from.left) / z + 'px, ' + (to.top - from.top) / z + 'px) scale(' + to.width / from.width + ', ' + to.height / from.height + ')';
+      const frames = dragged ? [
+        { transformOrigin: '50% 50%', transform: 'none', opacity: 1 },
+        { offset: 0.28, transformOrigin: '50% 50%', transform: 'scale(1.012)', opacity: 1 },
+        { offset: 0.85, transformOrigin: '0 0', transform: shrink + ' rotate(' + DRAG_TILT + 'deg)', opacity: 0.9 },
+        { transformOrigin: '0 0', transform: shrink + ' rotate(0deg)', opacity: 0 }
+      ] : [
         { transformOrigin: '0 0', transform: 'none', opacity: 1 },
-        { offset: 0.8, transformOrigin: '0 0', transform: 'translate(' + dx + 'px, ' + dy + 'px) scale(' + sx + ', ' + sy + ')', opacity: 0.85 },
-        { transformOrigin: '0 0', transform: 'translate(' + dx + 'px, ' + dy + 'px) scale(' + sx + ', ' + sy + ')', opacity: 0 }
-      ], { duration: duration('--sn-duration-slow') * 1.3, easing: easing('--sn-ease-standard') }).finished.then(remove, remove);
+        { offset: 0.8, transformOrigin: '0 0', transform: shrink, opacity: 0.85 },
+        { transformOrigin: '0 0', transform: shrink, opacity: 0 }
+      ];
+      entry.node.animate(frames, { duration: duration('--sn-duration-slow') * (dragged ? 1.6 : 1.3), easing: easing('--sn-ease-standard') }).finished.then(function landed() { remove(); land(id); }, remove);
       return;
     }
-    entry.node.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(0.97)' }], { duration: duration('--sn-duration-fast'), easing: easing('--sn-ease-exit') }).finished.then(remove, remove);
+    const away = dragged ? [
+      { transformOrigin: '50% 50%', transform: 'none', opacity: 1 },
+      { offset: 0.3, transformOrigin: '50% 50%', transform: 'scale(1.012)', opacity: 1 },
+      { transformOrigin: '50% 50%', transform: 'rotate(' + DRAG_TILT + 'deg) scale(0.92)', opacity: 0 }
+    ] : [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(0.97)' }];
+    entry.node.animate(away, { duration: dragged ? duration('--sn-duration-slow') * 1.2 : duration('--sn-duration-fast'), easing: easing('--sn-ease-exit') }).finished.then(remove, remove);
   }
 
   /** @brief 关闭全部记录窗口（快捷键「关闭全部记录窗口」）。 @return {boolean} 是否有窗口被关闭。 */
@@ -629,6 +736,7 @@ window.NoteWindows = (function createNoteWindows() {
   return Object.freeze({
     open: open,
     openFromDrag: openFromDrag,
+    hint: hint,
     closeAll: closeAll,
     refresh: refresh,
     count: function count() { return windows.size; },

@@ -89,6 +89,49 @@
     return compose(content.body, content.tags.filter(function keepTag(value) { return tagKey(value) !== tagKey(tag); }));
   }
 
+  /* ==================== 正文结构：标题行、标签行与正文末尾 ==================== */
+
+  /** @brief 末尾标签行的起点：最后一个非空行只有 #标签 时就是标签行。 @param {string} source 原文。 @return {number} 起点，没有标签行时为 -1。 */
+  function tagLineStart(source) {
+    const match = /(?:^|\n)([\t ]*#[\p{L}\p{N}_-]+(?:[\t ]+#[\p{L}\p{N}_-]+)*[\t ]*)\s*$/u.exec(String(source || ''));
+    return match ? match.index + (match[0].startsWith('\n') ? 1 : 0) : -1;
+  }
+
+  /** @brief 这一行只有一个图片或文件引用（附件整块占一行）。 @param {string} line 一行原文。 @return {boolean} 是否附件行。 */
+  function isAttachmentLine(line) {
+    return /^\s*!?\[(?:\\.|[^\]\\])*\]\([^)\r\n]*\)\s*$/.test(String(line || ''));
+  }
+
+  /**
+   * @brief 卡片标题所在的行：第一个非空行是普通文字或 Markdown 标题时才算，与卡片标题行的取法一致；
+   * 第一行是代码、列表、引用、附件、分隔线或只有标签时，卡片整段显示正文，没有单独的标题行。
+   * @param {string} source 原文。 @return {{start:number,end:number}|null} 这一行的起止（不含换行）。
+   */
+  function titleLine(source) {
+    const text = String(source || '');
+    const lines = /[^\r\n]*(?:\r\n|\r|\n|$)/g;
+    let match;
+    while ((match = lines.exec(text)) && match[0]) {
+      const line = match[0].replace(/[\r\n]+$/, '');
+      if (!line.trim()) continue;
+      const structured = /^\s*(?:`{3,}|~{3,}|>|(?:-\s*){3,}$|(?:_\s*){3,}$|(?:\*\s*){3,}$)|^(?: {4}|\t)|^\s*[-*+]\s|^\s*\d+[.)]\s/.test(line);
+      if (structured || isAttachmentLine(line) || filePath(line) || tagLineStart(line) === 0) return null;
+      return { start: match.index, end: match.index + line.length };
+    }
+    return null;
+  }
+
+  /**
+   * @brief 正文末尾：标签行之前最后一个非空字符之后（本次提出：进入编辑时光标放在这里，接着写正文，而不是落在标签行末尾）。
+   * 只有标签、没有正文时放在全文末尾，免得输入的文字并进标签行。
+   * @param {string} source 原文。 @return {number} 原文偏移。
+   */
+  function bodyEnd(source) {
+    const text = String(source || ''), tags = tagLineStart(text);
+    const body = (tags < 0 ? text : text.slice(0, tags)).replace(/\s+$/, '');
+    return body ? body.length : text.length;
+  }
+
   /* ==================== 文件引用与真实校验 ==================== */
 
   /** @brief 判断引用是否为浏览器所选文件的持久标识。 @param {string} value 引用。 @return {boolean} 是否为文件标识。 */
@@ -518,5 +561,5 @@
     return features.length ? features : ['文本'];
   }
 
-  window.NoteContent = Object.freeze({ parse: parse, compose: compose, canonicalize: canonicalize, removeTag: removeTag, renderMarkdown: renderMarkdown, renderInline: renderInline, getFeatures: getFeatures, files: files, isFileToken: isFileToken, fileLabel: fileLabel, createFileReference: createFileReference, registerFile: registerFile, checkFile: checkFile, filePath: filePath, fileKey: fileKey, tagKey: tagKey });
+  window.NoteContent = Object.freeze({ parse: parse, compose: compose, canonicalize: canonicalize, removeTag: removeTag, tagLineStart: tagLineStart, isAttachmentLine: isAttachmentLine, titleLine: titleLine, bodyEnd: bodyEnd, renderMarkdown: renderMarkdown, renderInline: renderInline, getFeatures: getFeatures, files: files, isFileToken: isFileToken, fileLabel: fileLabel, createFileReference: createFileReference, registerFile: registerFile, checkFile: checkFile, filePath: filePath, fileKey: fileKey, tagKey: tagKey });
 })();
