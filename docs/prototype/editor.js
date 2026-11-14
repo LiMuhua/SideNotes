@@ -834,7 +834,7 @@
     /* ==================== 拖动附件调整位置（本次提出） ==================== */
 
     /**
-     * @brief 按住编辑面中的图片或文件块：移动 4 像素后开始拖动，松开时整块移到插入线处；没有移动就是单击，照常打开附件弹窗。
+     * @brief 按住编辑面中的图片或文件块：移动 4 像素后开始拖动，松开时移到插入光标处；没有移动就是单击，照常打开附件弹窗。
      * @details 不用浏览器的原生拖放：按下附件时要阻止默认行为，光标与焦点才不会被附件夺走（见 mousedown），原生拖放因此无法开始。
      * Esc 取消拖动，不退出编辑。
      * @param {PointerEvent} event 按下。
@@ -844,7 +844,7 @@
       if (!node || !this.element.contains(node) || event.button !== 0 || attachmentDrag || this.composing || this.element.contentEditable === 'false') return;
       const start = Number(node.dataset.mdStart), end = Number(node.dataset.mdEnd);
       if (!(end > start) || !this.value.slice(start, end).trim()) return;
-      const drag = attachmentDrag = { node: node, pointerId: event.pointerId, x: event.clientX, y: event.clientY, start: start, end: end, active: false, slot: -1 };
+      const drag = attachmentDrag = { node: node, pointerId: event.pointerId, x: event.clientX, y: event.clientY, start: start, end: end, active: false, target: -1 };
       const move = (next) => { if (next.pointerId === drag.pointerId) this.moveAttachmentDrag(drag, next); };
       const stop = (last) => {
         if (last.type === 'keydown') {
@@ -864,7 +864,8 @@
     }
 
     /**
-     * @brief 拖动中：拖影跟随指针（与卡片拖影同样倾斜），插入线落在行与行之间；指针靠近编辑区上下边缘时滚动。
+     * @brief 拖动中：拖影跟随指针（与卡片拖影同样倾斜），插入光标落在指针处的字符之间（第四次反馈：不再只按行）；
+     * 指针靠近编辑区上下边缘时滚动。
      * @param {object} drag 拖动。 @param {PointerEvent} event 移动。
      */
     moveAttachmentDrag(drag, event) {
@@ -878,10 +879,9 @@
         drag.ghost = element('div', 'md-drag-ghost');
         drag.ghost.setAttribute('aria-hidden', 'true');
         drag.ghost.append(drag.node.cloneNode(true));
-        // 插入线与卡片排序相同：一条强调色的线，左端一个小圆点。
-        drag.guide = element('div', 'card-drop-guide md-drop-guide');
+        // 插入光标：一条强调色的竖线，上端一个小圆点（与标签页的插入线同一种样子），落在字符之间。
+        drag.guide = element('div', 'md-drop-caret');
         drag.guide.hidden = true;
-        drag.guide.append(element('span', 'card-drop-guide-line'));
         document.body.append(drag.ghost, drag.guide);
         drag.node.classList.add('is-drag-source');
         document.body.classList.add('is-dragging-attachment');
@@ -894,33 +894,54 @@
         if (event.clientY < box.top + edge) this.element.scrollTop -= Math.ceil((box.top + edge - event.clientY) / 3);
         else if (event.clientY > box.bottom - edge) this.element.scrollTop += Math.ceil((event.clientY - box.bottom + edge) / 3);
       }
-      const rows = Array.from(this.element.children);
-      let slot = rows.findIndex(function above(row) { const rect = row.getBoundingClientRect(); return event.clientY < rect.top + rect.height / 2; });
-      if (slot < 0) slot = rows.length;
-      slot = Math.max(drag.bounds.min, Math.min(drag.bounds.max, slot));
-      // 附件独占一行时，放回它自己的上下边缘等于没动，不显示插入线。
-      drag.slot = drag.bounds.own && slot >= drag.bounds.own.from && slot <= drag.bounds.own.to ? -1 : slot;
-      if (drag.slot < 0 || !rows.length) { drag.guide.hidden = true; return; }
-      const last = rows[rows.length - 1].getBoundingClientRect(), y = drag.slot < rows.length ? rows[drag.slot].getBoundingClientRect().top : last.bottom;
-      drag.guide.hidden = y < box.top - 1 || y > box.bottom + 1;
-      drag.guide.style.left = last.left + 'px';
-      drag.guide.style.width = Math.max(0, last.width) + 'px';
-      drag.guide.style.top = y + 'px';
+      // 指针处的原文位置，限制在标题行之后、正文末尾之前；落在附件自身（含紧挨着的两端）等于没动，不显示插入光标。
+      const target = Math.max(drag.bounds.min, Math.min(drag.bounds.max, this.offsetAt(event.clientX, event.clientY)));
+      drag.target = target >= drag.bounds.own.start && target <= drag.bounds.own.end ? -1 : target;
+      const caret = drag.target < 0 ? null : this.caretRect(drag.target);
+      if (!caret) { drag.guide.hidden = true; return; }
+      drag.guide.hidden = caret.top + caret.height < box.top - 1 || caret.top > box.bottom + 1;
+      drag.guide.style.left = caret.left + 'px';
+      drag.guide.style.top = caret.top + 'px';
+      drag.guide.style.height = caret.height + 'px';
     }
 
     /**
-     * @brief 附件可以放的范围：标题行之后、标签行之前（标题与标签的位置不变，与插入附件的规则一致）；附件独占一行时记下它所在的行。
-     * 行号按移动前的原文计；只去掉附件这一段时行数不变，所以按去掉附件后的原文找标题与标签。
-     * @param {object} drag 拖动。 @return {{min:number,max:number,own:object|null}} 插入位置的上下限与附件所在的行。
+     * @brief 原文偏移在屏幕上的位置（拖动附件时的插入光标）：取这个位置的文字矩形；紧挨着图片、文件块或空行时，取它们的边缘。
+     * @param {number} offset 原文偏移。 @return {{left:number,top:number,height:number}|null} 视口坐标。
+     */
+    caretRect(offset) {
+      const line = this.element.children[this.lineAt(offset)];
+      if (!line) return null;
+      const widget = Array.from(line.querySelectorAll('[data-md-attachment]')).find(function adjacent(node) { return Number(node.dataset.mdStart) === offset || Number(node.dataset.mdEnd) === offset; });
+      if (widget) {
+        const box = widget.getBoundingClientRect();
+        return { left: Number(widget.dataset.mdStart) === offset ? box.left : box.right, top: box.top, height: box.height };
+      }
+      const point = this.domPoint(offset), range = document.createRange();
+      try { range.setStart(point.node, point.offset); range.collapse(true); } catch (error) { return null; }
+      const rect = Array.from(range.getClientRects()).find(function visible(item) { return item.height > 0; });
+      if (rect) return { left: rect.left, top: rect.top, height: rect.height };
+      const box = line.getBoundingClientRect();
+      return { left: box.left, top: box.top, height: box.height };
+    }
+
+    /**
+     * @brief 附件可以放的范围（按移动前的原文偏移计）：标题行之后、正文末尾之前，标题与标签不变（与插入附件的规则一致）；
+     * 附件自身连同紧挨着的空白算作原处。标题与正文末尾按去掉附件后的原文找，再换回移动前的偏移。
+     * @param {object} drag 拖动。 @return {{min:number,max:number,own:{start:number,end:number}}} 落点的上下限与原处的范围。
      */
     attachmentBounds(drag) {
-      const lines = splitLines(this.value), index = this.lineAt(drag.start), line = lines[index];
-      const rest = line.text.slice(0, drag.start - line.start) + line.text.slice(drag.end - line.start);
-      const alone = !rest.replace(/^\s{0,3}(?:(?:[-+*]|\d+[.)])\s*(?:\[[ xX]\]\s*)?|>\s*)/, '').trim();
-      const remaining = this.value.slice(0, drag.start) + this.value.slice(drag.end);
-      const lineOf = function lineOf(offset) { return splitLines(remaining.slice(0, offset)).length - 1; };
-      const content = window.NoteContent, title = content ? content.titleLine(remaining) : null, tags = content ? content.tagLineStart(remaining) : -1;
-      return { min: title ? lineOf(title.start) + 1 : 0, max: tags >= 0 ? lineOf(tags) : lines.length, own: alone ? { from: index, to: index + 1 } : null };
+      const length = drag.end - drag.start, remaining = this.value.slice(0, drag.start) + this.value.slice(drag.end);
+      const original = function original(offset) { return offset < drag.start ? offset : offset + length; };
+      const content = window.NoteContent, title = content ? content.titleLine(remaining) : null;
+      // 标题行之后：下一行的开头；标题后面没有换行时（只有标题一行）是标题行末尾，松开时另起一行。
+      const next = title ? /^(?:\r\n|\r|\n)/.exec(remaining.slice(title.end)) : null;
+      const min = title ? title.end + (next ? next[0].length : 0) : 0;
+      const max = content ? content.bodyEnd(remaining) : remaining.length;
+      let ownStart = drag.start, ownEnd = drag.end;
+      while (ownStart > 0 && /[\t ]/.test(this.value[ownStart - 1])) ownStart -= 1;
+      while (ownEnd < this.value.length && /[\t ]/.test(this.value[ownEnd])) ownEnd += 1;
+      return { min: original(min), max: Math.max(original(min), original(max)), own: { start: ownStart, end: ownEnd } };
     }
 
     /** @brief 结束拖动：松开时移动附件，取消或没有落点时不改动。 @param {object} drag 拖动。 @param {boolean} commit 是否松开在落点上。 */
@@ -934,17 +955,19 @@
       // 松开后浏览器还会派发一次单击，不能当作点开附件。
       this.suppressClick = true;
       window.setTimeout(() => { this.suppressClick = false; }, 0);
-      if (!commit || drag.slot < 0 || this.destroyed) return;
+      if (!commit || drag.target < 0 || this.destroyed) return;
       if (!this.hasFocus()) this.element.focus({ preventScroll: true });
-      this.moveBlock(drag.start, drag.end, drag.slot);
+      this.moveAttachment(drag.start, drag.end, drag.target);
     }
 
     /**
-     * @brief 把一段原文（附件引用）移成第 slot 行之前的单独一行，记入撤销历史；原来那一行只剩空白或列表、引用标记时整行删掉。
-     * @param {number} start 起点。 @param {number} end 终点。 @param {number} slot 插在第几行之前（按移动前的行号，等于行数时接在末尾）。
+     * @brief 把一段原文（附件引用）移到字符位置 target（第四次反馈：落点精确到字符），记入撤销历史。
+     * 原来那一行只剩空白或列表、引用标记时整行删掉；夹在两个空格之间时去掉一个，免得留下双空格。
+     * 落点在标题行末尾（只有标题一行）时另起一行，标题不变。
+     * @param {number} start 起点。 @param {number} end 终点。 @param {number} target 落点（按移动前的原文偏移计）。
      * @return {boolean} 是否移动。
      */
-    moveBlock(start, end, slot) {
+    moveAttachment(start, end, target) {
       const text = this.value.slice(start, end).trim();
       if (!text) return false;
       const lines = splitLines(this.value), eol = (this.value.match(/\r\n|\r|\n/) || ['\n'])[0];
@@ -955,16 +978,19 @@
         cutStart = line.start;
         cutEnd = line.end + line.eol.length;
         if (!line.eol && index > 0) cutStart -= lines[index - 1].eol.length;
+        // 这一行前后都是空行时一并去掉后面那个，免得留下连着的两行空白。
+        const previous = lines[index - 1], following = lines[index + 1];
+        if (line.eol && previous && !previous.text.trim() && following && !following.text.trim()) cutEnd = following.end + following.eol.length;
       } else if (this.value[start - 1] === ' ' && this.value[end] === ' ') cutEnd += 1;
-      const at = slot < lines.length ? lines[slot].start : this.value.length;
-      if (at > cutStart && at < cutEnd) return false;
-      const rest2 = this.value.slice(0, cutStart) + this.value.slice(cutEnd);
-      const position = at >= cutEnd ? at - (cutEnd - cutStart) : at;
-      const append = slot >= lines.length && position >= rest2.length && rest2.length > 0;
-      const insert = append ? (/(?:\r\n|\r|\n)$/.test(rest2) ? '' : eol) + text : text + eol;
+      if (target > cutStart && target < cutEnd) return false;
+      const remaining = this.value.slice(0, cutStart) + this.value.slice(cutEnd);
+      const position = Math.min(remaining.length, target >= cutEnd ? target - (cutEnd - cutStart) : target);
+      const content = window.NoteContent, title = content ? content.titleLine(remaining) : null;
+      const insert = title && position <= title.end ? eol + text : text;
+      const at = title && position <= title.end ? title.end : position;
       this.remember({ start: start, end: end, direction: 'none' });
-      this.value = rest2.slice(0, position) + insert + rest2.slice(position);
-      const caret = position + (append ? insert.length : text.length);
+      this.value = remaining.slice(0, at) + insert + remaining.slice(at);
+      const caret = at + insert.length;
       this.selection = { start: caret, end: caret, direction: 'none' };
       this.activeLine = this.lineAt(caret);
       this.render(this.selection);

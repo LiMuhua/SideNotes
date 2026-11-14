@@ -54,16 +54,39 @@
   }
   /** @brief 多选和排序之后不再触发双击复制。 @param {MouseEvent} event 双击。 */
   function captureDoubleClick(event){const target=targetOf(event);if(target&&target.closest('.note-card')&&(hasSelection()||now()-tools.lastDragAt<650))consume(event);}
-  /** @brief 按照批次目的地更新状态，先持久化再刷新。 @param {string} destination 目的地。 @return {boolean} 是否成功。 */
-  function moveRecords(source,destination){
-    const ids=new Set(source||[]),previous=new Map();if(!ids.size)return false;const changedAt=Date.now();
-    const notes=state.notes.map(function change(note){if(!ids.has(note.id)||note.status==='trash')return note;previous.set(note.id,{status:note.status,pinned:note.pinned,deletedAt:note.deletedAt,previousStatus:note.previousStatus,order:note.order});
-      if(destination==='trash')return {...note,status:'trash',previousStatus:note.status,deletedAt:changedAt,updatedAt:changedAt};
-      return {...note,status:destination==='archive'?'archived':'active',pinned:destination==='archive'?note.pinned:destination==='pinned',order:null,updatedAt:changedAt};});
-    if(!persistSnapshot(notes)){toast('移动未保存，请重试',null,true);return false;}
-    const message=destination==='trash'?'已移入回收站':destination==='archive'?'已移到归档':destination==='pinned'?'已移到置顶':'已移到工作区';
-    clearSelection();renderNotes();toast(message+' '+ids.size+' 条记录',{label:'撤销',run:function undoBatch(){const restored=state.notes.map(function restore(note){return previous.has(note.id)?{...note,...previous.get(note.id)}:note;});if(persistSnapshot(restored))renderNotes();}});return true;
+  /**
+   * @brief 从一个页签移到另一个页签时记录的变化（第四次反馈：标签页签按标签归类，去掉了归档）。
+   * 拖到标签页签：加上这个标签，从别的标签页签来时去掉原来那个；拖到随记：去掉原页签的标签，从置顶来时取消置顶；拖到置顶：只置顶。
+   * @param {object} note 记录。 @param {string} from 原页签。 @param {string} to 目标页签。 @return {object} 要改的字段。
+   */
+  function tabPatch(note,from,to){
+    if(to==='pinned')return {pinned:true};
+    const patch={},tabs=window.SidebarTabs,fromTag=tabs.tagOf(from),toTag=tabs.tagOf(to);
+    if(to==='workspace'&&from==='pinned')patch.pinned=false;
+    if(fromTag||toTag){
+      const parts=noteParts(note);let tags=parts.tags.slice();
+      if(fromTag&&(!toTag||tagKey(fromTag)!==tagKey(toTag)))tags=tags.filter(function keep(tag){return tagKey(tag)!==tagKey(fromTag);});
+      if(toTag&&!tags.some(function same(tag){return tagKey(tag)===tagKey(toTag);}))tags.push(toTag);
+      if(tags.join('\n')!==parts.tags.join('\n'))patch.text=window.NoteContent.compose(parts.body,tags);
+    }
+    return patch;
   }
+  /**
+   * @brief 按照批次目的地更新状态，先持久化再刷新；提示条可以撤销。移出标签页签后还在别的固定标签里的，提示写明在哪里。
+   * @param {Iterable<string>} source 记录。 @param {string} destination 目的地：trash 或页签。 @param {string} from 原页签，默认当前页签。 @return {boolean} 是否成功。
+   */
+  function moveRecords(source,destination,from=ui.tab){
+    const ids=new Set(source||[]),previous=new Map();if(!ids.size)return false;const changedAt=Date.now();
+    const notes=state.notes.map(function change(note){if(!ids.has(note.id)||note.status==='trash')return note;previous.set(note.id,{status:note.status,pinned:note.pinned,deletedAt:note.deletedAt,previousStatus:note.previousStatus,order:note.order,text:note.text,updatedAt:note.updatedAt});
+      if(destination==='trash')return {...note,status:'trash',previousStatus:'active',deletedAt:changedAt,updatedAt:changedAt};
+      return {...note,...tabPatch(note,from,destination),status:'active',order:null,updatedAt:changedAt};});
+    if(!persistSnapshot(notes)){toast('移动未保存，请重试',null,true);return false;}
+    let message=destination==='trash'?'已移入回收站 '+ids.size+' 条记录':'已移到'+window.SidebarTabs.label(destination)+' '+ids.size+' 条记录';
+    if(destination==='workspace'){const still=notes.filter(function moved(note){return ids.has(note.id);}).map(window.SidebarTabs.pinnedTagOf).filter(Boolean);if(still.length)message='已移出'+window.SidebarTabs.label(from)+'，'+(still.length<ids.size?still.length+' 条':'')+'仍在「'+still[0]+'」'+(new Set(still).size>1?'等页签':'');}
+    clearSelection();renderNotes();toast(message,{label:'撤销',run:function undoBatch(){const restored=state.notes.map(function restore(note){return previous.has(note.id)?{...note,...previous.get(note.id)}:note;});if(persistSnapshot(restored))renderNotes();}});return true;
+  }
+  /** @brief 菜单「移到…」（第四次反馈）：与把卡片拖到页签上相同。 @param {Array<string>} ids 记录。 @param {string} destination 页签。 @return {boolean} 是否成功。 */
+  function moveTo(ids,destination){return destination!==ui.tab&&moveRecords(ids,destination,ui.tab);}
   /** @brief 取得记录标题用于落点提示。 @param {object} note 记录。 @return {string} 短标题。 */
   function noteTitle(note){const first=String(note&&note.text||'').split(/\r?\n/).find(function content(text){return text.trim();})||'图片记录';return first.trim().slice(0,18);}
   /** @brief 清除当前插入线。 @param {object} gesture 手势。 */
@@ -74,7 +97,7 @@
     dragTrash.append(icon('trash'),el('span','drag-trash-label','移入回收站'));elements.sidebar.append(dragTrash);
   }
   /** @brief 清除 Tab 悬停计时与提示。 @param {object} gesture 手势。 */
-  function clearTabTarget(gesture){window.clearTimeout(gesture.tabTimer);gesture.tabTimer=0;gesture.tabCandidate='';document.querySelectorAll('.sidebar-tabs .tab.is-drag-target').forEach(function clear(tab){tab.classList.remove('is-drag-target');});}
+  function clearTabTarget(gesture){window.clearTimeout(gesture.tabTimer);gesture.tabTimer=0;gesture.tabCandidate='';document.querySelectorAll('.sidebar-tabs .tab.is-drag-target, .tab-menu .is-drag-target').forEach(function clear(tab){tab.classList.remove('is-drag-target');});}
   /** @brief 在悬停 Tab 后切换列表，保留当前拖动手势。 @param {object} gesture 手势。 @param {string} destination 目标 Tab。 */
   function activateDragTab(gesture,destination){
     if(tools.gesture!==gesture||!gesture.active||gesture.tabCandidate!==destination||destination===ui.tab)return;
@@ -85,11 +108,15 @@
   }
   /** @brief 记录指针当前悬停的 Tab，并在短暂停留后切换页面。 @param {object} gesture 手势。 @param {HTMLElement|null} tab Tab 按钮。 */
   function setTabTarget(gesture,tab){
-    const destination=tab&&tab.dataset.tab||'';
-    if(gesture.tabCandidate!==destination){window.clearTimeout(gesture.tabTimer);gesture.tabTimer=0;document.querySelectorAll('.sidebar-tabs .tab.is-drag-target').forEach(function clear(node){node.classList.remove('is-drag-target');});}
+    // 最后一格（第四次反馈）：停 0.6 秒展开菜单，菜单中收起的页签可以作为落点；菜单里的页签只作落点，不切换列表。
+    const slot=Boolean(tab&&tab.classList.contains('tab-more')),inMenu=Boolean(tab&&tab.closest('.tab-menu'));
+    const destination=tab?(slot?'more:'+(tab.dataset.tab||''):tab.dataset.tab||''):'';
+    if(gesture.tabCandidate!==destination){window.clearTimeout(gesture.tabTimer);gesture.tabTimer=0;document.querySelectorAll('.sidebar-tabs .tab.is-drag-target, .tab-menu .is-drag-target').forEach(function clear(node){node.classList.remove('is-drag-target');});}
+    else if(gesture.tabTimer||!tab)return;
     gesture.tabCandidate=destination;if(!tab)return;
     tab.classList.add('is-drag-target');
-    if(destination!==ui.tab&&!gesture.tabTimer)gesture.tabTimer=window.setTimeout(function switchTab(){gesture.tabTimer=0;activateDragTab(gesture,destination);},240);
+    if(slot){if(!gesture.menuOpened)gesture.tabTimer=window.setTimeout(function openSlot(){gesture.tabTimer=0;if(tools.gesture!==gesture||!gesture.active)return;gesture.menuOpened=true;window.SidebarTabs.openMenu({dragging:true});},600);return;}
+    if(!inMenu&&destination!==ui.tab&&!gesture.tabTimer)gesture.tabTimer=window.setTimeout(function switchTab(){gesture.tabTimer=0;activateDragTab(gesture,destination);},240);
   }
   /** @brief 在列表边缘或卡片间隙选择最近的有效插入点。 @param {object} gesture 手势。 */
   function updateDropTarget(gesture){
@@ -103,9 +130,10 @@
     gesture.ghost.classList.toggle('is-window',outside);
     if(outside&&window.NoteWindows){clearTabTarget(gesture);gesture.targetMode='window';gesture.label.textContent=gesture.ids.size+' 条 · 松开后在窗口中打开';return;}
     const tab=document.elementFromPoint?document.elementFromPoint(gesture.x,gesture.y):null;
-    const tabTarget=tab&&tab.closest?tab.closest('.sidebar-tabs [data-tab]'):null;
+    const tabTarget=tab&&tab.closest?tab.closest('.sidebar-tabs [data-tab], .sidebar-tabs .tab-more, .tab-menu [data-tab]'):null;
     if(tabTarget){
-      setTabTarget(gesture,tabTarget);gesture.targetMode='tab';gesture.targetDestination=tabTarget.dataset.tab;
+      setTabTarget(gesture,tabTarget);gesture.targetMode='tab';gesture.targetDestination=tabTarget.dataset.tab||'';
+      if(!gesture.targetDestination){gesture.label.textContent=gesture.ids.size+' 条 · 停留后展开收起的页签';return;}
       gesture.label.textContent=gesture.targetDestination===ui.tab?gesture.ids.size+' 条 · 当前为'+tabTarget.textContent.replace(/\d+/g,'').trim()+'，继续拖入列表排序':gesture.ids.size+' 条 · 停留后可切换到'+tabTarget.textContent.replace(/\d+/g,'').trim();
       return;
     }
@@ -213,11 +241,13 @@
     event.preventDefault();event.stopImmediatePropagation();if(!tools.frame)tools.frame=window.requestAnimationFrame(function draw(){tools.frame=0;paintGesture(gesture);});
   }
   /** @brief 将整批卡片插入目标记录之前或之后并保存顺序。 @param {Set<string>} ids 来源标识。 @param {string} targetId 目标。 @param {boolean} after 是否放在目标之后。 @return {boolean} 是否保存。 */
-  function reorder(ids,targetId,after){
+  function reorder(ids,targetId,after,originTab=''){
+    // 拖动时停在别的页签上切换了列表（第四次反馈）：放进这个页签的卡片同时按页签的规则加减标签。
+    const switched=originTab&&originTab!==ui.tab,tabChange=function tabChange(note){return switched?window.SidebarTabs&&tabPatch(note,originTab,ui.tab):{};};
     const target=state.notes.find(function find(note){return note.id===targetId;}),moving=state.notes.filter(function chosen(note){return ids.has(note.id)&&note.status!=='trash';}).sort(function order(a,b){return (a.pinned===b.pinned?0:a.pinned?-1:1)||compareNoteOrder(a,b);});if(!target||!moving.length||ids.has(targetId))return false;
     const group=state.notes.filter(function same(note){return note.status===target.status&&note.pinned===target.pinned&&!ids.has(note.id);}).sort(compareNoteOrder),index=group.findIndex(function same(note){return note.id===targetId;});if(index<0)return false;group.splice(index+(after?1:0),0,...moving);
-    const ranks=new Map(group.map(function rank(note,index){return [note.id,index];})),before=new Map(state.notes.filter(function affected(note){return ranks.has(note.id);}).map(function previous(note){return [note.id,{order:note.order,status:note.status,pinned:note.pinned}];}));
-    const notes=state.notes.map(function rank(note){return ranks.has(note.id)?{...note,order:ranks.get(note.id),status:ids.has(note.id)?target.status:note.status,pinned:ids.has(note.id)?target.pinned:note.pinned}:note;});
+    const ranks=new Map(group.map(function rank(note,index){return [note.id,index];})),before=new Map(state.notes.filter(function affected(note){return ranks.has(note.id);}).map(function previous(note){return [note.id,{order:note.order,status:note.status,pinned:note.pinned,text:note.text}];}));
+    const notes=state.notes.map(function rank(note){return ranks.has(note.id)?{...note,...(ids.has(note.id)?tabChange(note):{}),order:ranks.get(note.id),status:ids.has(note.id)?target.status:note.status,pinned:ids.has(note.id)?target.pinned:note.pinned}:note;});
     if(!persistSnapshot(notes)){toast('排序未保存，原顺序保持不变',null,true);return false;}renderNotes();refresh();toast('已移动 '+moving.length+' 条记录',{label:'撤销',run:function undo(){const restored=state.notes.map(function restore(note){return before.has(note.id)?{...note,...before.get(note.id)}:note;});if(persistSnapshot(restored))renderNotes();}});return true;
   }
   /** 清理按压计时、指针捕获和所有拖动反馈。 */
@@ -225,10 +255,11 @@
     const gesture=tools.gesture;if(!gesture)return false;window.clearTimeout(gesture.timer);clearTabTarget(gesture);if(tools.frame)window.cancelAnimationFrame(tools.frame);if(tools.scrollFrame)window.cancelAnimationFrame(tools.scrollFrame);tools.frame=0;tools.scrollFrame=0;
     if(gesture.active){tools.blockClick=true;tools.lastDragAt=now();invalidateCardClick();}
     try{if(gesture.card&&gesture.card.hasPointerCapture&&gesture.card.hasPointerCapture(gesture.pointerId))gesture.card.releasePointerCapture(gesture.pointerId);}catch(error){/* 系统可能已经释放指针捕获。 */}
+    if(gesture.menuOpened&&window.NoteMenus)window.NoteMenus.close({restoreFocus:false});
     if(gesture.ghost)gesture.ghost.remove();if(gesture.guide)gesture.guide.remove();if(gesture.overlay)gesture.overlay.remove();if(dragTrash){dragTrash.classList.remove('is-target');dragTrash.setAttribute('aria-hidden','true');}if(window.NoteWindows&&window.NoteWindows.hint)window.NoteWindows.hint(null);document.body.classList.remove('is-sorting-cards','is-framing-cards');elements.noteList.querySelectorAll('.note-card').forEach(function clean(card){card.classList.remove('is-sort-pending','is-sorting','is-sorting-member','drop-before','drop-after');});tools.gesture=null;ui.sortPress=null;return true;
   }
   /** @brief 松开后一次性保存排序或完成框选，不触发编辑。 @param {Event} event 松开。 */
-  function release(event){if(!samePointer(event))return;const gesture=tools.gesture;if(gesture.active){gesture.x=event.clientX;gesture.y=event.clientY;paintGesture(gesture);consume(event);}const active=gesture.active,kind=gesture.kind,target=gesture.targetId,after=gesture.after,ids=gesture.ids,mode=gesture.targetMode,destination=gesture.targetDestination,originTab=gesture.originTab,point={x:gesture.x,y:gesture.y},ghost=gesture.copy?gesture.copy.getBoundingClientRect():null;cancelGesture();if(!active||kind!=='sort')return;if(mode==='window'){window.NoteWindows.openFromDrag(ids,point,ghost);return;}if(mode==='trash')moveRecords(ids,'trash');else if(mode==='tab'&&destination&&destination!==originTab)moveRecords(ids,destination);else if(mode==='list'&&target)reorder(ids,target,after);}
+  function release(event){if(!samePointer(event))return;const gesture=tools.gesture;if(gesture.active){gesture.x=event.clientX;gesture.y=event.clientY;paintGesture(gesture);consume(event);}const active=gesture.active,kind=gesture.kind,target=gesture.targetId,after=gesture.after,ids=gesture.ids,mode=gesture.targetMode,destination=gesture.targetDestination,originTab=gesture.originTab,point={x:gesture.x,y:gesture.y},ghost=gesture.copy?gesture.copy.getBoundingClientRect():null;cancelGesture();if(!active||kind!=='sort')return;if(mode==='window'){window.NoteWindows.openFromDrag(ids,point,ghost);return;}if(mode==='trash')moveRecords(ids,'trash');else if(mode==='tab'&&destination&&destination!==originTab)moveRecords(ids,destination,originTab);else if(mode==='list'&&target)reorder(ids,target,after,originTab);}
   /** @brief 选择模式下 Ctrl+A 全选筛选结果。 @param {KeyboardEvent} event 按键。 */
   function keyboard(event){const target=targetOf(event);if(hasSelection()&&(event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='a'&&!(target&&target.closest('input,textarea,[contenteditable="true"]'))){consume(event);visibleIds().forEach(function select(id){selected.add(id);});refresh();}}
   /** 连接捕获阶段手势与普通按钮，不接管正文编辑事务。 */
@@ -239,5 +270,5 @@
     if(window.MutationObserver){tools.observer=new window.MutationObserver(function listChanged(){refresh();});tools.observer.observe(elements.noteList,{childList:true,subtree:true});}
     refresh();
   }
-  window.NoteInteractions=Object.freeze({initialize:initialize,refresh:refresh,clearSelection:clearSelection,hasSelection:hasSelection,isBusy:isBusy,cancelGesture:cancelGesture,selectedIds:selectedIds});
+  window.NoteInteractions=Object.freeze({initialize:initialize,refresh:refresh,clearSelection:clearSelection,hasSelection:hasSelection,isBusy:isBusy,cancelGesture:cancelGesture,selectedIds:selectedIds,moveTo:moveTo});
 })();

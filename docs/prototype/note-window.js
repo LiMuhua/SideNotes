@@ -21,6 +21,7 @@ window.NoteWindows = (function createNoteWindows() {
   const MIN_HEIGHT = 140;
   const MARGIN = 12;
   const FIT_WIDTH = [280, 560]; // 按内容定宽的上下限（按 13px 字号计，乘以缩放倍数）。
+  const FIT_TABS_WIDTH = 720; // 顶部有标签页时按标签页定宽的上限（第四次反馈：标题不过早省略），同上。
   const FIT_HEIGHT = 600; // 按内容定高的上限（同上），同时不超过视口的六成。
   const DRAG_TILT = -2.5; // 与拖影（.card-drag-ghost）的倾斜角度一致。
   const EDGES = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
@@ -28,6 +29,8 @@ window.NoteWindows = (function createNoteWindows() {
   let order = 0;
   let sequence = 0;
   let gesture = null;
+  let tip = null; // 标签页全名的悬停提示。
+  let tipTimer = 0;
   let tabDrop = null; // 标签栏里的插入线（拖动标签页、窗口或卡片到标签栏时）。
   let hinted = null; // 从侧栏拖来的卡片正落在其上的窗口。
 
@@ -66,8 +69,9 @@ window.NoteWindows = (function createNoteWindows() {
   function windowAt(point, except = null, headerOnly = false) {
     return frontToBack().find(function hit(entry) {
       if (entry === except || entry.closing) return false;
-      const box = (headerOnly ? entry.header : entry.node).getBoundingClientRect();
-      return point.x >= box.left && point.x <= box.right && point.y >= box.top && point.y <= box.bottom;
+      // 只认标题栏时，竖排的标签栏也算（第四次反馈）：标签页拖到那里同样合并。
+      const parts = headerOnly ? [entry.header].concat(entry.node.classList.contains('is-side-tabs') ? [entry.strip] : []) : [entry.node];
+      return parts.some(function inside(part) { const box = part.getBoundingClientRect(); return point.x >= box.left && point.x <= box.right && point.y >= box.top && point.y <= box.bottom; });
     }) || null;
   }
 
@@ -141,29 +145,37 @@ window.NoteWindows = (function createNoteWindows() {
     const grip = el('div', 'note-window-grip');
     grip.setAttribute('aria-hidden', 'true');
     const actions = el('div', 'window-actions');
+    // 标签页放在顶部还是左侧（第四次反馈）：有标签页时才显示，切换的是设置中的同一项。
+    const layout = button('标签页放到左侧', '', 'panel-left', 'icon-button note-window-layout');
+    layout.setAttribute('aria-pressed', 'false');
     const pin = button('置顶窗口', '', 'pin', 'icon-button note-window-pin');
     pin.setAttribute('aria-pressed', 'false');
     const close = button('关闭窗口', '', 'x', 'icon-button');
-    actions.append(pin, close);
+    actions.append(layout, pin, close);
     header.append(emoji, title, strip, grip, actions);
+    // 正文外面一层横排的容器：标签页放在左侧时，标签栏挪到这里、排在正文之前。
+    const main = el('div', 'note-window-main');
     const body = el('div', 'note-window-body');
     body.setAttribute('role', 'tabpanel');
-    node.append(header, body);
+    main.append(body);
+    node.append(header, main);
     EDGES.forEach(function handle(edge) {
       const grip = el('div', 'note-window-resize');
       grip.dataset.edge = edge;
       grip.setAttribute('aria-hidden', 'true');
       node.append(grip);
     });
-    const entry = { id: 'window-' + (++sequence), node: node, header: header, emoji: emoji, titleNode: title, strip: strip, body: body, pin: pin, tabs: [], active: '', x: 0, y: 0, width: 0, height: 0, pinned: false, editing: null, closing: false, order: ++order };
+    const entry = { id: 'window-' + (++sequence), node: node, header: header, emoji: emoji, titleNode: title, strip: strip, grip: grip, main: main, body: body, layout: layout, pin: pin, tabs: [], active: '', x: 0, y: 0, width: 0, height: 0, pinned: false, editing: null, closing: false, order: ++order };
     node.dataset.windowId = entry.id;
 
     pin.addEventListener('click', function togglePin() { setPinned(entry, !entry.pinned); bringToFront(entry); });
+    layout.addEventListener('click', function toggleLayout() { if (window.SideNotesSettings.save({ windowTabs: sideLayout() ? 'top' : 'side' })) entry.node.focus({ preventScroll: true }); });
     close.addEventListener('click', function closeWindow() { closeEntry(entry); });
     node.addEventListener('pointerdown', function activate() { if (!entry.node.classList.contains('is-front')) bringToFront(entry); }, true);
     header.addEventListener('pointerdown', function startMove(event) { if (!event.target.closest('button,.note-window-tab')) startGesture(entry, event, 'move'); });
     header.addEventListener('dblclick', function toggleSize(event) { if (!event.target.closest('button,.note-window-tab')) maximize(entry); });
     // 标签页放不下时横向滚动：滚轮的上下滚动换成左右。
+    strip.addEventListener('scroll', hideTip, { passive: true });
     strip.addEventListener('wheel', function scrollTabs(event) {
       if (strip.scrollWidth <= strip.clientWidth || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
       event.preventDefault();
@@ -206,6 +218,8 @@ window.NoteWindows = (function createNoteWindows() {
     entry.emoji.textContent = note ? note.emoji || '📝' : '';
     entry.titleNode.textContent = title;
     entry.node.setAttribute('aria-label', many ? entry.tabs.length + ' 条记录' : title);
+    hideTip();
+    placeStrip(entry);
     if (!many) { entry.strip.replaceChildren(); return; }
     entry.strip.replaceChildren(...entry.tabs.map(function tab(id) {
       const item = noteOf(id), name = item ? noteTitle(item) : '';
@@ -223,9 +237,13 @@ window.NoteWindows = (function createNoteWindows() {
       node.append(mark, el('span', 'note-window-tab-title', name), close);
       node.addEventListener('click', function choose() { activate(entry, id); });
       node.addEventListener('auxclick', function middle(event) { if (event.button === 1) { event.preventDefault(); closeTab(entry, id); } });
-      node.addEventListener('pointerdown', function startTabDrag(event) { if (!event.target.closest('button')) startGesture(entry, event, 'tab', id); });
+      node.addEventListener('pointerdown', function startTabDrag(event) { hideTip(); if (!event.target.closest('button')) startGesture(entry, event, 'tab', id); });
+      node.addEventListener('pointerenter', function hoverTab() { showTip(node); });
+      node.addEventListener('pointerleave', hideTip);
       node.addEventListener('keydown', function tabKeys(event) {
-        const index = entry.tabs.indexOf(id), next = event.key === 'ArrowRight' ? entry.tabs[(index + 1) % entry.tabs.length] : event.key === 'ArrowLeft' ? entry.tabs[(index - 1 + entry.tabs.length) % entry.tabs.length] : '';
+        // 竖排时上下方向键同样切换（第四次反馈）。
+        const side = entry.node.classList.contains('is-side-tabs'), forward = event.key === 'ArrowRight' || (side && event.key === 'ArrowDown'), backward = event.key === 'ArrowLeft' || (side && event.key === 'ArrowUp');
+        const index = entry.tabs.indexOf(id), next = forward ? entry.tabs[(index + 1) % entry.tabs.length] : backward ? entry.tabs[(index - 1 + entry.tabs.length) % entry.tabs.length] : '';
         if (next) { event.preventDefault(); activate(entry, next); const target = entry.strip.querySelector('.note-window-tab.is-active'); if (target) target.focus(); }
         else if (event.key === 'Delete') { event.preventDefault(); closeTab(entry, id); }
       });
@@ -409,8 +427,8 @@ window.NoteWindows = (function createNoteWindows() {
       const target = windowAt(point, entry, true), own = inTabBand(entry, point);
       markMerge(target);
       // 插入线标出松开后的位置：别的窗口的标签栏里，或本窗口的标签栏里（调整顺序）；拖到窗口外时拖影放大一点，表示拆成新窗口。
-      if (target) showTabDrop(target, point.x);
-      else if (own) showTabDrop(entry, point.x, gesture.tab);
+      if (target) showTabDrop(target, point);
+      else if (own) showTabDrop(entry, point, gesture.tab);
       else hideTabDrop();
       gesture.ghost.classList.toggle('is-detaching', !target && !own && entry.tabs.length > 1);
       return;
@@ -421,7 +439,7 @@ window.NoteWindows = (function createNoteWindows() {
       // 标题栏拖到另一个窗口的标题栏上：松开后合并成标签页，插入线标出位置。
       const target = windowAt(point, entry, true);
       markMerge(target);
-      if (target) showTabDrop(target, point.x); else hideTabDrop();
+      if (target) showTabDrop(target, point); else hideTabDrop();
     } else {
       const mode = gesture.mode;
       if (mode.includes('e')) entry.width = clamp(start.width + dx, MIN_WIDTH, view.width - start.x);
@@ -433,19 +451,70 @@ window.NoteWindows = (function createNoteWindows() {
     apply(entry);
   }
 
+  /** @return {boolean} 标签页是否放在左侧（设置中的「窗口标签页」）。 */
+  function sideLayout() { return state.settings.windowTabs === 'side'; }
+
   /**
-   * @brief 标签页在窗口标签栏里的落点；只有一个标签页（标题栏写标题）的窗口接在最后。
-   * @param {object} entry 窗口。 @param {number} x 指针横坐标。 @return {number} 插入位置。
+   * @brief 标签栏放在标题栏里（顶部横排）或正文左侧（竖排，第四次反馈）；只有一个标签页时标题栏照常写标题。
+   * 竖排时标题栏写当前标签页的标题，标签页的名称有一整列的宽度。按钮的图标与名称随之切换。
+   * @param {object} entry 窗口。
    */
-  function tabIndexAt(entry, x) {
+  function placeStrip(entry) {
+    const side = sideLayout() && entry.tabs.length > 1;
+    entry.node.classList.toggle('is-side-tabs', side);
+    if (side && entry.strip.parentNode !== entry.main) entry.main.prepend(entry.strip);
+    else if (!side && entry.strip.parentNode !== entry.header) entry.header.insertBefore(entry.strip, entry.grip);
+    entry.strip.setAttribute('aria-orientation', side ? 'vertical' : 'horizontal');
+    entry.layout.setAttribute('aria-pressed', String(side));
+    entry.layout.setAttribute('aria-label', side ? '标签页放到顶部' : '标签页放到左侧');
+    entry.layout.replaceChildren(icon(side ? 'panel-top' : 'panel-left'));
+  }
+
+  /**
+   * @brief 标签页的标题被截断时，悬停片刻显示全名（第四次反馈）。提示挂在 body 上，不被标签栏裁掉；
+   * 横排时在标签页下方，竖排时在右侧；拖动、滚动或离开时收起。
+   * @param {HTMLElement} tab 标签页。
+   */
+  function showTip(tab) {
+    window.clearTimeout(tipTimer);
+    tipTimer = window.setTimeout(function reveal() {
+      const name = tab.querySelector('.note-window-tab-title');
+      if (gesture || !tab.isConnected || !name || name.scrollWidth <= name.clientWidth + 1) return;
+      if (!tip) { tip = el('div', 'note-window-tooltip'); tip.setAttribute('role', 'tooltip'); }
+      tip.textContent = name.textContent;
+      document.body.append(tip);
+      const z = zoom(), view = viewport(), box = tab.getBoundingClientRect(), size = tip.getBoundingClientRect(), side = Boolean(tab.closest('.is-side-tabs'));
+      const left = side ? box.right + MARGIN / 2 : clamp(box.left, MARGIN / 2, view.width - size.width - MARGIN / 2);
+      const top = side ? clamp(box.top + (box.height - size.height) / 2, MARGIN / 2, view.height - size.height - MARGIN / 2) : box.bottom + MARGIN / 3;
+      tip.style.left = left / z + 'px';
+      tip.style.top = top / z + 'px';
+    }, 400);
+  }
+
+  /** 收起标签页的全名提示。 */
+  function hideTip() { window.clearTimeout(tipTimer); if (tip) tip.remove(); }
+
+  /**
+   * @brief 标签页在窗口标签栏里的落点：横排看横坐标，竖排看纵坐标；只有一个标签页（标题栏写标题）的窗口接在最后。
+   * @param {object} entry 窗口。 @param {{x:number,y:number}} point 指针。 @return {number} 插入位置。
+   */
+  function tabIndexAt(entry, point) {
     const tabs = Array.from(entry.strip.querySelectorAll('.note-window-tab'));
     if (!tabs.length) return entry.tabs.length;
-    const index = tabs.findIndex(function before(tab) { const box = tab.getBoundingClientRect(); return x < box.left + box.width / 2; });
+    const side = entry.node.classList.contains('is-side-tabs');
+    const index = tabs.findIndex(function before(tab) { const box = tab.getBoundingClientRect(); return side ? point.y < box.top + box.height / 2 : point.x < box.left + box.width / 2; });
     return index < 0 ? tabs.length : index;
   }
 
-  /** @brief 指针在窗口的标签栏一带（上下放宽一点）：在这里松开是调整顺序。 @param {object} entry 窗口。 @param {{x:number,y:number}} point 指针。 @return {boolean} 是否。 */
+  /**
+   * @brief 指针在窗口的标签栏一带（放宽一点）：在这里松开是调整顺序。横排是标题栏，竖排是左侧的标签栏。
+   * @param {object} entry 窗口。 @param {{x:number,y:number}} point 指针。 @return {boolean} 是否。
+   */
   function inTabBand(entry, point) {
+    if (entry.node.classList.contains('is-side-tabs')) {
+      const strip = entry.strip.getBoundingClientRect();
+      return point.x >= strip.left - MARGIN && point.x <= strip.right + MARGIN && point.y >= strip.top && point.y <= strip.bottom;
+    }
     const header = entry.header.getBoundingClientRect();
     return point.y >= header.top - MARGIN && point.y <= header.bottom + MARGIN && point.x >= header.left && point.x <= header.right;
   }
@@ -453,26 +522,39 @@ window.NoteWindows = (function createNoteWindows() {
   /**
    * @brief 标签栏里的插入线（本次提出）：一条强调色的竖线，上端一个小圆点，与卡片排序的插入线同一种样子。
    * 插入线挂在 body 上、叠在拖影之上，拖影盖在落点上时也看得见。落点与松开时的计算（tabIndexAt）一致；
-   * 在本窗口里放回原处等于没动，不显示。指针靠近标签栏两端时横向滚动。
-   * @param {object} target 窗口。 @param {number} x 指针横坐标。 @param {string} dragged 本窗口里正在拖动的标签页。
+   * 在本窗口里放回原处等于没动，不显示。指针靠近标签栏两端时滚动。竖排时是一条横线，左端一个小圆点（第四次反馈）。
+   * @param {object} target 窗口。 @param {{x:number,y:number}} point 指针。 @param {string} dragged 本窗口里正在拖动的标签页。
    */
-  function showTabDrop(target, x, dragged = '') {
+  function showTabDrop(target, point, dragged = '') {
     const tabs = Array.from(target.strip.querySelectorAll('.note-window-tab'));
     if (!target.node.classList.contains('has-tabs') || !tabs.length) { hideTabDrop(); return; }
+    const side = target.node.classList.contains('is-side-tabs');
     const z = zoom(), strip = target.strip.getBoundingClientRect(), edge = MARGIN * 2 * z;
-    if (target.strip.scrollWidth > target.strip.clientWidth) {
-      if (x < strip.left + edge) target.strip.scrollLeft -= MARGIN;
-      else if (x > strip.right - edge) target.strip.scrollLeft += MARGIN;
+    if (side && target.strip.scrollHeight > target.strip.clientHeight) {
+      if (point.y < strip.top + edge) target.strip.scrollTop -= MARGIN;
+      else if (point.y > strip.bottom - edge) target.strip.scrollTop += MARGIN;
+    } else if (!side && target.strip.scrollWidth > target.strip.clientWidth) {
+      if (point.x < strip.left + edge) target.strip.scrollLeft -= MARGIN;
+      else if (point.x > strip.right - edge) target.strip.scrollLeft += MARGIN;
     }
-    const index = tabIndexAt(target, x), from = dragged ? target.tabs.indexOf(dragged) : -1;
+    const index = tabIndexAt(target, point), from = dragged ? target.tabs.indexOf(dragged) : -1;
     if (from >= 0 && (index === from || index === from + 1)) { hideTabDrop(); return; }
-    const gap = (parseFloat(window.getComputedStyle(target.strip).columnGap) || 0) * z;
+    const style = window.getComputedStyle(target.strip), gap = (parseFloat(side ? style.rowGap : style.columnGap) || 0) * z;
     const box = tabs[Math.min(index, tabs.length - 1)].getBoundingClientRect();
     if (!tabDrop) { tabDrop = el('span', 'note-window-tab-drop'); tabDrop.setAttribute('aria-hidden', 'true'); }
     if (!tabDrop.isConnected) document.body.append(tabDrop);
-    tabDrop.style.left = clamp(index < tabs.length ? box.left - gap / 2 : box.right + gap / 2, strip.left, strip.right) + 'px';
-    tabDrop.style.top = box.top + 'px';
-    tabDrop.style.height = box.height + 'px';
+    tabDrop.classList.toggle('is-horizontal', side);
+    if (side) {
+      tabDrop.style.left = box.left + 'px';
+      tabDrop.style.width = box.width + 'px';
+      tabDrop.style.top = clamp(index < tabs.length ? box.top - gap / 2 : box.bottom + gap / 2, strip.top, strip.bottom) + 'px';
+      tabDrop.style.height = '';
+    } else {
+      tabDrop.style.left = clamp(index < tabs.length ? box.left - gap / 2 : box.right + gap / 2, strip.left, strip.right) + 'px';
+      tabDrop.style.top = box.top + 'px';
+      tabDrop.style.height = box.height + 'px';
+      tabDrop.style.width = '';
+    }
   }
 
   /** 收起标签栏里的插入线。 */
@@ -489,7 +571,7 @@ window.NoteWindows = (function createNoteWindows() {
       hinted = target;
       if (target) target.node.classList.add('is-merge-target');
     }
-    if (target) showTabDrop(target, point.x); else hideTabDrop();
+    if (target) showTabDrop(target, point); else hideTabDrop();
   }
 
   /** @brief 结束移动、缩放或拖动标签页：落在别的窗口标题栏上时合并，标签页拖到窗口外时拆成新窗口。 @param {PointerEvent} event 松开。 */
@@ -508,7 +590,7 @@ window.NoteWindows = (function createNoteWindows() {
     if (done.mode === 'move' && done.merge) {
       const target = done.merge, ids = entry.tabs.slice();
       if (entry.editing && !finishEditing(entry, true)) return;
-      addTabs(target, ids, tabIndexAt(target, point.x));
+      addTabs(target, ids, tabIndexAt(target, point));
       bringToFront(target);
       pulse(target);
       target.node.focus({ preventScroll: true });
@@ -516,7 +598,7 @@ window.NoteWindows = (function createNoteWindows() {
     }
     if (done.mode !== 'tab' || !done.active) return;
     if (done.merge) {
-      addTabs(done.merge, [done.tab], tabIndexAt(done.merge, point.x));
+      addTabs(done.merge, [done.tab], tabIndexAt(done.merge, point));
       bringToFront(done.merge);
       pulse(done.merge);
       return;
@@ -524,7 +606,7 @@ window.NoteWindows = (function createNoteWindows() {
     if (inTabBand(entry, point)) {
       // 在本窗口的标签栏里松开：调整标签页的顺序。
       const from = entry.tabs.indexOf(done.tab);
-      let to = tabIndexAt(entry, point.x);
+      let to = tabIndexAt(entry, point);
       if (to > from) to -= 1;
       entry.tabs.splice(from, 1);
       entry.tabs.splice(to, 0, done.tab);
@@ -580,11 +662,15 @@ window.NoteWindows = (function createNoteWindows() {
    */
   function fitSize(entry) {
     const view = viewport(), z = zoom(), style = entry.node.style;
-    const maxWidth = Math.max(Math.min(MIN_WIDTH, view.width - MARGIN * 2), Math.min(FIT_WIDTH[1] * z, view.width - MARGIN * 2));
+    // 竖排的标签栏另占一列，上下限都加上它的宽度，正文仍按 280–560 定宽。
+    // 顶部的标签页按各自标题的宽度排开，上限放宽到 720，放不下时再省略（悬停显示全名）。
+    const side = entry.node.classList.contains('is-side-tabs'), extra = side ? entry.strip.getBoundingClientRect().width : 0;
+    const cap = entry.node.classList.contains('has-tabs') && !side ? FIT_TABS_WIDTH : FIT_WIDTH[1];
+    const maxWidth = Math.max(Math.min(MIN_WIDTH, view.width - MARGIN * 2), Math.min(cap * z + extra, view.width - MARGIN * 2));
     style.width = 'max-content';
     style.maxWidth = maxWidth / z + 'px';
     style.height = 'auto';
-    entry.width = clamp(Math.ceil(entry.node.getBoundingClientRect().width), Math.min(FIT_WIDTH[0] * z, maxWidth), maxWidth);
+    entry.width = clamp(Math.ceil(entry.node.getBoundingClientRect().width), Math.min(FIT_WIDTH[0] * z + extra, maxWidth), maxWidth);
     style.maxWidth = '';
     style.width = entry.width / z + 'px';
     entry.height = clamp(Math.ceil(entry.node.getBoundingClientRect().height), MIN_HEIGHT, Math.max(MIN_HEIGHT, Math.min(view.height * 0.6, FIT_HEIGHT * z)));
@@ -663,7 +749,7 @@ window.NoteWindows = (function createNoteWindows() {
     if (!list.length) return;
     const target = windowAt(point);
     if (target) {
-      addTabs(target, list, tabIndexAt(target, point.x));
+      addTabs(target, list, tabIndexAt(target, point));
       bringToFront(target);
       pulse(target);
       target.node.focus({ preventScroll: true });
@@ -730,8 +816,31 @@ window.NoteWindows = (function createNoteWindows() {
 
   /** 字号或窗口大小变化后，按保存的视口坐标重新写入样式。 */
   function relayout() { windows.forEach(apply); }
+
+  /**
+   * @brief 切换标签页的位置后（第四次反馈），已开的窗口重新排列标签栏：竖排的标签栏另占一列，窗口加宽这一列，正文宽度不变；
+   * 改回顶部时再减掉。窗口仍留在视口内。
+   * @param {CustomEvent} event 设置变化。
+   */
+  function changeTabLayout(event) {
+    const patch = event.detail && event.detail.patch;
+    if (!patch || !('windowTabs' in patch)) return;
+    const view = viewport();
+    windows.forEach(function arrange(entry) {
+      if (entry.closing) return;
+      const before = entry.node.classList.contains('is-side-tabs') ? entry.strip.getBoundingClientRect().width : 0;
+      renderTabs(entry);
+      const after = entry.node.classList.contains('is-side-tabs') ? entry.strip.getBoundingClientRect().width : 0;
+      if (after === before) return;
+      entry.width = clamp(entry.width + after - before, Math.min(MIN_WIDTH, view.width - MARGIN * 2), view.width - MARGIN * 2);
+      entry.x = clamp(entry.x, MARGIN, Math.max(MARGIN, view.width - entry.width - MARGIN));
+      entry.maximized = null;
+      apply(entry);
+    });
+  }
   window.addEventListener('resize', relayout);
   window.addEventListener('sidenotes:settings-changed', relayout);
+  window.addEventListener('sidenotes:settings-changed', changeTabLayout);
 
   return Object.freeze({
     open: open,

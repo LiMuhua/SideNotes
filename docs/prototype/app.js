@@ -134,8 +134,8 @@ function createExamples() {
     {id:'sample-yesterday-1',text:'版本发布检查\n\n## 数据\n- 数据库迁移前创建备份\n- 图片附件随记录一起导出\n- 验证归档、撤销和回收站\n\n## 窗口\n- 唤出不打断原应用输入\n- 收起后不保留可见边缘条\n- 编辑期间保护未提交内容\n\n## 交付\n确认快捷键冲突、多屏缩放和安装目录权限。\n\n#开发 #发布 #测试 #Windows #SideNotes',hours:-24},
     {id:'sample-file-map',text:'文件引用示例\n\n'+FILE_EXAMPLE_REFERENCE+'\n\n#文件 #示例',hours:-.5},
     {id:'sample-yesterday-2',text:'设计文档位置\n\n[交互设计.pdf](file:///C:/Projects/SideNotes/交互设计.pdf)\n\n打开前检查文件状态；失效时重新定位。\n\n#文件 #设计',hours:-28},
-    {id:'sample-archive-1',text:'首轮方案评审\n\n已确认侧栏和快捷速记两个入口。\n\n#产品 #归档',status:'archived',hours:-48},
-    {id:'sample-archive-2',text:'上周工作记录\n\n已整理为周报。\n\n#工作 #归档',status:'archived',hours:-72}
+    {id:'sample-archive-1',text:'首轮方案评审\n\n已确认侧栏和快捷速记两个入口。\n\n#产品 #归档',hours:-48},
+    {id:'sample-archive-2',text:'上周工作记录\n\n已整理为周报。\n\n#工作 #归档',hours:-72}
   ].map(function completeExample(item){const t=now+item.hours*3600000;return {id:item.id,text:item.text,images:item.images||[],pinned:Boolean(item.pinned),status:item.status||'active',createdAt:t,updatedAt:t};});
 }
 
@@ -162,8 +162,11 @@ function normalizeNote(value) {
   if (!value || typeof value.text !== 'string') return null;
   const images = markInlineImages(Array.isArray(value.images) ? value.images.slice(0, 12).map(normalizeImage).filter(Boolean) : [], value.text);
   if (!value.text.trim() && !images.length) return null;
-  const status = ['active', 'archived', 'trash'].includes(value.status) ? value.status : 'active';
-  return { id: typeof value.id === 'string' && value.id.length < 100 ? value.id : createId(), text: window.NoteContent.canonicalize(value.text), emoji:window.NoteEmoji.valid(value.emoji)?value.emoji:'', order:Number.isFinite(value.order)?value.order:null, images: images, pinned: Boolean(value.pinned), collapsed: Boolean(value.collapsed), status: status, previousStatus: value.previousStatus === 'archived' ? 'archived' : 'active', createdAt: Number.isFinite(value.createdAt) && Math.abs(value.createdAt) <= 8640000000000000 ? value.createdAt : Date.now(), updatedAt: Number.isFinite(value.updatedAt) && Math.abs(value.updatedAt) <= 8640000000000000 ? value.updatedAt : Date.now(), deletedAt: Number.isFinite(value.deletedAt) && Math.abs(value.deletedAt) <= 8640000000000000 ? value.deletedAt : null };
+  // 第四次反馈去掉了「归档」：旧的归档记录（包括从归档移进回收站的）回到随记，正文加上 #归档，可以用这个标签找回或固定成页签。
+  const archived = value.status === 'archived' || value.previousStatus === 'archived';
+  const status = value.status === 'trash' ? 'trash' : 'active';
+  const text = archived ? withTag(value.text, '归档') : value.text;
+  return { id: typeof value.id === 'string' && value.id.length < 100 ? value.id : createId(), text: window.NoteContent.canonicalize(text), emoji:window.NoteEmoji.valid(value.emoji)?value.emoji:'', order:Number.isFinite(value.order)?value.order:null, images: images, pinned: Boolean(value.pinned), collapsed: Boolean(value.collapsed), status: status, previousStatus: 'active', createdAt: Number.isFinite(value.createdAt) && Math.abs(value.createdAt) <= 8640000000000000 ? value.createdAt : Date.now(), updatedAt: Number.isFinite(value.updatedAt) && Math.abs(value.updatedAt) <= 8640000000000000 ? value.updatedAt : Date.now(), deletedAt: Number.isFinite(value.deletedAt) && Math.abs(value.deletedAt) <= 8640000000000000 ? value.deletedAt : null };
 }
 
 /** @brief 校验并补全原型设置。 @param {object} value 输入设置。 @return {object} 完整设置。 */
@@ -188,6 +191,10 @@ function normalizeSettings(value = {}) {
     animDuration: Number.isFinite(Number(value.animDuration)) && value.animDuration !== null && value.animDuration !== '' ? Math.max(0,Math.min(600,Math.round(Number(value.animDuration)))) : 260,
     cardMaxHeight: Number.isFinite(Number(value.cardMaxHeight)) && value.cardMaxHeight !== null && value.cardMaxHeight !== '' ? Math.max(120,Math.min(600,Math.round(Number(value.cardMaxHeight)))) : 220,
     toastPosition: ['top-center','top-right','bottom-center'].includes(value.toastPosition) ? value.toastPosition : 'top-center',
+    // 记录窗口的标签页位置（第四次反馈）：顶部横排，或左侧竖排；窗口中的按钮与设置都可以切换。
+    windowTabs: value.windowTabs === 'side' ? 'side' : 'top',
+    // 固定为页签的标签（第四次反馈）：按页签栏的顺序保存，不带 #；只由用户手动固定，不会自动加入。
+    pinnedTags: normalizePinnedTags(value.pinnedTags),
     // 移出后收起：100–10000 毫秒，下拉框列出常用的 300、600、1000（与现有应用一致）。
     hideDelay: Number.isFinite(Number(value.hideDelay)) && value.hideDelay !== null && value.hideDelay !== '' ? Math.max(100,Math.min(10000,Math.round(Number(value.hideDelay)))) : 600,
     // 进入编辑时把卡片滚到列表顶部（本次提出，默认打开）。编辑期间侧栏一律保持展开，不再提供开关。
@@ -205,6 +212,25 @@ function normalizeSettings(value = {}) {
     // 快捷键只保存改过的命令，其余用默认按键（shortcuts.js，同现有应用）；旧存档的 capture、save、hide 是默认按键，整理后不再保存。
     shortcuts: window.SideNotesShortcuts.normalizeBindings(shortcuts)
   };
+}
+
+/** @brief 正文加上一个标签（已有时不变），写在标签行。 @param {string} text 原文。 @param {string} tag 标签。 @return {string} 原文。 */
+function withTag(text, tag) {
+  const parts = window.NoteContent.parse(String(text || ''));
+  return parts.tags.some(function same(item) { return tagKey(item) === tagKey(tag); }) ? text : window.NoteContent.compose(parts.body, parts.tags.concat(tag));
+}
+
+/**
+ * @brief 整理固定为页签的标签：去掉 #、空白、无效与重复的（不分大小写），保留顺序，最多 50 个。
+ * @param {Array<string>} value 存档中的标签。 @return {Array<string>} 标签。
+ */
+function normalizePinnedTags(value) {
+  const seen = new Set();
+  return (Array.isArray(value) ? value : []).map(function clean(tag) { return String(tag || '').trim().replace(/^#/, ''); }).filter(function usable(tag) {
+    if (!/^[\p{L}\p{N}_-]{1,40}$/u.test(tag) || seen.has(tagKey(tag))) return false;
+    seen.add(tagKey(tag));
+    return true;
+  }).slice(0, 50);
 }
 
 /** @brief 读取本地数据并恢复草稿。 */
@@ -331,10 +357,10 @@ function renderCard(note) {
     const input=el('textarea','note-edit-input');input.value=ui.editing.text;input.dataset.editId=note.id;input.setAttribute('aria-label','编辑记录');input.rows=Math.min(12,Math.max(4,ui.editing.text.split('\n').length));
     const actions=el('div','note-edit-actions'),tools=el('div','composer-tools'),confirm=el('div','composer-actions');tools.append(button('添加图片','attach-edit-image','image'),button('引用文件','attach-edit-file','file'));confirm.append(keyHint(['Ctrl','Enter']),button('取消修改 · Esc','cancel-edit','x'),button('保存修改 · Ctrl+Enter','finish-edit','check','icon-button primary'));actions.append(tools,confirm);card.append(input,actions);renderEditAttachments(card);if(window.LiveMarkdown)window.LiveMarkdown.attach(input,{value:ui.editing.text,minHeight:100,maxHeight:300});const editingSession=ui.editing;input.addEventListener('blur',function editInputBlur(){scheduleEditBlur(editingSession);});return card;
   }
-  // 操作按钮：置顶（只在工作区与置顶中）排在最前，然后是复制、归档或恢复、更多，收起在最右。
+  // 操作按钮：置顶排在最前，然后是复制、更多，收起在最右（第四次反馈去掉了归档）。
   const actions=el('div','note-actions');
   if(note.status==='active'){const pin=button(note.pinned?'取消置顶':'置顶记录','pin-note',note.pinned?'pin-off':'pin','icon-button note-pin-toggle'+(note.pinned?' is-pinned':''));pin.setAttribute('aria-pressed',String(note.pinned));actions.append(pin);}
-  actions.append(button('复制记录与附件 · Ctrl+C','copy-note','copy'),button(note.status==='archived'?'恢复记录':'归档记录','archive-note',note.status==='archived'?'restore':'archive'),button('更多操作 · Shift+F10','more-note','more'));
+  actions.append(button('复制记录与附件 · Ctrl+C','copy-note','copy'),button('更多操作 · Shift+F10','more-note','more'));
   const collapse=button(note.collapsed?'展开正文':'收起正文','toggle-note-collapse','chevron-down','icon-button note-collapse'+(note.collapsed?' is-collapsed':''));collapse.setAttribute('aria-expanded',String(!note.collapsed));actions.append(collapse);
   side.append(actions);
   const content=el('div','note-content markdown-body');
@@ -372,10 +398,8 @@ function keyHint(keys){const node=el('span','key-hint');node.setAttribute('aria-
 function renderNotes(options={}) {
   ui.tagRefreshPending=false;
   if(ui.listObserver){ui.listObserver.disconnect();ui.listObserver=null;}
-  const active=state.notes.filter(function activeNote(n){return n.status==='active';}),archive=state.notes.filter(function archivedNote(n){return n.status==='archived';});
-  const counts={workspace:active.length,pinned:active.filter(function pinnedNote(n){return n.pinned;}).length,archive:archive.length};
-  document.querySelectorAll('[data-count]').forEach(function count(node){node.textContent=String(counts[node.dataset.count]||0);});
-  document.querySelectorAll('.sidebar-tabs [data-tab]').forEach(function tab(node){const selected=node.dataset.tab===ui.tab;node.classList.toggle('active',selected);node.setAttribute('aria-selected',String(selected));node.tabIndex=selected?0:-1;});
+  // 页签栏（第四次反馈）：随记、置顶与固定的标签，放不下的收进最后一格；条数只写在随记与当前页签上（tabs.js）。
+  window.SidebarTabs.render();
   const notes=state.notes.filter(function visible(n){return inCurrentTab(n)&&(!ui.selectedTag||hasTag(n,ui.selectedTag))&&matchesQuery(n,ui.query);}).sort(compareNoteOrder);
   const pinned=notes.filter(function pinned(n){return n.pinned;}),normal=notes.filter(function normal(n){return !n.pinned;});
   const key=[ui.tab,ui.selectedTag,ui.query,state.settings.lazyLoading,state.settings.pageSize].join('|');const same=ui.listKey===key&&!options.reset;
@@ -386,8 +410,23 @@ function renderNotes(options={}) {
   ui.listItems=pinned.concat(normal);ui.listKey=key;ui.visibleCount=0;ui.sentinel=null;ui.loading=false;
   if(!notes.length){const empty=el('div','empty-state');empty.append(el('h3','',ui.query||ui.selectedTag?'没有匹配的记录':'暂无记录'),el('p','',ui.query||ui.selectedTag?'调整搜索或标签筛选。':'在上方直接输入。'));if(ui.query||ui.selectedTag)empty.append(button('清除筛选','clear-filters','','button secondary'));elements.noteList.append(empty);}
   else appendNextPage(target);
-  elements.noteList.scrollTop=same?oldScroll:0;elements.listSummary.textContent=notes.length+' 条'+(ui.selectedTag?' · #'+ui.selectedTag:'');elements.noteList.setAttribute('aria-label',notes.length+' 条记录');syncCardTabStops();elements.clearSearch.hidden=!ui.query;
+  elements.noteList.scrollTop=same?oldScroll:0;renderListSummary(notes);elements.noteList.setAttribute('aria-label',notes.length+' 条记录');syncCardTabStops();elements.clearSearch.hidden=!ui.query;
   renderTagMenu();renderWorkspaceNudge();refreshSearchSummary();if(window.NoteInteractions)window.NoteInteractions.refresh();if(window.NoteWindows)window.NoteWindows.refresh();
+}
+
+/**
+ * @brief 列表顶栏的条数；按标签筛选时是筛选条（第四次反馈）：条数与标签之后是「固定为页签」（这个标签还没固定时）
+ * 与「合并」（筛出两条以上时，把它们合并成一条，见 merge.js）。
+ * @param {Array} notes 当前列表中的记录。
+ */
+function renderListSummary(notes){
+  const summary=elements.listSummary;summary.replaceChildren(el('span','list-summary-text',notes.length+' 条'+(ui.selectedTag?' · #'+ui.selectedTag:'')));
+  if(!ui.selectedTag)return;
+  const actions=el('span','list-summary-actions');
+  const tabs=window.SidebarTabs,pinned=tabs.pinnedTags().some(function same(tag){return tagKey(tag)===tagKey(ui.selectedTag);});
+  if(!pinned){const pin=button('固定为页签','pin-filter-tag','','list-summary-action');pin.textContent='固定为页签';pin.dataset.tag=ui.selectedTag;actions.append(pin);}
+  if(notes.length>1){const merge=button('合并这 '+notes.length+' 条','merge-filtered','','list-summary-action');merge.textContent='合并';actions.append(merge);}
+  if(actions.childElementCount)summary.append(actions);
 }
 
 /** 创建可直接输入的空白卡片，工具与提交操作分别排列。 */
@@ -462,9 +501,11 @@ function saveDraft(origin,options={}){
   if(ui.pendingImages){toast('内容正在读取，请稍候');return;}
   if(!state.draft.text.trim()&&!state.draft.images.length)return;window.clearTimeout(ui.draftTimer);
   const now=Date.now(),targetTab=origin==='sidebar'?ui.tab:'workspace',collapse=Boolean(options.collapse);
-  const note={id:createId(),text:window.NoteContent.canonicalize(state.draft.text),images:keepReferencedImages(state.draft.text,state.draft.images).map(function clone(image){return {...image};}),pinned:targetTab==='pinned',status:targetTab==='archive'?'archived':'active',collapsed:false,emoji:window.NoteEmoji.pick(state.notes.map(function current(n){return n.emoji;})),createdAt:now,updatedAt:now};
+  // 在标签页签中新建（第四次反馈）：带上这个页签的标签（新建卡片上的「#标签」去掉了就不带）。
+  const tabTag=origin==='sidebar'?window.SidebarTabs.draftTag():'',text=window.NoteContent.canonicalize(tabTag?withTag(state.draft.text,tabTag):state.draft.text);
+  const note={id:createId(),text:text,images:keepReferencedImages(state.draft.text,state.draft.images).map(function clone(image){return {...image};}),pinned:targetTab==='pinned',status:'active',collapsed:false,emoji:window.NoteEmoji.pick(state.notes.map(function current(n){return n.emoji;})),createdAt:now,updatedAt:now};
   if(!persistSnapshot([note,...state.notes],{text:'',images:[],updatedAt:now})){persistDraft();toast('没有保存成功，草稿和图片仍在，可导出备份后重试',null,true);renderDraft();return;}
-  ui.composer=false;renderDraft();renderNotes();
+  ui.composer=false;if(origin==='sidebar')window.SidebarTabs.resetDraftTag();renderDraft();renderNotes();
   if(origin==='capture'){
     if(collapse)hideCapture();else showCapture();
   }else if(collapse)hideSidebar(true);else{showSidebar({focus:false});focusNewComposer();}
@@ -800,7 +841,8 @@ function renderAttachmentPreview(area,preview){
 }
 
 /**
- * @brief 附件弹窗：标题是附件名，上方是图片预览或文件块；正文中的引用下面是 Markdown 原文，可以修改。
+ * @brief 附件弹窗：标题是附件名，图片在上方显示原图；正文中的引用下面是 Markdown 原文，可以修改。
+ * 文件不显示预览（第四次反馈：文件块看不到内容，只重复了标题中的名称）。
  * 原文完整显示在一个随内容加高的输入框里，不出现滚动条；修改时上方的预览跟着变，点「应用修改」（或 Ctrl+Enter）才写回（本次提出）。
  * 底栏左侧是打开（正文中的引用）、更换、另存为与删除，右侧是「应用修改」，原文没有改动时不可用。缩略条中的图片没有原文，也没有「打开」，更换只接受 2 MB 以内的图片。
  * @param {object} context 附件上下文：kind、source（strip、edit、draft、text、editor）、note、image、editor、markdown、start、end、src、path、label。
@@ -808,7 +850,7 @@ function renderAttachmentPreview(area,preview){
 function openAttachment(context){
   const image=context.kind==='image',strip=Boolean(context.image),inline=window.SideNotesImages.imageOf(context.src),name=strip?context.image.name:inline?inline.name:context.label||(context.path?window.NoteContent.fileLabel(context.path):'')||(image?'图片':'附件');
   const dialog=openModal(name,'attachment-modal');const heading=dialog.modal.querySelector('.modal-header h2');heading.prepend(icon(image?'image':'file'));
-  const area=el('div','attachment-preview-area');dialog.body.append(area);
+  const area=image?el('div','attachment-preview-area'):null;if(area)dialog.body.append(area);
   /** 原文对应的预览：地址按编辑器的规则解析（随记录保存的图片、data 图片与网络图片）。 */
   const sourcePreview=function sourcePreview(markdown){
     const parsed=parseAttachmentMarkdown(markdown);if(!parsed)return {kind:'text',markdown:String(markdown||'')};
@@ -816,13 +858,13 @@ function openAttachment(context){
     const resolved=window.SideNotesImages.resolve(parsed.target),src=/^(?:data:image\/|https?:)/i.test(resolved)?resolved:'';
     return {kind:'image',src:src,label:parsed.label};
   };
-  if(!strip&&context.markdown!==undefined)renderAttachmentPreview(area,sourcePreview(context.markdown));
-  else renderAttachmentPreview(area,image?{kind:'image',src:strip?context.image.data:window.SideNotesImages.resolve(context.src),label:name}:{kind:'file',path:context.path,label:context.path?window.NoteContent.fileLabel(context.path):name});
+  if(area&&!strip&&context.markdown!==undefined)renderAttachmentPreview(area,sourcePreview(context.markdown));
+  else if(area)renderAttachmentPreview(area,{kind:'image',src:strip?context.image.data:window.SideNotesImages.resolve(context.src),label:name});
   let input=null,apply=null;
   if(!strip&&context.markdown!==undefined){
     const field=el('label','attachment-source');input=el('textarea','form-control attachment-source-input');input.value=context.markdown;input.rows=1;input.spellcheck=false;input.setAttribute('aria-label','Markdown 原文');
     const fit=function fitSource(){if(!input.isConnected)return;const style=window.getComputedStyle(input);input.style.height='auto';input.style.height=input.scrollHeight+parseFloat(style.borderTopWidth)+parseFloat(style.borderBottomWidth)+'px';};
-    input.addEventListener('input',function previewSource(){fit();renderAttachmentPreview(area,sourcePreview(input.value));apply.disabled=input.value===context.markdown;});
+    input.addEventListener('input',function previewSource(){fit();if(area)renderAttachmentPreview(area,sourcePreview(input.value));apply.disabled=input.value===context.markdown;});
     input.addEventListener('keydown',function applyByKey(event){if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();event.stopPropagation();if(!apply.disabled)apply.click();}});
     field.append(el('span','attachment-source-label','Markdown 原文'),input);dialog.body.append(field);
     fit();window.requestAnimationFrame(fit);
@@ -897,14 +939,6 @@ function noteDisplay(note){const parsed=noteParts(note),lines=parsed.body.split(
 function showCopiedAttachments(note,result){const dialog=openModal('复制与附件','clipboard-attachments-modal');dialog.body.append(el('p','modal-hint',result.refs.length?'文字已复制。浏览器无法把任意文件写入微信等应用的文件剪贴板；可保存真实文件后拖入目标应用，或使用系统分享。':'图片复制受限，已保留文字与富文本。'));if(result.imageError)dialog.body.append(el('p','settings-notice',result.imageError));const list=el('div','clipboard-file-list');result.refs.forEach(function row(ref){const item=el('div','clipboard-file-row');item.append(icon('file'),el('span','',window.NoteContent.fileLabel(ref)));const save=button('保存文件','','download','button secondary compact');save.addEventListener('click',async function saveRealFile(){const file=await window.NoteClipboard.file(ref);if(!file){openFileReference(ref);return;}window.NoteClipboard.download(file);});const share=button('系统分享','','external','button secondary compact');share.addEventListener('click',async function shareRealFile(){try{const file=await window.NoteClipboard.file(ref);if(!file){openFileReference(ref);return;}if(!navigator.share||!navigator.canShare||!navigator.canShare({files:[file]})){toast('当前环境不支持文件系统分享，请保存后拖入目标应用');return;}await navigator.share({files:[file],title:(note.emoji||'📝')+' '+file.name});}catch(error){if(error.name!=='AbortError')toast('分享未完成，可保存文件后发送',null,true);}});item.append(save,share);list.append(item);});note.images.forEach(function imageRow(image){const item=el('div','clipboard-file-row');item.append(icon('image'),el('span','',image.name));const save=button('保存图片','','download','button secondary compact');save.addEventListener('click',async function saveImage(){try{const response=await fetch(image.data),blob=await response.blob();window.NoteClipboard.download(new File([blob],image.name,{type:blob.type}));}catch(error){toast('图片读取失败',null,true);}});item.append(save);list.append(item);});dialog.body.append(list);dialog.footer.remove();}
 
 
-/** @brief 归档或恢复记录，并提供撤销。 @param {object} note 记录。 */
-function archiveNote(note) {
-  if (ui.editing && !finishEdit()) return;
-  const previousStatus = note.status;
-  const archived = previousStatus !== 'archived';
-  if (!updateNote(note.id, { status: archived ? 'archived' : 'active' })) return;
-  toast(archived ? '已归档' : '已移回工作区', { label: '撤销', run: function undoArchive() { updateNote(note.id, { status: previousStatus }); } });
-}
 
 /** @brief 删除前请求确认。 @param {object} note 记录。 */
 function requestDelete(note) {
@@ -1032,7 +1066,8 @@ function handleAction(event) {
     case 'open-note':if(note)openNote(note,card);break;
     case 'copy-note':if(note)copyNote(note);break;
     case 'pin-note':if(note)updateNote(note.id,{pinned:!note.pinned});break;
-    case 'archive-note':if(note)archiveNote(note);break;
+    case 'pin-filter-tag':window.SidebarTabs.pin(control.dataset.tag);break;
+    case 'merge-filtered':window.NoteMerge.open({ids:ui.listItems.map(function id(item){return item.id;}),tag:ui.selectedTag});break;
     case 'more-note':if(note)openNoteOptions(note,control);break;
     case 'toggle-note-collapse':if(note&&window.NoteMenus)window.NoteMenus.toggleCollapsed(note);break;
     case 'finish-edit':finishEdit();break;
@@ -1051,7 +1086,7 @@ function handleAction(event) {
     case 'manage-tag':manageTag(control.dataset.tag);break;
     case 'focus-tag-search':toggleSearch(true);closeTagMenu();elements.searchInput.value='#';ui.query='#';elements.searchInput.focus();elements.searchInput.setSelectionRange(1,1);renderNotes();break;
     case 'snooze-tidy':{const next={...state.settings,tidySnoozeUntil:Date.now()+7*86400000};if(persistSnapshot(state.notes,state.draft,next))renderWorkspaceNudge();break;}
-    case 'tidy-workspace':ui.tab='workspace';ui.selectedTag='';ui.query='';elements.searchInput.value='';renderNotes();toast('可将已处理记录归档。');break;
+    case 'tidy-workspace':ui.tab='workspace';ui.selectedTag='';ui.query='';elements.searchInput.value='';renderNotes();toast('可以把同一类的记录固定为页签，或合并成一条。');break;
     case 'tidy-settings':openSettings('appearance');break;
     case 'settings':openSettings();break;case 'close-modal':closeModal();break;
     case 'export-data':exportData();break;case 'import-data':elements.importPicker.click();break;case 'open-trash':openTrash();break;
@@ -1126,10 +1161,12 @@ function handleCurrentCardKey(event){
 
 /** @brief 页签按 WAI-ARIA 页签模式：← → 切换并立即显示，Home、End 到两端。 @param {KeyboardEvent} event 按键。 */
 function handleTabKeyboard(event){
-  const tabs=Array.from(document.querySelectorAll('.sidebar-tabs [role="tab"]')),index=tabs.indexOf(event.target);
+  const tabs=Array.from(document.querySelectorAll('.sidebar-tabs [role="tab"]')).filter(function visible(tab){return !tab.hidden;}),index=tabs.indexOf(event.target);
   if(index<0||event.altKey||event.ctrlKey)return;
   const next=event.key==='ArrowRight'?tabs[(index+1)%tabs.length]:event.key==='ArrowLeft'?tabs[(index-1+tabs.length)%tabs.length]:event.key==='Home'?tabs[0]:event.key==='End'?tabs[tabs.length-1]:null;
-  if(!next)return;event.preventDefault();next.click();next.focus();
+  if(!next)return;event.preventDefault();if(next.classList.contains('tab-more')){next.focus();return;}
+  // 切换会重绘页签栏（tabs.js），按标识找到新的页签再聚焦。
+  const key=next.dataset.tab;next.click();const fresh=Array.from(document.querySelectorAll('.sidebar-tabs [data-tab]')).find(function same(tab){return tab.dataset.tab===key&&!tab.hidden;})||document.querySelector('.sidebar-tabs .tab-more');if(fresh)fresh.focus();
 }
 
 /**
@@ -1351,7 +1388,7 @@ function tagKey(tag) { return String(tag).normalize('NFKC').toLocaleLowerCase();
 /** @brief 检查记录的标签。 @param {object} note 记录。 @param {string} tag 标签。 @return {boolean} 是否包含。 */
 function hasTag(note,tag) { return noteParts(note).tags.some(function same(item){return tagKey(item)===tagKey(tag);}); }
 /** @brief 判断记录是否属于当前页签。 @param {object} note 记录。 @return {boolean} 是否属于。 */
-function inCurrentTab(note) { return ui.tab==='archive'?note.status==='archived':note.status==='active'&&(ui.tab!=='pinned'||note.pinned); }
+function inCurrentTab(note) { return window.SidebarTabs.belongs(note,ui.tab); }
 /** @brief 支持正文与多个标签组合搜索。 @param {object} note 记录。 @param {string} query 查询。 @return {boolean} 是否匹配。 */
 function matchesQuery(note,query) {
   if(!String(query).trim())return true;
@@ -1386,14 +1423,30 @@ function closeTagMenu(){if(elements.tagDropdown){elements.tagDropdown.hidden=tru
 function selectTag(tag){if(!finishEdit())return;ui.selectedTag=tag;ui.query='';elements.searchInput.value='';const key=tagKey(tag),old=state.tagUsage[key]||{count:0,last:0};state.tagUsage[key]={count:Math.min(10000,(Number(old.count)||0)+1),last:Date.now()};persistSnapshot();closeTagMenu();renderNotes();}
 /** @brief 移除一条记录中的标签。 @param {object} note 记录。 @param {string} tag 标签。 */
 function removeNoteTag(note,tag){let text=window.NoteContent.removeTag(note.text,tag);if(!text.trim()&&!note.images.length)text=tag;if(updateNote(note.id,{text:text}))toast('已从此记录移除 #'+tag);}
+/**
+ * @brief 把所有记录上的标签改名，与已有标签同名时合并；筛选中的标签、使用记录与固定的页签一起改（第四次反馈：双击页签改名也用这里）。
+ * @param {string} tag 原标签。 @param {string} value 新名称。 @return {boolean} 是否完成（名称无效时提示）。
+ */
+function renameTagEverywhere(tag,value){
+  const next=String(value||'').trim().replace(/^#/,'');
+  if(!isValidTag(next)){toast('标签最多40字；使用文字、数字、下划线或短横线，避免十六进制色值',null,true);return false;}
+  if(next===tag)return true;
+  const notes=state.notes.map(function replaceTag(note){if(!hasTag(note,tag))return note;const parsed=noteParts(note);return {...note,text:window.NoteContent.compose(parsed.body,parsed.tags.map(function replace(t){return tagKey(t)===tagKey(tag)?next:t;})),updatedAt:Date.now()};});
+  const pinned=[];state.settings.pinnedTags.forEach(function follow(item){const name=tagKey(item)===tagKey(tag)?next:item;if(!pinned.some(function same(t){return tagKey(t)===tagKey(name);}))pinned.push(name);});
+  if(!persistSnapshot(notes,state.draft,normalizeSettings({...state.settings,pinnedTags:pinned})))return false;
+  const oldUsage=state.tagUsage[tagKey(tag)];if(oldUsage){state.tagUsage[tagKey(next)]=oldUsage;if(tagKey(next)!==tagKey(tag))delete state.tagUsage[tagKey(tag)];persistSnapshot();}
+  if(ui.selectedTag&&tagKey(ui.selectedTag)===tagKey(tag))ui.selectedTag=next;
+  if(tagKey(window.SidebarTabs.tagOf(ui.tab))===tagKey(tag))ui.tab=window.SidebarTabs.tabOf(pinned.find(function same(t){return tagKey(t)===tagKey(next);})||next);
+  return true;
+}
 /** @brief 对标签进行重命名、合并或全局移除。 @param {string} tag 标签。 */
 function manageTag(tag){closeTagMenu();const dialog=openModal('管理 #'+tag,'tag-manage-modal');dialog.body.append(el('p','modal-hint','只修改标签，保留记录内容。'));
   const input=el('input','form-control tag-name-input');input.value=tag;input.setAttribute('aria-label','标签名称');dialog.body.append(input);
-  const rename=button('重命名 / 合并','','edit','button primary');rename.addEventListener('click',function renameTag(){const next=input.value.trim().replace(/^#/,'');if(!isValidTag(next)){toast('标签最多40字；使用文字、数字、下划线或短横线，避免十六进制色值',null,true);return;}const notes=state.notes.map(function replaceTag(note){if(!hasTag(note,tag))return note;const parsed=noteParts(note);return {...note,text:window.NoteContent.compose(parsed.body,parsed.tags.map(function replace(t){return tagKey(t)===tagKey(tag)?next:t;})),updatedAt:Date.now()};});if(!persistSnapshot(notes))return;const oldUsage=state.tagUsage[tagKey(tag)];if(oldUsage){state.tagUsage[tagKey(next)]=oldUsage;if(tagKey(next)!==tagKey(tag))delete state.tagUsage[tagKey(tag)];persistSnapshot();}if(ui.selectedTag&&tagKey(ui.selectedTag)===tagKey(tag))ui.selectedTag=next;closeModal();renderNotes();toast('标签已更新，相同标签已合并');});
+  const rename=button('重命名 / 合并','','edit','button primary');rename.addEventListener('click',function renameTag(){if(!renameTagEverywhere(tag,input.value))return;closeModal();renderNotes();toast('标签已更新，相同标签已合并');});
   const remove=button('移除此标签','','trash','button danger');remove.addEventListener('click',function confirmRemove(){confirmAction({title:'移除 #'+tag+'？',description:'从所有记录中移除此标签；记录正文与附件保留。',confirmLabel:'移除标签',run:function removeGroup(){const notes=state.notes.map(function removeAssociation(note){if(!hasTag(note,tag))return note;let text=window.NoteContent.removeTag(note.text,tag);if(!text.trim()&&!note.images.length)text=tag;return {...note,text:text,updatedAt:Date.now()};});if(!persistSnapshot(notes))return false;if(ui.selectedTag&&tagKey(ui.selectedTag)===tagKey(tag))ui.selectedTag='';renderNotes();return true;}});});dialog.footer.append(remove,rename);
 }
 /** 刷新可忽略的工作区整理提醒。 */
-function renderWorkspaceNudge(){if(!elements.workspaceNudge||!state)return;const count=state.notes.filter(function active(n){return n.status==='active';}).length,limit=state.settings.tidyLimit||0;const visible=limit>0&&count>limit&&Date.now()>(state.settings.tidySnoozeUntil||0);const target=elements.workspaceNudge;target.hidden=!visible;target.replaceChildren();if(!visible)return;target.append(icon('info'),el('span','',count+' 条未归档记录，建议整理。'),button('查看','tidy-workspace','','nudge-link'),button('稍后','snooze-tidy','','nudge-link'),button('设置','tidy-settings','settings'));}
+function renderWorkspaceNudge(){if(!elements.workspaceNudge||!state)return;const count=state.notes.filter(function active(n){return n.status==='active';}).length,limit=state.settings.tidyLimit||0;const visible=limit>0&&count>limit&&Date.now()>(state.settings.tidySnoozeUntil||0);const target=elements.workspaceNudge;target.hidden=!visible;target.replaceChildren();if(!visible)return;target.append(icon('info'),el('span','',count+' 条记录，建议整理。'),button('查看','tidy-workspace','','nudge-link'),button('稍后','snooze-tidy','','nudge-link'),button('设置','tidy-settings','settings'));}
 
 /** 调整输入区域的高度边界，不重建正在书写的编辑器。 */
 function resizeDraftInput(){const input=elements.sidebarDraft;if(!input)return;const active=ui.composer||Boolean(state.draft.text||state.draft.images.length);elements.sidebarComposer.classList.add('is-active');if(input.liveMarkdown){input.liveMarkdown.element.style.maxHeight=Math.min(340,window.innerHeight*.42)+'px';return;}input.style.height='auto';input.style.height=Math.min(Math.min(300,window.innerHeight*.38),Math.max(active?100:76,input.scrollHeight||40))+'px';}

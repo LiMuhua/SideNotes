@@ -1231,7 +1231,12 @@ window.SideNotesSettings = (function createSettingsController() {
     const toastControls = el('div', 'settings-runtime-controls');
     toastControls.append(select('通知弹出位置', [['top-center', '顶部正中'], ['top-right', '右上角'], ['bottom-center', '底部正中']], state.settings.toastPosition, function toastPosition(value) { return save({ toastPosition: value }); }));
     toastField.append(el('div', 'settings-runtime-name', '通知位置'), toastControls);
-    grid.append(loading, tidy, toastField);
+    // 记录窗口的标签页位置（第四次反馈）：顶部横排或左侧竖排；窗口标题栏上的按钮切换的是同一项设置。
+    const tabsField = el('div', 'settings-runtime-field');
+    const tabsControls = el('div', 'settings-runtime-controls');
+    tabsControls.append(select('记录窗口的标签页位置', [['top', '顶部'], ['side', '左侧']], state.settings.windowTabs, function windowTabs(value) { return save({ windowTabs: value }); }));
+    tabsField.append(el('div', 'settings-runtime-name', '窗口标签页'), tabsControls);
+    grid.append(loading, tidy, toastField, tabsField);
     card.append(grid);
     return card;
   }
@@ -2090,5 +2095,5 @@ window.SideNotesSettings = (function createSettingsController() {
     return true;
   }
 
-  return { open: open, apply: apply, openTrash: openTrash, focusSearch: focusSearch, dataChanged: dataChanged, backupNow: backupNow, status: status, createSnapshot: createSnapshot, closeFloating: function close() { stopRecording(); closeFloating(); } };
+  return { open: open, apply: apply, save: save, openTrash: openTrash, focusSearch: focusSearch, dataChanged: dataChanged, backupNow: backupNow, status: status, createSnapshot: createSnapshot, closeFloating: function close() { stopRecording(); closeFloating(); } };
 })();

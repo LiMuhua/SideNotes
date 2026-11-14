@@ -556,8 +556,183 @@ img.brand-mark.is-small {
   background: var(--sn-color-mark-pinned);
 }
 
-.tab[data-tab='archive'] .tab-mark {
+/* 固定的标签页签（第四次反馈）用原来归档页签的颜色点。 */
+.tab.is-tag-tab .tab-mark {
   background: var(--sn-color-mark-archive);
+}
+
+/* 页签栏（第四次反馈）：随记、置顶之后是固定的标签页签，最后一格是菜单。页签不压缩，横向放不下时由 tabs.js 从右往左收进最后一格；
+ * 只裁切横向，当前页签的下划线照常落在分隔线上。页签名最多显示 4 个字，条数只写在随记与当前页签上。 */
+.sidebar-navigation .sidebar-tabs {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-x: clip;
+  overflow-y: visible;
+}
+
+.sidebar-tabs .tab {
+  position: relative;
+  flex: none;
+}
+
+.sidebar-tabs .tab[hidden],
+.sidebar-tabs .tab [data-count][hidden] {
+  display: none;
+}
+
+.sidebar-tabs .tab .tab-name {
+  min-width: 0;
+  max-width: calc(var(--sn-font-size-md) * 4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 旧样式给页签里的 span 都加了计数徽标的底色与内边距（styles.css 的 .tab span），名称与收起的个数还原成普通文字。 */
+.sidebar-tabs .tab :is(.tab-name, .tab-more-count),
+.sidebar-tabs .tab.active :is(.tab-name, .tab-more-count) {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+}
+
+/* 最后一格：只有 ▾，或收起的个数，或当前的收起页签（带当前样式）。量宽时按 4 个字预留，占位文字看不见。 */
+.sidebar-tabs .tab-more {
+  gap: var(--sn-space-1);
+  padding: 0 var(--sn-space-3);
+  color: var(--sn-color-text-muted);
+}
+
+.sidebar-tabs .tab-more.active {
+  color: var(--sn-color-text);
+}
+
+.sidebar-tabs .tab-more .tab-name.is-reserve {
+  visibility: hidden;
+}
+
+.sidebar-tabs .tab .tab-more-count {
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.sidebar-tabs .tab-more[aria-expanded='true'] {
+  background: var(--sn-color-hover);
+  color: var(--sn-color-text);
+}
+
+/* 卡片拖到页签上（停留后切换）与拖到菜单中收起的页签上：浅强调色。 */
+.sidebar-tabs .tab.is-drag-target,
+.tab-menu .note-context-item.is-drag-target {
+  background: var(--sn-color-accent-subtle);
+  color: var(--sn-color-accent-text);
+}
+
+/* 拖动页签排序：原处变淡，插入线与记录窗口标签栏的相同（.sidebar-tab-drop）。 */
+.sidebar-tabs .tab.is-drag-source {
+  opacity: var(--sn-opacity-disabled);
+}
+
+body.is-dragging-tab,
+body.is-dragging-tab * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+/* 双击页签原地改名的输入框。 */
+.sidebar-tabs .tab-rename-input {
+  flex: none;
+  align-self: center;
+  height: calc(var(--sn-tab-height) - var(--sn-space-2));
+  min-width: 0;
+  padding: 0 var(--sn-space-2);
+  border: var(--sn-border-width) solid var(--sn-color-accent);
+  border-radius: var(--sn-radius-control);
+  background: var(--sn-color-surface-raised);
+  color: var(--sn-color-text);
+  font: inherit;
+  outline: none;
+}
+
+/* 页签菜单中的当前项右侧一个对勾。 */
+.note-context-menu .note-context-item.is-checked > svg.icon:last-child {
+  margin-left: auto;
+  color: var(--sn-color-accent-text);
+}
+
+/* 新建页签：最后一格下方的输入框与已有标签的候选。 */
+.tab-create-panel {
+  z-index: var(--sn-z-popover);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sn-space-1);
+  width: calc(var(--sn-dialog-width) * 0.6);
+  padding: var(--sn-space-2);
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-surface-raised);
+  box-shadow: var(--sn-shadow-md);
+  color: var(--sn-color-text);
+}
+
+.tab-create-panel .tab-create-input {
+  width: 100%;
+  height: var(--sn-control-height);
+}
+
+.tab-create-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.tab-create-list:empty {
+  display: none;
+}
+
+.tab-create-option {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  min-height: var(--sn-menu-item-height);
+  padding: 0 var(--sn-space-3);
+  border: 0;
+  border-radius: var(--sn-radius-sm);
+  background: transparent;
+  color: var(--sn-color-text);
+  text-align: left;
+}
+
+.tab-create-option svg.icon {
+  flex: none;
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  color: var(--sn-color-text-secondary);
+}
+
+.tab-create-option-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-create-option-count {
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+}
+
+.tab-create-option:hover,
+.tab-create-option.is-active {
+  background: var(--sn-color-selected);
 }
 
 /* 搜索框：收起时只是最右边的放大镜，边框与底色透明；展开时宽度从右向左铺满这一行，盖住页签，页签淡出；
@@ -745,10 +920,60 @@ img.brand-mark.is-small {
 }
 
 .list-topline #list-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  min-width: 0;
+  margin: 0;
   color: var(--sn-color-text-muted);
   font-family: var(--sn-font-meta);
   font-size: var(--sn-font-size-sm);
   font-variant-numeric: tabular-nums;
+}
+
+/* 筛选条上的「固定为页签」「合并」（第四次反馈）：强调色的小号文字按钮，跟在条数与标签之后。 */
+.list-topline .list-summary-actions {
+  display: inline-flex;
+  flex: none;
+  gap: var(--sn-space-1);
+}
+
+.list-topline .list-summary-action {
+  height: var(--sn-control-height-sm);
+  min-height: 0;
+  padding: 0 var(--sn-space-3);
+  border: 0;
+  border-radius: var(--sn-radius-control);
+  background: transparent;
+  color: var(--sn-color-accent-text);
+  font-family: var(--sn-font-ui);
+  font-size: var(--sn-font-size-xs);
+  white-space: nowrap;
+}
+
+.list-topline .list-summary-action:hover {
+  background: var(--sn-color-accent-subtle);
+}
+
+/* 在标签页签中新建：工具栏上一个可以去掉的「#标签」，保存时写进标签行（第四次反馈）。 */
+.composer-tools .composer-tab-tag {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sn-space-1);
+  height: var(--sn-control-height-sm);
+  padding: 0 0 0 var(--sn-space-3);
+  border-radius: var(--sn-radius-chip);
+  background: var(--sn-color-accent-subtle);
+  color: var(--sn-color-accent-text);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+}
+
+.composer-tools .composer-tab-tag .icon-button {
+  width: var(--sn-control-height-sm);
+  height: var(--sn-control-height-sm);
+  color: inherit;
 }
 
 .tag-filter-button {
@@ -1769,9 +1994,35 @@ img.is-thumbnail-pending {
   background: var(--sn-color-surface-sunken);
 }
 
-/* 拖动编辑面中的附件调整位置（本次提出）：原处变淡，拖影是附件的副本，与卡片拖影同样倾斜、浮起；插入线沿用卡片排序的 card-drop-guide。 */
+/* 拖动编辑面中的附件调整位置（本次提出）：原处变淡，拖影是附件的副本，与卡片拖影同样倾斜、浮起；
+ * 落点精确到字符（第四次反馈），插入光标是一条强调色的竖线，上端一个小圆点（与标签页的插入线同一种样子），
+ * 挂在 body 上、叠在拖影之上，位置与高度由脚本按屏幕坐标写入。 */
 .live-markdown-editor .is-drag-source {
   opacity: var(--sn-opacity-disabled);
+}
+
+.md-drop-caret {
+  position: fixed;
+  z-index: calc(var(--sn-z-tooltip) + 1);
+  width: var(--sn-focus-ring-width);
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-accent);
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.md-drop-caret::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  box-sizing: border-box;
+  width: var(--sn-space-4);
+  height: var(--sn-space-4);
+  border: var(--sn-focus-ring-width) solid var(--sn-color-accent);
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-panel);
+  transform: translate(-50%, -50%);
 }
 
 .md-drag-ghost {
@@ -2337,26 +2588,38 @@ body.is-dragging-attachment * {
  * 与 Playground 的设置窗口相同（windows.css 与 controls.css），布局沿用现有应用 0.7.3：
  * 窗口宽 880（与现有应用相同），不随字号变化，内容按字号缩放；窄的分类栏，当前项浮起、图标用强调色；
  * 页面由分组卡片组成，相关的设置放在同一张卡片里，一行可以放几项，项与项之间一条很淡的竖线，说明收在名称后的问号里。
- * 高度随内容（本次提出）：最高 600，内容多的分类在页面里滚动，不把窗口撑高；内容少的分类窗口跟着变矮，最矮 360，不留大片空白。
- * 上边固定在最高时居中的位置，切换分类时标题栏不动，只有下边伸缩。 */
+ * 高度固定（第四次反馈：不随内容跳动）：560，内容多的分类在页面里滚动；回收站的列表伸到底部，内容少的页不显空。
+ * 左右两栏（第四次反馈：页面外面不再套一层边框）：左栏是「设置」与分类栏，用窗口底色；右栏是页面，用表面色，两栏只靠底色区分，
+ * 不画分隔线；页面中的分组卡片居中排成一栏。 */
 .modal.settings-modal {
   position: relative;
   display: flex;
   flex-direction: column;
-  align-self: flex-start;
   width: min(calc(880px / var(--app-zoom, 1)), calc((100vw - var(--sn-space-6)) / var(--app-zoom, 1))); /* 固定：设置窗口的窗口尺寸 */
-  height: auto;
-  min-height: min(calc(360px / var(--app-zoom, 1)), calc((100dvh - 40px) / var(--app-zoom, 1))); /* 固定：内容少时的最小高度；遮罩上下各留 20 */
-  max-height: min(calc(600px / var(--app-zoom, 1)), calc((100dvh - 40px) / var(--app-zoom, 1))); /* 固定：设置窗口的最大高度；遮罩上下各留 20 */
+  height: min(calc(560px / var(--app-zoom, 1)), calc((100dvh - 40px) / var(--app-zoom, 1))); /* 固定：设置窗口的窗口尺寸；遮罩上下各留 20 */
   max-width: none;
-  margin-top: calc(max(0px, (100dvh - 640px) / 2) / var(--app-zoom, 1)); /* 固定：最大高度 600 加遮罩上下各 20 的内边距 */
+  max-height: none;
   padding: 0;
   overflow: hidden;
   border: var(--sn-border-width) solid var(--sn-color-border);
   border-radius: var(--sn-radius-lg);
-  background: var(--sn-color-bg);
+  background: var(--sn-color-surface);
   box-shadow: var(--sn-shadow-lg);
   color: var(--sn-color-text);
+}
+
+/* 左栏的底色从标题栏一直铺到底部，与分类栏同宽。 */
+.modal.settings-modal::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--sn-dialog-width) * 0.32);
+  background: var(--sn-color-bg);
+  content: '';
+  pointer-events: none;
+}
+
+.settings-modal > :is(.modal-header, .modal-body) {
+  position: relative;
 }
 
 /* 标题栏：「设置」与最小化、关闭两个小号图标按钮。 */
@@ -2477,7 +2740,7 @@ body.is-dragging-attachment * {
   outline-offset: calc(var(--sn-focus-ring-width) * -1);
 }
 
-/* 页面：表面色的一块，左上角圆角，与分类栏之间一条淡分隔线。 */
+/* 页面：右栏的表面色上直接排分组卡片，不再有外框、圆角与另一层底色（第四次反馈）。 */
 .settings-modal .settings-panel {
   flex: 1;
   min-width: 0;
@@ -2486,10 +2749,8 @@ body.is-dragging-attachment * {
   padding: var(--sn-space-5) var(--sn-space-5) var(--sn-space-8);
   overflow: auto;
   border: 0;
-  border-top: var(--sn-border-width) solid var(--sn-color-border-subtle);
-  border-left: var(--sn-border-width) solid var(--sn-color-border-subtle);
-  border-radius: var(--sn-radius-lg) 0 0 0;
-  background: var(--sn-color-surface);
+  border-radius: 0;
+  background: transparent;
   box-shadow: none;
   scrollbar-color: var(--sn-color-border-strong) transparent;
 }
@@ -3490,6 +3751,35 @@ body.is-dragging-attachment * {
   gap: var(--sn-space-3);
 }
 
+/* 窗口高度固定后（第四次反馈），回收站的列表伸到页面底部，「回收站为空」在空出的地方居中，不在顶部留一行字、下面一片空白。 */
+.settings-modal .settings-panel[data-section='trash'] {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-modal .settings-panel[data-section='trash'] > * {
+  width: 100%;
+}
+
+.settings-modal .settings-panel[data-section='trash'] > .settings-trash-list {
+  flex: 1 0 auto;
+}
+
+.settings-modal .settings-trash-list > .settings-empty {
+  margin: auto;
+}
+
+/* 关于页内容不多，整页在固定高度的页面里上下居中（第四次反馈：内容少的页不显空）；字号大、放不下时从顶部排起，不裁掉上面。 */
+.settings-modal .settings-panel[data-section='about'] {
+  display: flex;
+  flex-direction: column;
+  justify-content: safe center;
+}
+
+.settings-modal .settings-panel[data-section='about'] > * {
+  width: 100%;
+}
+
 .settings-modal .settings-trash-item {
   display: flex;
   align-items: flex-start;
@@ -4169,6 +4459,11 @@ body[data-edge='left'] .toast-region {
     margin-top: 0;
   }
 
+  /* 分类栏叠在页面上方，左栏的底色不再铺满整个高度。 */
+  .modal.settings-modal::before {
+    display: none;
+  }
+
   .settings-modal .settings-layout {
     flex-direction: column;
   }
@@ -4510,6 +4805,125 @@ body[data-edge='left'] .toast-region {
   width: min(calc(var(--sn-dialog-width) * 1.3), calc((100vw - var(--sn-space-6)) / var(--app-zoom, 1)));
 }
 
+/* 合并成一条（第四次反馈）：标题与格式一行，下面是按卡片排版的实时预览；底栏左侧「保留原记录」，右侧「合并」。 */
+.modal.merge-modal {
+  width: calc(var(--sn-dialog-width) * 1.3);
+}
+
+.merge-modal .modal-header h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  min-width: 0;
+}
+
+.merge-modal .modal-header h2 svg.icon {
+  flex: none;
+  color: var(--sn-color-text-muted);
+}
+
+.merge-modal .merge-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sn-space-4) var(--sn-space-6);
+}
+
+.merge-modal .merge-field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  min-width: 0;
+}
+
+.merge-modal .merge-field:has(.merge-title) {
+  flex: 1 1 calc(var(--sn-dialog-width) * 0.5);
+}
+
+.merge-modal .merge-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.merge-modal .merge-field-label {
+  flex: none;
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+}
+
+.merge-modal .merge-format {
+  display: inline-flex;
+  gap: var(--sn-space-1);
+  padding: var(--sn-space-1);
+  border-radius: var(--sn-radius-control);
+  background: var(--sn-color-surface-sunken);
+}
+
+.merge-modal .merge-format-option {
+  height: var(--sn-control-height-sm);
+  padding: 0 var(--sn-space-4);
+  border: 0;
+  border-radius: var(--sn-radius-control);
+  background: transparent;
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+}
+
+.merge-modal .merge-format-option[aria-pressed='true'] {
+  background: var(--sn-color-surface-raised);
+  box-shadow: var(--sn-shadow-sm);
+  color: var(--sn-color-text);
+  font-weight: var(--sn-font-weight-medium);
+}
+
+.merge-modal .merge-preview-box {
+  max-height: 50dvh;
+  margin-top: var(--sn-space-5);
+  padding: var(--sn-space-5) var(--sn-space-6);
+  overflow-y: auto;
+  border: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-card);
+  scrollbar-width: thin;
+  scrollbar-color: var(--sn-color-border-strong) transparent;
+}
+
+.merge-modal .merge-preview-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sn-space-2);
+  margin-top: var(--sn-space-5);
+}
+
+.merge-modal .merge-preview-tags:empty {
+  display: none;
+}
+
+.merge-modal .merge-preview-tags .tag-chip {
+  display: inline-flex;
+  align-items: center;
+  height: calc(var(--sn-control-height-sm) - var(--sn-space-2));
+  padding: 0 var(--sn-space-3);
+  border-radius: var(--sn-radius-chip);
+  background: var(--sn-color-hover);
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+}
+
+.merge-modal .modal-footer .merge-keep {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-2);
+  margin-right: auto;
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+}
+
+.merge-modal .merge-keep input {
+  accent-color: var(--sn-color-accent);
+}
+
 .attachment-modal .modal-header h2 {
   display: inline-flex;
   align-items: center;
@@ -4684,8 +5098,17 @@ body[data-edge='left'] .toast-region {
 }
 
 /* 正文四周留白相同；窗口按内容定大小时把它算在内（note-window.js 的 fitSize）。 */
+/* 正文外面一层横排的容器（第四次反馈）：标签页放在左侧时，标签栏排在正文之前。 */
+.note-window-main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
 .note-window-body {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   padding: var(--sn-space-5) var(--sn-space-6) var(--sn-space-6);
   overflow-y: auto;
@@ -4783,6 +5206,8 @@ body[data-edge='left'] .toast-region {
   padding-left: var(--sn-space-4);
 }
 
+/* 标签页（第四次反馈）：最宽放得下十来个字；关闭按钮不再常占位置，平时标题用满整个标签页，
+ * 当前一页与悬停时关闭按钮浮在右端。标题仍放不下时省略，悬停片刻显示全名（.note-window-tooltip）。 */
 .note-window-tab {
   position: relative;
   display: inline-flex;
@@ -4790,10 +5215,10 @@ body[data-edge='left'] .toast-region {
   align-items: center;
   gap: var(--sn-space-3);
   min-width: calc(var(--sn-control-height) * 2.5);
-  max-width: calc(var(--sn-control-height) * 7);
+  max-width: calc(var(--sn-control-height) * 9);
   height: 100%;
   margin-bottom: calc(var(--sn-border-width) * -1);
-  padding: 0 var(--sn-space-2) 0 var(--sn-space-5);
+  padding: 0 var(--sn-space-5);
   border: var(--sn-border-width) solid transparent;
   border-bottom: 0;
   border-radius: var(--sn-radius-md) var(--sn-radius-md) 0 0;
@@ -4837,14 +5262,106 @@ body[data-edge='left'] .toast-region {
 }
 
 .note-window-tab .note-window-tab-close {
-  flex: none;
+  position: absolute;
+  top: 50%;
+  right: var(--sn-space-1);
   width: var(--sn-control-height-sm);
   height: var(--sn-control-height-sm);
+  background: inherit;
   opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
 }
 
 .note-window-tab:is(:hover, .is-active, :focus-within) .note-window-tab-close {
   opacity: 1;
+  pointer-events: auto;
+}
+
+/* 当前一页的关闭按钮一直在，标题让出它的位置；其余标签页悬停时按钮盖住标题的末尾。 */
+.note-window-tab.is-active {
+  padding-right: calc(var(--sn-control-height-sm) + var(--sn-space-2));
+}
+
+/* 标签页位置的按钮只在有标签页时出现。 */
+.note-window:not(.has-tabs) .note-window-layout {
+  display: none;
+}
+
+.note-window .note-window-layout[aria-pressed='true'] {
+  color: var(--sn-color-accent-text);
+}
+
+/* 标签页的全名：挂在 body 上，与应用图标名称的工具提示同一种样子。 */
+.note-window-tooltip {
+  position: fixed;
+  z-index: calc(var(--sn-z-tooltip) + 1);
+  max-width: calc(var(--sn-dialog-width) * 0.9);
+  padding: var(--sn-space-2) var(--sn-space-4);
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-sm);
+  background: var(--sn-color-surface-raised);
+  box-shadow: var(--sn-shadow-md);
+  color: var(--sn-color-text);
+  font-family: var(--sn-font-ui);
+  font-size: var(--sn-font-size-sm);
+  line-height: var(--sn-line-height-normal);
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  zoom: var(--app-zoom, 1);
+}
+
+/* 标签页放在左侧（第四次反馈）：标题栏恢复单页时的样子，写当前一页的标题；左侧一列竖排的标签页，
+ * 名称有一整列的宽度，当前一页浮起；标签栏与正文之间一条淡分隔线。拖动排序时插入线是一条横线。 */
+.note-window.has-tabs.is-side-tabs .note-window-header {
+  gap: var(--sn-space-4);
+  height: var(--sn-header-height);
+  padding-top: 0;
+  padding-left: var(--sn-panel-padding);
+}
+
+.note-window.has-tabs.is-side-tabs :is(.note-window-emoji, .note-window-title) {
+  display: revert;
+}
+
+.note-window.has-tabs.is-side-tabs .note-window-grip {
+  display: none;
+}
+
+.note-window.is-side-tabs .note-window-tabs {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: stretch;
+  align-self: stretch;
+  gap: var(--sn-space-1);
+  width: calc(var(--sn-control-height) * 6);
+  padding: var(--sn-space-3) var(--sn-space-2);
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-right: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  background: var(--sn-color-panel);
+}
+
+.note-window.is-side-tabs .note-window-tab {
+  flex: none;
+  min-width: 0;
+  max-width: none;
+  height: var(--sn-control-height);
+  margin: 0;
+  padding: 0 var(--sn-space-3) 0 var(--sn-space-4);
+  border: 0;
+  border-radius: var(--sn-radius-control);
+}
+
+.note-window.is-side-tabs .note-window-tab.is-active {
+  padding-right: calc(var(--sn-control-height-sm) + var(--sn-space-2));
+  background: var(--sn-color-card);
+  box-shadow: var(--sn-shadow-sm);
+}
+
+.note-window.is-editing.is-side-tabs .note-window-tab.is-active {
+  background: var(--sn-color-editing);
 }
 
 .note-window-tab .note-window-tab-close svg.icon {
@@ -4862,7 +5379,8 @@ body[data-edge='left'] .toast-region {
   opacity: var(--sn-opacity-disabled);
 }
 
-.note-window-tab-drop {
+.note-window-tab-drop,
+.sidebar-tab-drop {
   position: fixed;
   z-index: calc(var(--sn-z-tooltip) + 1);
   width: var(--sn-focus-ring-width);
@@ -4872,7 +5390,8 @@ body[data-edge='left'] .toast-region {
   transform: translateX(-50%);
 }
 
-.note-window-tab-drop::before {
+.note-window-tab-drop::before,
+.sidebar-tab-drop::before {
   content: '';
   position: absolute;
   top: 0;
@@ -4884,6 +5403,17 @@ body[data-edge='left'] .toast-region {
   border-radius: var(--sn-radius-full);
   background: var(--sn-color-panel);
   transform: translate(-50%, -50%);
+}
+
+/* 竖排的标签栏：插入线是一条横线，小圆点在左端。 */
+.note-window-tab-drop.is-horizontal {
+  height: var(--sn-focus-ring-width);
+  transform: translateY(-50%);
+}
+
+.note-window-tab-drop.is-horizontal::before {
+  top: 50%;
+  left: 0;
 }
 
 .note-window-tab-ghost {
