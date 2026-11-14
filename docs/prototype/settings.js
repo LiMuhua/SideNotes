@@ -1204,10 +1204,10 @@ window.SideNotesSettings = (function createSettingsController() {
 
     const tidy = el('div', 'settings-runtime-field');
     const tidyName = el('div', 'settings-runtime-name', '整理提醒');
-    tidyName.append(help('整理提醒', '工作区记录超过这个数时提醒整理'));
+    tidyName.append(help('整理提醒', '记录超过这个数时提醒整理'));
     const tidyControls = el('div', 'settings-runtime-controls');
     let previousLimit = state.settings.tidyLimit || 50;
-    const threshold = input('工作区整理提醒阈值', String(state.settings.tidyLimit || previousLimit), function limit(value) {
+    const threshold = input('整理提醒阈值', String(state.settings.tidyLimit || previousLimit), function limit(value) {
       const number = Number(value);
       if (!Number.isInteger(number) || number < 1 || number > 100000) { toast('请输入 1 至 100000 的整数'); return false; }
       if (!save({ tidyLimit: number })) return false;
@@ -1215,7 +1215,7 @@ window.SideNotesSettings = (function createSettingsController() {
       return true;
     });
     threshold.type = 'number'; threshold.min = '1'; threshold.max = '100000'; threshold.disabled = !state.settings.tidyLimit;
-    const tidyToggle = toggle('启用工作区整理提醒', state.settings.tidyLimit > 0, function reminders(value) {
+    const tidyToggle = toggle('启用整理提醒', state.settings.tidyLimit > 0, function reminders(value) {
       const next = value ? previousLimit : 0;
       if (!save({ tidyLimit: next })) return false;
       threshold.disabled = !value;

@@ -214,6 +214,31 @@ kbd,
   color: #e6e9ef; /* 固定：模拟桌面上的文字 */
 }
 
+/* 跳到 Design Playground（第四次反馈）：品牌区「交互原型」之后一个小号链接，颜色随模拟桌面上的文字。 */
+.demo-canvas .demo-brand .demo-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-1);
+  margin-left: var(--sn-space-5);
+  padding: var(--sn-space-1) var(--sn-space-3);
+  border: var(--sn-border-width) solid currentColor;
+  border-radius: var(--sn-radius-control);
+  color: inherit;
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+  opacity: 0.72;
+  text-decoration: none;
+}
+
+.demo-canvas .demo-brand .demo-link:hover {
+  opacity: 1;
+}
+
+.demo-canvas .demo-brand .demo-link svg.icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
 .demo-canvas .ambient-orbit {
   display: none;
 }
