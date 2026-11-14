@@ -233,17 +233,23 @@
   border-bottom: 0;
 }
 
+/* 页签栏（第四次反馈）：随记、置顶之后是固定的标签页签，最后一格是菜单。页签不压缩，放不下时由 SidebarTabs.tsx
+ * 从右往左收进最后一格；只裁切横向，当前页签的下划线照常落在分隔线上。 */
 .sn-tabs-row {
   display: flex;
-  flex: none;
+  flex: 0 1 auto;
   align-items: center;
   gap: var(--sn-space-1);
+  min-width: 0;
+  overflow-x: clip;
+  overflow-y: visible;
   transition: opacity var(--sn-duration-normal) var(--sn-ease-standard);
 }
 
 .sn-side-tab {
   position: relative;
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: var(--sn-space-2);
   height: var(--sn-tab-height);
@@ -287,8 +293,17 @@
   background: var(--sn-color-mark-pinned);
 }
 
-.sn-side-tab[data-tab='archive'] .sn-side-tab-mark {
+/* 固定的标签页签用原来归档页签的颜色点（第四次反馈去掉了归档）。 */
+.sn-side-tab[data-tab^='tag:'] .sn-side-tab-mark {
   background: var(--sn-color-mark-archive);
+}
+
+/* 标签页签不写 #，名称最多显示 4 个字，超出省略；最后一格显示收起的当前页签时也一样。 */
+.sn-side-tab[data-tab^='tag:'] .sn-side-tab-label,
+.sn-tab-more .sn-side-tab-label {
+  max-width: calc(var(--sn-font-size-md) * 4);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sn-side-tab:hover {
@@ -338,6 +353,124 @@
 .sn-tabs-row.is-segmented .sn-side-tab[aria-selected='true'] {
   background: var(--sn-color-surface-raised);
   box-shadow: var(--sn-shadow-sm);
+}
+
+/* 最后一格：只有 ▾，或收起的个数「N ▾」，或当前的收起页签（带当前样式）。单击总是打开菜单。 */
+.sn-tab-more {
+  gap: var(--sn-space-1);
+  padding: 0 var(--sn-space-3);
+  color: var(--sn-color-text-muted);
+}
+
+.sn-tab-more[aria-selected='true'] {
+  color: var(--sn-color-text);
+}
+
+.sn-tab-more[aria-expanded='true'] {
+  background: var(--sn-color-hover);
+  color: var(--sn-color-text);
+}
+
+.sn-tab-more > .sn-icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.sn-tab-more-count {
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 测量行：与页签栏同样的页签（包括收起的页签与最后一格按 4 个字预留的宽度），看不见，只用来量宽度。 */
+.sn-tabs-row.sn-tabs-measure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: max-content;
+  overflow: visible;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* 双击页签原地改名的输入框：宽度随名称，Enter 或点到别处确认，Esc 取消。 */
+.sn-tab-rename {
+  flex: none;
+  align-self: center;
+  field-sizing: content;
+  min-width: calc(var(--sn-font-size-md) * 3);
+  max-width: calc(var(--sn-font-size-md) * 8);
+  height: calc(var(--sn-tab-height) - var(--sn-space-2));
+  padding: 0 var(--sn-space-2);
+  border: var(--sn-border-width) solid var(--sn-color-accent);
+  border-radius: var(--sn-radius-control);
+  background: var(--sn-color-surface-raised);
+  color: var(--sn-color-text);
+  font: inherit;
+  outline: none;
+}
+
+/* 新建页签：最后一格下方的小浮层，一个输入框与还没固定的已有标签。 */
+.sn-tab-create {
+  position: absolute;
+  z-index: var(--sn-z-popover);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sn-space-1);
+  width: calc(var(--sn-dialog-width) * 0.6);
+  padding: var(--sn-space-2);
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-surface-raised);
+  box-shadow: var(--sn-shadow-md);
+  color: var(--sn-color-text);
+  animation: sn-drop-in var(--sn-duration-normal) var(--sn-ease-enter);
+}
+
+.sn-tab-create > .sn-input {
+  width: 100%;
+}
+
+.sn-tab-create-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.sn-tab-create-option {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  min-height: var(--sn-menu-item-height);
+  padding: 0 var(--sn-space-3);
+  border-radius: var(--sn-radius-sm);
+  color: var(--sn-color-text);
+  text-align: left;
+}
+
+.sn-tab-create-option .sn-icon {
+  flex: none;
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  color: var(--sn-color-text-secondary);
+}
+
+.sn-tab-create-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sn-tab-create-count {
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+}
+
+.sn-tab-create-option:hover,
+.sn-tab-create-option.is-active {
+  background: var(--sn-color-selected);
 }
 
 /* 搜索框（与现有应用一样有展开与收起的动画）：收起时只是最右边的放大镜，边框与底色透明；
@@ -621,6 +754,19 @@
   background: var(--sn-color-hover);
 }
 
+/* 按标签筛选时的「固定为页签」「合并」（第四次反馈）：与「显示全部」同样的文字按钮，字重轻一档。 */
+.sn-filter-banner-action {
+  padding: var(--sn-space-1) var(--sn-space-3);
+  border-radius: var(--sn-radius-sm);
+  color: var(--sn-color-accent-text);
+  font-weight: var(--sn-font-weight-medium);
+  white-space: nowrap;
+}
+
+.sn-filter-banner-action:hover {
+  background: var(--sn-color-hover);
+}
+
 /* ---------- 新建卡片 ---------- */
 .sn-composer {
   position: relative;
@@ -656,6 +802,25 @@
   display: flex;
   gap: var(--sn-space-1);
   margin-right: auto;
+}
+
+/* 在标签页签中新建：工具栏上一个可以去掉的「#标签」，保存时写进标签行（第四次反馈）。 */
+.sn-composer-tag {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sn-space-1);
+  height: var(--sn-control-height-sm);
+  padding: 0 0 0 var(--sn-space-3);
+  border-radius: var(--sn-radius-chip);
+  background: var(--sn-color-accent-subtle);
+  color: var(--sn-color-accent-text);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+}
+
+.sn-composer-tag .sn-icon-button {
+  color: inherit;
 }
 
 .sn-composer-count {
@@ -1049,7 +1214,7 @@
   transform: translate(-50%, -50%);
 }
 
-/* 拖影：卡片的副本向右错开、倾斜、浮起；多选时后面叠着一两张卡片的边（本次提出：倾斜加大，增加堆叠）。 */
+/* 拖影：卡片的副本向右错开、倾斜、浮起（本次提出：倾斜加大，增加堆叠）。 */
 .sn-drag-ghost {
   position: relative;
   opacity: 0.9;
@@ -1062,16 +1227,25 @@
   position: relative;
 }
 
-.sn-drag-stack {
+.sn-drag-ghost > .sn-note {
+  z-index: 1;
+}
+
+/* 多选时是一叠真实的卡片（第三次反馈，与交互原型相同）：后面两层是另外两张选中卡片的副本，与最上面的卡片一样大
+ * （更长的部分裁掉），越往后往右上错开越多、转得越多，露出它们的标题栏。 */
+.sn-drag-layer {
   position: absolute;
   inset: 0;
-  border: var(--sn-border-width) solid var(--sn-color-border);
+  overflow: hidden;
   border-radius: var(--sn-card-radius);
-  background: var(--sn-color-card);
   box-shadow: var(--sn-shadow-md);
   transform:
-    translate(calc(var(--local-layer) * var(--sn-space-3)), calc(var(--local-layer) * var(--sn-space-2)))
-    rotate(calc(var(--local-layer) * 2deg));
+    translate(calc(var(--local-layer) * var(--sn-space-4) * 1.25), calc(var(--local-layer) * var(--sn-space-4) * -1.6))
+    rotate(calc(var(--local-layer) * 2.5deg));
+}
+
+.sn-drag-layer > .sn-note {
+  height: 100%;
 }
 
 .sn-drag-count {
@@ -1172,4 +1346,72 @@
   width: var(--sn-space-4);
   height: var(--sn-space-4);
   stroke-width: calc(var(--sn-icon-stroke) * 1.6);
+}
+
+/* ---------- 合并成一条（第四次反馈） ----------
+ * 宽为弹窗宽度的 1.3 倍。一行是「标题」与「格式」，下面是按卡片排版的实时预览（高不超过视口的一半，超出在框内滚动），
+ * 末尾是合并后的标签；底栏左侧「保留原记录」，右侧主要按钮。 */
+.sn-dialog.sn-merge-dialog {
+  width: calc(var(--sn-dialog-width) * 1.3);
+}
+
+.sn-merge-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sn-space-4) var(--sn-space-6);
+}
+
+.sn-merge-field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  min-width: 0;
+}
+
+.sn-merge-field.is-title {
+  flex: 1 1 calc(var(--sn-dialog-width) * 0.5);
+}
+
+.sn-merge-field.is-title .sn-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.sn-merge-label {
+  flex: none;
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+}
+
+.sn-merge-preview {
+  max-height: 50dvh;
+  margin-top: var(--sn-space-5);
+  padding: var(--sn-space-5) var(--sn-space-6);
+  overflow-y: auto;
+  border: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-card);
+  scrollbar-width: thin;
+  scrollbar-color: var(--sn-color-border-strong) transparent;
+}
+
+.sn-merge-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sn-space-2);
+  margin-top: var(--sn-space-5);
+}
+
+.sn-merge-tags .sn-note-tag {
+  display: inline-flex;
+  align-items: center;
+}
+
+.sn-merge-dialog .sn-dialog-footer {
+  align-items: center;
+}
+
+.sn-merge-dialog .sn-dialog-footer > .sn-check {
+  margin-right: auto;
 }

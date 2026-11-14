@@ -7,15 +7,16 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { rankTags, suggestTags } from '@/core/notes';
 import { tagKey } from '@/core/tags';
-import type { EdgeSide, TabKey } from '@/core/types';
-import { TAB_LABELS, TAB_ORDER, useNotes, type SidebarView } from '../model/notes';
+import type { EdgeSide } from '@/core/types';
+import { findPinned, notesInTab, useNotes, type SidebarView } from '../model/notes';
 import { IconButton } from '../ui/Button';
-import { cx, useSurface, useFormFactor } from '../ui/context';
-import { Icon, type IconName } from '../ui/Icon';
+import { cx, useFormFactor } from '../ui/context';
+import { Icon } from '../ui/Icon';
 import { Layer, useAnchoredPosition } from '../ui/layer';
 import { Keys } from '../ui/Misc';
 import { SHORTCUT_KEYS } from './shortcuts';
 import { builtinAppIcon, CUSTOM_APP_ICON } from '../model/appIcons';
+import { TabsRow } from './SidebarTabs';
 
 /** 当前应用图标的地址：内置图标用母版 SVG，自定义图标用上传后裁好的 PNG。 */
 export function useAppIconUrl(): string {
@@ -80,33 +81,11 @@ export function SidebarHeader({ pinned, linked, edge, onTogglePinned, onHide }: 
   );
 }
 
-const TAB_ICONS: Record<TabKey, IconName | null> = { workspace: null, pinned: 'pin', archive: 'archive' };
-
+/** 页签行：页签栏（见 SidebarTabs.tsx）与最右边的搜索。 */
 export function SidebarNav({ view, onSearchInput }: { view: SidebarView; onSearchInput?: (element: HTMLInputElement | null) => void }) {
-  const surface = useSurface();
   return (
     <div className={cx('sn-side-nav', view.searchOpen && 'is-searching')}>
-      <div className={cx('sn-tabs-row', `is-${surface.tabs}`, surface.tabMarks && 'has-marks')} role="tablist" aria-label="记录列表" inert={view.searchOpen}>
-        {TAB_ORDER.map((tab) => {
-          const icon = TAB_ICONS[tab];
-          return (
-            <button
-              key={tab}
-              type="button"
-              role="tab"
-              aria-selected={view.tab === tab}
-              className="sn-side-tab"
-              data-tab={tab}
-              onClick={() => view.setTab(tab)}
-            >
-              <span className="sn-side-tab-mark" aria-hidden="true" />
-              {icon ? <Icon name={icon} /> : null}
-              <span className="sn-side-tab-label">{TAB_LABELS[tab]}</span>
-              <span className="sn-side-tab-count">{view.counts[tab]}</span>
-            </button>
-          );
-        })}
-      </div>
+      <TabsRow view={view} />
       <SearchBox view={view} onInput={onSearchInput} />
     </div>
   );
@@ -219,17 +198,17 @@ function SearchBox({ view, onInput }: { view: SidebarView; onInput?: (element: H
   );
 }
 
-/** 整理提醒：工作区记录超过阈值时出现（T 系列「整理提醒」）。 */
-export function TidyNudge({ onArchive, onSnooze, onClose }: { onArchive: () => void; onSnooze: () => void; onClose: () => void }) {
+/**
+ * 整理提醒：记录超过阈值时出现（T 系列「整理提醒」）。第四次反馈去掉了归档，提醒改为建议把同一类的记录固定为页签，
+ * 或合并成一条（与交互原型相同）。
+ */
+export function TidyNudge({ onSnooze, onClose }: { onSnooze: () => void; onClose: () => void }) {
   return (
     <div className="sn-nudge" role="status">
       <Icon name="alert" />
       <p className="sn-nudge-text">
-        <strong>工作区记录较多</strong>
-        <button type="button" className="sn-nudge-link" onClick={onArchive}>
-          归档旧记录
-        </button>
-        可以让工作区保持整洁
+        <strong>记录较多</strong>
+        可以把同一类的记录固定为页签，或合并成一条
         <button type="button" className="sn-nudge-link" onClick={onSnooze}>
           七天后再说
         </button>
@@ -315,7 +294,8 @@ function TagMenu({
   const data = useNotes();
   const menu = useRef<HTMLDivElement>(null);
   const { style } = useAnchoredPosition(true, anchor, menu, 'bottom-end', 4);
-  const candidates = rankTags(data.notes, view.tab, data.tagUsage, view.query, view.tag);
+  // 页签按第四次反馈的规则计算（见 model/notes.tsx），先取出当前页签的记录；它们都是未删除的记录，所以按 workspace 排名。
+  const candidates = rankTags(notesInTab(data.notes, view.tab, data.pinnedTags), 'workspace', data.tagUsage, view.query, view.tag);
   const shown = candidates.slice(0, MAX_TAG_CANDIDATES);
   const priority = shown.length > 0 && (shown[0].match || shown[0].selected) ? shown[0] : null;
   const others = priority ? shown.slice(1) : shown;
@@ -405,7 +385,7 @@ function TagMenu({
           }}
         >
           <span className="sn-menu-label">全部标签</span>
-          <span className="sn-tag-count">{view.counts[view.tab]}</span>
+          <span className="sn-tag-count">{view.total}</span>
         </button>
         {others.map((item) => (
           <div key={item.tag} role="none" className="sn-tag-row">
@@ -435,9 +415,14 @@ function TagMenu({
   );
 }
 
-/** 筛选条：搜索或按标签筛选时显示条件、条数与「显示全部」（T67）。 */
-export function FilterBanner({ view }: { view: SidebarView }) {
+/**
+ * 筛选条：搜索或按标签筛选时显示条件、条数与「显示全部」（T67）。
+ * 按标签筛选时还有「固定为页签」（这个标签还没固定时）与「合并」（筛出两条以上时），第四次反馈。
+ */
+export function FilterBanner({ view, onPin, onMerge }: { view: SidebarView; onPin?: (tag: string) => void; onMerge?: () => void }) {
   const query = view.query.trim();
+  const canPin = Boolean(view.tag && onPin && !findPinned(view.pinnedTags, view.tag));
+  const canMerge = Boolean(view.tag && onMerge && view.items.length > 1);
   return (
     <div className="sn-filter-banner" role="status">
       <Icon name="search" />
@@ -447,8 +432,18 @@ export function FilterBanner({ view }: { view: SidebarView }) {
         {view.tag ? `标签 #${view.tag}` : null}
       </p>
       <span className="sn-filter-banner-count">
-        {view.items.length} / {view.counts[view.tab]} 条
+        {view.items.length} / {view.total} 条
       </span>
+      {canPin ? (
+        <button type="button" className="sn-filter-banner-action" onClick={() => onPin?.(view.tag)}>
+          固定为页签
+        </button>
+      ) : null}
+      {canMerge ? (
+        <button type="button" className="sn-filter-banner-action" aria-label={`合并这 ${view.items.length} 条`} onClick={onMerge}>
+          合并
+        </button>
+      ) : null}
       <button type="button" className="sn-filter-banner-clear" onClick={view.clearFilters}>
         显示全部
       </button>

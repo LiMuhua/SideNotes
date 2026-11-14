@@ -43,7 +43,10 @@ type ExtraIconName =
   | 'refresh'
   | 'maximize'
   | 'restore-window'
-  | 'menu';
+  | 'menu'
+  | 'merge'
+  | 'panel-left'
+  | 'panel-top';
 
 export type IconName = BaseIconName | ExtraIconName;
 
@@ -174,6 +177,18 @@ function ExtraSprite() {
       </symbol>
       <symbol id="i-menu" viewBox="0 0 24 24">
         <path d="M4 7h16M4 12h16M4 17h16" />
+      </symbol>
+      {/* 第四次反馈：合并成一条，记录窗口的标签页在左侧或顶部（与交互原型的 sprite 相同）。 */}
+      <symbol id="i-merge" viewBox="0 0 24 24">
+        <path d="M8 6l4-4 4 4M12 2v10.3a4 4 0 0 1-1.2 2.9L4 22M20 22l-5-5" />
+      </symbol>
+      <symbol id="i-panel-left" viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <path d="M9 4v16" />
+      </symbol>
+      <symbol id="i-panel-top" viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <path d="M3 9h18" />
       </symbol>
     </svg>
   );

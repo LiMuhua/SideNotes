@@ -103,6 +103,9 @@ export function AppearancePanel() {
   const [tidyLimit, setTidyLimit] = useState(settings.tidyLimit || 50);
   // 编辑时滚到顶部（本次提出，默认打开）：Playground 的设置模型沿用现有应用，这一项只在页面上演示。
   const [scrollOnEdit, setScrollOnEdit] = useState(true);
+  // 记录窗口的标签页位置（第四次反馈）：顶部横排或左侧竖排，与窗口标题栏上的按钮是同一项。Playground 没有记录窗口，只示意这一项；
+  // 两种形态见组件页「记录窗口」。
+  const [windowTabs, setWindowTabs] = useState<'top' | 'side'>('top');
 
   return (
     <SettingsPage title="外观与交互">
@@ -221,10 +224,10 @@ export function AppearancePanel() {
             />
             <span className="sn-set-unit">条/批</span>
           </Field>
-          <Field label="整理提醒" help="工作区记录超过这个数时提醒整理">
-            <Switch label="启用工作区整理提醒" hideLabel checked={settings.tidyLimit > 0} onChange={(on) => updateSettings({ tidyLimit: on ? tidyLimit : 0 })} />
+          <Field label="整理提醒" help="记录超过这个数时提醒整理">
+            <Switch label="启用整理提醒" hideLabel checked={settings.tidyLimit > 0} onChange={(on) => updateSettings({ tidyLimit: on ? tidyLimit : 0 })} />
             <NumberInput
-              label="工作区整理提醒阈值"
+              label="整理提醒阈值"
               value={settings.tidyLimit || tidyLimit}
               min={1}
               max={100000}
@@ -238,6 +241,17 @@ export function AppearancePanel() {
           </Field>
           <Field label="通知位置">
             <Select aria-label="通知弹出位置" value={settings.toastPosition} onChange={(toastPosition) => updateSettings({ toastPosition })} options={TOAST_POSITIONS} />
+          </Field>
+          <Field label="窗口标签页">
+            <Select
+              aria-label="记录窗口的标签页位置"
+              value={windowTabs}
+              onChange={setWindowTabs}
+              options={[
+                { value: 'top', label: '顶部' },
+                { value: 'side', label: '左侧' },
+              ]}
+            />
           </Field>
         </FieldRow>
       </SettingsCard>

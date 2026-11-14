@@ -475,3 +475,31 @@ tr:hover .sn-token-motion::after {
 .sn-panel-sample.is-dragging-demo {
   width: 416px;
 }
+
+/* 页签放不下时的示例：窄一些的侧栏。 */
+.sn-panel-sample.is-narrow {
+  width: 300px;
+}
+
+/* 记录窗口的示例：与交互原型中三个标签页的窗口差不多大（有标签页时按标签页定宽，最宽 720），放不下两个时上下排。 */
+.sn-window-matrix {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.sn-window-matrix .sn-state-cell {
+  max-width: 100%;
+}
+
+.sn-window-sample {
+  width: 720px;
+  max-width: 100%;
+  height: 300px;
+}
+
+/* 标签页在左侧时窗口窄一些，左栏中放不下的标题省略，悬停显示全名。 */
+.sn-window-sample.is-side {
+  width: 560px;
+}

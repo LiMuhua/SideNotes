@@ -8,6 +8,8 @@
  * 键盘（本次提出）：↑ ↓ 在卡片之间移动，Enter 编辑，Delete 移入回收站。
  * 鼠标（现有）：单击选中、Ctrl 或 Shift 单击多选、单击空白清除；双击编辑；右键卡片打开卡片菜单，
  * 右键空白打开侧栏菜单；双击空白收起或展开全部卡片。
+ * 页签与合并（第四次反馈）：页签栏见 SidebarTabs.tsx；卡片菜单的「移到…」打开第二个菜单列出可去的页签；
+ * 按标签筛选时筛选条上有「固定为页签」与「合并」，多选后右键可以「合并成一条…」或「合并到这条」（MergeDialog.tsx）。
  */
 
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
@@ -17,13 +19,14 @@ import { tagKey } from '@/core/tags';
 import { WIDTH_RANGE } from '@/core/settings';
 import type { EdgeSide, Note } from '@/core/types';
 import { copyText } from '../model/clipboard';
-import { useNotes, useSidebarView, type SidebarView, type SidebarViewOptions } from '../model/notes';
+import { belongsTo, pinnedTagOf, tabOfTag, tagOfTab, TAB_LABELS, useNotes, useSidebarView, type SidebarTab, type SidebarView, type SidebarViewOptions } from '../model/notes';
 import { Button } from '../ui/Button';
 import { cx, useSurface, useFormFactor } from '../ui/context';
 import { ContextMenu, type MenuItem } from '../ui/Menu';
 import { EmptyState } from '../ui/Misc';
 import { useToast } from '../ui/Tabs';
 import { Composer } from './Composer';
+import { MergeDialog, type MergeRequest } from './MergeDialog';
 import { SHORTCUT_KEYS } from './shortcuts';
 import {
   AVAILABLE_UPDATE,
@@ -41,6 +44,7 @@ import {
 } from './menus';
 import { NoteCard } from './NoteCard';
 import { FilterBanner, ListTopline, Resizer, SidebarFooter, SidebarHeader, SidebarNav, TidyNudge } from './SidebarParts';
+import { useTabActions } from './SidebarTabs';
 
 export interface SidebarPanelProps {
   pinned: boolean;
@@ -60,7 +64,8 @@ export interface SidebarPanelProps {
   forceNudge?: boolean;
 }
 
-type MenuState = { type: 'note'; id: string; point: { x: number; y: number } } | { type: 'sidebar'; point: { x: number; y: number } } | null;
+type Point = { x: number; y: number };
+type MenuState = { type: 'note'; id: string; point: Point } | { type: 'move'; ids: string[]; point: Point } | { type: 'sidebar'; point: Point } | null;
 
 /** 事件目标是否是空白处：不在卡片、按钮、输入框与编辑器之内。 */
 function isBlank(target: EventTarget | null): boolean {
@@ -89,10 +94,12 @@ export function SidebarPanel(props: SidebarPanelProps) {
   const [changelog, setChangelog] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [nudgeClosed, setNudgeClosed] = useState(false);
+  const [merging, setMerging] = useState<MergeRequest | null>(null);
+  const tabs = useTabActions(view);
 
   const { settings } = data;
   const edge: EdgeSide = settings.edge;
-  const busy = Boolean(view.editingId || menu || trashing || infoNote || emojiNote || managingTag || guide || changelog || updating);
+  const busy = Boolean(view.editingId || menu || trashing || infoNote || emojiNote || managingTag || guide || changelog || updating || merging);
   const { onBusyChange } = props;
 
   useEffect(() => {
@@ -126,15 +133,22 @@ export function SidebarPanel(props: SidebarPanelProps) {
     [toast],
   );
 
-  const archive = (notes: Note[]) => {
-    const ids = notes.map((note) => note.id);
-    if (notes[0]?.status === 'archived') {
-      data.setStatus(ids, 'active');
-      toast({ message: notes.length > 1 ? `已将 ${notes.length} 条记录移回工作区` : '已移回工作区', tone: 'success' });
-    } else {
-      data.setStatus(ids, 'archived');
-      toast({ message: notes.length > 1 ? `已归档 ${notes.length} 条记录` : '已归档', action: { label: '撤销', run: () => data.setStatus(ids, 'active') } });
+  /** 「移到…」可去的页签：随记与固定的标签页签，当前页签除外；置顶有自己的菜单项。 */
+  const destinations: SidebarTab[] = (['workspace', ...data.pinnedTags.map(tabOfTag)] as SidebarTab[]).filter((tab) => tab !== view.tab);
+
+  /** 合并完成：新卡片（或合并到的那张）进入编辑；它不在当前页签里时切换到它所在的页签。 */
+  const finishMerge = (note: Note) => {
+    setMerging(null);
+    view.setChecked(new Set());
+    if (!belongsTo(note, view.tab, data.pinnedTags)) {
+      const tag = pinnedTagOf(note, data.pinnedTags);
+      view.setTab(tag ? tabOfTag(tag) : 'workspace');
     }
+    // 等弹窗关闭、焦点还原之后再进入编辑，否则还原的焦点会让编辑器失焦，编辑随即结束。
+    window.setTimeout(() => {
+      view.select(note.id);
+      view.setEditingId(note.id);
+    }, 0);
   };
 
   const confirmTrash = () => {
@@ -163,8 +177,11 @@ export function SidebarPanel(props: SidebarPanelProps) {
         data.setPinned(note.id, !note.pinned);
         toast({ message: note.pinned ? '已移到普通记录' : '已置顶', tone: 'success' });
         break;
-      case 'archive':
-        archive(targets(note.id));
+      case 'merge':
+        setMerging({ ids: targets(note.id).map((item) => item.id) });
+        break;
+      case 'merge-into':
+        setMerging({ ids: targets(note.id).map((item) => item.id), target: note.id });
         break;
       case 'duplicate':
         data.duplicate(note.id);
@@ -307,10 +324,25 @@ export function SidebarPanel(props: SidebarPanelProps) {
   }, [props.primary, targets, copy]);
 
   const menuNote = menu?.type === 'note' ? data.byId.get(menu.id) : undefined;
+  // 多选的条数按当前列表中选中的计算（与「操作的对象」相同）。
+  const selected = menuNote && view.checked.has(menuNote.id) ? targets(menuNote.id).length : 0;
   const menuItems: MenuItem[] =
     menu?.type === 'note' && menuNote
-      ? noteMenuItems(menuNote, (command) => runNote(menuNote, command))
-      : menu?.type === 'sidebar'
+      ? noteMenuItems(
+          menuNote,
+          (command) =>
+            // 「移到…」在原来的位置打开第二个菜单（与交互原型相同）。
+            command === 'move' ? setMenu({ type: 'move', ids: targets(menuNote.id).map((item) => item.id), point: menu.point }) : runNote(menuNote, command),
+          { selected, canMove: destinations.length > 0 },
+        )
+      : menu?.type === 'move'
+        ? destinations.map<MenuItem>((tab) => ({
+            id: tab,
+            label: tagOfTab(tab) || TAB_LABELS.workspace,
+            icon: tab === 'workspace' ? 'note' : 'hash',
+            onSelect: () => tabs.moveTo(menu.ids, tab),
+          }))
+        : menu?.type === 'sidebar'
         ? sidebarMenuItems(
             { count: items.length, hasExpanded: items.some((note) => !note.collapsed), pinned: props.pinned, edge },
             runSidebar,
@@ -361,7 +393,6 @@ export function SidebarPanel(props: SidebarPanelProps) {
       </div>
       {nudge ? (
         <TidyNudge
-          onArchive={() => view.setTab('archive')}
           onSnooze={() => {
             data.updateSettings({ tidySnoozeUntil: Date.now() + 7 * 86_400_000 });
             setNudgeClosed(true);
@@ -383,10 +414,18 @@ export function SidebarPanel(props: SidebarPanelProps) {
           }, 50);
         }}
       />
-      {view.tab === 'archive' ? null : (
-        <Composer onReady={setComposer} onSaved={(id) => view.select(id)} />
-      )}
-      {view.filtering ? <FilterBanner view={view} /> : null}
+      <Composer
+        tag={view.composerTag}
+        onSkipTag={view.skipComposerTag}
+        onReady={setComposer}
+        onSaved={(id) => {
+          view.select(id);
+          view.resetComposerTag();
+        }}
+      />
+      {view.filtering ? (
+        <FilterBanner view={view} onPin={tabs.pin} onMerge={() => setMerging({ ids: items.map((note) => note.id), tag: view.tag })} />
+      ) : null}
       <div className={cx('sn-note-list', `is-${surface.entries}`)} role="list" aria-label={`${items.length} 条记录`}>
         {items.length ? (
           items.map((note) => {
@@ -422,7 +461,6 @@ export function SidebarPanel(props: SidebarPanelProps) {
                   }}
                   onCopy={() => void copy(targets(note.id))}
                   onTogglePin={() => runNote(note, 'pin')}
-                  onToggleArchive={() => archive(targets(note.id))}
                   onToggleCollapse={() => data.setCollapsed([note.id], !note.collapsed)}
                   onTag={(tag) => view.selectTag(tag)}
                   onEmoji={() => setEmojiNote(note)}
@@ -445,11 +483,11 @@ export function SidebarPanel(props: SidebarPanelProps) {
           />
         ) : (
           <EmptyState
-            icon={view.tab === 'archive' ? 'archive' : view.tab === 'pinned' ? 'pin' : 'note'}
-            title={view.tab === 'archive' ? '还没有归档的记录' : view.tab === 'pinned' ? '还没有置顶的记录' : '还没有记录'}
+            icon={tagOfTab(view.tab) ? 'hash' : view.tab === 'pinned' ? 'pin' : 'note'}
+            title={tagOfTab(view.tab) ? '这个页签还没有记录' : view.tab === 'pinned' ? '还没有置顶的记录' : '还没有记录'}
             description={
-              view.tab === 'archive'
-                ? '处理完的记录可以归档，归档后不再出现在工作区。'
+              tagOfTab(view.tab)
+                ? `在上面输入，保存时带上 #${tagOfTab(view.tab)}；也可以从卡片菜单「移到…」移过来。`
                 : view.tab === 'pinned'
                   ? '常用的记录可以置顶，集中在这里。'
                   : phone
@@ -466,8 +504,15 @@ export function SidebarPanel(props: SidebarPanelProps) {
       />
 
       {menu && menuItems.length ? (
-        <ContextMenu label={menu.type === 'note' ? '记录操作' : '侧栏操作'} items={menuItems} point={menu.point} onClose={() => setMenu(null)} />
+        <ContextMenu
+          key={menu.type}
+          label={menu.type === 'note' ? '记录操作' : menu.type === 'move' ? '移到页签' : '侧栏操作'}
+          items={menuItems}
+          point={menu.point}
+          onClose={() => setMenu((current) => (current?.type === menu.type ? null : current))}
+        />
       ) : null}
+      <MergeDialog request={merging} onClose={() => setMerging(null)} onDone={finishMerge} />
       <TrashConfirm notes={trashing} onCancel={() => setTrashing(null)} onConfirm={confirmTrash} />
       <NoteInfoDialog note={infoNote} onClose={() => setInfoNote(null)} />
       <TagManageDialog

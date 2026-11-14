@@ -11,10 +11,13 @@ import { useToast } from '../ui/Tabs';
 import { HelpTip } from '../ui/Tooltip';
 import { useWheelStep } from '../ui/wheel';
 
-/** 设置页：标题在左，右侧可以放与整页有关的操作（例如「恢复默认」）。 */
-export function SettingsPage({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
+/**
+ * 设置页：标题在左，右侧可以放与整页有关的操作（例如「恢复默认」）。
+ * 窗口高度固定（第四次反馈），内容少的页不显空：fill 让最后一块（回收站的列表）伸到底部，center 让整页上下居中（关于）。
+ */
+export function SettingsPage({ title, aside, layout, children }: { title: string; aside?: ReactNode; layout?: 'fill' | 'center'; children: ReactNode }) {
   return (
-    <div className="sn-set-page">
+    <div className={cx('sn-set-page', layout && `is-${layout}`)}>
       <header className="sn-set-head">
         <h3 className="sn-set-title">{title}</h3>
         {aside ? <div className="sn-set-aside">{aside}</div> : null}

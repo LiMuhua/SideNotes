@@ -19,7 +19,8 @@ import { Markdown, MarkdownInline } from '@/components/Markdown';
 import { noteDisplay, sourceOffset } from '@/core/display';
 import { formatTime, noteTitle } from '@/core/notes';
 import { parse } from '@/core/tags';
-import type { Note, TabKey } from '@/core/types';
+import type { Note } from '@/core/types';
+import type { SidebarTab } from '../model/notes';
 import { NoteEditor } from '../content/NoteEditor';
 import { useSurface, cx } from '../ui/context';
 import { IconButton } from '../ui/Button';
@@ -29,7 +30,7 @@ import { SHORTCUT_KEYS } from './shortcuts';
 
 export interface NoteCardProps {
   note: Note;
-  tab: TabKey;
+  tab: SidebarTab;
   /** 高亮：悬停或单击选中。 */
   active: boolean;
   /** 多选中。 */
@@ -50,7 +51,6 @@ export interface NoteCardProps {
   onMenu: (point: { x: number; y: number }) => void;
   onCopy: () => void;
   onTogglePin: () => void;
-  onToggleArchive: () => void;
   onToggleCollapse: () => void;
   onTag: (tag: string) => void;
   onEmoji: () => void;
@@ -151,14 +151,8 @@ export function NoteCard(props: NoteCardProps) {
                 onClick={props.onTogglePin}
               />
             ) : null}
+            {/* 第四次反馈去掉了归档：操作按钮是置顶、复制、更多与收起。 */}
             <IconButton icon="copy" label="复制记录与附件" size="sm" tabIndex={innerTab} onClick={props.onCopy} />
-            <IconButton
-              icon={note.status === 'archived' ? 'restore' : 'archive'}
-              label={note.status === 'archived' ? '恢复记录' : '归档记录'}
-              size="sm"
-              tabIndex={innerTab}
-              onClick={props.onToggleArchive}
-            />
             <IconButton
               icon="more"
               label="更多操作"

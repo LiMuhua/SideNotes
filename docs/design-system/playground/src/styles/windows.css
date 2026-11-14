@@ -125,18 +125,35 @@
 
 /* ---------- 设置窗口 ----------
  * 布局沿用现有应用 0.7.3：窄的分类栏；页面由分组卡片组成，相关的设置放在同一张卡片里，一行可以放几项，
- * 说明收在名称后的问号里。尽量紧凑，不留大片空白。 */
+ * 说明收在名称后的问号里。尽量紧凑，不留大片空白。
+ * 左右两栏（第四次反馈：页面外面不再套一层边框）：左栏是「设置」与分类栏，用窗口底色；右栏是窗口按钮与页面，用表面色，
+ * 两栏只靠底色区分，不画分隔线。 */
 .sn-settings {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
   border: var(--sn-border-width) solid var(--sn-color-border);
   border-radius: var(--sn-radius-lg);
-  background: var(--sn-color-bg);
+  background: var(--sn-color-surface);
   box-shadow: var(--sn-shadow-lg);
   color: var(--sn-color-text);
   animation: sn-rise-in var(--sn-duration-slow) var(--sn-ease-enter);
+}
+
+/* 左栏的底色从标题栏一直铺到底部，与分类栏同宽。 */
+.sn-settings::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--sn-dialog-width) * 0.32);
+  background: var(--sn-color-bg);
+  content: '';
+  pointer-events: none;
+}
+
+.sn-settings > :is(.sn-settings-titlebar, .sn-settings-body) {
+  position: relative;
 }
 
 .sn-settings-titlebar {
@@ -213,16 +230,30 @@
   flex: 1;
   min-width: 0;
   overflow: auto;
-  border-top: var(--sn-border-width) solid var(--sn-color-border-subtle);
-  border-left: var(--sn-border-width) solid var(--sn-color-border-subtle);
-  border-top-left-radius: var(--sn-radius-lg);
-  background: var(--sn-color-surface);
 }
 
 .sn-set-page {
   max-width: calc(var(--sn-dialog-width) * 1.6);
   margin: 0 auto;
   padding: var(--sn-space-5) var(--sn-space-5) var(--sn-space-8);
+}
+
+/* 窗口高度固定后（第四次反馈），回收站的列表伸到页面底部，「回收站为空」在空出的地方居中；
+ * 关于页内容不多，整页上下居中，放不下时从顶部排起。内容少的页不显空。 */
+.sn-set-page.is-fill,
+.sn-set-page.is-center {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.sn-set-page.is-fill > .sn-set-cards {
+  flex: 1;
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.sn-set-page.is-center {
+  justify-content: safe center;
 }
 
 .sn-set-head {
@@ -459,12 +490,13 @@
 }
 
 /* 选项卡片：明暗模式与主题，预览用所示主题与明暗模式的令牌绘制。
- * 两行卡片的总宽相同（不必逐张对齐），比整行窄，下面的设置不再被它们撑宽（本次提出）。 */
+ * 两行卡片的总宽相同（不必逐张对齐），都铺满名称右侧的一栏，右边与下面的滑块、数值框和字体预览对齐；
+ * 页面本身有最大宽度（.sn-set-page），谁也不会把页面撑宽（第三次反馈：此前两行限制在 480，右边空出一截）。 */
 .sn-choice-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--sn-space-4);
-  width: min(100%, calc(var(--sn-space-10) * 12));
+  width: 100%;
 }
 
 .sn-choice-grid.is-five {
@@ -1058,6 +1090,10 @@ button.sn-shortcut-key:hover {
   gap: var(--sn-space-1);
 }
 
+.sn-trash-list > .sn-set-empty {
+  margin: auto;
+}
+
 .sn-set-empty {
   padding: var(--sn-space-9) 0;
   color: var(--sn-color-text-muted);
@@ -1273,4 +1309,234 @@ button.sn-shortcut-key:hover {
 .sn-scope[data-toast='bottom-center'] .sn-toast-region {
   top: auto;
   bottom: calc(var(--sn-footer-height) + var(--sn-space-4));
+}
+
+/* ---------- 记录窗口（第三、四次反馈；组件页的静态示例） ----------
+ * 卡片拖出侧栏或点「展开全文」时打开，与速记浮窗同一种窗口表面，正文用卡片正文的排版。
+ * 拖出、合并标签页、缩放与关闭动画只在交互原型中实现（interactions.md 第四节）。 */
+.sn-note-window {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-lg);
+  background: linear-gradient(var(--sn-color-card), var(--sn-color-card)), var(--sn-color-panel);
+  box-shadow:
+    var(--sn-shadow-lg),
+    inset 0 var(--sn-border-width) 0 var(--sn-color-edge-highlight);
+  color: var(--sn-color-text);
+}
+
+/* 获得焦点的窗口：边框带一点强调色，外面再淡淡一圈，很轻，不像焦点环那样醒目。 */
+.sn-note-window.is-focused,
+.sn-note-window:focus-within {
+  border-color: color-mix(in srgb, var(--sn-color-accent) 40%, var(--sn-color-border));
+  box-shadow:
+    var(--sn-shadow-lg),
+    0 0 0 var(--sn-border-width) color-mix(in srgb, var(--sn-color-accent) 16%, transparent),
+    inset 0 var(--sn-border-width) 0 var(--sn-color-edge-highlight);
+}
+
+.sn-note-window-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sn-space-4);
+  height: var(--sn-header-height);
+  padding: 0 var(--sn-space-3) 0 var(--sn-panel-padding);
+  border-bottom: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  user-select: none;
+}
+
+.sn-note-window-emoji {
+  flex: none;
+  font-size: var(--sn-font-size-md);
+  line-height: 1;
+}
+
+.sn-note-window-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--sn-font-title);
+  font-size: var(--sn-font-size-md);
+  font-weight: var(--sn-title-weight);
+  letter-spacing: var(--sn-title-tracking);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sn-note-window-actions {
+  display: flex;
+  flex: none;
+  gap: var(--sn-space-1);
+}
+
+/* 置顶时图钉是实心的，并用强调色浅底。 */
+.sn-note-window-pin[aria-pressed='true'] {
+  background: var(--sn-color-accent-subtle);
+  color: var(--sn-color-accent-text);
+}
+
+.sn-note-window-layout[aria-pressed='true'] {
+  color: var(--sn-color-accent-text);
+}
+
+/* 正文外面一层横排的容器：标签页在左侧时，标签栏排在正文之前。正文四周留白相同。 */
+.sn-note-window-main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.sn-note-window-body {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: var(--sn-space-5) var(--sn-space-6) var(--sn-space-6);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sn-color-border-strong) transparent;
+}
+
+.sn-note-window-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sn-space-2);
+  margin-top: var(--sn-space-6);
+}
+
+.sn-note-window-tags .sn-note-tag {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 顶部标签页：两个以上的记录时标题栏换成标签页，标签栏比单页的标题栏高，标签页之间留出间距，当前一页与正文连成一片；
+ * 右侧一块空白（.sn-note-window-grip）按住可以拖动窗口。 */
+.sn-note-window-tabs {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: flex-end;
+  align-self: stretch;
+  gap: var(--sn-space-2);
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.sn-note-window-grip {
+  flex: 1 0 calc(var(--sn-control-height) * 2.5);
+  align-self: stretch;
+}
+
+.sn-note-window.has-tabs:not(.is-side-tabs) :is(.sn-note-window-emoji, .sn-note-window-title) {
+  display: none;
+}
+
+.sn-note-window.has-tabs:not(.is-side-tabs) .sn-note-window-head {
+  gap: var(--sn-space-3);
+  height: calc(var(--sn-header-height) + var(--sn-space-4));
+  padding-top: var(--sn-space-4);
+  padding-left: var(--sn-space-4);
+}
+
+/* 标签页最宽 9 个控件高；关闭按钮不常占位置，当前一页与悬停时浮在右端。标题仍放不下时省略，悬停片刻显示全名。 */
+.sn-note-window-tab {
+  position: relative;
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--sn-space-3);
+  min-width: calc(var(--sn-control-height) * 2.5);
+  max-width: calc(var(--sn-control-height) * 9);
+  height: 100%;
+  margin-bottom: calc(var(--sn-border-width) * -1);
+  padding: 0 var(--sn-space-5);
+  border: var(--sn-border-width) solid transparent;
+  border-bottom: 0;
+  border-radius: var(--sn-radius-md) var(--sn-radius-md) 0 0;
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+  cursor: pointer;
+}
+
+.sn-note-window-tab:hover {
+  background: var(--sn-color-hover);
+  color: var(--sn-color-text);
+}
+
+.sn-note-window-tab.is-active {
+  padding-right: calc(var(--sn-control-height-sm) + var(--sn-space-2));
+  border-color: var(--sn-color-border-subtle);
+  background: var(--sn-color-card);
+  color: var(--sn-color-text);
+  font-weight: var(--sn-font-weight-medium);
+}
+
+.sn-note-window-tab:focus-visible {
+  outline: var(--sn-focus-ring-width) solid var(--sn-color-focus);
+  outline-offset: calc(var(--sn-focus-ring-width) * -1);
+}
+
+.sn-note-window-tab-emoji {
+  flex: none;
+  line-height: 1;
+}
+
+.sn-note-window-tab-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sn-note-window-tab .sn-note-window-tab-close {
+  position: absolute;
+  top: 50%;
+  right: var(--sn-space-1);
+  background: inherit;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.sn-note-window-tab:is(:hover, .is-active, :focus-within) .sn-note-window-tab-close {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* 左侧标签页（第四次反馈）：标题栏恢复单页时的样子，写当前一页的标题；左侧一列竖排的标签页，面板底色，
+ * 与正文之间一条淡分隔线；当前一页浮起。 */
+.sn-note-window.is-side-tabs .sn-note-window-tabs {
+  flex: none;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sn-space-1);
+  width: calc(var(--sn-control-height) * 6);
+  padding: var(--sn-space-3) var(--sn-space-2);
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-right: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  background: var(--sn-color-panel);
+}
+
+.sn-note-window.is-side-tabs .sn-note-window-tab {
+  flex: none;
+  min-width: 0;
+  max-width: none;
+  height: var(--sn-control-height);
+  margin: 0;
+  padding: 0 var(--sn-space-3) 0 var(--sn-space-4);
+  border: 0;
+  border-radius: var(--sn-radius-control);
+}
+
+.sn-note-window.is-side-tabs .sn-note-window-tab.is-active {
+  padding-right: calc(var(--sn-control-height-sm) + var(--sn-space-2));
+  background: var(--sn-color-card);
+  box-shadow: var(--sn-shadow-sm);
 }

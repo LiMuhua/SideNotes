@@ -26,9 +26,14 @@ export interface MenuItem {
   label: string;
   icon?: IconName;
   shortcut?: string;
+  /** 右侧的补充说明，例如「合并成一条…」后面的条数。 */
+  hint?: string;
   danger?: boolean;
   disabled?: boolean;
-  /** 单选或多选项的状态；提供时以对勾显示。 */
+  /**
+   * 单选或多选项的状态，对勾画在图标的位置；普通项（kind 为 item）表示当前的那一项，对勾画在右侧，
+   * 图标照常显示（页签菜单中当前的页签）。
+   */
   checked?: boolean;
   kind?: 'item' | 'checkbox' | 'radio';
   /** 在这一项之前画分隔线。 */
@@ -132,6 +137,7 @@ function MenuList({ items, label, anchor, placement, focus = 'first', onClose, i
               role={item.kind === 'checkbox' ? 'menuitemcheckbox' : item.kind === 'radio' ? 'menuitemradio' : 'menuitem'}
               aria-checked={item.kind && item.kind !== 'item' ? Boolean(item.checked) : undefined}
               aria-disabled={item.disabled || undefined}
+              aria-current={item.checked && (!item.kind || item.kind === 'item') ? 'true' : undefined}
               tabIndex={-1}
               className={cx('sn-menu-item', item.danger && 'is-danger')}
               onClick={() => {
@@ -148,7 +154,9 @@ function MenuList({ items, label, anchor, placement, focus = 'first', onClose, i
                 ) : null}
               </span>
               <span className="sn-menu-label">{item.label}</span>
+              {item.hint ? <span className="sn-menu-hint">{item.hint}</span> : null}
               {item.shortcut ? <Keys combo={item.shortcut} /> : null}
+              {item.checked && (!item.kind || item.kind === 'item') ? <Icon name="check" className="sn-menu-check" /> : null}
             </button>
           </div>
         ))}

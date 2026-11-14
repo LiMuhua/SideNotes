@@ -10,6 +10,7 @@ import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, ty
 import { Button } from './Button';
 import { cx } from './context';
 import { IconButton } from './Button';
+import { Icon, type IconName } from './Icon';
 import { Layer, focusableIn, useAnchoredPosition, type Placement } from './layer';
 
 /** 焦点陷阱：Tab 与 Shift+Tab 在容器内循环。 */
@@ -35,6 +36,10 @@ export interface DialogProps {
   open: boolean;
   onClose: () => void;
   title: string;
+  /** 标题前的图标（例如合并成一条）。 */
+  icon?: IconName;
+  /** 加在弹窗上的类名，用来调整个别弹窗的宽度与内容排版。 */
+  className?: string;
   description?: ReactNode;
   children?: ReactNode;
   footer?: ReactNode;
@@ -48,6 +53,8 @@ export function Dialog({
   open,
   onClose,
   title,
+  icon,
+  className,
   description,
   children,
   footer,
@@ -86,7 +93,7 @@ export function Dialog({
           aria-labelledby={titleId}
           aria-describedby={description ? descriptionId : undefined}
           tabIndex={-1}
-          className={cx('sn-dialog', `is-${size}`)}
+          className={cx('sn-dialog', `is-${size}`, className)}
           onKeyDown={(event) => {
             if (event.key === 'Escape') {
               event.stopPropagation();
@@ -97,6 +104,7 @@ export function Dialog({
         >
           <header className="sn-dialog-header">
             <h2 id={titleId} className="sn-dialog-title">
+              {icon ? <Icon name={icon} /> : null}
               {title}
             </h2>
             <IconButton icon="x" label="关闭" size="sm" onClick={onClose} />

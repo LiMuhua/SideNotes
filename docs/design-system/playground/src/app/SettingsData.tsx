@@ -331,7 +331,7 @@ export function TrashPanel() {
 
   // 保留天数紧跟在条数之后（本次提出）：两者都在说回收站里的记录，放在一起读；页面标题的右侧不再放控件。
   return (
-    <SettingsPage title="回收站">
+    <SettingsPage title="回收站" layout="fill">
       <div className="sn-trash-toolbar">
         <SearchInput value={query} onValueChange={setQuery} placeholder="搜索回收站" aria-label="搜索回收站" />
         <Select aria-label="回收站标签筛选" value={activeTag} onChange={setTag} options={[{ value: '', label: '全部标签' }, ...tagOptions.map((item) => ({ value: item, label: `#${item}` }))]} />
@@ -450,7 +450,7 @@ export function AboutPanel() {
   const [update, setUpdate] = useState(false);
   const open = (label: string) => toast({ message: `打开${label}（示例）` });
   return (
-    <SettingsPage title="关于">
+    <SettingsPage title="关于" layout="center">
       <div className="sn-about-hero">
         <AppIcon />
         <div className="sn-about-text">

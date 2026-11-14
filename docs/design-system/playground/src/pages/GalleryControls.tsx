@@ -135,7 +135,7 @@ export function ControlsSection() {
           <Tag label="常用" selected onClick={() => {}} />
           <span className="sn-set-label">
             整理提醒
-            <HelpTip label="整理提醒">工作区记录超过这个数时提醒整理</HelpTip>
+            <HelpTip label="整理提醒">记录超过这个数时提醒整理</HelpTip>
           </span>
         </DemoRow>
       </Demo>

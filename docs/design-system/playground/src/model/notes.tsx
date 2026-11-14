@@ -6,13 +6,16 @@
  *
  * 数据层（记录、草稿、设置）全局共享：侧栏、速记浮窗与设置窗口看到同一份数据，
  * 与现有应用三个窗口共用一个数据库的行为一致。界面状态由各个侧栏实例自己持有，见 `useSidebarView`。
+ *
+ * 页签按第四次反馈（与交互原型相同）：随记、置顶与手动固定的标签，去掉了「归档」。现有应用还是工作区、置顶、归档，
+ * 所以页签的归属在这里按新规则计算，不用 `src/core` 的 inTab；旧的归档记录在示例数据中迁移为带 #归档 的普通记录。
  */
 
 import { createContext, useCallback, useContext, useMemo, useReducer, useState, type ReactNode } from 'react';
-import { compareNoteOrder, createNote, inTab, matchesQuery } from '@/core/notes';
+import { compareNoteOrder, createNote, matchesQuery } from '@/core/notes';
 import { DEFAULT_SETTINGS } from '@/core/settings';
 import { canonicalize, compose, hasTag, parse, removeTag, tagKey } from '@/core/tags';
-import type { Note, NoteStatus, Settings, TabKey, TagUsage } from '@/core/types';
+import type { Note, NoteStatus, Settings, TagUsage } from '@/core/types';
 import { createSampleNotes } from '@/debug/sample-notes';
 import { CUSTOM_APP_ICON, DEFAULT_APP_ICON } from './appIcons';
 
@@ -27,6 +30,8 @@ interface State {
   appIcon: string;
   /** 上传并裁好的图标（256 × 256 PNG 的 data URL）；没有上传过时为 null。 */
   customIcon: string | null;
+  /** 固定为页签的标签，按页签栏的顺序（第四次反馈；交互原型存在设置的 pinnedTags 中）。 */
+  pinnedTags: string[];
 }
 
 type Action =
@@ -46,17 +51,38 @@ type Action =
   | { type: 'track-tag'; tag: string; now: number }
   | { type: 'rename-tag'; tag: string; next: string; now: number }
   | { type: 'remove-tag'; tag: string; now: number }
+  | { type: 'pinned-tags'; tags: string[] }
+  | { type: 'patch'; changes: ReadonlyArray<readonly [string, Partial<Note>]> }
   | { type: 'reset'; now: number };
+
+/** 示例数据中已经固定的两个标签，用来演示标签页签。页签只由用户手动固定，不会自动出现。 */
+const SAMPLE_PINNED_TAGS = ['工作', '生活'];
+
+/** 给原文带上一个标签；已经带着（不分大小写）时不变。 */
+export function withTag(text: string, tag: string): string {
+  const parsed = parse(text);
+  return parsed.tags.some((item) => tagKey(item) === tagKey(tag)) ? text : compose(parsed.body, [...parsed.tags, tag]);
+}
+
+/**
+ * 去掉「归档」之后的迁移（第四次反馈，与交互原型相同）：旧的归档记录（包括从归档移进回收站的）回到随记，
+ * 正文加上 #归档，可以用这个标签找回或固定成页签。
+ */
+function migrateArchived(note: Note): Note {
+  if (note.status !== 'archived' && note.previousStatus !== 'archived') return note;
+  return { ...note, text: canonicalize(withTag(note.text, '归档')), status: note.status === 'trash' ? 'trash' : 'active', previousStatus: 'active' };
+}
 
 function initialState(now = Date.now()): State {
   // 字体默认「跟随主题」（空值）：现有设置里的旧默认值 Maple Mono NF CN 迁移为跟随主题，见 adaptation.md。
   return {
-    notes: createSampleNotes(now),
+    notes: createSampleNotes(now).map(migrateArchived),
     draft: '',
     settings: { ...DEFAULT_SETTINGS, fontFamily: '' },
     tagUsage: {},
     appIcon: DEFAULT_APP_ICON,
     customIcon: null,
+    pinnedTags: SAMPLE_PINNED_TAGS,
   };
 }
 
@@ -125,9 +151,15 @@ function reduce(state: State, action: Action): State {
         tagUsage[newKey] = tagUsage[oldKey];
         if (newKey !== oldKey) delete tagUsage[oldKey];
       }
+      // 固定的页签跟着改名；新名称已经固定时两个页签合成一个（第四次反馈）。
+      const pinnedTags = state.pinnedTags.reduce<string[]>((list, item) => {
+        const next = tagKey(item) === oldKey ? action.next : item;
+        return list.some((entry) => tagKey(entry) === tagKey(next)) ? list : [...list, next];
+      }, []);
       return {
         ...state,
         tagUsage,
+        pinnedTags,
         notes: state.notes.map((note) => {
           if (!hasTag(note.text, action.tag)) return note;
           const parsed = parse(note.text);
@@ -147,9 +179,15 @@ function reduce(state: State, action: Action): State {
           return { ...note, text, updatedAt: action.now };
         }),
       };
+    case 'pinned-tags':
+      return { ...state, pinnedTags: action.tags };
+    case 'patch': {
+      const changes = new Map(action.changes);
+      return { ...state, notes: state.notes.map((note) => (changes.has(note.id) ? { ...note, ...changes.get(note.id) } : note)) };
+    }
     case 'reset':
-      // 设置与应用图标都属于偏好，重置示例数据时保留。
-      return { ...initialState(action.now), settings: state.settings, appIcon: state.appIcon, customIcon: state.customIcon };
+      // 设置、应用图标与固定的页签都属于偏好，重置示例数据时保留。
+      return { ...initialState(action.now), settings: state.settings, appIcon: state.appIcon, customIcon: state.customIcon, pinnedTags: state.pinnedTags };
   }
 }
 
@@ -178,6 +216,12 @@ export interface NotesData extends State {
   renameTag: (tag: string, next: string) => void;
   /** 从所有记录中移除标签，正文与附件保留。 */
   removeTagEverywhere: (tag: string) => void;
+  /** 固定为页签的标签与顺序：固定、移出与撤销都整体替换（第四次反馈）。 */
+  setPinnedTags: (tags: string[]) => void;
+  /** 按记录改若干字段：移到页签、合并与它们的撤销。 */
+  patchNotes: (changes: ReadonlyArray<readonly [string, Partial<Note>]>) => void;
+  /** 加入一条已经建好的记录（合并成一条：位置与置顶取自原来的第一条）。 */
+  insertNote: (note: Note) => void;
   reset: () => void;
 }
 
@@ -220,6 +264,9 @@ export function NotesProvider({ children }: { children: ReactNode }) {
   const trackTagUsage = useCallback((tag: string) => dispatch({ type: 'track-tag', tag, now: Date.now() }), []);
   const renameTag = useCallback((tag: string, next: string) => dispatch({ type: 'rename-tag', tag, next, now: Date.now() }), []);
   const removeTagEverywhere = useCallback((tag: string) => dispatch({ type: 'remove-tag', tag, now: Date.now() }), []);
+  const setPinnedTags = useCallback((tags: string[]) => dispatch({ type: 'pinned-tags', tags }), []);
+  const patchNotes = useCallback((changes: ReadonlyArray<readonly [string, Partial<Note>]>) => dispatch({ type: 'patch', changes }), []);
+  const insertNote = useCallback((note: Note) => dispatch({ type: 'create', note }), []);
   const reset = useCallback(() => dispatch({ type: 'reset', now: Date.now() }), []);
 
   const value = useMemo<NotesData>(
@@ -243,9 +290,36 @@ export function NotesProvider({ children }: { children: ReactNode }) {
       trackTagUsage,
       renameTag,
       removeTagEverywhere,
+      setPinnedTags,
+      patchNotes,
+      insertNote,
       reset,
     }),
-    [state, byId, create, update, setPinned, setStatus, restore, removeForever, setCollapsed, setEmoji, reorder, duplicate, setDraft, updateSettings, setAppIcon, setCustomIcon, trackTagUsage, renameTag, removeTagEverywhere, reset],
+    [
+      state,
+      byId,
+      create,
+      update,
+      setPinned,
+      setStatus,
+      restore,
+      removeForever,
+      setCollapsed,
+      setEmoji,
+      reorder,
+      duplicate,
+      setDraft,
+      updateSettings,
+      setAppIcon,
+      setCustomIcon,
+      trackTagUsage,
+      renameTag,
+      removeTagEverywhere,
+      setPinnedTags,
+      patchNotes,
+      insertNote,
+      reset,
+    ],
   );
   return <NotesContext.Provider value={value}>{children}</NotesContext.Provider>;
 }
@@ -256,10 +330,38 @@ export function useNotes(): NotesData {
   return value;
 }
 
-/* ==================== 列表规则 ==================== */
+/* ==================== 页签与列表规则 ==================== */
 
-export const TAB_LABELS: Record<TabKey, string> = { workspace: '工作区', pinned: '置顶', archive: '归档' };
-export const TAB_ORDER: readonly TabKey[] = ['workspace', 'pinned', 'archive'];
+/**
+ * 侧栏页签（第四次反馈）：随记、置顶与固定的标签。随记就是原来的「工作区」（内部仍叫 workspace），
+ * 标签页签写成 `tag:标签`。
+ */
+export type SidebarTab = 'workspace' | 'pinned' | `tag:${string}`;
+
+const TAG_TAB = 'tag:';
+
+export const TAB_LABELS = { workspace: '随记', pinned: '置顶' } as const;
+
+/** 页签对应的标签；随记与置顶返回空字符串。 */
+export function tagOfTab(tab: SidebarTab): string {
+  return tab.startsWith(TAG_TAB) ? tab.slice(TAG_TAB.length) : '';
+}
+
+export function tabOfTag(tag: string): SidebarTab {
+  return `tag:${tag}`;
+}
+
+/** 页签在提示中的名称：随记、置顶或「标签」。 */
+export function tabLabel(tab: SidebarTab): string {
+  const tag = tagOfTab(tab);
+  return tag ? `「${tag}」` : TAB_LABELS[tab as 'workspace' | 'pinned'];
+}
+
+/** 已固定的同名标签（不分大小写），返回固定时的写法；没有时为空字符串。 */
+export function findPinned(pinned: readonly string[], tag: string): string {
+  const key = tagKey(tag);
+  return pinned.find((item) => tagKey(item) === key) ?? '';
+}
 
 /** 记录是否带有某个标签（忽略大小写与全角差异）。 */
 export function hasTagKey(note: Note, tag: string): boolean {
@@ -267,43 +369,79 @@ export function hasTagKey(note: Note, tag: string): boolean {
   return parse(note.text).tags.some((item) => tagKey(item) === key);
 }
 
+/** 记录所在的第一个标签页签（按页签栏的顺序）；没有时为空字符串。 */
+export function pinnedTagOf(note: Note, pinned: readonly string[]): string {
+  return pinned.find((tag) => hasTagKey(note, tag)) ?? '';
+}
+
+/** 页签是否还在：标签页签移出页签栏之后就不在了。 */
+export function tabExists(tab: SidebarTab, pinned: readonly string[]): boolean {
+  const tag = tagOfTab(tab);
+  return tag ? Boolean(findPinned(pinned, tag)) : tab === 'workspace' || tab === 'pinned';
+}
+
+/** 记录是否显示在这个页签里：随记是没有任何已固定标签的记录，置顶是置顶的记录，标签页签是带这个标签的记录。 */
+export function belongsTo(note: Note, tab: SidebarTab, pinned: readonly string[]): boolean {
+  if (note.status !== 'active') return false;
+  if (tab === 'pinned') return note.pinned;
+  const tag = tagOfTab(tab);
+  return tag ? hasTagKey(note, tag) : !pinnedTagOf(note, pinned);
+}
+
 /** 页签内的记录，按现有应用的排序规则：置顶的在前，再按手动顺序与创建时间。 */
-export function notesInTab(notes: readonly Note[], tab: TabKey): Note[] {
-  const list = notes.filter((note) => inTab(note, tab)).sort(compareNoteOrder);
+export function notesInTab(notes: readonly Note[], tab: SidebarTab, pinned: readonly string[]): Note[] {
+  const list = notes.filter((note) => belongsTo(note, tab, pinned)).sort(compareNoteOrder);
   return tab === 'pinned' ? list : [...list.filter((note) => note.pinned), ...list.filter((note) => !note.pinned)];
 }
 
 /** 页签内经过搜索与标签筛选后的记录。 */
-export function filterNotes(notes: readonly Note[], tab: TabKey, query: string, tag: string): Note[] {
-  return notesInTab(notes, tab).filter((note) => matchesQuery(note, query) && (!tag || hasTagKey(note, tag)));
+export function filterNotes(notes: readonly Note[], tab: SidebarTab, pinned: readonly string[], query: string, tag: string): Note[] {
+  return notesInTab(notes, tab, pinned).filter((note) => matchesQuery(note, query) && (!tag || hasTagKey(note, tag)));
 }
 
-export function tabCounts(notes: readonly Note[]): Record<TabKey, number> {
-  return {
-    workspace: notes.filter((note) => inTab(note, 'workspace')).length,
-    pinned: notes.filter((note) => inTab(note, 'pinned')).length,
-    archive: notes.filter((note) => inTab(note, 'archive')).length,
-  };
+export function tabCount(notes: readonly Note[], tab: SidebarTab, pinned: readonly string[]): number {
+  return notes.filter((note) => belongsTo(note, tab, pinned)).length;
 }
 
-/** 页签内的标签与条数，按条数从多到少。 */
-export function tagsInTab(notes: readonly Note[], tab: TabKey): Array<{ tag: string; count: number }> {
+/** 未删除记录中的全部标签与条数，条数多的在前（新建页签的候选）。 */
+export function allTags(notes: readonly Note[]): Array<{ tag: string; count: number }> {
   const groups = new Map<string, { tag: string; count: number }>();
-  notesInTab(notes, tab).forEach((note) =>
+  notes.forEach((note) => {
+    if (note.status !== 'active') return;
     parse(note.text).tags.forEach((tag) => {
       const key = tagKey(tag);
       const entry = groups.get(key);
       if (entry) entry.count += 1;
       else groups.set(key, { tag, count: 1 });
-    }),
-  );
+    });
+  });
   return Array.from(groups.values()).sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag, 'zh-CN'));
+}
+
+/**
+ * 把卡片移到另一个页签时要改的字段（与交互原型的 tabPatch 相同）：到标签页签加上这个标签，从别的标签页签来时换掉原来那个；
+ * 到随记去掉当前页签的标签（从置顶来时取消置顶）；到置顶只置顶。
+ */
+export function tabPatch(note: Note, from: SidebarTab, to: SidebarTab): Partial<Note> {
+  if (to === 'pinned') return { pinned: true };
+  const patch: Partial<Note> = {};
+  if (to === 'workspace' && from === 'pinned') patch.pinned = false;
+  const fromTag = tagOfTab(from);
+  const toTag = tagOfTab(to);
+  if (fromTag || toTag) {
+    const parsed = parse(note.text);
+    let tags = parsed.tags.slice();
+    if (fromTag && (!toTag || tagKey(fromTag) !== tagKey(toTag))) tags = tags.filter((tag) => tagKey(tag) !== tagKey(fromTag));
+    if (toTag && !tags.some((tag) => tagKey(tag) === tagKey(toTag))) tags.push(toTag);
+    if (tags.join('\n') !== parsed.tags.join('\n')) patch.text = compose(parsed.body, tags);
+  }
+  return patch;
 }
 
 /* ==================== 侧栏的界面状态 ==================== */
 
 export interface SidebarViewOptions {
-  tab?: TabKey;
+  tab?: SidebarTab;
   selectedId?: string | null;
   editingId?: string | null;
   /** 初始的搜索词与标签筛选（组件页的示例状态）。 */
@@ -315,7 +453,7 @@ export interface SidebarViewOptions {
 /** 一个侧栏实例的界面状态：页签、搜索、标签筛选、选中、悬停、编辑与多选。 */
 export function useSidebarView(options: SidebarViewOptions = {}) {
   const data = useNotes();
-  const [tab, setTabState] = useState<TabKey>(options.tab ?? 'workspace');
+  const [tabState, setTabState] = useState<SidebarTab>(options.tab ?? 'workspace');
   const [query, setQuery] = useState(options.query ?? '');
   const [searchOpen, setSearchOpen] = useState(Boolean(options.searchOpen));
   const [tag, setTag] = useState(options.tag ?? '');
@@ -323,16 +461,26 @@ export function useSidebarView(options: SidebarViewOptions = {}) {
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(options.editingId ?? null);
   const [checked, setChecked] = useState<ReadonlySet<string>>(() => new Set());
+  // 新建卡片上去掉了的页签标签（第四次反馈：在标签页签中新建时默认带上这个标签，点 × 这一条不带）。
+  const [skippedTag, setSkippedTag] = useState('');
 
-  const items = filterNotes(data.notes, tab, query, tag);
-  const counts = tabCounts(data.notes);
+  const { notes, pinnedTags } = data;
+  // 当前的标签页签移出页签栏之后回到随记。
+  const tab: SidebarTab = tabExists(tabState, pinnedTags) ? tabState : 'workspace';
+  const items = filterNotes(notes, tab, pinnedTags, query, tag);
+  /** 当前页签的全部条数（不计搜索与筛选）。 */
+  const total = tabCount(notes, tab, pinnedTags);
+  const countOf = useCallback((target: SidebarTab) => tabCount(notes, target, pinnedTags), [notes, pinnedTags]);
+  const pageTag = tagOfTab(tab);
+  const composerTag = pageTag && tagKey(pageTag) !== tagKey(skippedTag) ? pageTag : '';
   // 单击与悬停共用一个选中状态：悬停的卡片高亮，移开后回到单击选中的卡片（技术决策第 13 条）。
   const activeId = hoverId ?? selectedId;
 
-  const setTab = useCallback((next: TabKey) => {
+  const setTab = useCallback((next: SidebarTab) => {
     setTabState(next);
     setChecked(new Set());
     setEditingId(null);
+    setSkippedTag('');
   }, []);
   /** 按标签筛选（现有应用的 selectTag）：清空搜索词，并记一次访问作为标签菜单的评分依据。 */
   const { trackTagUsage } = data;
@@ -372,7 +520,13 @@ export function useSidebarView(options: SidebarViewOptions = {}) {
     setChecked,
     clearFilters,
     items,
-    counts,
+    total,
+    countOf,
+    pinnedTags,
+    /** 在标签页签中新建时带上的标签；去掉了或不在标签页签时为空。 */
+    composerTag,
+    skipComposerTag: () => setSkippedTag(pageTag),
+    resetComposerTag: () => setSkippedTag(''),
     filtering: Boolean(query.trim() || tag),
   };
 }

@@ -286,9 +286,10 @@
   height: 420px;
 }
 
+/* 设置窗口高度固定为 560（第四次反馈：不随内容跳动，也不像 720 那样内容少的分类留下大片空白）。 */
 .sn-floating-frame.is-settings .sn-window-box {
   width: 880px;
-  height: 720px;
+  height: 560px;
 }
 
 .sn-window-box {

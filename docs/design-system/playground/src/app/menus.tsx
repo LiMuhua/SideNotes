@@ -17,18 +17,35 @@ import { SearchInput, TextInput } from '../ui/Field';
 import type { MenuItem } from '../ui/Menu';
 import { cx } from '../ui/context';
 import { useToast } from '../ui/Tabs';
-import { useNotes } from '../model/notes';
+import { pinnedTagOf, useNotes } from '../model/notes';
 import { SHORTCUT_KEYS } from './shortcuts';
 
-export type NoteCommand = 'copy' | 'edit' | 'collapse' | 'pin' | 'archive' | 'duplicate' | 'export' | 'info' | 'trash' | 'restore';
+export type NoteCommand = 'merge' | 'merge-into' | 'copy' | 'edit' | 'collapse' | 'pin' | 'move' | 'duplicate' | 'export' | 'info' | 'trash' | 'restore';
 
-/** 卡片菜单：按记录状态生成。 */
-export function noteMenuItems(note: Note, run: (command: NoteCommand) => void): MenuItem[] {
-  const items: MenuItem[] = [
-    { id: 'copy', label: '复制内容与附件', icon: 'copy', shortcut: 'Ctrl+C', onSelect: () => run('copy') },
+export interface NoteMenuOptions {
+  /** 这张卡片在多选之中时，选中的条数（大于 1 时最上面是两个合并项）。 */
+  selected?: number;
+  /** 有可以移去的页签（随记与固定的标签页签，当前页签除外）时显示「移到…」。 */
+  canMove?: boolean;
+}
+
+/**
+ * 卡片菜单：按记录状态生成。第四次反馈去掉了「归档」，换成「移到…」（随记与固定的标签页签）；
+ * 多选之中的卡片最上面是「合并成一条…」与「合并到这条」（与交互原型相同）。
+ */
+export function noteMenuItems(note: Note, run: (command: NoteCommand) => void, options: NoteMenuOptions = {}): MenuItem[] {
+  const merging = (options.selected ?? 0) > 1;
+  const items: MenuItem[] = merging
+    ? [
+        { id: 'merge', label: '合并成一条…', icon: 'merge', hint: `${options.selected} 条`, onSelect: () => run('merge') },
+        { id: 'merge-into', label: '合并到这条', icon: 'merge', onSelect: () => run('merge-into') },
+      ]
+    : [];
+  items.push(
+    { id: 'copy', label: '复制内容与附件', icon: 'copy', shortcut: 'Ctrl+C', separatorBefore: merging, onSelect: () => run('copy') },
     { id: 'edit', label: '编辑内容', icon: 'edit', shortcut: '双击', onSelect: () => run('edit') },
     { id: 'collapse', label: note.collapsed ? '展开正文' : '收起正文', icon: 'chevron-down', onSelect: () => run('collapse') },
-  ];
+  );
   if (note.status === 'active') {
     items.push({
       id: 'pin',
@@ -37,15 +54,9 @@ export function noteMenuItems(note: Note, run: (command: NoteCommand) => void): 
       separatorBefore: true,
       onSelect: () => run('pin'),
     });
+    if (options.canMove) items.push({ id: 'move', label: '移到…', icon: 'arrow-right', onSelect: () => run('move') });
   }
   items.push(
-    {
-      id: 'archive',
-      label: note.status === 'archived' ? '移回工作区' : '归档记录',
-      icon: note.status === 'archived' ? 'restore' : 'archive',
-      separatorBefore: note.status !== 'active',
-      onSelect: () => run('archive'),
-    },
     { id: 'duplicate', label: '创建副本', icon: 'duplicate', separatorBefore: true, onSelect: () => run('duplicate') },
     { id: 'export', label: '导出 Markdown', icon: 'download', onSelect: () => run('export') },
     { id: 'info', label: '记录信息', icon: 'info', onSelect: () => run('info') },
@@ -199,13 +210,21 @@ export function UpdateDialog({ update, open, onClose }: { update: ChangelogEntry
   );
 }
 
+/** 记录所在的位置：回收站，或置顶、固定的标签页签与随记（第四次反馈，与交互原型相同）。 */
+function place(note: Note, pinnedTags: readonly string[]): string {
+  if (note.status === 'trash') return '回收站';
+  const tag = pinnedTagOf(note, pinnedTags);
+  return [note.pinned ? '置顶' : '', tag ? `页签「${tag}」` : note.pinned ? '' : '随记'].filter(Boolean).join('、');
+}
+
 /** 记录信息：创建与修改时间、字数、标签与位置。 */
 export function NoteInfoDialog({ note, onClose }: { note: Note | null; onClose: () => void }) {
+  const { pinnedTags } = useNotes();
   const parsed = note ? parse(note.text) : null;
   const rows: Array<[string, string]> = note && parsed
     ? [
         ['标题', noteTitle(note)],
-        ['位置', note.status === 'archived' ? '归档' : note.status === 'trash' ? '回收站' : note.pinned ? '工作区 · 置顶' : '工作区'],
+        ['位置', place(note, pinnedTags)],
         ['创建', formatFullTime(note.createdAt)],
         ['修改', formatFullTime(note.updatedAt)],
         ['字数', `${Array.from(parsed.body).length} 字 · ${parsed.body.split('\n').length} 行`],

@@ -449,6 +449,22 @@
   margin-left: var(--sn-space-6);
 }
 
+/* 菜单项右侧的补充说明（条数）与当前项的对勾（第四次反馈：页签菜单中当前的页签）。 */
+.sn-menu-hint {
+  margin-left: var(--sn-space-6);
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.sn-menu-item > .sn-menu-check {
+  flex: none;
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  color: var(--sn-color-accent-text);
+}
+
 .sn-menu-item .sn-kbd {
   border-color: transparent;
   background: transparent;
@@ -598,6 +614,21 @@
   font-size: var(--sn-font-size-lg);
   font-weight: var(--sn-title-weight);
   letter-spacing: var(--sn-title-tracking);
+}
+
+/* 标题前的图标（合并成一条）：淡色，与标题垂直居中。 */
+.sn-dialog-title:has(> .sn-icon) {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  min-width: 0;
+}
+
+.sn-dialog-title > .sn-icon {
+  flex: none;
+  width: var(--sn-icon-size);
+  height: var(--sn-icon-size);
+  color: var(--sn-color-text-muted);
 }
 
 .sn-dialog-description {

@@ -4,8 +4,9 @@
 
 import { useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import type { Note } from '@/core/types';
-import { notesInTab, useNotes, useSidebarView } from '../model/notes';
+import { notesInTab, tabOfTag, useNotes, useSidebarView } from '../model/notes';
 import { Composer } from '../app/Composer';
+import { MergeDialog, type MergeRequest } from '../app/MergeDialog';
 import { AVAILABLE_UPDATE, ChangelogDialog, EmojiDialog, GuideDialog, NoteInfoDialog, noteMenuItems, sidebarMenuItems, TrashConfirm, UpdateDialog } from '../app/menus';
 import { NoteCard, type NoteCardProps } from '../app/NoteCard';
 import { FilterBanner, ListTopline, SidebarFooter, SidebarNav, TidyNudge } from '../app/SidebarParts';
@@ -47,7 +48,6 @@ export function StaticCard({ note, ...overrides }: { note: Note } & Partial<Note
       onMenu={noop}
       onCopy={noop}
       onTogglePin={noop}
-      onToggleArchive={noop}
       onToggleCollapse={noop}
       onTag={noop}
       onEmoji={noop}
@@ -60,8 +60,7 @@ export function StaticCard({ note, ...overrides }: { note: Note } & Partial<Note
 
 export function NotesSection() {
   const data = useNotes();
-  const workspace = notesInTab(data.notes, 'workspace');
-  const archived = notesInTab(data.notes, 'archive');
+  const workspace = notesInTab(data.notes, 'workspace', data.pinnedTags);
   const [editing, setEditing] = useState(false);
   const pick = (index: number) => workspace[index % Math.max(1, workspace.length)];
   if (!workspace.length) return null;
@@ -112,7 +111,7 @@ export function NotesSection() {
           </StateCell>
         </div>
       </Demo>
-      <Demo title="折叠、置顶与归档" note="点时间收起正文，只留标题行；置顶的记录在工作区显示图钉。" wide>
+      <Demo title="折叠与置顶" note="点时间收起正文，只留标题行；置顶的记录在随记与标签页签中显示图钉。第四次反馈去掉了归档，原来的归档记录回到随记，带上 #归档。" wide>
         <div className="sn-card-matrix">
           <StateCell label="收起正文">
             <PanelSample list>
@@ -124,22 +123,23 @@ export function NotesSection() {
               <StaticCard note={pinned} />
             </PanelSample>
           </StateCell>
-          {archived[0] ? (
-            <StateCell label="归档">
-              <PanelSample list>
-                <StaticCard note={archived[0]} tab="archive" />
-              </PanelSample>
-            </StateCell>
-          ) : null}
         </div>
       </Demo>
-      <Demo title="拖动排序（示意）" note="按住卡片拖动：插入线标出落点，拖到页签移过去，拖到底部的回收站区域删除，都可以撤销。多选拖动时拖影后面叠着卡片，右上角写条数。" wide>
+      <Demo
+        title="拖动排序（示意）"
+        note="按住卡片拖动：插入线标出落点，拖到页签移过去（标签页签按标签加减），拖到底部的回收站区域删除，都可以撤销。多选拖动时拖影是一叠真实的卡片：后面两层是另外两张选中卡片的副本，往右上错开、转开一点，露出标题栏，右上角写条数。"
+        wide
+      >
         <PanelSample list className="is-dragging-demo">
           <StaticCard note={pick(5)} />
           <div className="sn-drop-line" aria-hidden="true" />
           <div className="sn-drag-ghost" aria-hidden="true">
-            <span className="sn-drag-stack" style={{ '--local-layer': 2 } as CSSProperties} />
-            <span className="sn-drag-stack" style={{ '--local-layer': 1 } as CSSProperties} />
+            <div className="sn-drag-layer" style={{ '--local-layer': 2 } as CSSProperties}>
+              <StaticCard note={pick(8)} />
+            </div>
+            <div className="sn-drag-layer" style={{ '--local-layer': 1 } as CSSProperties}>
+              <StaticCard note={pick(9)} />
+            </div>
             <StaticCard note={pick(6)} active />
             <span className="sn-drag-count">3</span>
           </div>
@@ -156,36 +156,72 @@ export function NotesSection() {
 
 export function PartsSection() {
   const plain = useSidebarView();
+  const narrow = useSidebarView();
+  const narrowHidden = useSidebarView({ tab: tabOfTag('生活') });
   const searching = useSidebarView({ searchOpen: true, query: '#工' });
   const filtered = useSidebarView({ query: '代码' });
+  const tagged = useSidebarView({ tag: '阅读' });
 
   return (
     <PageSection id="gallery-parts" title="侧栏部件" description="页签、搜索、列表顶栏、筛选条、整理提醒、新建卡片与底栏，都是侧栏中真实的组件。">
-      <Demo title="页签" note="工作区、置顶、归档三个页签，带条数；放大镜展开搜索框，搜索框盖住页签。">
+      <Demo
+        title="页签"
+        note="随记、置顶与手动固定的标签（第四次反馈），最后一格是菜单：收起的页签与「新建页签」。条数只写在随记与当前页签上；双击标签页签改名，右键可以移出页签栏。放大镜展开搜索框，盖住页签。"
+      >
         <PanelSample>
           <SidebarNav view={plain} />
         </PanelSample>
+      </Demo>
+      <Demo title="页签放不下" note="多出来的页签从右往左收进最后一格「N ▾」。选中收起的页签时前面的页签不动，最后一格写它的名称并带当前样式。">
+        <div className="sn-card-matrix">
+          <StateCell label="放不下时">
+            <PanelSample className="is-narrow">
+              <SidebarNav view={narrow} />
+            </PanelSample>
+          </StateCell>
+          <StateCell label="当前是收起的页签">
+            <PanelSample className="is-narrow">
+              <SidebarNav view={narrowHidden} />
+            </PanelSample>
+          </StateCell>
+        </div>
       </Demo>
       <Demo title="搜索与标签联想" note="输入 # 时以灰字联想已有标签，Tab 选用，↑ ↓ 切换候选（T41）；再点放大镜收起并清空搜索词。">
         <PanelSample>
           <SidebarNav view={searching} />
         </PanelSample>
       </Demo>
-      <Demo title="列表顶栏与筛选条" note="标签菜单列出评分最高的六个标签，可以管理标签或转到 #标签 搜索；筛选时列表上方出现筛选条（T67）。">
+      <Demo
+        title="列表顶栏与筛选条"
+        note="标签菜单列出评分最高的六个标签，可以管理标签或转到 #标签 搜索；筛选时列表上方出现筛选条（T67）。按标签筛选时筛选条上还有「固定为页签」与「合并」（第四次反馈）。"
+      >
         <PanelSample>
           <ListTopline view={filtered} onManageTag={noop} onSearchTags={noop} />
           <FilterBanner view={filtered} />
+          <FilterBanner view={tagged} onPin={noop} onMerge={noop} />
         </PanelSample>
       </Demo>
-      <Demo title="整理提醒" note="工作区记录超过阈值时出现，可以归档旧记录或七天后再提醒。">
+      <Demo title="整理提醒" note="记录超过阈值时出现，建议把同一类的记录固定为页签或合并成一条，可以七天后再提醒。">
         <PanelSample>
-          <TidyNudge onArchive={noop} onSnooze={noop} onClose={noop} />
+          <TidyNudge onSnooze={noop} onClose={noop} />
         </PanelSample>
       </Demo>
-      <Demo title="新建卡片" note="可以直接输入；获得焦点时与编辑中的卡片一样换成编辑底色并浮起。Ctrl+Enter 保存，保存后焦点留在这里，可以接着记下一条。">
-        <PanelSample>
-          <Composer />
-        </PanelSample>
+      <Demo
+        title="新建卡片"
+        note="可以直接输入；获得焦点时与编辑中的卡片一样换成编辑底色并浮起。Ctrl+Enter 保存，保存后焦点留在这里，可以接着记下一条。在标签页签中新建时，工具栏上有一个「#标签 ×」，保存时带上这个标签。"
+      >
+        <div className="sn-card-matrix">
+          <StateCell label="随记">
+            <PanelSample>
+              <Composer />
+            </PanelSample>
+          </StateCell>
+          <StateCell label="在标签页签「工作」中">
+            <PanelSample>
+              <Composer tag="工作" onSkipTag={noop} />
+            </PanelSample>
+          </StateCell>
+        </div>
       </Demo>
       <Demo title="底栏" note="左下角是缩小的版本号，检查到新版本时右上角带一个更新角标，点开列出即将更新的内容；右边是设置（Ctrl+,）。">
         <div className="sn-card-matrix">
@@ -208,20 +244,27 @@ export function PartsSection() {
 export function OverlaySection() {
   const data = useNotes();
   const toast = useToast();
-  const note = notesInTab(data.notes, 'workspace')[0] ?? null;
-  const [menu, setMenu] = useState<{ type: 'note' | 'sidebar'; point: { x: number; y: number } } | null>(null);
+  const list = notesInTab(data.notes, 'workspace', data.pinnedTags);
+  const note = list[0] ?? null;
+  const [menu, setMenu] = useState<{ type: 'note' | 'selected' | 'sidebar'; point: { x: number; y: number } } | null>(null);
   const [dialog, setDialog] = useState<'trash' | 'changelog' | 'update' | 'info' | 'guide' | 'emoji' | null>(null);
-  const open = (type: 'note' | 'sidebar') => (event: ReactMouseEvent<HTMLButtonElement>) => {
+  const [merging, setMerging] = useState<MergeRequest | null>(null);
+  // 合并的示例：示例数据中带 #生活 的记录（会真的写入 Playground 的示例数据，可以撤销）。
+  const living = notesInTab(data.notes, tabOfTag('生活'), data.pinnedTags).map((item) => item.id);
+  const open = (type: 'note' | 'selected' | 'sidebar') => (event: ReactMouseEvent<HTMLButtonElement>) => {
     const box = event.currentTarget.getBoundingClientRect();
     setMenu({ type, point: { x: box.left, y: box.bottom + 4 } });
   };
 
   return (
     <PageSection id="gallery-overlays" title="菜单、弹窗与提示" description="菜单项的名称、顺序与提示键沿用现有应用；移入回收站先确认，确认后的提示条可以撤销。">
-      <Demo title="菜单" note="右键卡片打开卡片菜单，右键空白处打开侧栏菜单。">
+      <Demo title="菜单" note="右键卡片打开卡片菜单，右键空白处打开侧栏菜单。卡片菜单去掉了归档，换成「移到…」；多选之中的卡片最上面是「合并成一条…」与「合并到这条」（第四次反馈）。">
         <DemoRow>
           <Button variant="secondary" trailingIcon="chevron-down" onClick={open('note')}>
             卡片菜单
+          </Button>
+          <Button variant="secondary" trailingIcon="chevron-down" onClick={open('selected')}>
+            多选中的卡片菜单
           </Button>
           <Button variant="secondary" trailingIcon="chevron-down" onClick={open('sidebar')}>
             侧栏菜单
@@ -229,8 +272,12 @@ export function OverlaySection() {
         </DemoRow>
         {menu && note ? (
           <ContextMenu
-            label={menu.type === 'note' ? '记录操作' : '侧栏操作'}
-            items={menu.type === 'note' ? noteMenuItems(note, noop) : sidebarMenuItems({ count: 3, hasExpanded: true, pinned: false, edge: 'right' }, noop)}
+            label={menu.type === 'sidebar' ? '侧栏操作' : '记录操作'}
+            items={
+              menu.type === 'sidebar'
+                ? sidebarMenuItems({ count: 3, hasExpanded: true, pinned: false, edge: 'right' }, noop)
+                : noteMenuItems(note, noop, { selected: menu.type === 'selected' ? 3 : 0, canMove: true })
+            }
             point={menu.point}
             onClose={() => setMenu(null)}
           />
@@ -256,6 +303,9 @@ export function OverlaySection() {
           <Button variant="secondary" onClick={() => setDialog('guide')}>
             使用指南
           </Button>
+          <Button variant="secondary" icon="merge" disabled={living.length < 2} onClick={() => setMerging({ ids: living, tag: '生活' })}>
+            合并成一条
+          </Button>
         </DemoRow>
         <TrashConfirm notes={dialog === 'trash' && note ? [note] : null} onCancel={() => setDialog(null)} onConfirm={() => setDialog(null)} />
         <ChangelogDialog open={dialog === 'changelog'} onClose={() => setDialog(null)} />
@@ -263,6 +313,7 @@ export function OverlaySection() {
         <NoteInfoDialog note={dialog === 'info' ? note : null} onClose={() => setDialog(null)} />
         <EmojiDialog note={dialog === 'emoji' ? note : null} onPick={() => setDialog(null)} onClose={() => setDialog(null)} />
         <GuideDialog open={dialog === 'guide'} onClose={() => setDialog(null)} />
+        <MergeDialog request={merging} onClose={() => setMerging(null)} onDone={() => setMerging(null)} />
       </Demo>
       <Demo title="提示条" note="反色，默认在窗口顶部正中（T57、T63）；可撤销的操作带「撤销」。">
         <DemoRow>

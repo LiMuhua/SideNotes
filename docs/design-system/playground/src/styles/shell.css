@@ -137,6 +137,28 @@ body,
   color: var(--pg-accent-text);
 }
 
+/* 跳到交互原型：顶栏最右边的小号链接。 */
+.pg-jump {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  margin-left: auto;
+  padding: 0 10px;
+  border: 1px solid var(--pg-border);
+  border-radius: 6px;
+  color: var(--pg-muted);
+  font-size: 12px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.pg-jump:hover {
+  background: var(--pg-hover);
+  color: var(--pg-text);
+}
+
 /* ---------- 预览设置 ---------- */
 .pg-controls {
   display: flex;
