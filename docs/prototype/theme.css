@@ -2540,6 +2540,8 @@ body.is-dragging-attachment * {
   max-width: calc(100% - var(--sn-space-8) * 2);
   pointer-events: none;
   transform: translateX(-50%);
+  /* 设置窗口已按字号缩放，提示条不能再按 .toast-region 的规则缩放一次，否则字号与侧栏提示条不一致。 */
+  zoom: 1;
 }
 
 [data-sn-toast='top-right'] .modal.settings-modal > .toast-region.settings-toast-region {
@@ -4156,7 +4158,17 @@ body[data-edge='left'] .toast-region {
     transform: none;
   }
 
-  /* 设置窗口：分类栏在上，名称在控件上方，主题卡片排成三列，快捷键的两张卡片各占一行。 */
+  /* 设置窗口：分类栏在上，名称在控件上方，主题卡片排成三列，快捷键的两张卡片各占一行。
+   * 窗口铺满遮罩（layout.md 第七节「设置窗口铺满屏幕」），不用桌面「随内容伸缩、上边固定」的高度：
+   * 分类栏叠在页面上方，再限高 600 页面只剩半屏，上下还空出大片。 */
+  .modal.settings-modal {
+    align-self: stretch;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    margin-top: 0;
+  }
+
   .settings-modal .settings-layout {
     flex-direction: column;
   }
