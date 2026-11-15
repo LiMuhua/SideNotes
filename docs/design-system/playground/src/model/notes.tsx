@@ -2,7 +2,8 @@
  * Playground 的记录仓库。
  *
  * 复用现有应用的记录模型与规则（`src/core`）：记录、页签归属、排序、搜索、标签解析都调用同一批函数，
- * 示例数据取自 `src/debug/sample-notes.ts`。数据只在内存中，不调用桌面接口、不读写数据库。
+ * 示例数据取自 `src/debug/sample-notes.ts`，后面追加第六次反馈补充的示例（`./samples.ts`）。
+ * 数据只在内存中，不调用桌面接口、不读写数据库。
  *
  * 数据层（记录、草稿、设置）全局共享：侧栏、速记浮窗与设置窗口看到同一份数据，
  * 与现有应用三个窗口共用一个数据库的行为一致。界面状态由各个侧栏实例自己持有，见 `useSidebarView`。
@@ -18,6 +19,7 @@ import { canonicalize, compose, hasTag, parse, removeTag, tagKey } from '@/core/
 import type { Note, NoteStatus, Settings, TagUsage } from '@/core/types';
 import { createSampleNotes } from '@/debug/sample-notes';
 import { CUSTOM_APP_ICON, DEFAULT_APP_ICON } from './appIcons';
+import { createExtraSampleNotes, SAMPLE_PINNED_TAGS } from './samples';
 
 interface State {
   notes: Note[];
@@ -55,9 +57,6 @@ type Action =
   | { type: 'patch'; changes: ReadonlyArray<readonly [string, Partial<Note>]> }
   | { type: 'reset'; now: number };
 
-/** 示例数据中已经固定的两个标签，用来演示标签页签。页签只由用户手动固定，不会自动出现。 */
-const SAMPLE_PINNED_TAGS = ['工作', '生活'];
-
 /** 给原文带上一个标签；已经带着（不分大小写）时不变。 */
 export function withTag(text: string, tag: string): string {
   const parsed = parse(text);
@@ -76,7 +75,8 @@ function migrateArchived(note: Note): Note {
 function initialState(now = Date.now()): State {
   // 字体默认「跟随主题」（空值）：现有设置里的旧默认值 Maple Mono NF CN 迁移为跟随主题，见 adaptation.md。
   return {
-    notes: createSampleNotes(now).map(migrateArchived),
+    // 示例数据中已经固定了几个标签（SAMPLE_PINNED_TAGS），用来演示标签页签与放不下的情况；页签只由用户手动固定，不会自动出现。
+    notes: [...createSampleNotes(now), ...createExtraSampleNotes(now)].map(migrateArchived),
     draft: '',
     settings: { ...DEFAULT_SETTINGS, fontFamily: '' },
     tagUsage: {},
