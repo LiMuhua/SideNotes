@@ -98,10 +98,17 @@ export function useTabIds(): string {
 
 /* ==================== 提示条 ==================== */
 
+export interface ToastAction {
+  label: string;
+  run: () => void;
+}
+
 export interface ToastOptions {
   message: string;
   tone?: 'neutral' | 'success' | 'danger';
-  action?: { label: string; run: () => void };
+  action?: ToastAction;
+  /** 多个操作（第五次反馈：新记录不在当前页签时有「查看」与「放回」），排在 action 之后。 */
+  actions?: readonly ToastAction[];
 }
 
 interface ToastEntry extends ToastOptions {
@@ -136,7 +143,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const schedule = useCallback(
     (toast: ToastEntry) => {
       window.clearTimeout(timers.current.get(toast.id));
-      timers.current.set(toast.id, window.setTimeout(() => dismiss(toast.id), toast.action ? 9000 : 6000));
+      timers.current.set(toast.id, window.setTimeout(() => dismiss(toast.id), toast.action || toast.actions?.length ? 9000 : 6000));
     },
     [dismiss],
   );
@@ -176,18 +183,19 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             >
               <Icon name={TONE_ICONS[toast.tone ?? 'neutral']} />
               <span className="sn-toast-message">{toast.message}</span>
-              {toast.action ? (
+              {[...(toast.action ? [toast.action] : []), ...(toast.actions ?? [])].map((action) => (
                 <button
+                  key={action.label}
                   type="button"
                   className="sn-toast-action"
                   onClick={() => {
-                    toast.action?.run();
+                    action.run();
                     dismiss(toast.id);
                   }}
                 >
-                  {toast.action.label}
+                  {action.label}
                 </button>
-              ) : null}
+              ))}
               <button type="button" className="sn-toast-close" aria-label="关闭提示" onClick={() => dismiss(toast.id)}>
                 <Icon name="x" />
               </button>

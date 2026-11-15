@@ -399,6 +399,84 @@ export function filterNotes(notes: readonly Note[], tab: SidebarTab, pinned: rea
   return notesInTab(notes, tab, pinned).filter((note) => matchesQuery(note, query) && (!tag || hasTagKey(note, tag)));
 }
 
+/** 页签栏的顺序：随记、置顶与固定的标签（全局搜索的结果按这个顺序分组）。 */
+export function tabOrder(pinned: readonly string[]): SidebarTab[] {
+  return ['workspace', 'pinned', ...pinned.map(tabOfTag)];
+}
+
+/** 页签显示的名称（不带引号）：随记、置顶或标签名。 */
+export function tabName(tab: SidebarTab): string {
+  return tagOfTab(tab) || TAB_LABELS[tab as 'workspace' | 'pinned'];
+}
+
+/**
+ * 记录在页签栏中第一个出现的页签（第五次反馈）：没有已固定标签的在随记，否则置顶的在置顶，其余在它的第一个固定标签。
+ * 全局搜索的结果按它分组，「转到」也去这里。
+ */
+export function homeTab(note: Note, pinned: readonly string[]): SidebarTab {
+  return tabOrder(pinned).find((tab) => belongsTo(note, tab, pinned)) ?? 'workspace';
+}
+
+/* ==================== 全局搜索（第五次反馈，与交互原型相同） ==================== */
+
+/** 实际的搜索词：去掉只有 # 还没写标签名的部分（刚输入 # 时只联想标签，列表不变）。 */
+export function searchTerms(query: string): string {
+  return query.replace(/(^|\s)#(?=\s|$)/gu, ' ').trim();
+}
+
+/**
+ * 搜索匹配：正文、标签与附件名中的文字都要出现；写完整的已有标签（如 #产品）只匹配这个标签，没写完的按前缀匹配。
+ * @param known 已有标签的 tagKey。
+ */
+export function matchesSearch(note: Note, terms: string, known: ReadonlySet<string>): boolean {
+  if (!terms) return true;
+  const parsed = parse(note.text);
+  const tags: string[] = [];
+  const text = terms
+    .replace(/(?:^|\s)#([\p{L}\p{N}_-]+)/gu, (_match, tag: string) => {
+      tags.push(tagKey(tag));
+      return ' ';
+    })
+    .trim()
+    .toLocaleLowerCase();
+  const keys = parsed.tags.map(tagKey);
+  if (!tags.every((tag) => keys.some((key) => (known.has(tag) ? key === tag : key.startsWith(tag))))) return false;
+  const haystack = `${parsed.body} ${parsed.tags.join(' ')} ${note.images.map((image) => image.name).join(' ')}`.toLocaleLowerCase();
+  return text
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((word) => haystack.includes(word));
+}
+
+export interface SearchGroup {
+  tab: SidebarTab;
+  notes: Note[];
+}
+
+/** 全部未删除记录中的搜索结果，按页签分组：组的顺序与页签栏相同，组内置顶在前，再按手动顺序与创建时间。 */
+export function searchGroups(notes: readonly Note[], pinned: readonly string[], query: string): SearchGroup[] {
+  const terms = searchTerms(query);
+  if (!terms) return [];
+  const known = new Set(allTags(notes).map((item) => tagKey(item.tag)));
+  const groups = new Map<SidebarTab, Note[]>(tabOrder(pinned).map((tab) => [tab, []]));
+  notes.forEach((note) => {
+    if (note.status !== 'active' || !matchesSearch(note, terms, known)) return;
+    groups.get(homeTab(note, pinned))?.push(note);
+  });
+  return Array.from(groups, ([tab, list]) => ({
+    tab,
+    notes: list.sort((a, b) => Number(b.pinned) - Number(a.pinned) || compareNoteOrder(a, b)),
+  })).filter((group) => group.notes.length);
+}
+
+/** 搜索词只是一个已有的标签（如「#产品」）时返回这个标签的写法，否则为空；这时搜索框里有「固定为页签」「合并」。 */
+export function singleSearchTag(query: string, notes: readonly Note[]): string {
+  const match = /^#([\p{L}\p{N}_-]+)$/u.exec(searchTerms(query));
+  if (!match) return '';
+  const key = tagKey(match[1]);
+  return allTags(notes).find((item) => tagKey(item.tag) === key)?.tag ?? '';
+}
+
 export function tabCount(notes: readonly Note[], tab: SidebarTab, pinned: readonly string[]): number {
   return notes.filter((note) => belongsTo(note, tab, pinned)).length;
 }
@@ -444,7 +522,7 @@ export interface SidebarViewOptions {
   tab?: SidebarTab;
   selectedId?: string | null;
   editingId?: string | null;
-  /** 初始的搜索词与标签筛选（组件页的示例状态）。 */
+  /** 初始的搜索词与标签筛选（组件页的示例状态）；有搜索词时是全局搜索。 */
   query?: string;
   searchOpen?: boolean;
   tag?: string;
@@ -463,11 +541,16 @@ export function useSidebarView(options: SidebarViewOptions = {}) {
   const [checked, setChecked] = useState<ReadonlySet<string>>(() => new Set());
   // 新建卡片上去掉了的页签标签（第四次反馈：在标签页签中新建时默认带上这个标签，点 × 这一条不带）。
   const [skippedTag, setSkippedTag] = useState('');
+  // 「转到」一条记录：列表滚到它并闪一下（第五次反馈），处理完清空。
+  const [locateId, setLocateId] = useState<string | null>(null);
 
   const { notes, pinnedTags } = data;
   // 当前的标签页签移出页签栏之后回到随记。
   const tab: SidebarTab = tabExists(tabState, pinnedTags) ? tabState : 'workspace';
-  const items = filterNotes(notes, tab, pinnedTags, query, tag);
+  // 全局搜索（第五次反馈）：有搜索词时列表是全部记录中的结果，按页签分组，与当前页签和标签筛选无关。
+  const searching = Boolean(searchTerms(query));
+  const groups = useMemo(() => (searching ? searchGroups(notes, pinnedTags, query) : []), [searching, notes, pinnedTags, query]);
+  const items = searching ? groups.flatMap((group) => group.notes) : filterNotes(notes, tab, pinnedTags, '', tag);
   /** 当前页签的全部条数（不计搜索与筛选）。 */
   const total = tabCount(notes, tab, pinnedTags);
   const countOf = useCallback((target: SidebarTab) => tabCount(notes, target, pinnedTags), [notes, pinnedTags]);
@@ -492,12 +575,33 @@ export function useSidebarView(options: SidebarViewOptions = {}) {
     },
     [trackTagUsage],
   );
-  /** 「显示全部」与空状态的「清除筛选」：同时清除标签与搜索，并收起搜索框。 */
+  /** 空状态的「清除筛选」：同时清除标签与搜索，并收起搜索框。 */
   const clearFilters = useCallback(() => {
     setQuery('');
     setTag('');
     setSearchOpen(false);
   }, []);
+  /** 结束搜索：清空搜索词并收起搜索框，回到原来的页签（标签筛选保留）。 */
+  const endSearch = useCallback(() => {
+    setQuery('');
+    setSearchOpen(false);
+  }, []);
+  /**
+   * 切到一个页签（单击页签、搜索结果的「转到」）：结束搜索，清除标签筛选；给出记录时选中它，列表滚到它并闪一下。
+   */
+  const goToTab = useCallback(
+    (next: SidebarTab, noteId?: string) => {
+      setTab(next);
+      setQuery('');
+      setSearchOpen(false);
+      setTag('');
+      if (noteId) {
+        setSelectedId(noteId);
+        setLocateId(noteId);
+      }
+    },
+    [setTab],
+  );
 
   return {
     tab,
@@ -519,6 +623,15 @@ export function useSidebarView(options: SidebarViewOptions = {}) {
     checked,
     setChecked,
     clearFilters,
+    endSearch,
+    goToTab,
+    locateId,
+    clearLocate: () => setLocateId(null),
+    searching,
+    /** 搜索结果的分组（不搜索时为空）。 */
+    groups,
+    /** 只搜一个已有标签时的标签（搜索框里出现「固定为页签」「合并」）。 */
+    searchTag: searching ? singleSearchTag(query, notes) : '',
     items,
     total,
     countOf,
@@ -527,7 +640,7 @@ export function useSidebarView(options: SidebarViewOptions = {}) {
     composerTag,
     skipComposerTag: () => setSkippedTag(pageTag),
     resetComposerTag: () => setSkippedTag(''),
-    filtering: Boolean(query.trim() || tag),
+    filtering: searching || Boolean(tag),
   };
 }
 

@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { isValidTag, tagKey } from '@/core/tags';
 import type { Note } from '@/core/types';
-import { allTags, findPinned, pinnedTagOf, tabLabel, tabOfTag, tabPatch, tagOfTab, TAB_LABELS, useNotes, type SidebarTab, type SidebarView } from '../model/notes';
+import { allTags, findPinned, homeTab, pinnedTagOf, tabLabel, tabOfTag, tabPatch, tagOfTab, TAB_LABELS, useNotes, type SidebarTab, type SidebarView } from '../model/notes';
 import { cx, useSurface } from '../ui/context';
 import { Icon, type IconName } from '../ui/Icon';
 import { Layer, useAnchoredPosition } from '../ui/layer';
@@ -53,8 +53,7 @@ export function useTabActions(view: SidebarView) {
       data.setPinnedTags([...previous, tag]);
       toast({ message: `已固定为页签「${tag}」`, action: { label: '撤销', run: () => data.setPinnedTags(previous) } });
     }
-    view.setTab(tabOfTag(tag));
-    view.clearFilters();
+    view.goToTab(tabOfTag(tag));
     return true;
   };
 
@@ -88,16 +87,18 @@ export function useTabActions(view: SidebarView) {
    * 移到随记后还在别的固定标签里的，提示写明在哪里。
    */
   const moveTo = (ids: readonly string[], destination: SidebarTab) => {
+    // 全局搜索的结果来自各个页签（第五次反馈）：按每条记录自己所在的页签算，已经在目的地的不动。
+    const fromOf = (note: Note): SidebarTab => (view.searching ? homeTab(note, data.pinnedTags) : view.tab);
     const from = view.tab;
-    if (destination === from) return;
+    if (!view.searching && destination === from) return;
     const now = Date.now();
     const previous: Array<readonly [string, Partial<Note>]> = [];
     const changes: Array<readonly [string, Partial<Note>]> = [];
     const moved: Note[] = [];
     ids.forEach((id) => {
       const note = data.byId.get(id);
-      if (!note || note.status !== 'active') return;
-      const patch: Partial<Note> = { ...tabPatch(note, from, destination), order: null, updatedAt: now };
+      if (!note || note.status !== 'active' || fromOf(note) === destination) return;
+      const patch: Partial<Note> = { ...tabPatch(note, fromOf(note), destination), order: null, updatedAt: now };
       previous.push([id, { text: note.text, pinned: note.pinned, order: note.order, updatedAt: note.updatedAt }]);
       changes.push([id, patch]);
       moved.push({ ...note, ...patch });
@@ -111,7 +112,9 @@ export function useTabActions(view: SidebarView) {
       if (still.length) {
         const some = still.length < moved.length ? `${still.length} 条` : '';
         const more = new Set(still.map(tagKey)).size > 1 ? '等页签' : '';
-        message = `已移出${tabLabel(from)}，${some}仍在「${still[0]}」${more}`;
+        const origins = new Set(moved.map((note) => fromOf(data.byId.get(note.id) ?? note)));
+        const origin = view.searching ? (origins.size === 1 ? tabLabel([...origins][0]) : '原来的页签') : tabLabel(from);
+        message = `已移出${origin}，${some}仍在「${still[0]}」${more}`;
       }
     }
     toast({ message, action: { label: '撤销', run: () => data.patchNotes(previous) } });
@@ -145,7 +148,9 @@ export function TabsRow({ view }: { view: SidebarView }) {
   const [creating, setCreating] = useState<HTMLElement | null>(null);
 
   const tags = view.pinnedTags;
-  const current = tagOfTab(view.tab);
+  // 全局搜索时（第五次反馈）结果不属于某一个页签，页签栏不标出当前页签；单击页签结束搜索并切过去。
+  const selectedTab = view.searching ? null : view.tab;
+  const current = selectedTab ? tagOfTab(selectedTab) : '';
   const hidden = tags.slice(visible);
   const activeHidden = Boolean(current) && hidden.some((tag) => tagKey(tag) === tagKey(current));
   const mode: 'plain' | 'count' | 'active' = activeHidden ? 'active' : hidden.length ? 'count' : 'plain';
@@ -205,7 +210,7 @@ export function TabsRow({ view }: { view: SidebarView }) {
       label: tag,
       icon: 'hash',
       checked: Boolean(current) && tagKey(tag) === tagKey(current),
-      onSelect: () => view.setTab(tabOfTag(tag)),
+      onSelect: () => view.goToTab(tabOfTag(tag)),
     })),
     { id: 'create', label: '新建页签', icon: 'plus', separatorBefore: hidden.length > 0, onSelect: () => setCreating(slotMenu?.anchor ?? null) },
   ];
@@ -217,14 +222,14 @@ export function TabsRow({ view }: { view: SidebarView }) {
         <TabContent label={TAB_LABELS[tab]} icon={icon} count={countOf(tab)} />
       </span>
     ) : (
-      <button key={tab} type="button" role="tab" aria-selected={view.tab === tab} className="sn-side-tab" data-tab={tab} onClick={() => view.setTab(tab)}>
+      <button key={tab} type="button" role="tab" aria-selected={selectedTab === tab} className="sn-side-tab" data-tab={tab} onClick={() => view.goToTab(tab)}>
         <TabContent label={TAB_LABELS[tab]} icon={icon} count={countOf(tab)} />
       </button>
     );
 
   return (
     <>
-      <div className={rowClass} role="tablist" aria-label="记录列表" inert={view.searchOpen}>
+      <div className={rowClass} role="tablist" aria-label="记录列表">
         {FIXED_TABS.map(({ tab, icon }) => fixedTab(tab, icon))}
         {tags.slice(0, visible).map((tag) => {
           const tab = tabOfTag(tag);
@@ -245,10 +250,10 @@ export function TabsRow({ view }: { view: SidebarView }) {
               key={tab}
               type="button"
               role="tab"
-              aria-selected={view.tab === tab}
+              aria-selected={selectedTab === tab}
               className="sn-side-tab"
               data-tab={tab}
-              onClick={() => view.setTab(tab)}
+              onClick={() => view.goToTab(tab)}
               onDoubleClick={() => setRenaming(tag)}
               onContextMenu={(event) => {
                 event.preventDefault();

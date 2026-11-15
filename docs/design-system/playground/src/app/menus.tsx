@@ -1,5 +1,6 @@
 /**
- * 菜单与弹窗：卡片菜单、侧栏菜单、移入回收站的确认、版本与更新、记录信息、更换 Emoji、管理标签、使用指南。
+ * 菜单与弹窗：卡片菜单、侧栏菜单、版本与更新、记录信息、更换 Emoji、管理标签、使用指南。
+ * 移入回收站不再确认（第五次反馈），提示条可以撤销。
  *
  * 菜单项的名称、顺序与提示键沿用现有应用（`src/components/NoteMenu.tsx`、`SidebarMenu.tsx`）；
  * 使用指南的文字取自 `src/components/UsageGuide.tsx`，版本说明取自 `src/core/changelog.ts`。
@@ -20,29 +21,38 @@ import { useToast } from '../ui/Tabs';
 import { pinnedTagOf, useNotes } from '../model/notes';
 import { SHORTCUT_KEYS } from './shortcuts';
 
-export type NoteCommand = 'merge' | 'merge-into' | 'copy' | 'edit' | 'collapse' | 'pin' | 'move' | 'duplicate' | 'export' | 'info' | 'trash' | 'restore';
+export type NoteCommand = 'locate' | 'merge' | 'merge-into' | 'copy' | 'edit' | 'collapse' | 'pin' | 'move' | 'duplicate' | 'export' | 'info' | 'trash' | 'restore';
 
 export interface NoteMenuOptions {
   /** 这张卡片在多选之中时，选中的条数（大于 1 时最上面是两个合并项）。 */
   selected?: number;
   /** 有可以移去的页签（随记与固定的标签页签，当前页签除外）时显示「移到…」。 */
   canMove?: boolean;
+  /** 全局搜索的结果（第五次反馈）：记录所在页签的名称，最上面是「转到「X」」。 */
+  locate?: string;
+}
+
+/** 菜单里写的记录标题：超过 10 个字截断。 */
+function shortTitle(note: Note): string {
+  const chars = Array.from(noteTitle(note));
+  return chars.length > 10 ? `${chars.slice(0, 10).join('')}…` : chars.join('');
 }
 
 /**
  * 卡片菜单：按记录状态生成。第四次反馈去掉了「归档」，换成「移到…」（随记与固定的标签页签）；
- * 多选之中的卡片最上面是「合并成一条…」与「合并到这条」（与交互原型相同）。
+ * 多选之中的卡片最上面是「合并成一条…」与「合并到「标题」」（第五次反馈：写出这一条的标题）；
+ * 全局搜索的结果最上面是「转到「X」」（与交互原型相同）。
  */
 export function noteMenuItems(note: Note, run: (command: NoteCommand) => void, options: NoteMenuOptions = {}): MenuItem[] {
   const merging = (options.selected ?? 0) > 1;
-  const items: MenuItem[] = merging
-    ? [
-        { id: 'merge', label: '合并成一条…', icon: 'merge', hint: `${options.selected} 条`, onSelect: () => run('merge') },
-        { id: 'merge-into', label: '合并到这条', icon: 'merge', onSelect: () => run('merge-into') },
-      ]
-    : [];
+  const items: MenuItem[] = options.locate ? [{ id: 'locate', label: `转到${options.locate}`, icon: 'arrow-right', onSelect: () => run('locate') }] : [];
+  if (merging)
+    items.push(
+      { id: 'merge', label: '合并成一条…', icon: 'merge', hint: `${options.selected} 条`, separatorBefore: Boolean(options.locate), onSelect: () => run('merge') },
+      { id: 'merge-into', label: `合并到「${shortTitle(note)}」`, icon: 'merge', onSelect: () => run('merge-into') },
+    );
   items.push(
-    { id: 'copy', label: '复制内容与附件', icon: 'copy', shortcut: 'Ctrl+C', separatorBefore: merging, onSelect: () => run('copy') },
+    { id: 'copy', label: '复制内容与附件', icon: 'copy', shortcut: 'Ctrl+C', separatorBefore: items.length > 0, onSelect: () => run('copy') },
     { id: 'edit', label: '编辑内容', icon: 'edit', shortcut: '双击', onSelect: () => run('edit') },
     { id: 'collapse', label: note.collapsed ? '展开正文' : '收起正文', icon: 'chevron-down', onSelect: () => run('collapse') },
   );
@@ -104,23 +114,6 @@ export function sidebarMenuItems(
     },
   );
   return items;
-}
-
-/** 移入回收站的确认：说明只取第一行，最多 70 字（与现有应用一致）。 */
-export function TrashConfirm({ notes, onCancel, onConfirm }: { notes: Note[] | null; onCancel: () => void; onConfirm: () => void }) {
-  const first = notes?.[0];
-  const line = first ? parse(first.text).body.split('\n').find((item) => item.trim()) ?? '' : '';
-  return (
-    <ConfirmDialog
-      open={Boolean(notes?.length)}
-      title={notes && notes.length > 1 ? `将这 ${notes.length} 条记录移入回收站？` : '将这条记录移入回收站？'}
-      description={notes && notes.length > 1 ? '可以在设置的「回收站」中恢复。' : line.slice(0, 70)}
-      confirmLabel="移入回收站"
-      danger
-      onCancel={onCancel}
-      onConfirm={onConfirm}
-    />
-  );
 }
 
 /** 把一段更新日志按分号拆成要点。 */

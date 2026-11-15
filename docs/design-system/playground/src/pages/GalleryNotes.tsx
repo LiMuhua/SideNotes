@@ -7,9 +7,9 @@ import type { Note } from '@/core/types';
 import { notesInTab, tabOfTag, useNotes, useSidebarView } from '../model/notes';
 import { Composer } from '../app/Composer';
 import { MergeDialog, type MergeRequest } from '../app/MergeDialog';
-import { AVAILABLE_UPDATE, ChangelogDialog, EmojiDialog, GuideDialog, NoteInfoDialog, noteMenuItems, sidebarMenuItems, TrashConfirm, UpdateDialog } from '../app/menus';
+import { AVAILABLE_UPDATE, ChangelogDialog, EmojiDialog, GuideDialog, NoteInfoDialog, noteMenuItems, sidebarMenuItems, UpdateDialog } from '../app/menus';
 import { NoteCard, type NoteCardProps } from '../app/NoteCard';
-import { FilterBanner, ListTopline, SidebarFooter, SidebarNav, TidyNudge } from '../app/SidebarParts';
+import { ListTopline, SearchGroupHeader, SidebarFooter, SidebarNav, TidyNudge } from '../app/SidebarParts';
 import { Button } from '../ui/Button';
 import { cx, useSurface } from '../ui/context';
 import { Icon } from '../ui/Icon';
@@ -158,15 +158,15 @@ export function PartsSection() {
   const plain = useSidebarView();
   const narrow = useSidebarView();
   const narrowHidden = useSidebarView({ tab: tabOfTag('生活') });
-  const searching = useSidebarView({ searchOpen: true, query: '#工' });
-  const filtered = useSidebarView({ query: '代码' });
+  const suggesting = useSidebarView({ searchOpen: true, query: '#工' });
+  const searching = useSidebarView({ searchOpen: true, query: '#阅读' });
   const tagged = useSidebarView({ tag: '阅读' });
 
   return (
-    <PageSection id="gallery-parts" title="侧栏部件" description="页签、搜索、列表顶栏、筛选条、整理提醒、新建卡片与底栏，都是侧栏中真实的组件。">
+    <PageSection id="gallery-parts" title="侧栏部件" description="页签、筛选行与搜索、搜索结果的分组、整理提醒、新建卡片与底栏，都是侧栏中真实的组件。">
       <Demo
         title="页签"
-        note="随记、置顶与手动固定的标签（第四次反馈），最后一格是菜单：收起的页签与「新建页签」。条数只写在随记与当前页签上；双击标签页签改名，右键可以移出页签栏。放大镜展开搜索框，盖住页签。"
+        note="随记、置顶与手动固定的标签（第四次反馈），最后一格是菜单：收起的页签与「新建页签」。条数只写在随记与当前页签上；双击标签页签改名，右键可以移出页签栏。"
       >
         <PanelSample>
           <SidebarNav view={plain} />
@@ -186,20 +186,44 @@ export function PartsSection() {
           </StateCell>
         </div>
       </Demo>
-      <Demo title="搜索与标签联想" note="输入 # 时以灰字联想已有标签，Tab 选用，↑ ↓ 切换候选（T41）；再点放大镜收起并清空搜索词。">
-        <PanelSample>
-          <SidebarNav view={searching} />
-        </PanelSample>
+      <Demo
+        title="筛选行"
+        note="页签栏下面一行（第五次反馈：保持两行）。左边的标签下拉同时写标签与条数，× 清除筛选；选了标签时后面是「固定为页签」与「合并」。右端的放大镜展开搜索框，从右向左铺满这一行。"
+      >
+        <div className="sn-card-matrix">
+          <StateCell label="没有筛选">
+            <PanelSample>
+              <ListTopline view={plain} onManageTag={noop} onSearchTags={noop} />
+            </PanelSample>
+          </StateCell>
+          <StateCell label="按 #阅读 筛选">
+            <PanelSample>
+              <ListTopline view={tagged} onManageTag={noop} onSearchTags={noop} onPin={noop} onMerge={noop} />
+            </PanelSample>
+          </StateCell>
+        </div>
       </Demo>
       <Demo
-        title="列表顶栏与筛选条"
-        note="标签菜单列出评分最高的六个标签，可以管理标签或转到 #标签 搜索；筛选时列表上方出现筛选条（T67）。按标签筛选时筛选条上还有「固定为页签」与「合并」（第四次反馈）。"
+        title="搜索"
+        note="搜索全部记录，与当前页签无关；输入 # 时以灰字联想已有标签，Tab 选用，↑ ↓ 切换候选（T41）。搜索框里写结果的条数，只搜一个标签时还有「固定为页签」与「合并」。结果按页签分组，组标题右侧「转到」切到这个页签。"
       >
-        <PanelSample>
-          <ListTopline view={filtered} onManageTag={noop} onSearchTags={noop} />
-          <FilterBanner view={filtered} />
-          <FilterBanner view={tagged} onPin={noop} onMerge={noop} />
-        </PanelSample>
+        <div className="sn-card-matrix">
+          <StateCell label="标签联想">
+            <PanelSample>
+              <ListTopline view={suggesting} onManageTag={noop} onSearchTags={noop} />
+            </PanelSample>
+          </StateCell>
+          <StateCell label="只搜一个标签">
+            <PanelSample>
+              <ListTopline view={searching} onManageTag={noop} onSearchTags={noop} onPin={noop} onMerge={noop} />
+              <div className="sn-note-list">
+                {searching.groups.map((group) => (
+                  <SearchGroupHeader key={group.tab} tab={group.tab} count={group.notes.length} onGo={noop} />
+                ))}
+              </div>
+            </PanelSample>
+          </StateCell>
+        </div>
       </Demo>
       <Demo title="整理提醒" note="记录超过阈值时出现，建议把同一类的记录固定为页签或合并成一条，可以七天后再提醒。">
         <PanelSample>
@@ -247,7 +271,7 @@ export function OverlaySection() {
   const list = notesInTab(data.notes, 'workspace', data.pinnedTags);
   const note = list[0] ?? null;
   const [menu, setMenu] = useState<{ type: 'note' | 'selected' | 'sidebar'; point: { x: number; y: number } } | null>(null);
-  const [dialog, setDialog] = useState<'trash' | 'changelog' | 'update' | 'info' | 'guide' | 'emoji' | null>(null);
+  const [dialog, setDialog] = useState<'changelog' | 'update' | 'info' | 'guide' | 'emoji' | null>(null);
   const [merging, setMerging] = useState<MergeRequest | null>(null);
   // 合并的示例：示例数据中带 #生活 的记录（会真的写入 Playground 的示例数据，可以撤销）。
   const living = notesInTab(data.notes, tabOfTag('生活'), data.pinnedTags).map((item) => item.id);
@@ -257,8 +281,8 @@ export function OverlaySection() {
   };
 
   return (
-    <PageSection id="gallery-overlays" title="菜单、弹窗与提示" description="菜单项的名称、顺序与提示键沿用现有应用；移入回收站先确认，确认后的提示条可以撤销。">
-      <Demo title="菜单" note="右键卡片打开卡片菜单，右键空白处打开侧栏菜单。卡片菜单去掉了归档，换成「移到…」；多选之中的卡片最上面是「合并成一条…」与「合并到这条」（第四次反馈）。">
+    <PageSection id="gallery-overlays" title="菜单、弹窗与提示" description="菜单项的名称、顺序与提示键沿用现有应用；移入回收站不再确认（第五次反馈），提示条可以撤销。">
+      <Demo title="菜单" note="右键卡片打开卡片菜单，右键空白处打开侧栏菜单。卡片菜单去掉了归档，换成「移到…」；多选之中的卡片最上面是「合并成一条…」与「合并到「标题」」（第五次反馈写出标题）；搜索结果的卡片最上面是「转到「X」」。">
         <DemoRow>
           <Button variant="secondary" trailingIcon="chevron-down" onClick={open('note')}>
             卡片菜单
@@ -285,9 +309,6 @@ export function OverlaySection() {
       </Demo>
       <Demo title="弹窗" note="打开时焦点移入，Tab 在弹窗内循环，Esc 关闭，关闭后焦点回到打开前的位置。">
         <DemoRow>
-          <Button variant="danger" onClick={() => setDialog('trash')}>
-            移入回收站
-          </Button>
           <Button variant="secondary" onClick={() => setDialog('changelog')}>
             版本与更新
           </Button>
@@ -307,7 +328,6 @@ export function OverlaySection() {
             合并成一条
           </Button>
         </DemoRow>
-        <TrashConfirm notes={dialog === 'trash' && note ? [note] : null} onCancel={() => setDialog(null)} onConfirm={() => setDialog(null)} />
         <ChangelogDialog open={dialog === 'changelog'} onClose={() => setDialog(null)} />
         <UpdateDialog update={AVAILABLE_UPDATE} open={dialog === 'update'} onClose={() => setDialog(null)} />
         <NoteInfoDialog note={dialog === 'info' ? note : null} onClose={() => setDialog(null)} />

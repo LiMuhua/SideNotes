@@ -9,6 +9,7 @@
 
 import { useRef, type MouseEvent } from 'react';
 import type { MarkdownEditor } from '@/core/editor';
+import type { Note } from '@/core/types';
 import { NoteEditor } from '../content/NoteEditor';
 import { useNotes, withTag } from '../model/notes';
 import { IconButton } from '../ui/Button';
@@ -23,7 +24,8 @@ export interface ComposerProps {
   /** 点「#标签」上的 ×：这一条不带页签的标签。 */
   onSkipTag?: () => void;
   /** 保存了一条新记录。 */
-  onSaved?: (id: string) => void;
+  /** 保存之后（第五次反馈）：由侧栏决定提示——新记录不在当前页签时写明记在哪里；没有时提示「已保存」。 */
+  onSaved?: (note: Note) => void;
   /** 父组件用来聚焦新建卡片（Ctrl+N）。 */
   onReady?: (editor: MarkdownEditor) => void;
 }
@@ -41,8 +43,8 @@ export function Composer({ tag = '', onSkipTag, onSaved, onReady }: ComposerProp
     if (empty) return;
     const note = data.create(tag ? withTag(data.draft, tag) : data.draft);
     data.setDraft('');
-    toast({ message: '已保存', tone: 'success' });
-    onSaved?.(note.id);
+    if (onSaved) onSaved(note);
+    else toast({ message: '已保存', tone: 'success' });
     editor.current?.focus({ preventScroll: true });
   };
 

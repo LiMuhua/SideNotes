@@ -13,9 +13,10 @@ import { useWheelStep } from '../ui/wheel';
 
 /**
  * 设置页：标题在左，右侧可以放与整页有关的操作（例如「恢复默认」）。
- * 窗口高度固定（第四次反馈），内容少的页不显空：fill 让最后一块（回收站的列表）伸到底部，center 让整页上下居中（关于）。
+ * 窗口高度固定（第四次反馈），内容少的页不显空：fill 让最后一块（回收站的列表）伸到底部。
+ * 各页的标题都在最上面（第五次反馈：关于页不再上下居中）。
  */
-export function SettingsPage({ title, aside, layout, children }: { title: string; aside?: ReactNode; layout?: 'fill' | 'center'; children: ReactNode }) {
+export function SettingsPage({ title, aside, layout, children }: { title: string; aside?: ReactNode; layout?: 'fill'; children: ReactNode }) {
   return (
     <div className={cx('sn-set-page', layout && `is-${layout}`)}>
       <header className="sn-set-head">
@@ -61,8 +62,9 @@ export function Field({ label, help, grow = false, children }: { label: string; 
 }
 
 /** 一行放几项设置，放不下时折行。 */
-export function FieldRow({ children, spread = false }: { children: ReactNode; spread?: boolean }) {
-  return <div className={cx('sn-set-row', spread && 'is-spread')}>{children}</div>;
+export function FieldRow({ children, spread = false, columns }: { children: ReactNode; spread?: boolean; columns?: 2 }) {
+  // columns：两列对齐（第五次反馈「其它」：列表加载、整理提醒；通知位置、窗口标签页），竖线只画在两列之间。
+  return <div className={cx('sn-set-row', spread && 'is-spread', columns && 'is-grid')}>{children}</div>;
 }
 
 /** 数据行：名称单独成一列，取值与操作紧跟在后（云端备份的几行输入框因此对齐）。 */

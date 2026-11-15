@@ -103,9 +103,9 @@ export function AppearancePanel() {
   const [tidyLimit, setTidyLimit] = useState(settings.tidyLimit || 50);
   // 编辑时滚到顶部（本次提出，默认打开）：Playground 的设置模型沿用现有应用，这一项只在页面上演示。
   const [scrollOnEdit, setScrollOnEdit] = useState(true);
-  // 记录窗口的标签页位置（第四次反馈）：顶部横排或左侧竖排，与窗口标题栏上的按钮是同一项。Playground 没有记录窗口，只示意这一项；
-  // 两种形态见组件页「记录窗口」。
-  const [windowTabs, setWindowTabs] = useState<'top' | 'side'>('top');
+  // 记录窗口的标签页位置（第四次反馈）：顶部横排或左侧竖排，默认左侧（第五次反馈），与窗口标题栏上的按钮是同一项。
+  // Playground 没有记录窗口，只示意这一项；两种形态见组件页「记录窗口」。
+  const [windowTabs, setWindowTabs] = useState<'top' | 'side'>('side');
 
   return (
     <SettingsPage title="外观与交互">
@@ -210,7 +210,7 @@ export function AppearancePanel() {
       </SettingsCard>
 
       <SettingsCard title="其它">
-        <FieldRow>
+        <FieldRow columns={2}>
           <Field label="列表加载" help="滚动到列表底部时按批加载">
             <Switch label="滚动按需加载" hideLabel checked={settings.lazyLoading} onChange={(lazyLoading) => updateSettings({ lazyLoading })} />
             <NumberInput
@@ -242,7 +242,7 @@ export function AppearancePanel() {
           <Field label="通知位置">
             <Select aria-label="通知弹出位置" value={settings.toastPosition} onChange={(toastPosition) => updateSettings({ toastPosition })} options={TOAST_POSITIONS} />
           </Field>
-          <Field label="窗口标签页">
+          <Field label="窗口标签页" help="记录窗口中标签页的位置，窗口标题栏上的按钮也能切换">
             <Select
               aria-label="记录窗口的标签页位置"
               value={windowTabs}

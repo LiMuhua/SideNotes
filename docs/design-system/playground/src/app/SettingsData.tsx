@@ -420,26 +420,42 @@ export function TrashPanel() {
 
 /* ==================== 关于 ==================== */
 
-const CREDITS: ReadonlyArray<{ name: string; glyph: string; note: string }> = [
-  { name: 'Tauri', glyph: '◈', note: '桌面与跨平台运行时' },
-  { name: 'React', glyph: '⚛', note: '界面方案参考' },
-  { name: 'Vite', glyph: 'ϟ', note: '开发与构建工具' },
-  { name: 'SQLite', glyph: '▱', note: '本地数据方案参考' },
-  { name: 'Filee', glyph: '▣', note: '桌面外观与交互参考' },
-  { name: 'Maple Mono', glyph: 'Aa', note: '内置默认字体 Maple Mono NF CN，SIL Open Font License 1.1' },
+/** 开源致谢：名称、符号、用途与许可证（第五次反馈：块的第二行写许可证；2026-11-15 按各项目的仓库或 package.json 核对）。 */
+const CREDITS: ReadonlyArray<{ name: string; glyph: string; note: string; license: string }> = [
+  { name: 'Tauri', glyph: '◈', note: '桌面与跨平台运行时', license: 'MIT / Apache-2.0' },
+  { name: 'React', glyph: '⚛', note: '界面方案参考', license: 'MIT' },
+  { name: 'Vite', glyph: 'ϟ', note: '开发与构建工具', license: 'MIT' },
+  { name: 'SQLite', glyph: '▱', note: '本地数据方案参考', license: '公有领域' },
+  { name: 'Filee', glyph: '▣', note: '桌面外观与交互参考', license: 'MIT' },
+  { name: 'Maple Mono', glyph: 'Aa', note: '内置默认字体 Maple Mono NF CN', license: 'OFL-1.1' },
 ];
 
-/** 小块按钮：项目链接、开源致谢与调试共用；外部链接带一个斜箭头。 */
-function LinkChip({ icon, glyph, label, external = false, onClick }: { icon?: IconName; glyph?: string; label: string; external?: boolean; onClick: () => void }) {
+/** 小块按钮：项目链接、开源致谢与调试共用；外部链接带一个斜箭头。致谢的块名称下面一行写许可证（note）。 */
+function LinkChip({
+  icon,
+  glyph,
+  label,
+  note,
+  external = false,
+  onClick,
+}: {
+  icon?: IconName;
+  glyph?: string;
+  label: string;
+  note?: string;
+  external?: boolean;
+  onClick: () => void;
+}) {
   return (
-    <button type="button" className="sn-link-chip" onClick={onClick}>
+    <button type="button" className={cx('sn-link-chip', note && 'has-note')} onClick={onClick}>
       {icon ? <Icon name={icon} /> : null}
       {glyph ? (
         <span className="sn-link-glyph" aria-hidden="true">
           {glyph}
         </span>
       ) : null}
-      {label}
+      <span className="sn-link-label">{label}</span>
+      {note ? <span className="sn-link-note">{note}</span> : null}
       {external ? <Icon name="arrow-up-right" /> : null}
     </button>
   );
@@ -450,30 +466,34 @@ export function AboutPanel() {
   const [update, setUpdate] = useState(false);
   const open = (label: string) => toast({ message: `打开${label}（示例）` });
   return (
-    <SettingsPage title="关于" layout="center">
+    // 第五次反馈：标题与其他页一样在最上面，内容从上往下排，排完还空就留空；「检查更新」放在版本号旁边，
+    // 项目与开源致谢的链接是铺满整行的等宽块（每行三块），致谢的块写许可证。
+    <SettingsPage title="关于">
       <div className="sn-about-hero">
         <AppIcon />
         <div className="sn-about-text">
           <h3 className="sn-about-name">SideNotes</h3>
           <p className="sn-about-tagline">藏在屏幕边上的速记本</p>
         </div>
-        <span className="sn-about-version">桌面预览版 {__APP_VERSION__}</span>
+        <div className="sn-about-release">
+          <span className="sn-about-version">桌面预览版 {__APP_VERSION__}</span>
+          {/* 检查到新版本时打开与底栏版本号相同的「发现新版本」弹窗，没有新版本时提示已是最新版本；Playground 模拟检查到 0.7.3。 */}
+          <LinkChip icon="restore" label="检查更新" onClick={() => (AVAILABLE_UPDATE ? setUpdate(true) : toast({ message: '已是最新版本' }))} />
+        </div>
       </div>
       <section className="sn-about-section">
         <h4 className="sn-set-card-title">项目</h4>
-        <div className="sn-chip-row">
+        <div className="sn-chip-row is-tiles">
           <LinkChip icon="code" label="GitHub" external onClick={() => open('GitHub')} />
           <LinkChip icon="globe" label="官方网站" external onClick={() => open('官方网站')} />
           <LinkChip icon="heart" label="支持项目" onClick={() => toast({ message: '赞助入口暂未开放，欢迎通过反馈与代码贡献支持项目' })} />
-          {/* 检查到新版本时打开与底栏版本号相同的「发现新版本」弹窗，没有新版本时提示已是最新版本；Playground 模拟检查到 0.7.3。 */}
-          <LinkChip icon="restore" label="检查更新" onClick={() => (AVAILABLE_UPDATE ? setUpdate(true) : toast({ message: '已是最新版本' }))} />
         </div>
       </section>
       <section className="sn-about-section">
         <h4 className="sn-set-card-title">开源致谢</h4>
-        <div className="sn-chip-row">
+        <div className="sn-chip-row is-tiles">
           {CREDITS.map((credit) => (
-            <LinkChip key={credit.name} glyph={credit.glyph} label={credit.name} external onClick={() => open(credit.name)} />
+            <LinkChip key={credit.name} glyph={credit.glyph} label={credit.name} note={credit.license} external onClick={() => open(credit.name)} />
           ))}
         </div>
       </section>

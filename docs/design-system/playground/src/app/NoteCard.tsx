@@ -35,6 +35,9 @@ export interface NoteCardProps {
   active: boolean;
   /** 多选中。 */
   checked: boolean;
+  /** 「转到」的这一条（第五次反馈）：强调色外圈闪一下，动画结束时调用 onLocated。 */
+  located?: boolean;
+  onLocated?: () => void;
   editing: boolean;
   /** 进入编辑时把焦点放进编辑区；组件页的常驻示例不抢焦点。 */
   editAutoFocus?: boolean;
@@ -81,6 +84,8 @@ export function NoteCard(props: NoteCardProps) {
     <article
       className={cx(
         'sn-note',
+        note.pinned && 'is-pinned',
+        props.located && 'is-located',
         active && 'is-active',
         checked && 'is-checked',
         editing && 'is-editing',
@@ -94,6 +99,9 @@ export function NoteCard(props: NoteCardProps) {
       aria-current={active ? 'true' : undefined}
       onMouseEnter={() => props.onHover(note.id)}
       onMouseLeave={() => props.onHover(null)}
+      onAnimationEnd={(event) => {
+        if (props.located && event.animationName === 'sn-note-located') props.onLocated?.();
+      }}
       onClick={(event) => {
         if (!editing) props.onSelect(event);
       }}
