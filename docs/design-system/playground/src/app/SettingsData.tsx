@@ -430,8 +430,21 @@ const CREDITS: ReadonlyArray<{ name: string; glyph: string; note: string; licens
   { name: 'Maple Mono', glyph: 'Aa', note: '内置默认字体 Maple Mono NF CN', license: 'OFL-1.1' },
 ];
 
-/** 小块按钮：项目链接、开源致谢与调试共用；外部链接带一个斜箭头。致谢的块名称下面一行写许可证（note）。 */
-function LinkChip({
+/** 小块按钮：关于页的动作（检查更新、打开开发者工具）。 */
+function LinkChip({ icon, label, onClick }: { icon: IconName; label: string; onClick: () => void }) {
+  return (
+    <button type="button" className="sn-link-chip" onClick={onClick}>
+      <Icon name={icon} />
+      <span className="sn-link-label">{label}</span>
+    </button>
+  );
+}
+
+/**
+ * 文字链接（第六次反馈：不为填满一行把按钮拉长）：项目链接与开源致谢，按内容宽度排开、放不下自然换行；
+ * 外部链接带一个斜箭头，致谢的名称后面写许可证（note）。
+ */
+function TextLink({
   icon,
   glyph,
   label,
@@ -447,14 +460,14 @@ function LinkChip({
   onClick: () => void;
 }) {
   return (
-    <button type="button" className={cx('sn-link-chip', note && 'has-note')} onClick={onClick}>
+    <button type="button" className="sn-text-link" onClick={onClick}>
       {icon ? <Icon name={icon} /> : null}
       {glyph ? (
         <span className="sn-link-glyph" aria-hidden="true">
           {glyph}
         </span>
       ) : null}
-      <span className="sn-link-label">{label}</span>
+      <span className="sn-text-link-label">{label}</span>
       {note ? <span className="sn-link-note">{note}</span> : null}
       {external ? <Icon name="arrow-up-right" /> : null}
     </button>
@@ -466,8 +479,8 @@ export function AboutPanel() {
   const [update, setUpdate] = useState(false);
   const open = (label: string) => toast({ message: `打开${label}（示例）` });
   return (
-    // 第五次反馈：标题与其他页一样在最上面，内容从上往下排，排完还空就留空；「检查更新」放在版本号旁边，
-    // 项目与开源致谢的链接是铺满整行的等宽块（每行三块），致谢的块写许可证。
+    // 第五次反馈：标题与其他页一样在最上面，内容从上往下排，排完还空就留空；「检查更新」放在版本号旁边。
+    // 第六次反馈：项目与开源致谢是文字链接（不再是铺满整行的等宽块），致谢的名称后面写许可证；动作仍是按钮。
     <SettingsPage title="关于">
       <div className="sn-about-hero">
         <AppIcon />
@@ -483,17 +496,17 @@ export function AboutPanel() {
       </div>
       <section className="sn-about-section">
         <h4 className="sn-set-card-title">项目</h4>
-        <div className="sn-chip-row is-tiles">
-          <LinkChip icon="code" label="GitHub" external onClick={() => open('GitHub')} />
-          <LinkChip icon="globe" label="官方网站" external onClick={() => open('官方网站')} />
-          <LinkChip icon="heart" label="支持项目" onClick={() => toast({ message: '赞助入口暂未开放，欢迎通过反馈与代码贡献支持项目' })} />
+        <div className="sn-chip-row is-text">
+          <TextLink icon="code" label="GitHub" external onClick={() => open('GitHub')} />
+          <TextLink icon="globe" label="官方网站" external onClick={() => open('官方网站')} />
+          <TextLink icon="heart" label="支持项目" onClick={() => toast({ message: '赞助入口暂未开放，欢迎通过反馈与代码贡献支持项目' })} />
         </div>
       </section>
       <section className="sn-about-section">
         <h4 className="sn-set-card-title">开源致谢</h4>
-        <div className="sn-chip-row is-tiles">
+        <div className="sn-chip-row is-text">
           {CREDITS.map((credit) => (
-            <LinkChip key={credit.name} glyph={credit.glyph} label={credit.name} note={credit.license} external onClick={() => open(credit.name)} />
+            <TextLink key={credit.name} glyph={credit.glyph} label={credit.name} note={credit.license} external onClick={() => open(credit.name)} />
           ))}
         </div>
       </section>

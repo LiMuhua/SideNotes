@@ -14,6 +14,7 @@ import { cx, useFormFactor } from '../ui/context';
 import { Icon } from '../ui/Icon';
 import { Layer, useAnchoredPosition } from '../ui/layer';
 import { Keys } from '../ui/Misc';
+import { useToast } from '../ui/Tabs';
 import { SHORTCUT_KEYS } from './shortcuts';
 import { builtinAppIcon, CUSTOM_APP_ICON } from '../model/appIcons';
 import { TabsRow } from './SidebarTabs';
@@ -81,18 +82,22 @@ export function SidebarHeader({ pinned, linked, edge, onTogglePinned, onHide }: 
   );
 }
 
-/** 页签行：页签栏（见 SidebarTabs.tsx）。搜索在下面的筛选行（第五次反馈），页签栏占满整行。 */
-export function SidebarNav({ view }: { view: SidebarView }) {
+/**
+ * 页签行：页签栏（见 SidebarTabs.tsx）与最右边的搜索。搜索回到这一行（第六次反馈：放在筛选行像是只搜当前页签），
+ * 展开时盖住页签。
+ */
+export function SidebarNav({ view, onSearchInput }: { view: SidebarView; onSearchInput?: (element: HTMLInputElement | null) => void }) {
   return (
-    <div className={cx('sn-side-nav', view.searching && 'is-search-results')}>
+    <div className={cx('sn-side-nav', view.searchOpen && 'is-searching')}>
       <TabsRow view={view} />
+      <SearchBox view={view} onInput={onSearchInput} />
     </div>
   );
 }
 
 /**
  * 按一个标签筛选或搜索时的两个按钮（第四、五次反馈）：「固定为页签」（这个标签还没固定时）与「合并」（两条以上时）。
- * 筛选行上跟在标签下拉之后；只搜一个标签时在搜索框里。
+ * 筛选行上跟在标签下拉之后；只搜一个标签时跟在结果的条数之后。
  */
 function FilterActions({ view, tag, onPin, onMerge }: { view: SidebarView; tag: string; onPin?: (tag: string) => void; onMerge?: (tag: string) => void }) {
   const canPin = Boolean(onPin && !findPinned(view.pinnedTags, tag));
@@ -115,23 +120,13 @@ function FilterActions({ view, tag, onPin, onMerge }: { view: SidebarView; tag: 
 }
 
 /**
- * 搜索（第五次反馈：搜索全部记录，放在筛选行的右端）：点放大镜后搜索框从右向左铺满筛选行，盖住标签下拉与按钮；
- * 再点放大镜收起并清空搜索词，标签筛选保留。有搜索词时列表是全部记录中的结果，按页签分组，搜索框里写结果的条数；
- * 只搜一个已有标签时还有「固定为页签」「合并」。末尾正在输入 #标签 时以灰字联想已有标签，Tab 选用，↑ ↓ 切换候选，
- * Esc 先关闭联想，再按 Esc 收起搜索框并清空搜索词；清空按钮只清空搜索词；失焦且没有内容时自动收起。
+ * 搜索（第五次反馈：搜索全部记录；第六次反馈：回到页签栏的最右端）：点放大镜后搜索框从右向左铺满页签栏，盖住页签；
+ * 再点放大镜收起并清空搜索词，标签筛选保留。有搜索词时列表是全部记录中的结果，按页签分组；结果的条数与
+ * 「固定为页签」「合并」写在下面的筛选行，框里只有输入框与清空按钮。末尾正在输入 #标签 时以灰字联想已有标签，Tab 选用，
+ * ↑ ↓ 切换候选，Esc 先关闭联想，再按 Esc 收起搜索框并清空搜索词；清空按钮只清空搜索词；失焦且没有内容时自动收起。
  * 搜索框一直在页面里，展开与收起靠宽度的过渡（与现有应用一样有动画）；收起时输入框不可聚焦，展开后自动获得焦点。
  */
-function SearchBox({
-  view,
-  onInput,
-  onPin,
-  onMerge,
-}: {
-  view: SidebarView;
-  onInput?: (element: HTMLInputElement | null) => void;
-  onPin?: (tag: string) => void;
-  onMerge?: (tag: string) => void;
-}) {
+function SearchBox({ view, onInput }: { view: SidebarView; onInput?: (element: HTMLInputElement | null) => void }) {
   const data = useNotes();
   const toggleRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -217,8 +212,6 @@ function SearchBox({
         />
       </div>
       {open && ghost ? <Keys combo="Tab" /> : null}
-      {open && view.searching ? <span className="sn-side-search-count">{view.items.length} 条</span> : null}
-      {open && view.searchTag ? <FilterActions view={view} tag={view.searchTag} onPin={onPin} onMerge={onMerge} /> : null}
       {open && view.query ? <IconButton icon="x" label="清空搜索" size="sm" onClick={() => view.setQuery('')} /> : null}
     </div>
   );
@@ -258,46 +251,93 @@ export interface ListToplineProps {
   onPin?: (tag: string) => void;
   /** 「合并」：把筛出或搜出的记录合并成一条。 */
   onMerge?: (tag: string) => void;
-  onSearchInput?: (element: HTMLInputElement | null) => void;
 }
 
 /**
- * 筛选行（第五次反馈：保持两行，在页签栏下面）。左边的标签下拉同时写标签与条数：选了标签时是「# 产品 · 2 条」，
- * 后面的 × 清除筛选；没选时是「# 全部标签 ▾」（条数已经写在当前页签上）。选了标签时后面是「固定为页签」「合并」。
- * 右端是搜索，展开时铺满这一行，左边淡出。
+ * 收起或展开当前列表的全部卡片（0.7.3 侧栏菜单「收起全部卡片」「展开全部卡片」与双击空白处；第六次反馈放到筛选行右边）：
+ * 还有展开的卡片时全部收起，否则全部展开；作用于整个列表，提示条可以撤销。
  */
-export function ListTopline({ view, onManageTag, onSearchTags, onPin, onMerge, onSearchInput }: ListToplineProps) {
+export function useCollapseAll(view: SidebarView) {
+  const data = useNotes();
+  const toast = useToast();
+  const collapse = view.items.some((note) => !note.collapsed);
+  const run = (target = collapse) => {
+    const ids = view.items.filter((note) => note.collapsed !== target).map((note) => note.id);
+    if (!ids.length) return;
+    data.setCollapsed(ids, target);
+    toast({ message: `已${target ? '收起' : '展开'} ${ids.length} 张卡片`, action: { label: '撤销', run: () => data.setCollapsed(ids, !target) } });
+  };
+  return { collapse, run };
+}
+
+/**
+ * 筛选行（第五、六次反馈：侧栏顶部保持两行，在页签栏下面）。左边写列表里是什么：标签下拉同时写标签与条数，选了标签时是
+ * 「# 产品 · 2 条」，后面的 × 清除筛选；没选时是「# 全部标签 ▾」（条数已经写在当前页签上）；选了标签时后面是「固定为页签」「合并」。
+ * 搜索时（搜索框在页签栏）标签下拉换成结果的条数，只搜一个已有标签时同样跟着这两个按钮。
+ * 右边是对整个列表的操作：多选（进入后单击卡片即选中或取消，写已选的条数）与收起/展开全部，最右一个在放大镜的正下方。
+ */
+export function ListTopline({ view, onManageTag, onSearchTags, onPin, onMerge }: ListToplineProps) {
   const [open, setOpen] = useState(false);
   const [button, setButton] = useState<HTMLButtonElement | null>(null);
+  const collapseAll = useCollapseAll(view);
   const tag = view.tag;
+  const selected = view.checked.size;
   return (
-    <div className={cx('sn-topline', view.searchOpen && 'is-searching')}>
-      <div className="sn-topline-filter" inert={view.searchOpen} aria-hidden={view.searchOpen ? true : undefined}>
-        <span className={cx('sn-topline-tag-wrap', tag && 'is-engaged')}>
-          <button
-            ref={setButton}
-            type="button"
-            className={cx('sn-topline-tag', tag && 'is-engaged')}
-            aria-haspopup="menu"
-            aria-expanded={open}
-            aria-label={tag ? `标签 #${tag}，${view.items.length} 条，更换标签` : '按标签筛选'}
-            onClick={() => setOpen((current) => !current)}
-            onKeyDown={(event) => {
-              if (event.key === 'ArrowDown') {
-                event.preventDefault();
-                setOpen(true);
-              }
-            }}
-          >
-            <Icon name="hash" />
-            <span className="sn-topline-tag-label">{tag || '全部标签'}</span>
-            {tag ? <span className="sn-topline-tag-count">· {view.items.length} 条</span> : <Icon name="chevron-down" />}
-          </button>
-          {tag ? <IconButton icon="x" label="清除标签筛选" size="sm" className="sn-topline-tag-clear" onClick={() => view.setTag('')} /> : null}
-        </span>
-        {tag && !view.searching ? <FilterActions view={view} tag={tag} onPin={onPin} onMerge={onMerge} /> : null}
+    <div className="sn-topline">
+      <div className="sn-topline-filter">
+        {view.searching ? (
+          <>
+            <span className="sn-topline-search-count">{view.items.length} 条</span>
+            {view.searchTag ? <FilterActions view={view} tag={view.searchTag} onPin={onPin} onMerge={onMerge} /> : null}
+          </>
+        ) : (
+          <>
+            <span className={cx('sn-topline-tag-wrap', tag && 'is-engaged')}>
+              <button
+                ref={setButton}
+                type="button"
+                className={cx('sn-topline-tag', tag && 'is-engaged')}
+                aria-haspopup="menu"
+                aria-expanded={open}
+                aria-label={tag ? `标签 #${tag}，${view.items.length} 条，更换标签` : '按标签筛选'}
+                onClick={() => setOpen((current) => !current)}
+                onKeyDown={(event) => {
+                  if (event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    setOpen(true);
+                  }
+                }}
+              >
+                <Icon name="hash" />
+                <span className="sn-topline-tag-label">{tag || '全部标签'}</span>
+                {tag ? <span className="sn-topline-tag-count">· {view.items.length} 条</span> : <Icon name="chevron-down" />}
+              </button>
+              {tag ? <IconButton icon="x" label="清除标签筛选" size="sm" className="sn-topline-tag-clear" onClick={() => view.setTag('')} /> : null}
+            </span>
+            {tag ? <FilterActions view={view} tag={tag} onPin={onPin} onMerge={onMerge} /> : null}
+          </>
+        )}
       </div>
-      <SearchBox view={view} onInput={onSearchInput} onPin={onPin} onMerge={onMerge} />
+      <div className="sn-topline-tools">
+        <button
+          type="button"
+          className="sn-icon-button is-sm is-ghost sn-topline-tool"
+          aria-pressed={view.selecting}
+          aria-label={view.selecting ? (selected ? `已选 ${selected} 条，退出多选` : '退出多选') : '多选'}
+          onClick={view.toggleSelecting}
+        >
+          <Icon name="check-square" />
+          {selected ? <span className="sn-topline-tool-count">{selected}</span> : null}
+        </button>
+        <IconButton
+          icon={collapseAll.collapse ? 'fold' : 'unfold'}
+          label={collapseAll.collapse ? '收起全部卡片' : '展开全部卡片'}
+          size="sm"
+          className="sn-topline-tool"
+          disabled={!view.items.length}
+          onClick={() => collapseAll.run()}
+        />
+      </div>
       {open ? (
         <TagMenu
           view={view}

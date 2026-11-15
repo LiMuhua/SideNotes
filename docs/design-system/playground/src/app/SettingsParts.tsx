@@ -61,10 +61,9 @@ export function Field({ label, help, grow = false, children }: { label: string; 
   );
 }
 
-/** 一行放几项设置，放不下时折行。 */
-export function FieldRow({ children, spread = false, columns }: { children: ReactNode; spread?: boolean; columns?: 2 }) {
-  // columns：两列对齐（第五次反馈「其它」：列表加载、整理提醒；通知位置、窗口标签页），竖线只画在两列之间。
-  return <div className={cx('sn-set-row', spread && 'is-spread', columns && 'is-grid')}>{children}</div>;
+/** 一行放几项设置，按各自的宽度排开，放不下时折行；新的一行开头没有竖线（第六次反馈：不按列对齐）。 */
+export function FieldRow({ children, spread = false }: { children: ReactNode; spread?: boolean }) {
+  return <div className={cx('sn-set-row', spread && 'is-spread')}>{children}</div>;
 }
 
 /** 数据行：名称单独成一列，取值与操作紧跟在后（云端备份的几行输入框因此对齐）。 */

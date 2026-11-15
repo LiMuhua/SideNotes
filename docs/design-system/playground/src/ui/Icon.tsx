@@ -38,6 +38,8 @@ type ExtraIconName =
   | 'terminal'
   | 'square'
   | 'check-square'
+  | 'fold'
+  | 'unfold'
   | 'arrow-up'
   | 'arrow-down'
   | 'refresh'
@@ -158,6 +160,13 @@ function ExtraSprite() {
       <symbol id="i-check-square" viewBox="0 0 24 24">
         <rect x="4.5" y="4.5" width="15" height="15" rx="2.5" />
         <path d="m8.5 12 2.5 2.5 4.5-5" />
+      </symbol>
+      {/* 收起与展开全部卡片（第六次反馈，筛选行右边的按钮）：两个尖角相对是收起，相背是展开。 */}
+      <symbol id="i-fold" viewBox="0 0 24 24">
+        <path d="m7 20 5-5 5 5M7 4l5 5 5-5" />
+      </symbol>
+      <symbol id="i-unfold" viewBox="0 0 24 24">
+        <path d="m7 15 5 5 5-5M7 9l5-5 5 5" />
       </symbol>
       <symbol id="i-arrow-up" viewBox="0 0 24 24">
         <path d="M12 19V5m-6 6 6-6 6 6" />

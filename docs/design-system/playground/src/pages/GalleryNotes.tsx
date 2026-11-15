@@ -155,25 +155,38 @@ export function NotesSection() {
 }
 
 export function PartsSection() {
+  const data = useNotes();
   const plain = useSidebarView();
+  const wide = useSidebarView();
   const narrow = useSidebarView();
-  const narrowHidden = useSidebarView({ tab: tabOfTag('生活') });
+  // 示例数据固定的标签中排在最后的「参考」，窄侧栏里收在最后一格。
+  const narrowHidden = useSidebarView({ tab: tabOfTag('参考') });
   const suggesting = useSidebarView({ searchOpen: true, query: '#工' });
   const searching = useSidebarView({ searchOpen: true, query: '#阅读' });
   const tagged = useSidebarView({ tag: '阅读' });
+  const selecting = useSidebarView({ checked: notesInTab(data.notes, 'workspace', data.pinnedTags).slice(0, 3).map((note) => note.id) });
 
   return (
     <PageSection id="gallery-parts" title="侧栏部件" description="页签、筛选行与搜索、搜索结果的分组、整理提醒、新建卡片与底栏，都是侧栏中真实的组件。">
       <Demo
-        title="页签"
-        note="随记、置顶与手动固定的标签（第四次反馈），最后一格是菜单：收起的页签与「新建页签」。条数只写在随记与当前页签上；双击标签页签改名，右键可以移出页签栏。"
+        title="页签与搜索"
+        note="随记、置顶与手动固定的标签（第四次反馈）。条数只写在随记与当前页签上；双击标签页签改名，右键可以移出页签栏。最右边的放大镜展开搜索框，盖住页签（第六次反馈：搜索回到页签栏）。"
       >
         <PanelSample>
           <SidebarNav view={plain} />
         </PanelSample>
       </Demo>
-      <Demo title="页签放不下" note="多出来的页签从右往左收进最后一格「N ▾」。选中收起的页签时前面的页签不动，最后一格写它的名称并带当前样式。">
+      <Demo
+        title="最后一格"
+        note="只占一个位置，样子固定（第六次反馈）：页签都放得下时是「+」，单击新建页签；真放不下时多出来的页签从右往左收进来，写「N ▾」，单击打开菜单。当前页签收在里面时只加当前样式，不换成它的名字。"
+      >
         <div className="sn-card-matrix">
+          <StateCell label="放得下时">
+            {/* 示例数据固定的标签较多，这里只取前两个，演示页签都放得下时的「+」。 */}
+            <PanelSample>
+              <SidebarNav view={{ ...wide, pinnedTags: wide.pinnedTags.slice(0, 2) }} />
+            </PanelSample>
+          </StateCell>
           <StateCell label="放不下时">
             <PanelSample className="is-narrow">
               <SidebarNav view={narrow} />
@@ -188,7 +201,7 @@ export function PartsSection() {
       </Demo>
       <Demo
         title="筛选行"
-        note="页签栏下面一行（第五次反馈：保持两行）。左边的标签下拉同时写标签与条数，× 清除筛选；选了标签时后面是「固定为页签」与「合并」。右端的放大镜展开搜索框，从右向左铺满这一行。"
+        note="页签栏下面一行（第五、六次反馈：保持两行）。左边写列表里是什么：标签下拉同时写标签与条数，× 清除筛选，选了标签时后面是「固定为页签」与「合并」。右边是对整个列表的操作：多选（多选中写已选的条数）与收起/展开全部。"
       >
         <div className="sn-card-matrix">
           <StateCell label="没有筛选">
@@ -201,20 +214,26 @@ export function PartsSection() {
               <ListTopline view={tagged} onManageTag={noop} onSearchTags={noop} onPin={noop} onMerge={noop} />
             </PanelSample>
           </StateCell>
+          <StateCell label="多选中">
+            <PanelSample>
+              <ListTopline view={selecting} onManageTag={noop} onSearchTags={noop} />
+            </PanelSample>
+          </StateCell>
         </div>
       </Demo>
       <Demo
         title="搜索"
-        note="搜索全部记录，与当前页签无关；输入 # 时以灰字联想已有标签，Tab 选用，↑ ↓ 切换候选（T41）。搜索框里写结果的条数，只搜一个标签时还有「固定为页签」与「合并」。结果按页签分组，组标题右侧「转到」切到这个页签。"
+        note="搜索全部记录，与当前页签无关；搜索框在页签栏，展开时盖住页签。输入 # 时以灰字联想已有标签，Tab 选用，↑ ↓ 切换候选（T41）。结果的条数写在筛选行左边，只搜一个标签时还有「固定为页签」与「合并」。结果按页签分组，组标题右侧「转到」切到这个页签。"
       >
         <div className="sn-card-matrix">
           <StateCell label="标签联想">
             <PanelSample>
-              <ListTopline view={suggesting} onManageTag={noop} onSearchTags={noop} />
+              <SidebarNav view={suggesting} />
             </PanelSample>
           </StateCell>
           <StateCell label="只搜一个标签">
             <PanelSample>
+              <SidebarNav view={searching} />
               <ListTopline view={searching} onManageTag={noop} onSearchTags={noop} onPin={noop} onMerge={noop} />
               <div className="sn-note-list">
                 {searching.groups.map((group) => (

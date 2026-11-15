@@ -3,10 +3,11 @@
  *
  * - 随记显示没有任何已固定标签的记录（原来的「工作区」改名，去掉了「归档」）；置顶与原来相同；
  *   标签页签显示带这个标签的记录，名称不写 #，超过 4 个字截断。条数只写在随记与当前页签上。
- * - 固定：按标签筛选时筛选条上的「固定为页签」，或最后一格菜单中的「新建页签」；不会自动出现页签。
+ * - 固定：按标签筛选时筛选行上的「固定为页签」，或最后一格的「新建页签」；不会自动出现页签。
  * - 双击标签页签原地改名（所有记录上的这个标签一起改）；右键「改名」「移出页签栏」，移出只是不再固定，可以撤销。
- * - 放不下时，多出来的页签从右往左收进最后一格「N ▾」。选中收起的页签时前面的页签不动，最后一格显示它的名称并带当前样式
- *   （最后一格按 4 个字的宽度预留，显示哪个名称都不会挤动前面的页签）。单击最后一格打开菜单：收起的页签与「新建页签」。
+ * - 最后一格只占一个位置，样子固定（第六次反馈）：页签都放得下时是「+」，单击新建页签；真放不下时多出来的页签从右往左
+ *   收进去，这一格写「N ▾」，单击打开菜单：收起的页签与「新建页签」。当前页签收在菜单里时这一格不换成它的名字，
+ *   只带当前样式，菜单里它打勾。能放下几个见 model/tabLayout.ts。
  *
  * Playground 没有模拟拖动（按住页签排序、把卡片拖到页签或最后一格）与菜单中收起页签的右键菜单，规则见 interactions.md 第十二节。
  */
@@ -15,6 +16,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type 
 import { isValidTag, tagKey } from '@/core/tags';
 import type { Note } from '@/core/types';
 import { allTags, findPinned, homeTab, pinnedTagOf, tabLabel, tabOfTag, tabPatch, tagOfTab, TAB_LABELS, useNotes, type SidebarTab, type SidebarView } from '../model/notes';
+import { fitTabs } from '../model/tabLayout';
 import { cx, useSurface } from '../ui/context';
 import { Icon, type IconName } from '../ui/Icon';
 import { Layer, useAnchoredPosition } from '../ui/layer';
@@ -26,8 +28,6 @@ const FIXED_TABS: ReadonlyArray<{ tab: 'workspace' | 'pinned'; icon: IconName | 
   { tab: 'pinned', icon: 'pin' },
 ];
 
-/** 最后一格按 4 个字预留宽度时用的占位文字（看不见）。 */
-const NAME_RESERVE = '页签名称';
 /** 新建页签时最多列出的已有标签。 */
 const MAX_CANDIDATES = 6;
 const INVALID_TAG = '标签最多 40 字；使用文字、数字、下划线或短横线';
@@ -105,7 +105,7 @@ export function useTabActions(view: SidebarView) {
     });
     if (!changes.length) return;
     data.patchNotes(changes);
-    view.setChecked(new Set());
+    view.clearSelection();
     let message = `已移到${tabLabel(destination)} ${changes.length} 条记录`;
     if (destination === 'workspace') {
       const still = moved.map((note) => pinnedTagOf(note, data.pinnedTags)).filter(Boolean);
@@ -148,17 +148,16 @@ export function TabsRow({ view }: { view: SidebarView }) {
   const [creating, setCreating] = useState<HTMLElement | null>(null);
 
   const tags = view.pinnedTags;
-  // 全局搜索时（第五次反馈）结果不属于某一个页签，页签栏不标出当前页签；单击页签结束搜索并切过去。
+  // 搜索时搜索框盖住页签栏（第六次反馈），页签不标出当前页签。
   const selectedTab = view.searching ? null : view.tab;
   const current = selectedTab ? tagOfTab(selectedTab) : '';
   const hidden = tags.slice(visible);
   const activeHidden = Boolean(current) && hidden.some((tag) => tagKey(tag) === tagKey(current));
-  const mode: 'plain' | 'count' | 'active' = activeHidden ? 'active' : hidden.length ? 'count' : 'plain';
   const countOf = (tab: SidebarTab) => (tab === 'workspace' ? view.countOf('workspace') : tab === view.tab ? view.total : null);
 
   /**
-   * 量出放得下几个标签页签：先按最后一格只有 ▾ 来排；放不下时按它写 4 个字的宽度预留，从右往左收起，
-   * 这样选中收起的页签、最后一格换成它的名称时，前面的页签不会被挤动。宽度取自看不见的测量行（与页签栏同样的页签）。
+   * 量出放得下几个标签页签（规则见 model/tabLayout.ts）：都放得下时最后一格是「+」，放不下时按「N ▾」的实际宽度从右往左收起。
+   * 宽度取自看不见的测量行（与页签栏同样的页签，以及最后一格的「+」与一位、两位数的「N ▾」）。
    */
   const layout = useCallback(() => {
     const box = measure.current;
@@ -172,15 +171,19 @@ export function TabsRow({ view }: { view: SidebarView }) {
     const rowStyle = getComputedStyle(box);
     const gap = parseFloat(rowStyle.columnGap) || 0;
     const edges = parseFloat(rowStyle.paddingLeft) + parseFloat(rowStyle.paddingRight);
-    const fixed = Array.from(box.querySelectorAll('[data-measure="fixed"]')).reduce((sum, node) => sum + width(node), 0);
-    const widths = Array.from(box.querySelectorAll('[data-measure="tag"]'), width);
-    const need = (count: number, slot: number) => edges + fixed + widths.slice(0, count).reduce((sum, value) => sum + value, 0) + slot + gap * (FIXED_TABS.length + count);
-    let count = widths.length;
-    if (need(count, width(box.querySelector('[data-measure="plain"]'))) > available + 1) {
-      const reserve = width(box.querySelector('[data-measure="reserve"]'));
-      while (count > 0 && need(count, reserve) > available + 1) count -= 1;
-    }
-    setVisible(count);
+    const fixed = Array.from(box.querySelectorAll('[data-measure="fixed"]')).reduce((sum, node) => sum + width(node) + gap, edges);
+    const one = width(box.querySelector('[data-measure="count"]'));
+    const two = width(box.querySelector('[data-measure="count-2"]'));
+    setVisible(
+      fitTabs({
+        available,
+        fixed,
+        tags: Array.from(box.querySelectorAll('[data-measure="tag"]'), width),
+        gap,
+        add: width(box.querySelector('[data-measure="add"]')),
+        count: (hiddenCount) => (hiddenCount >= 10 ? two : one),
+      }),
+    );
   }, []);
 
   // 每次渲染后复核（条数、当前页签、字号与主题都会改变页签的宽度）；个数不变时不会再渲染。
@@ -265,34 +268,37 @@ export function TabsRow({ view }: { view: SidebarView }) {
             </button>
           );
         })}
+        {/* 最后一格（第六次反馈）：都放得下时是「+」，直接新建页签；有收起的页签时是「N ▾」，打开菜单。 */}
         <button
           type="button"
           role="tab"
-          aria-selected={mode === 'active'}
-          aria-haspopup="menu"
-          aria-expanded={Boolean(slotMenu)}
-          aria-label={mode === 'active' ? `${current}，另有 ${hidden.length - 1} 个收起的页签` : hidden.length ? `另有 ${hidden.length} 个页签，新建页签` : '新建页签'}
-          className="sn-side-tab sn-tab-more"
-          data-tab={mode === 'active' ? view.tab : undefined}
-          onClick={(event) => openSlotMenu(event.currentTarget)}
+          aria-selected={activeHidden}
+          aria-haspopup={hidden.length ? 'menu' : undefined}
+          aria-expanded={hidden.length ? Boolean(slotMenu) : Boolean(creating)}
+          aria-label={
+            !hidden.length ? '新建页签' : activeHidden ? `当前页签「${current}」收在这里，另有 ${hidden.length - 1} 个收起的页签` : `另有 ${hidden.length} 个收起的页签，新建页签`
+          }
+          className={cx('sn-side-tab sn-tab-more', !hidden.length && 'is-add')}
+          onClick={(event) => (hidden.length ? openSlotMenu(event.currentTarget) : setCreating(event.currentTarget))}
           onKeyDown={(event) => {
             if (event.key !== 'ArrowDown') return;
             event.preventDefault();
-            openSlotMenu(event.currentTarget);
+            if (hidden.length) openSlotMenu(event.currentTarget);
+            else setCreating(event.currentTarget);
           }}
         >
-          {mode === 'active' ? (
+          {hidden.length ? (
             <>
-              <span className="sn-side-tab-mark" aria-hidden="true" />
-              <span className="sn-side-tab-label">{current}</span>
+              <span className="sn-tab-more-count">{hidden.length}</span>
+              <Icon name="chevron-down" />
             </>
-          ) : null}
-          {mode === 'count' ? <span className="sn-tab-more-count">{hidden.length}</span> : null}
-          <Icon name="chevron-down" />
+          ) : (
+            <Icon name="plus" />
+          )}
         </button>
       </div>
 
-      {/* 测量行：与页签栏同样的页签，看不见，只用来量宽度（包括收起的页签与最后一格的两种宽度）。 */}
+      {/* 测量行：与页签栏同样的页签，看不见，只用来量宽度（包括收起的页签与最后一格的「+」和「N ▾」）。 */}
       <div ref={measure} className={cx(rowClass, 'sn-tabs-measure')} aria-hidden="true" inert>
         {FIXED_TABS.map(({ tab, icon }) => fixedTab(tab, icon, true))}
         {tags.map((tag) => (
@@ -300,17 +306,20 @@ export function TabsRow({ view }: { view: SidebarView }) {
             <TabContent label={tag} count={countOf(tabOfTag(tag))} />
           </span>
         ))}
-        <span className="sn-side-tab sn-tab-more" data-measure="plain">
+        <span className="sn-side-tab sn-tab-more is-add" data-measure="add">
+          <Icon name="plus" />
+        </span>
+        <span className="sn-side-tab sn-tab-more" data-measure="count" aria-selected="true">
+          <span className="sn-tab-more-count">8</span>
           <Icon name="chevron-down" />
         </span>
-        <span className="sn-side-tab sn-tab-more" data-measure="reserve" aria-selected="true">
-          <span className="sn-side-tab-mark" />
-          <span className="sn-side-tab-label">{NAME_RESERVE}</span>
+        <span className="sn-side-tab sn-tab-more" data-measure="count-2" aria-selected="true">
+          <span className="sn-tab-more-count">88</span>
           <Icon name="chevron-down" />
         </span>
       </div>
 
-      {slotMenu ? <ContextMenu label="页签" items={slotItems} point={slotMenu.point} onClose={() => setSlotMenu(null)} /> : null}
+      {slotMenu ? <ContextMenu label="页签" className="sn-tab-menu" items={slotItems} point={slotMenu.point} onClose={() => setSlotMenu(null)} /> : null}
       {tabMenu ? (
         <ContextMenu
           label={`页签「${tabMenu.tag}」`}

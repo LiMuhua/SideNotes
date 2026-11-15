@@ -209,8 +209,9 @@ export function AppearancePanel() {
         </RangeGroup>
       </SettingsCard>
 
+      {/* 其它（第六次反馈）：四项按各自的宽度排成一行，放不下才折行；不按列对齐，对齐会在短的一项后面空出一段。 */}
       <SettingsCard title="其它">
-        <FieldRow columns={2}>
+        <FieldRow>
           <Field label="列表加载" help="滚动到列表底部时按批加载">
             <Switch label="滚动按需加载" hideLabel checked={settings.lazyLoading} onChange={(lazyLoading) => updateSettings({ lazyLoading })} />
             <NumberInput

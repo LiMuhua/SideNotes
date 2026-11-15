@@ -50,9 +50,11 @@ interface MenuListProps {
   focus?: 'first' | 'last';
   onClose: (reason: 'select' | 'escape' | 'outside' | 'tab') => void;
   id?: string;
+  /** 附加的类名，例如页签栏最后一格的菜单按内容定宽（第六次反馈）。 */
+  className?: string;
 }
 
-function MenuList({ items, label, anchor, placement, focus = 'first', onClose, id }: MenuListProps) {
+function MenuList({ items, label, anchor, placement, focus = 'first', onClose, id, className }: MenuListProps) {
   const menu = useRef<HTMLDivElement>(null);
   const { style } = useAnchoredPosition(true, anchor, menu, placement, 4);
   const enabled = items.filter((item) => !item.disabled);
@@ -128,7 +130,7 @@ function MenuList({ items, label, anchor, placement, focus = 'first', onClose, i
 
   return (
     <Layer>
-      <div ref={menu} id={id} role="menu" aria-label={label} className="sn-menu" style={style} onKeyDown={onKeyDown}>
+      <div ref={menu} id={id} role="menu" aria-label={label} className={cx('sn-menu', className)} style={style} onKeyDown={onKeyDown}>
         {items.map((item) => (
           <div key={item.id} role="none" className="sn-menu-slot">
             {item.separatorBefore ? <div role="separator" className="sn-menu-separator" /> : null}
@@ -225,10 +227,11 @@ export interface ContextMenuProps {
   /** 视口坐标。 */
   point: { x: number; y: number };
   onClose: () => void;
+  className?: string;
 }
 
 /** 右键菜单：在指针处打开；用键盘（Shift+F10、菜单键）打开时由调用方传入元素位置。 */
-export function ContextMenu({ label, items, point, onClose }: ContextMenuProps) {
+export function ContextMenu({ label, items, point, onClose, className }: ContextMenuProps) {
   const previous = useRef<Element | null>(document.activeElement);
   const close = useCallback(
     (reason: 'select' | 'escape' | 'outside' | 'tab') => {
@@ -237,5 +240,5 @@ export function ContextMenu({ label, items, point, onClose }: ContextMenuProps) 
     },
     [onClose],
   );
-  return <MenuList items={items} label={label} anchor={point} placement="bottom-start" onClose={close} />;
+  return <MenuList items={items} label={label} anchor={point} placement="bottom-start" onClose={close} className={className} />;
 }

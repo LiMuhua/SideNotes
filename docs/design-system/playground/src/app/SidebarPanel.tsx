@@ -43,7 +43,7 @@ import {
   type SidebarCommand,
 } from './menus';
 import { NoteCard } from './NoteCard';
-import { ListTopline, Resizer, SearchGroupHeader, SidebarFooter, SidebarHeader, SidebarNav, TidyNudge } from './SidebarParts';
+import { ListTopline, Resizer, SearchGroupHeader, SidebarFooter, SidebarHeader, SidebarNav, TidyNudge, useCollapseAll } from './SidebarParts';
 import { useTabActions } from './SidebarTabs';
 
 export interface SidebarPanelProps {
@@ -111,6 +111,8 @@ export function SidebarPanel(props: SidebarPanelProps) {
   }, [busy, onBusyChange]);
 
   const items = view.items;
+  // 收起或展开全部卡片：筛选行右边的按钮、侧栏菜单与双击空白处共用（第六次反馈起有提示条，可以撤销）。
+  const collapseAll = useCollapseAll(view);
   const editing = view.editingId;
   const nudge = (props.forceNudge || shouldNudgeTidy(data.notes, settings)) && !nudgeClosed && view.tab === 'workspace';
 
@@ -147,7 +149,7 @@ export function SidebarPanel(props: SidebarPanelProps) {
   /** 合并完成：新卡片（或合并到的那张）进入编辑；它不在当前页签里时切换到它所在的页签。 */
   const finishMerge = (note: Note) => {
     setMerging(null);
-    view.setChecked(new Set());
+    view.clearSelection();
     if (view.searching) view.goToTab(homeTab(note, data.pinnedTags));
     else if (!belongsTo(note, view.tab, data.pinnedTags)) {
       const tag = pinnedTagOf(note, data.pinnedTags);
@@ -165,7 +167,7 @@ export function SidebarPanel(props: SidebarPanelProps) {
     const ids = notes.map((note) => note.id);
     if (!ids.length) return;
     data.setStatus(ids, 'trash');
-    view.setChecked(new Set());
+    view.clearSelection();
     toast({ message: ids.length > 1 ? `已将 ${ids.length} 条记录移入回收站` : '已移入回收站', action: { label: '撤销', run: () => data.restore(ids) } });
     // 卡片没了，焦点回到侧栏（Esc 等按键仍由侧栏处理）；在提交之后做，菜单命令在渲染期间传出，不能读 ref。
     setFocusPanel((tick) => tick + 1);
@@ -262,10 +264,7 @@ export function SidebarPanel(props: SidebarPanelProps) {
         break;
       case 'collapse-all':
       case 'expand-all':
-        data.setCollapsed(
-          items.map((note) => note.id),
-          command === 'collapse-all',
-        );
+        collapseAll.run(command === 'collapse-all');
         break;
       case 'select-all':
         view.setChecked(new Set(items.map((note) => note.id)));
@@ -288,21 +287,26 @@ export function SidebarPanel(props: SidebarPanelProps) {
     }
   };
 
-  /** 单击、Ctrl 单击与 Shift 单击：沿用资源管理器的多选习惯（T09）。 */
+  /**
+   * 单击、Ctrl 单击与 Shift 单击：沿用资源管理器的多选习惯（T09）。Shift 单击从上一次单击的卡片选到这一张（第六次反馈），
+   * 起点不在当前列表中（例如换过页签）时只切换这一张，不再从列表顶部选起。
+   */
   const selectCard = (note: Note, event: MouseEvent) => {
-    if (event.shiftKey && (anchor.current ?? view.selectedId)) {
-      const from = items.findIndex((item) => item.id === (anchor.current ?? view.selectedId));
+    const start = anchor.current ?? view.selectedId;
+    const from = start ? items.findIndex((item) => item.id === start) : -1;
+    if (event.shiftKey && from >= 0) {
       const to = items.findIndex((item) => item.id === note.id);
       const [a, b] = [from, to].sort((x, y) => x - y);
-      view.setChecked(new Set(items.slice(Math.max(0, a), b + 1).map((item) => item.id)));
+      view.setChecked(new Set(items.slice(a, b + 1).map((item) => item.id)));
       view.select(note.id);
       return;
     }
     anchor.current = note.id;
-    // 已有多选时，单击与 Ctrl 单击一样切换这张卡片（现有行为）；单击空白处才清除多选。
-    if (event.ctrlKey || event.metaKey || view.checked.size) {
+    // 多选中（已有多选，或点了筛选行的多选按钮）单击与 Ctrl 单击一样切换这张卡片（现有行为）；单击空白处才清除多选。
+    if (event.ctrlKey || event.metaKey || event.shiftKey || view.selecting) {
       const next = new Set(view.checked);
-      if (!next.size && view.selectedId && view.selectedId !== note.id) next.add(view.selectedId);
+      // Ctrl 单击开始多选时，原来高亮的那张一起选上；点多选按钮进入的不带上。
+      if (!next.size && !view.selecting && view.selectedId && view.selectedId !== note.id) next.add(view.selectedId);
       if (next.has(note.id)) next.delete(note.id);
       else next.add(note.id);
       view.setChecked(next);
@@ -345,8 +349,8 @@ export function SidebarPanel(props: SidebarPanelProps) {
     // 打开设置（本次提出）：应用内快捷键，侧栏获得焦点时响应，编辑中同样可用。
     else if (ctrl && key === ',') runSidebar('settings');
     else if (event.key === 'Escape') {
-      // 逐级退出：多选（本次提出）、搜索（现有：收起并清空搜索词，标签筛选保留）、标签筛选（第五次反馈），最后收起侧栏。
-      if (view.checked.size) view.setChecked(new Set());
+      // 逐级退出：多选（本次提出，包括点了多选按钮还没选的）、搜索（现有：收起并清空搜索词，标签筛选保留）、标签筛选（第五次反馈），最后收起侧栏。
+      if (view.selecting) view.clearSelection();
       else if (view.searchOpen) view.endSearch();
       else if (view.tag) view.setTag('');
       else props.onHide();
@@ -458,7 +462,7 @@ export function SidebarPanel(props: SidebarPanelProps) {
       onClick={(event) => {
         if (isBlank(event.target) && !editing) {
           view.select(null);
-          view.setChecked(new Set());
+          view.clearSelection();
         }
       }}
       onContextMenu={(event) => {
@@ -468,10 +472,7 @@ export function SidebarPanel(props: SidebarPanelProps) {
       }}
       onDoubleClick={(event) => {
         if (!isBlank(event.target) || editing) return;
-        data.setCollapsed(
-          items.map((note) => note.id),
-          items.some((note) => !note.collapsed),
-        );
+        collapseAll.run();
       }}
       onMouseDown={(event) => {
         // 双击空白处用于收起或展开全部卡片，不选中其中的文字。
@@ -487,7 +488,7 @@ export function SidebarPanel(props: SidebarPanelProps) {
           onTogglePinned={props.onTogglePinned}
           onHide={props.onHide}
         />
-        <SidebarNav view={view} />
+        <SidebarNav view={view} onSearchInput={setSearchInput} />
       </div>
       {nudge ? (
         <TidyNudge
@@ -500,7 +501,6 @@ export function SidebarPanel(props: SidebarPanelProps) {
       ) : null}
       <ListTopline
         view={view}
-        onSearchInput={setSearchInput}
         onPin={tabs.pin}
         onMerge={(tag) => setMerging({ ids: items.map((note) => note.id), tag })}
         onManageTag={setManagingTag}

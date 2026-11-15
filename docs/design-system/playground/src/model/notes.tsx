@@ -526,6 +526,8 @@ export interface SidebarViewOptions {
   query?: string;
   searchOpen?: boolean;
   tag?: string;
+  /** 初始选中的记录（组件页「多选中」的示例）。 */
+  checked?: readonly string[];
 }
 
 /** 一个侧栏实例的界面状态：页签、搜索、标签筛选、选中、悬停、编辑与多选。 */
@@ -538,7 +540,9 @@ export function useSidebarView(options: SidebarViewOptions = {}) {
   const [selectedId, setSelectedId] = useState<string | null>(options.selectedId ?? null);
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(options.editingId ?? null);
-  const [checked, setChecked] = useState<ReadonlySet<string>>(() => new Set());
+  const [checked, setChecked] = useState<ReadonlySet<string>>(() => new Set(options.checked ?? []));
+  // 筛选行的多选按钮（第六次反馈）：进入多选后单击卡片就是选中或取消，还没选中任何一张时也在多选中。
+  const [selectMode, setSelectMode] = useState(false);
   // 新建卡片上去掉了的页签标签（第四次反馈：在标签页签中新建时默认带上这个标签，点 × 这一条不带）。
   const [skippedTag, setSkippedTag] = useState('');
   // 「转到」一条记录：列表滚到它并闪一下（第五次反馈），处理完清空。
@@ -562,9 +566,21 @@ export function useSidebarView(options: SidebarViewOptions = {}) {
   const setTab = useCallback((next: SidebarTab) => {
     setTabState(next);
     setChecked(new Set());
+    setSelectMode(false);
     setEditingId(null);
     setSkippedTag('');
   }, []);
+  /** 清除多选并退出多选（Esc、单击空白处、移动或合并之后）。单击卡片取消最后一张时仍在多选中，与交互原型相同。 */
+  const clearSelection = useCallback(() => {
+    setChecked(new Set());
+    setSelectMode(false);
+  }, []);
+  const selecting = selectMode || checked.size > 0;
+  /** 多选按钮：没有多选时进入多选；已在多选中时退出并清空。 */
+  const toggleSelecting = useCallback(() => {
+    if (selecting) clearSelection();
+    else setSelectMode(true);
+  }, [selecting, clearSelection]);
   /** 按标签筛选（现有应用的 selectTag）：清空搜索词，并记一次访问作为标签菜单的评分依据。 */
   const { trackTagUsage } = data;
   const selectTag = useCallback(
@@ -622,6 +638,10 @@ export function useSidebarView(options: SidebarViewOptions = {}) {
     setEditingId,
     checked,
     setChecked,
+    /** 是否在多选中：点了多选按钮，或已经选中了记录。 */
+    selecting,
+    toggleSelecting,
+    clearSelection,
     clearFilters,
     endSearch,
     goToTab,
@@ -630,7 +650,7 @@ export function useSidebarView(options: SidebarViewOptions = {}) {
     searching,
     /** 搜索结果的分组（不搜索时为空）。 */
     groups,
-    /** 只搜一个已有标签时的标签（搜索框里出现「固定为页签」「合并」）。 */
+    /** 只搜一个已有标签时的标签（筛选行里出现「固定为页签」「合并」）。 */
     searchTag: searching ? singleSearchTag(query, notes) : '',
     items,
     total,
