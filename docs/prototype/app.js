@@ -401,7 +401,7 @@ function renderNotes(options={}) {
   // 页签栏（第四次反馈）：随记、置顶与固定的标签，放不下的收进最后一格；条数只写在随记与当前页签上（tabs.js）。
   window.SidebarTabs.render();
   // 全局搜索（第五次反馈）：有搜索词时列表是全部记录中的匹配结果，按页签分组，与当前页签和标签筛选无关；
-  // 页签栏不标出当前页签，新建卡片收起。没有搜索词时是当前页签（及标签筛选），置顶在前。
+  // 搜索框盖住页签栏（第六次反馈），新建卡片收起。没有搜索词时是当前页签（及标签筛选），置顶在前。
   const searching=isSearching();
   const notes=searching?searchResults():state.notes.filter(function visible(n){return inCurrentTab(n)&&(!ui.selectedTag||hasTag(n,ui.selectedTag));}).sort(compareNoteOrder);
   const pinned=notes.filter(function pinned(n){return n.pinned;}),normal=notes.filter(function normal(n){return !n.pinned;});
@@ -411,7 +411,7 @@ function renderNotes(options={}) {
   if(searching&&ui.listKey&&!ui.listKey.startsWith('search|')&&!ui.searchReturn)ui.searchReturn={key:ui.listKey,scroll:oldScroll,count:ui.visibleCount};
   const restore=!searching&&ui.searchReturn&&ui.searchReturn.key===key?ui.searchReturn:null;if(!searching)ui.searchReturn=null;
   const target=state.settings.lazyLoading?(same?Math.max(state.settings.pageSize,ui.visibleCount||0):Math.max(state.settings.pageSize,restore?restore.count:0)):notes.length;
-  document.getElementById('sidebar-navigation').classList.toggle('is-search-results',searching);elements.sidebar.classList.toggle('is-search-results',searching);
+  elements.sidebar.classList.toggle('is-search-results',searching);
   elements.noteList.querySelectorAll('.note-edit-input').forEach(function dispose(input){if(input.liveMarkdown)input.liveMarkdown.destroy();});
   elements.noteList.replaceChildren();
   ui.listGroups=searching?searchGroups(notes):null;
@@ -423,21 +423,49 @@ function renderNotes(options={}) {
 }
 
 /**
- * @brief 筛选行（第五次反馈：保持两行，筛选行在页签栏下面）。左边的标签下拉同时写标签与条数：选了标签时是「# 产品 · 2 条」，
- * 后面的 × 清除筛选；没选时是「# 全部标签」（条数已经写在当前页签上）。选了标签时后面是「固定为页签」（这个标签还没固定时）
- * 与「合并」（筛出两条以上时，见 merge.js）。搜索时这一行被搜索框盖住，结果的条数写在搜索框里；只搜一个标签时，
- * 搜索框里同样有这两个按钮。
+ * @brief 筛选行（第五、六次反馈：侧栏顶部保持两行）。左边写列表里是什么：标签下拉同时写标签与条数，选了标签时是
+ * 「# 产品 · 2 条」，后面的 × 清除筛选；没选时是「# 全部标签」（条数已经写在当前页签上）。选了标签时后面是「固定为页签」
+ * （这个标签还没固定时）与「合并」（筛出两条以上时，见 merge.js）。搜索时标签下拉不用，换成结果的条数；只搜一个已有标签时，
+ * 后面同样是这两个按钮。右边是对整个列表的操作，见 syncListTools。
  * @param {Array} notes 当前列表中的记录（搜索时是全部结果）。
  */
 function renderListSummary(notes){
   const searching=isSearching(),filtered=Boolean(ui.selectedTag),trigger=elements.tagFilterButton;
-  trigger.parentElement.classList.toggle('is-filtered',filtered);trigger.classList.toggle('is-filtered',filtered);
+  trigger.parentElement.classList.toggle('is-filtered',filtered);trigger.classList.toggle('is-filtered',filtered);trigger.parentElement.hidden=searching;
   trigger.querySelector('.tag-filter-label').textContent=filtered?ui.selectedTag:'全部标签';
   if(!searching){const count=trigger.querySelector('.tag-filter-count');count.hidden=!filtered;count.textContent=filtered?'· '+notes.length+' 条':'';trigger.setAttribute('aria-label',filtered?'标签 #'+ui.selectedTag+'，'+notes.length+' 条，更换标签':'按标签筛选');}
   elements.tagFilterClear.hidden=!filtered;
-  elements.listSummary.replaceChildren(...(!searching&&filtered?filterActions(ui.selectedTag,notes):[]));
-  elements.searchCount.hidden=!searching;elements.searchCount.textContent=searching?notes.length+' 条':'';
-  elements.searchActions.replaceChildren(...(searching?filterActions(singleSearchTag(),notes):[]));
+  elements.searchSummary.hidden=!searching;elements.searchSummary.textContent=searching?notes.length+' 条':'';
+  elements.listSummary.replaceChildren(...(searching?filterActions(singleSearchTag(),notes):filtered?filterActions(ui.selectedTag,notes):[]));
+  syncListTools();
+}
+
+/**
+ * 筛选行右边的列表操作（第六次反馈，0.7.3 侧栏右键菜单中已有的两项）：多选按钮在多选中时按下并写选中的条数；
+ * 收起/展开全部按当前列表决定：还有展开的卡片时收起全部，全部收起后展开全部，列表为空时不可用。
+ */
+function syncListTools(){
+  const select=elements.selectMode,fold=elements.collapseAll;if(!select||!fold)return;
+  const interactions=window.NoteInteractions,active=Boolean(interactions&&interactions.hasSelection()),count=active?interactions.selectedCount():0,badge=select.querySelector('.list-tool-count');
+  select.setAttribute('aria-pressed',String(active));badge.hidden=!count;badge.textContent=count?String(count):'';
+  select.setAttribute('aria-label',active?(count?'已选 '+count+' 条，退出多选':'退出多选'):'多选');
+  const items=ui.listItems||[],collapse=items.some(function expanded(note){return !note.collapsed;});
+  fold.disabled=!items.length;fold.setAttribute('aria-label',collapse?'收起全部卡片':'展开全部卡片');
+  const use=fold.querySelector('use');if(use)use.setAttribute('href',collapse?'#i-fold':'#i-unfold');
+}
+
+/**
+ * @brief 收起或展开当前列表中的全部卡片（与 0.7.3 侧栏菜单「收起全部卡片」「展开全部卡片」相同）：还有展开的就全部收起，
+ * 否则全部展开；作用于整个列表（包括还没加载出来的），提示条可以撤销。
+ */
+function toggleCollapseAll(){
+  const items=ui.listItems||[],collapse=items.some(function expanded(note){return !note.collapsed;}),ids=new Set(items.filter(function differs(note){return Boolean(note.collapsed)!==collapse;}).map(function id(note){return note.id;}));
+  if(!ids.size||!finishEdit())return;
+  const previous=new Map(state.notes.filter(function changing(note){return ids.has(note.id);}).map(function remember(note){return [note.id,Boolean(note.collapsed)];}));
+  const notes=state.notes.map(function change(note){return ids.has(note.id)?{...note,collapsed:collapse}:note;});
+  if(!persistSnapshot(notes)){toast('操作未保存，请重试',null,true);return;}
+  renderNotes();
+  toast('已'+(collapse?'收起':'展开')+' '+ids.size+' 张卡片',{label:'撤销',run:function undoCollapse(){const restored=state.notes.map(function restore(note){return previous.has(note.id)?{...note,collapsed:previous.get(note.id)}:note;});if(persistSnapshot(restored))renderNotes();}});
 }
 
 /**
@@ -485,7 +513,7 @@ function renderSearchGroup(group){
   const go=el('button','search-group-go');go.type='button';go.dataset.action='go-to-tab';go.dataset.goTab=group.tab;go.setAttribute('aria-label','转到'+tabs.label(group.tab));go.append(el('span','','转到'),icon('arrow-right'));
   head.append(title,go);return head;
 }
-/** @return {string} 搜索词只是一个已有的标签（如「#产品」）时返回这个标签的写法，否则为空；这时搜索框里出现「固定为页签」「合并」。 */
+/** @return {string} 搜索词只是一个已有的标签（如「#产品」）时返回这个标签的写法，否则为空；这时筛选行里出现「固定为页签」「合并」。 */
 function singleSearchTag(){
   const match=/^#([\p{L}\p{N}_-]+)$/u.exec(searchTerms());if(!match)return '';
   const key=tagKey(match[1]),found=window.SidebarTabs.allTags().find(function same(item){return tagKey(item.tag)===key;});
@@ -1215,6 +1243,8 @@ function handleAction(event) {
     case 'finish-edit':finishEdit();break;
     case 'cancel-edit':cancelEdit();break;
     case 'toggle-search':toggleSearch(!ui.searchOpen);break;
+    case 'toggle-select-mode':if(window.NoteInteractions)window.NoteInteractions.toggleMode();break;
+    case 'toggle-collapse-all':toggleCollapseAll();break;
     case 'collapse-search':toggleSearch(false);break;
     case 'attach-edit-image':ui.editAttachmentHold=ui.editing;ui.attachmentTarget=note.id;elements.imagePicker.click();break;
     case 'attach-edit-file':ui.editAttachmentHold=ui.editing;ui.attachmentTarget=note.id;elements.attachmentPicker.click();break;
@@ -1414,7 +1444,7 @@ function changeSetting(event) {
 
 /** 连接页面元素并注册交互。 */
 function initialize() {
-  const ids = { resizer:'sidebar-resizer', versionButton:'app-version', tagDropdown:'tag-dropdown', tagFilterButton:'tag-filter-button', syncWarning:'sync-warning', workspaceNudge:'workspace-nudge', sidebar: 'sidebar', edgeTrigger: 'edge-trigger', capture: 'capture', noteList: 'note-list', listSummary: 'list-summary', tagFilterClear: 'tag-filter-clear', searchCount: 'search-count', searchActions: 'search-actions', searchInput: 'search-input', clearSearch: 'clear-search', storageStatus: 'storage-status', draftInput: 'draft-input', attachmentList: 'attachment-list', imagePicker: 'image-picker', charCount: 'capture-char-count', saveNote: 'save-note', modalRoot: 'modal-root', toastRegion: 'toast-region' };
+  const ids = { resizer:'sidebar-resizer', versionButton:'app-version', tagDropdown:'tag-dropdown', tagFilterButton:'tag-filter-button', syncWarning:'sync-warning', workspaceNudge:'workspace-nudge', sidebar: 'sidebar', edgeTrigger: 'edge-trigger', capture: 'capture', noteList: 'note-list', listSummary: 'list-summary', tagFilterClear: 'tag-filter-clear', searchSummary: 'search-summary', selectMode: 'select-mode', collapseAll: 'collapse-all', searchInput: 'search-input', clearSearch: 'clear-search', storageStatus: 'storage-status', draftInput: 'draft-input', attachmentList: 'attachment-list', imagePicker: 'image-picker', charCount: 'capture-char-count', saveNote: 'save-note', modalRoot: 'modal-root', toastRegion: 'toast-region' };
   Object.entries(ids).forEach(function collectElement(entry) { elements[entry[0]] = document.getElementById(entry[1]); });
   elements.searchInput.type='text';elements.searchInput.setAttribute('role','searchbox');
   loadState();
@@ -1893,8 +1923,8 @@ async function addPickedAttachments(files,target='draft'){
 
 /** @brief 展开或收起搜索，收起时保留查询和筛选结果。 @param {boolean} open 是否展开。 @param {object} options 焦点选项。 */
 function toggleSearch(open=true,options={}){
-  // 搜索在筛选行的右端（第五次反馈）：展开时从右向左铺满这一行，盖住标签下拉与按钮。
-  ui.searchOpen=open;const wrap=document.getElementById('header-search'),row=wrap.closest('.list-topline'),filter=row.querySelector('.list-filter');wrap.classList.toggle('is-open',open);row.classList.toggle('is-searching',open);filter.inert=open;filter.setAttribute('aria-hidden',String(open));if(!open||ui.tagMenuMode!=='suggest')closeTagMenu();document.getElementById('search-toggle').setAttribute('aria-expanded',String(open));const panel=document.getElementById('search-panel');panel.inert=!open;panel.setAttribute('aria-hidden',String(!open));refreshSearchSummary();
+  // 搜索在页签栏的最右端（第六次反馈）：展开时从右向左铺满这一行，盖住页签。
+  ui.searchOpen=open;const wrap=document.getElementById('header-search'),row=document.getElementById('sidebar-navigation'),tabs=row.querySelector('.sidebar-tabs');wrap.classList.toggle('is-open',open);row.classList.toggle('is-searching',open);tabs.inert=open;tabs.setAttribute('aria-hidden',String(open));if(!open||ui.tagMenuMode!=='suggest')closeTagMenu();document.getElementById('search-toggle').setAttribute('aria-expanded',String(open));const panel=document.getElementById('search-panel');panel.inert=!open;panel.setAttribute('aria-hidden',String(!open));refreshSearchSummary();
   if(open){showSidebar({focus:false});elements.searchInput.value=ui.query;elements.searchInput.focus();elements.searchInput.select();}else if(options.focusButton)document.getElementById('search-toggle').focus();
 }
 /** 检查更新的原型入口，关于页与版本弹窗共用。 */

@@ -28,6 +28,7 @@
     elements.noteList.querySelectorAll('.note-card').forEach(function mark(card){
       const chosen=selected.has(card.dataset.noteId);card.classList.toggle('is-selected',chosen);card.setAttribute('aria-selected',String(chosen));
     });
+    if(typeof syncListTools==='function')syncListTools();
   }
   /** 清空选择与多选模式，不更改记录内容。 */
   function clearSelection(){selected.clear();tools.mode=false;tools.anchor='';refresh();}
@@ -35,13 +36,21 @@
   function hasSelection(){return tools.mode||selected.size>0;}
   /** @brief 指示是否正在按压、拖动或框选。 @return {boolean} 手势状态。 */
   function isBusy(){return Boolean(tools.gesture);}
-  /** @brief 同步连续区间选择。 @param {string} id 终点。 @param {boolean} range 是否区间选择。 @param {boolean} additive 是否追加。 */
+  /**
+   * @brief 同步连续区间选择。Shift+单击从起点选到这一张：起点是上一次不按 Shift 单击的卡片（第六次反馈：此前单击卡片只高亮、
+   * 不记作起点，Shift+单击只选中一张），起点不在当前列表中时只切换这一张。
+   * @param {string} id 终点。 @param {boolean} range 是否区间选择。 @param {boolean} additive 是否追加。
+   */
   function choose(id,range,additive){
     const ids=visibleIds();
     if(range&&tools.anchor&&ids.includes(tools.anchor)){const start=ids.indexOf(tools.anchor),end=ids.indexOf(id);if(!additive)selected.clear();ids.slice(Math.min(start,end),Math.max(start,end)+1).forEach(function select(item){selected.add(item);});}
     else{if(selected.has(id))selected.delete(id);else selected.add(id);tools.anchor=id;}
     tools.mode=true;refresh();
   }
+  /** @brief 筛选行的多选按钮（第六次反馈）：没有多选时进入多选，之后单击卡片就是选中或取消；已在多选中时退出并清空。 @return {boolean} 是否进入多选。 */
+  function toggleMode(){if(hasSelection()){clearSelection();return false;}tools.mode=true;refresh();return true;}
+  /** @return {number} 选中的条数（不含已移入回收站的）。 */
+  function selectedCount(){return selectedIds().length;}
   /** @brief 捕获多选点击及拖动产生的合成点击。 @param {MouseEvent} event 点击。 */
   function captureClick(event){
     const target=targetOf(event);if(!target)return;
@@ -50,7 +59,9 @@
     const card=target.closest('.note-card');
     if((!card||!elements.noteList.contains(card)||card.classList.contains('is-editing'))&&hasSelection()&&!interactive){consume(event);clearSelection();return;}
     if(!card||!elements.noteList.contains(card)||card.classList.contains('is-editing'))return;
-    if((hasSelection()||event.ctrlKey||event.metaKey||event.shiftKey)&&!interactive){consume(event);choose(card.dataset.noteId,event.shiftKey,event.ctrlKey||event.metaKey);}
+    if((hasSelection()||event.ctrlKey||event.metaKey||event.shiftKey)&&!interactive){consume(event);choose(card.dataset.noteId,event.shiftKey,event.ctrlKey||event.metaKey);return;}
+    // 不按 Shift 单击卡片（只高亮）也记作区间的起点；悬停的高亮不算。
+    if(!interactive)tools.anchor=card.dataset.noteId;
   }
   /** @brief 多选和排序之后不再触发双击复制。 @param {MouseEvent} event 双击。 */
   function captureDoubleClick(event){const target=targetOf(event);if(target&&target.closest('.note-card')&&(hasSelection()||now()-tools.lastDragAt<650))consume(event);}
@@ -138,7 +149,7 @@
     gesture.ghost.classList.toggle('is-window',outside);
     if(outside&&window.NoteWindows){clearTabTarget(gesture);gesture.targetMode='window';gesture.label.textContent=gesture.ids.size+' 条 · 松开后在窗口中打开';return;}
     const tab=document.elementFromPoint?document.elementFromPoint(gesture.x,gesture.y):null;
-    const tabTarget=tab&&tab.closest?tab.closest('.sidebar-tabs [data-tab], .sidebar-tabs .tab-more, .tab-menu [data-tab]'):null;
+    const tabTarget=tab&&tab.closest?tab.closest('.sidebar-tabs [data-tab], .sidebar-tabs .tab-more:not(.is-add), .tab-menu [data-tab]'):null;
     if(tabTarget){
       setTabTarget(gesture,tabTarget);gesture.targetMode='tab';gesture.targetDestination=tabTarget.dataset.tab||'';
       if(!gesture.targetDestination){gesture.label.textContent=gesture.ids.size+' 条 · 停留后展开收起的页签';return;}
@@ -280,5 +291,5 @@
     if(window.MutationObserver){tools.observer=new window.MutationObserver(function listChanged(){refresh();});tools.observer.observe(elements.noteList,{childList:true,subtree:true});}
     refresh();
   }
-  window.NoteInteractions=Object.freeze({initialize:initialize,refresh:refresh,clearSelection:clearSelection,hasSelection:hasSelection,isBusy:isBusy,cancelGesture:cancelGesture,selectedIds:selectedIds,moveTo:moveTo,trash:trash});
+  window.NoteInteractions=Object.freeze({initialize:initialize,refresh:refresh,clearSelection:clearSelection,hasSelection:hasSelection,toggleMode:toggleMode,selectedCount:selectedCount,isBusy:isBusy,cancelGesture:cancelGesture,selectedIds:selectedIds,moveTo:moveTo,trash:trash});
 })();

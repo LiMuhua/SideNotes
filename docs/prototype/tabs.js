@@ -4,12 +4,13 @@
  * @brief 侧栏页签（第四次反馈）：随记、置顶与手动固定的标签。
  * @details
  * - 随记显示没有任何已固定标签的记录（原来的「工作区」改名，去掉了「归档」）；置顶显示置顶的记录，与原来相同。
- * - 标签页签只由用户手动固定：按标签筛选时筛选条上的「固定为页签」，或最后一格菜单中的「新建页签」，不会自动出现。
+ * - 标签页签只由用户手动固定：按标签筛选时筛选行上的「固定为页签」，或最后一格的「新建页签」，不会自动出现。
  *   页签上写标签名（不写 #，超过 4 个字截断），显示带这个标签的记录；顺序保存在设置的 pinnedTags 中。
  * - 管理：双击页签原地改名（所有记录上的这个标签一起改）；按住拖动页签排序，插入线标出位置；
  *   右键「改名」「移出页签栏」，移出只是不再固定，记录与标签都不变，可以撤销。
- * - 放不下时，多出来的页签从右往左收进最后一格「N ▾」。选中收起的页签时前面的页签不动，最后一格显示它的名称并带当前样式
- *   （最后一格按 4 个字的宽度预留，显示哪个名称都不会挤动前面的页签）。单击最后一格总是打开菜单：收起的页签与「新建页签」。
+ * - 最后一格只占一个位置，样子固定（第六次反馈）：页签都放得下时是「+」，单击新建页签；真放不下时，多出来的页签从右往左
+ *   收进去，这一格写「N ▾」，单击打开菜单：收起的页签与「新建页签」。当前页签收在菜单里时，这一格不换成它的名字，
+ *   只带当前样式（下划线），菜单里它打勾（此前写它的名字，为此按 4 个字预留宽度，后面空着一段也会收起页签）。
  * - 条数只写在随记与当前页签上，省出页签栏的宽度。
  * - 在标签页签里新建记录时，新建卡片的工具栏上有一个「#标签」，保存时写进标签行；点它的 × 可以不带。
  * 依赖 app.js 的全局状态与函数（state、ui、elements、el、icon、button、renderNotes、toast、tagKey、hasTag、noteParts、
@@ -17,7 +18,6 @@
  */
 window.SidebarTabs = (function createSidebarTabs() {
   const PREFIX = 'tag:';
-  const NAME_RESERVE = '页签名称'; // 最后一格按 4 个字预留宽度时用的占位文字（看不见）。
   let nav = null; // 页签栏（.sidebar-tabs）
   let more = null; // 最后一格
   let observer = null;
@@ -155,41 +155,41 @@ window.SidebarTabs = (function createSidebarTabs() {
     return node;
   }
 
-  /** @return {HTMLButtonElement} 最后一格：收起的页签与「新建页签」的菜单。 */
+  /** @return {HTMLButtonElement} 最后一格：「+」新建页签，或「N ▾」收起的页签与「新建页签」的菜单。 */
   function createMore() {
     const node = el('button', 'tab tab-more');
     node.type = 'button';
     node.setAttribute('role', 'tab');
-    node.setAttribute('aria-haspopup', 'menu');
     node.setAttribute('aria-expanded', 'false');
     node.setAttribute('aria-controls', 'note-list');
-    node.addEventListener('click', function openFromClick(event) { event.preventDefault(); event.stopPropagation(); openMenu(); });
-    node.addEventListener('keydown', function openFromKey(event) { if (event.key === 'ArrowDown') { event.preventDefault(); openMenu(); } });
+    node.addEventListener('click', function openFromClick(event) { event.preventDefault(); event.stopPropagation(); activateMore(); });
+    node.addEventListener('keydown', function openFromKey(event) { if (event.key === 'ArrowDown') { event.preventDefault(); activateMore(); } });
     return node;
   }
 
+  /** 单击最后一格：都放得下时直接新建页签，有收起的页签时打开菜单。 */
+  function activateMore() {
+    if (hidden.length) openMenu();
+    else startCreate();
+  }
+
   /**
-   * @brief 最后一格的样子：plain 只有 ▾；count 写收起的个数；active 写当前的收起页签并带当前样式；reserve 按 4 个字预留宽度（量宽时用）。
-   * @param {string} mode 样子。 @param {string} tag 当前的收起页签。 @param {number} count 收起的个数。
+   * @brief 最后一格的样子（第六次反馈：固定只占一个位置）：没有收起的页签时是「+」；有时写收起的个数与 ▾，
+   * 当前页签收在里面时带当前样式，但不换成它的名字。
+   * @param {number} count 收起的个数。 @param {string} current 收在里面的当前页签，没有时为空。
    */
-  function setMore(mode, tag = '', count = 0) {
+  function setMore(count, current = '') {
     more.replaceChildren();
-    const named = mode === 'active' || mode === 'reserve';
-    more.classList.toggle('active', mode === 'active');
-    more.classList.toggle('has-name', named);
-    if (named) { const name = el('span', 'tab-name', mode === 'reserve' ? NAME_RESERVE : tag); if (mode === 'reserve') name.classList.add('is-reserve'); more.append(name); }
-    if (mode === 'count') more.append(el('span', 'tab-more-count', String(count)));
-    more.append(icon('chevron-down'));
-    if (mode === 'active') {
-      more.dataset.tab = tabOf(tag);
-      more.setAttribute('aria-selected', 'true');
-      more.setAttribute('aria-label', tag + '，另有 ' + Math.max(0, count - 1) + ' 个收起的页签');
-    } else {
-      delete more.dataset.tab;
-      more.setAttribute('aria-selected', 'false');
-      more.setAttribute('aria-label', count ? '另有 ' + count + ' 个页签，新建页签' : '新建页签');
-    }
-    more.tabIndex = mode === 'active' ? 0 : -1;
+    const add = count === 0;
+    more.classList.toggle('is-add', add);
+    more.classList.toggle('active', Boolean(current));
+    if (add) more.append(icon('plus'));
+    else more.append(el('span', 'tab-more-count', String(count)), icon('chevron-down'));
+    if (add) more.removeAttribute('aria-haspopup');
+    else more.setAttribute('aria-haspopup', 'menu');
+    more.setAttribute('aria-selected', String(Boolean(current)));
+    more.setAttribute('aria-label', add ? '新建页签' : current ? '当前页签「' + current + '」收在这里，另有 ' + (count - 1) + ' 个收起的页签' : '另有 ' + count + ' 个收起的页签，新建页签');
+    more.tabIndex = current ? 0 : -1;
   }
 
   /** 写出页签栏：随记、置顶之后是固定的标签，最后一格是菜单；只有随记与当前页签写条数。 */
@@ -227,21 +227,24 @@ window.SidebarTabs = (function createSidebarTabs() {
   function count(tab) { return state.notes.filter(function inTab(note) { return belongs(note, tab); }).length; }
 
   /**
-   * 放不下的标签页签从右往左收进最后一格。先按最后一格只有 ▾ 来排；放不下时按它写 4 个字的宽度预留，
-   * 这样选中收起的页签、最后一格换成它的名称时，前面的页签不会被挤动。搜索在下面的筛选行（第五次反馈），页签栏占满整行。
+   * 页签放得下就全部显示（最后一格是「+」）；真放不下时，从右往左把标签页签收进最后一格，每收一个按「N ▾」的实际宽度重新量，
+   * 刚好放下为止，后面不再为别的写法预留空位（第六次反馈）。搜索的放大镜在这一行的最右边，页签栏的右侧内边距给它留了位置。
    */
   function layout() {
     if (!nav || !more || !nav.isConnected) return;
     const tabs = Array.from(nav.querySelectorAll('.tab.is-tag-tab'));
+    const overflowing = function overflowing() { return nav.scrollWidth > nav.clientWidth + 1; };
     tabs.forEach(function show(node) { node.hidden = false; });
-    setMore('plain');
-    if (nav.scrollWidth > nav.clientWidth + 1) {
-      setMore('reserve');
-      for (let index = tabs.length - 1; index >= 0 && nav.scrollWidth > nav.clientWidth + 1; index -= 1) tabs[index].hidden = true;
+    setMore(0);
+    let count = 0;
+    for (let index = tabs.length - 1; index >= 0 && overflowing(); index -= 1) {
+      tabs[index].hidden = true;
+      count += 1;
+      setMore(count);
     }
     hidden = tabs.filter(function collapsed(node) { return node.hidden; }).map(function name(node) { return tagOf(node.dataset.tab); });
     const current = tagOf(ui.tab), activeHidden = Boolean(current) && hidden.some(function same(tag) { return tagKey(tag) === tagKey(current); });
-    setMore(activeHidden ? 'active' : hidden.length ? 'count' : 'plain', current, hidden.length);
+    setMore(hidden.length, activeHidden ? current : '');
   }
 
   /* ==================== 最后一格的菜单与新建页签 ==================== */
@@ -478,7 +481,7 @@ window.SidebarTabs = (function createSidebarTabs() {
     event.preventDefault();
     const box = more && more.isConnected ? more.getBoundingClientRect() : null;
     const overMore = Boolean(box) && event.clientX >= box.left && event.clientX <= box.right && event.clientY >= box.top && event.clientY <= box.bottom;
-    if (overMore && !menuTabs().length && !press.timer) press.timer = window.setTimeout(function expand() { if (press && press.active) openMenu({ dragging: true }); if (press) press.timer = 0; }, 600);
+    if (overMore && hidden.length && !menuTabs().length && !press.timer) press.timer = window.setTimeout(function expand() { if (press && press.active) openMenu({ dragging: true }); if (press) press.timer = 0; }, 600);
     else if (!overMore && press.timer) { window.clearTimeout(press.timer); press.timer = 0; }
     const at = dropAt(event.clientX, event.clientY), from = pinnedTags().findIndex(function same(item) { return tagKey(item) === tagKey(press.tag); });
     press.index = at.index < 0 || at.index === from || at.index === from + 1 ? -1 : at.index;

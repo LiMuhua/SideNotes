@@ -429,16 +429,18 @@ img.brand-mark.is-small {
   gap: var(--sn-space-1);
 }
 
-/* ---------- 页签 ----------
- * 搜索移到了下面的筛选行（第五次反馈），页签栏占满整行，放不下的页签才收进最后一格。 */
+/* ---------- 页签与搜索 ----------
+ * 搜索回到页签栏的最右边（第六次反馈：放在筛选行像是只搜当前页签）。放大镜叠在页签行之上，右侧内边距给它留出位置，
+ * 页签不会钻到它下面；放不下的页签才收进最后一格。 */
 .sidebar > .sidebar-navigation {
+  --local-search-size: calc(var(--sn-control-height) + var(--sn-border-width) * 2);
   position: relative;
   display: flex;
   align-items: stretch;
   gap: var(--sn-space-3);
   height: calc(var(--sn-tab-height) + var(--sn-space-4));
   margin: 0;
-  padding: 0 var(--sn-space-3) var(--sn-space-2) var(--sn-panel-padding);
+  padding: 0 calc(var(--sn-space-3) * 2 + var(--local-search-size)) var(--sn-space-2) var(--sn-panel-padding);
   border-bottom: var(--sn-border-width) solid var(--sn-color-border-subtle);
 }
 
@@ -525,21 +527,6 @@ img.brand-mark.is-small {
   height: var(--sn-focus-ring-width);
   border-radius: var(--sn-radius-full);
   background: var(--sn-color-accent);
-}
-
-/* 全局搜索时（第五次反馈）：结果不属于某一个页签，页签栏不标出当前页签；单击页签结束搜索并切过去。 */
-.sidebar-navigation.is-search-results .sidebar-tabs .tab.active {
-  color: var(--sn-color-text-secondary);
-  font-weight: var(--sn-body-weight);
-}
-
-.sidebar-navigation.is-search-results .sidebar-tabs .tab.active::after {
-  display: none;
-}
-
-[data-sn-tabs='segmented'] .sidebar-navigation.is-search-results .sidebar-tabs .tab.active {
-  background: transparent;
-  box-shadow: none;
 }
 
 /* 分段页签：凹陷的底，当前页签浮起。 */
@@ -636,7 +623,8 @@ img.brand-mark.is-small {
   line-height: inherit;
 }
 
-/* 最后一格：只有 ▾，或收起的个数，或当前的收起页签（带当前样式）。量宽时按 4 个字预留，占位文字看不见。 */
+/* 最后一格（第六次反馈）：只占一个位置，样子固定。全部放得下时是「+」（新建页签），放不下时是「N ▾」；
+ * 当前页签收在菜单里时不换成它的名字，只带当前样式（下划线）。 */
 .sidebar-tabs .tab-more {
   gap: var(--sn-space-1);
   padding: 0 var(--sn-space-3);
@@ -645,10 +633,6 @@ img.brand-mark.is-small {
 
 .sidebar-tabs .tab-more.active {
   color: var(--sn-color-text);
-}
-
-.sidebar-tabs .tab-more .tab-name.is-reserve {
-  visibility: hidden;
 }
 
 .sidebar-tabs .tab .tab-more-count {
@@ -774,14 +758,15 @@ body.is-dragging-tab * {
   background: var(--sn-color-selected);
 }
 
-/* 搜索框（第五次反馈：在筛选行的右端，搜索全部记录）：收起时只是最右边的放大镜，边框与底色透明；展开时宽度从右向左
- * 铺满这一行，盖住标签下拉与按钮，它们淡出；输入框在宽度展开一段之后淡入，收起是展开的倒放。有搜索词时保持展开。
+/* 搜索框（第六次反馈：回到页签栏的最右端，搜索全部记录）：收起时只是最右边的放大镜，边框与底色透明；展开时宽度从右向左
+ * 铺满这一行，盖住页签，页签淡出；输入框在宽度展开一段之后淡入，收起是展开的倒放。有搜索词时保持展开。
+ * 框里只有输入框与清空按钮，结果的条数与「固定为页签」「合并」写在下面的筛选行。
  * 盒子比控件高度多出两条边框，放大镜正好放在边框之内。 */
-.list-topline #header-search {
+.sidebar-navigation #header-search {
   position: absolute;
   top: 0;
   right: var(--sn-space-3);
-  bottom: 0;
+  bottom: var(--sn-space-2);
   left: auto;
   z-index: 3;
   display: flex;
@@ -804,7 +789,7 @@ body.is-dragging-tab * {
     border-color var(--sn-duration-normal) var(--sn-ease-standard);
 }
 
-.list-topline #header-search.is-open {
+.sidebar-navigation #header-search.is-open {
   width: calc(100% - var(--sn-panel-padding) - var(--sn-space-3));
   padding-right: var(--sn-space-1);
   border-color: var(--sn-color-border);
@@ -812,8 +797,8 @@ body.is-dragging-tab * {
 }
 
 /* 获得焦点或有搜索词时，底边换成两倍边框宽的强调色线（与 Playground 的输入类控件相同），不加外圈。 */
-.list-topline #header-search.is-open:focus-within,
-.list-topline #header-search.is-open.has-query {
+.sidebar-navigation #header-search.is-open:focus-within,
+.sidebar-navigation #header-search.is-open.has-query {
   border-bottom-color: transparent;
   background-image: linear-gradient(var(--sn-color-accent), var(--sn-color-accent));
   background-position: bottom;
@@ -822,15 +807,11 @@ body.is-dragging-tab * {
   background-origin: border-box;
 }
 
-.list-topline #header-search.is-open:focus-within {
+.sidebar-navigation #header-search.is-open:focus-within {
   background-color: var(--sn-color-surface);
 }
 
-.list-topline .list-filter {
-  transition: opacity var(--sn-duration-normal) var(--sn-ease-standard);
-}
-
-.list-topline.is-searching .list-filter {
+.sidebar-navigation.is-searching .sidebar-tabs {
   opacity: 0;
   pointer-events: none;
 }
@@ -893,26 +874,6 @@ body.is-dragging-tab * {
 #header-search .header-search-field .icon-button .icon {
   width: var(--sn-icon-size-sm);
   height: var(--sn-icon-size-sm);
-}
-
-/* 搜索框里：结果的条数；只搜一个标签时是「固定为页签」「合并」（与筛选行相同的小号文字按钮）。 */
-#header-search .search-count {
-  flex: none;
-  color: var(--sn-color-text-muted);
-  font-family: var(--sn-font-meta);
-  font-size: var(--sn-font-size-xs);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-#header-search .search-actions {
-  display: inline-flex;
-  flex: none;
-  gap: var(--sn-space-1);
-}
-
-#header-search .search-actions:empty {
-  display: none;
 }
 
 /* 全局搜索的结果：按页签分组，组标题是页签的图标、名称与条数，右侧「转到」。 */
@@ -1038,16 +999,17 @@ body.is-dragging-tab * {
   background-image: linear-gradient(var(--sn-color-danger-subtle), var(--sn-color-danger-subtle));
 }
 
-/* 筛选行（第五次反馈：保持两行）：左边是标签下拉（选了标签时同时写条数）与「固定为页签」「合并」，右端给放大镜留出位置。 */
+/* 筛选行（第五、六次反馈）：左边写列表里是什么，右边是对整个列表的操作。左边平常是标签下拉，选了标签时同时写条数，
+ * 后面是「固定为页签」「合并」；搜索时换成结果的条数（只搜一个标签时同样跟着这两个按钮）。右边是多选与收起/展开全部，
+ * 最右一个正好在页签栏放大镜的正下方。 */
 .sidebar > .list-topline {
-  --local-search-size: calc(var(--sn-control-height) + var(--sn-border-width) * 2);
   position: relative;
   display: flex;
   flex: none;
   align-items: center;
   gap: var(--sn-space-4);
   min-height: 0;
-  padding: var(--sn-space-3) calc(var(--sn-space-3) * 2 + var(--local-search-size)) var(--sn-space-3) var(--sn-panel-padding);
+  padding: var(--sn-space-3) calc(var(--sn-space-3) + var(--sn-border-width) + (var(--sn-control-height) - var(--sn-control-height-sm)) / 2) var(--sn-space-3) var(--sn-panel-padding);
   color: var(--sn-color-text-muted);
   font-size: var(--sn-font-size-sm);
   user-select: none;
@@ -1074,7 +1036,7 @@ body.is-dragging-tab * {
   display: none;
 }
 
-:is(.list-topline, #header-search) .list-summary-action {
+.list-topline .list-summary-action {
   height: var(--sn-control-height-sm);
   min-height: 0;
   padding: 0 var(--sn-space-3);
@@ -1087,8 +1049,80 @@ body.is-dragging-tab * {
   white-space: nowrap;
 }
 
-:is(.list-topline, #header-search) .list-summary-action:hover {
+.list-topline .list-summary-action:hover {
   background: var(--sn-color-accent-subtle);
+}
+
+/* 搜索时筛选行左边的结果条数（与标签下拉里的条数相同的写法），标签下拉在搜索时不用。 */
+.list-topline .search-summary {
+  flex: none;
+  padding: 0 var(--sn-space-3);
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.list-topline .tag-filter-wrap[hidden],
+.list-topline .search-summary[hidden] {
+  display: none;
+}
+
+/* 筛选行右边的列表操作：小号图标按钮；多选中用强调色浅底，图标后面写选中的条数。 */
+.list-topline .list-tools {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sn-space-1);
+  margin-left: auto;
+}
+
+.list-topline .list-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sn-space-1);
+  width: auto;
+  min-width: var(--sn-control-height-sm);
+  height: var(--sn-control-height-sm);
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--sn-radius-control);
+  background: transparent;
+  color: var(--sn-color-text-muted);
+}
+
+.list-topline .list-tool .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.list-topline .list-tool:hover {
+  background: var(--sn-color-hover);
+  color: var(--sn-color-text);
+}
+
+.list-topline .list-tool[aria-pressed='true'] {
+  padding: 0 var(--sn-space-2);
+  background: var(--sn-color-accent-subtle);
+  color: var(--sn-color-accent-text);
+}
+
+.list-topline .list-tool-count {
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.list-topline .list-tool-count[hidden] {
+  display: none;
+}
+
+.list-topline .list-tool:disabled {
+  opacity: var(--sn-opacity-disabled);
+  pointer-events: none;
 }
 
 /* 在标签页签中新建：工具栏上一个可以去掉的「#标签」，保存时写进标签行（第四次反馈）。 */
@@ -1206,7 +1240,8 @@ body.is-dragging-tab * {
 }
 
 /* 标签菜单：宽度跟着内容走（本次提出），浮起的表面，候选右侧是条数，底部只有「搜索标签」。
- * 从筛选行左边的标签下拉向下打开；在搜索框里输入 # 时同一个菜单列出标签候选（第五次反馈）。 */
+ * 从筛选行左边的标签下拉向下打开；在搜索框里输入 # 时同一个菜单列出标签候选（第五次反馈），
+ * 搜索框回到页签栏后（第六次反馈）候选紧贴在搜索框下面，盖住筛选行。 */
 .tag-dropdown {
   top: 100%;
   right: auto;
@@ -1222,6 +1257,10 @@ body.is-dragging-tab * {
   box-shadow: var(--sn-shadow-md);
   color: var(--sn-color-text);
   text-shadow: none;
+}
+
+.tag-dropdown.is-suggesting {
+  top: 0;
 }
 
 .tag-dropdown .tag-option {
@@ -2594,8 +2633,13 @@ body.is-dragging-attachment * {
   gap: var(--sn-space-3);
 }
 
-/* ---------- 菜单 ---------- */
+/* ---------- 菜单 ----------
+ * 宽度跟内容（第六次反馈）：菜单项不折行；卡片菜单不比原来窄（旧样式固定 216px），最宽到弹窗宽度的 0.9 倍，
+ * 再长的项省略。页签栏最后一格的菜单只按最长的页签名再留一点空白。 */
 .note-context-menu {
+  width: max-content;
+  min-width: 216px; /* 固定：旧样式的菜单宽度，卡片菜单不比原来窄 */
+  max-width: min(calc(var(--sn-dialog-width) * 0.9), calc((100vw - var(--sn-space-6)) / var(--app-zoom, 1)));
   padding: var(--sn-space-1);
   border: var(--sn-border-width) solid var(--sn-color-border);
   border-radius: var(--sn-radius-md);
@@ -2617,6 +2661,20 @@ body.is-dragging-attachment * {
   width: var(--sn-icon-size-sm);
   height: var(--sn-icon-size-sm);
   color: var(--sn-color-text-secondary);
+}
+
+.note-context-menu .note-context-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-context-menu.tab-menu {
+  min-width: 0;
+}
+
+.note-context-menu.tab-menu .note-context-item {
+  padding-right: var(--sn-space-6);
 }
 
 .note-context-menu .note-context-item:hover {
@@ -4161,7 +4219,7 @@ body.is-dragging-attachment * {
   align-self: flex-start;
 }
 
-.settings-modal :is(.about-hero ~ .settings-group, .about-hero ~ .settings-card, .about-release) :is(.resource-link, .button) {
+.settings-modal :is(.about-hero ~ .settings-group, .about-hero ~ .settings-card, .about-release) :is(.resource-link:not(.settings-external-link), .button) {
   display: inline-flex;
   align-items: center;
   gap: var(--sn-space-3);
@@ -4177,7 +4235,7 @@ body.is-dragging-attachment * {
   text-decoration: none;
 }
 
-.settings-modal :is(.about-hero ~ .settings-group, .about-hero ~ .settings-card, .about-release) :is(.resource-link, .button):hover {
+.settings-modal :is(.about-hero ~ .settings-group, .about-hero ~ .settings-card, .about-release) :is(.resource-link:not(.settings-external-link), .button):hover {
   border-color: var(--sn-color-border-strong);
   background-image: linear-gradient(var(--sn-color-hover), var(--sn-color-hover));
   text-decoration: none;
@@ -4189,70 +4247,46 @@ body.is-dragging-attachment * {
   color: var(--sn-color-text-muted);
 }
 
-/* 项目与开源致谢：等宽的块铺满整行，每行三块；名称在左，许可证与外链箭头在右。 */
-.settings-modal .resource-links.about-tiles {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--sn-space-3);
+/* 项目与开源致谢（第六次反馈）：文字链接，按内容宽度排开，放不下自然换行，不为填满一行而拉伸；悬停时浅底、名称换强调色。
+ * 「检查更新」「打开开发者工具」是动作，仍是按钮。致谢的名称后面是许可证（灰色小字）。 */
+.settings-modal .resource-links.about-text-links {
+  gap: var(--sn-space-2) var(--sn-space-6);
 }
 
-.settings-modal .about-tiles .resource-link {
-  min-width: 0;
-  height: var(--sn-control-height-lg);
-  padding: 0 var(--sn-space-4);
-}
-
-.settings-modal .about-tiles .resource-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-align: left;
-  text-overflow: ellipsis;
+.settings-modal .about-text-links .settings-external-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-2);
+  height: var(--sn-control-height-sm);
+  margin: 0 calc(var(--sn-space-2) * -1);
+  padding: 0 var(--sn-space-2);
+  border: 0;
+  border-radius: var(--sn-radius-control);
+  background: transparent;
+  color: var(--sn-color-text);
+  font-size: var(--sn-font-size-sm);
+  text-decoration: none;
   white-space: nowrap;
 }
 
-/* 致谢的块：名称下面一行是许可证（灰色小字），块高两行，名称不被挤掉。 */
-.settings-modal .about-tiles .resource-link.has-note {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  grid-template-rows: auto auto;
-  align-items: center;
-  column-gap: var(--sn-space-3);
-  row-gap: var(--sn-space-1);
-  height: auto;
-  padding: var(--sn-space-3) var(--sn-space-4);
+.settings-modal .about-text-links .settings-external-link:hover {
+  background: var(--sn-color-hover);
+  text-decoration: none;
 }
 
-.settings-modal .about-tiles .resource-link.has-note > .resource-note {
-  grid-row: 2;
-  grid-column: 2;
+.settings-modal .about-text-links .settings-external-link:hover .resource-name {
+  color: var(--sn-color-accent-text);
 }
 
-.settings-modal .about-tiles .resource-link.has-note > svg.icon:last-child {
-  grid-row: 1;
-  grid-column: 3;
+.settings-modal .about-text-links .settings-external-link > svg.icon:last-child {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
 }
 
 .settings-modal .resource-note {
-  min-width: 0;
-  overflow: hidden;
   color: var(--sn-color-text-muted);
   font-family: var(--sn-font-meta);
   font-size: var(--sn-font-size-xs);
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* 其它（第五次反馈）：两行两列，列表加载、整理提醒；通知位置、窗口标签页。第二列对齐，分隔线只画在两列之间。 */
-.settings-modal .settings-runtime-row {
-  display: grid;
-  grid-template-columns: repeat(2, max-content);
-  justify-content: start;
-}
-
-.settings-modal .settings-runtime-row > :nth-child(odd)::before {
-  content: none;
 }
 
 .settings-modal .resource-icon {
