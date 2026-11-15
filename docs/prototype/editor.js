@@ -864,8 +864,9 @@
     }
 
     /**
-     * @brief 拖动中：拖影跟随指针（与卡片拖影同样倾斜），插入光标落在指针处的字符之间（第四次反馈：不再只按行）；
-     * 指针靠近编辑区上下边缘时滚动。
+     * @brief 拖动中：插入光标落在指针处的字符之间（第四次反馈：不再只按行）；指针靠近编辑区上下边缘时滚动。
+     * 拖影（第五次反馈：最关注的字不能被压住）：左上角跟着指针，拿起时从原处平滑移过去，插入光标与它左边、上面的字不被挡；
+     * 拖影放在编辑区的前面、垫在文字下面并半透明，与它重叠的字也能看清，插入光标在最上层。
      * @param {object} drag 拖动。 @param {PointerEvent} event 移动。
      */
     moveAttachmentDrag(drag, event) {
@@ -876,19 +877,32 @@
         drag.zoom = appZoom();
         drag.grab = { x: drag.x - box.left, y: drag.y - box.top };
         drag.bounds = this.attachmentBounds(drag);
-        drag.ghost = element('div', 'md-drag-ghost');
+        drag.ghost = element('div', 'md-drag-ghost is-under-text');
         drag.ghost.setAttribute('aria-hidden', 'true');
         drag.ghost.append(drag.node.cloneNode(true));
         // 插入光标：一条强调色的竖线，上端一个小圆点（与标签页的插入线同一种样子），落在字符之间。
         drag.guide = element('div', 'md-drop-caret');
         drag.guide.hidden = true;
-        document.body.append(drag.ghost, drag.guide);
+        // 拖影的定位原点：侧栏、记录窗口整体缩放并可能有位移，先量出 left、top 为 0 时落在屏幕上的哪里。
+        const probe = element('span', 'md-drag-probe');
+        this.element.before(probe);
+        const origin = probe.getBoundingClientRect();
+        probe.remove();
+        drag.origin = { x: origin.left, y: origin.top };
+        drag.ghost.style.setProperty('--local-ghost-x', -drag.grab.x / drag.zoom + 'px');
+        drag.ghost.style.setProperty('--local-ghost-y', -drag.grab.y / drag.zoom + 'px');
+        this.element.before(drag.ghost);
+        this.element.classList.add('is-attachment-drop');
+        document.body.append(drag.guide);
+        // 下一帧移到指针的右下方（过渡在样式里）。
+        const ghost = drag.ghost;
+        window.requestAnimationFrame(function settle() { window.requestAnimationFrame(function shift() { ghost.style.setProperty('--local-ghost-x', 'var(--sn-space-3)'); ghost.style.setProperty('--local-ghost-y', 'var(--sn-space-4)'); }); });
         drag.node.classList.add('is-drag-source');
         document.body.classList.add('is-dragging-attachment');
       }
       event.preventDefault();
-      drag.ghost.style.left = (event.clientX - drag.grab.x) / drag.zoom + 'px';
-      drag.ghost.style.top = (event.clientY - drag.grab.y) / drag.zoom + 'px';
+      drag.ghost.style.left = (event.clientX - drag.origin.x) / drag.zoom + 'px';
+      drag.ghost.style.top = (event.clientY - drag.origin.y) / drag.zoom + 'px';
       const box = this.element.getBoundingClientRect(), edge = 24;
       if (this.element.scrollHeight > this.element.clientHeight) {
         if (event.clientY < box.top + edge) this.element.scrollTop -= Math.ceil((box.top + edge - event.clientY) / 3);
@@ -950,6 +964,7 @@
       if (!drag.active) return;
       drag.ghost.remove();
       drag.guide.remove();
+      this.element.classList.remove('is-attachment-drop');
       drag.node.classList.remove('is-drag-source');
       document.body.classList.remove('is-dragging-attachment');
       // 松开后浏览器还会派发一次单击，不能当作点开附件。

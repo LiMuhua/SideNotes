@@ -61,19 +61,24 @@ window.SidebarTabs = (function createSidebarTabs() {
     return tag ? hasTag(note, tag) : !pinnedTagOf(note);
   }
 
+  /** @return {Array<string>} 页签栏的顺序：随记、置顶与固定的标签（全局搜索的结果按这个顺序分组）。 */
+  function order() { return ['workspace', 'pinned'].concat(pinnedTags().map(tabOf)); }
+
+  /** @brief 页签显示的名称（不带引号）。 @param {string} tab 页签。 @return {string} 名称。 */
+  function name(tab) { return tab === 'pinned' ? '置顶' : tagOf(tab) || '随记'; }
+
+  /**
+   * @brief 记录在页签栏中第一个出现的页签：没有已固定标签的在随记，否则置顶的在置顶，其余在它的第一个固定标签。
+   * 全局搜索的结果按它分组，「转到」也去这里。 @param {object} note 记录。 @return {string} 页签。
+   */
+  function homeOf(note) { return order().find(function owns(tab) { return belongs(note, tab); }) || 'workspace'; }
+
   /** @brief 页签在提示中的名称。 @param {string} tab 页签。 @return {string} 名称。 */
   function label(tab) { const tag = tagOf(tab); return tab === 'pinned' ? '置顶' : tag ? '「' + tag + '」' : '随记'; }
 
-  /** @brief 切换页签，与单击页签相同：清空搜索与标签筛选。 @param {string} tab 页签。 @return {boolean} 是否切换。 */
+  /** @brief 切换页签，与单击页签相同：结束搜索，清除标签筛选，回到列表顶部（app.js 的 goToTab）。 @param {string} tab 页签。 @return {boolean} 是否切换。 */
   function select(tab) {
-    if (!exists(tab) || !finishEdit()) return false;
-    ui.tab = tab;
-    ui.query = '';
-    ui.selectedTag = '';
-    elements.searchInput.value = '';
-    closeTagMenu();
-    renderNotes({ reset: true });
-    return true;
+    return exists(tab) && goToTab(tab, { reset: true });
   }
 
   /** @brief 保存固定的标签与顺序。 @param {Array<string>} list 标签。 @return {boolean} 是否成功。 */
@@ -223,12 +228,10 @@ window.SidebarTabs = (function createSidebarTabs() {
 
   /**
    * 放不下的标签页签从右往左收进最后一格。先按最后一格只有 ▾ 来排；放不下时按它写 4 个字的宽度预留，
-   * 这样选中收起的页签、最后一格换成它的名称时，前面的页签不会被挤动。搜索框展开时页签被盖住，不重排。
+   * 这样选中收起的页签、最后一格换成它的名称时，前面的页签不会被挤动。搜索在下面的筛选行（第五次反馈），页签栏占满整行。
    */
   function layout() {
     if (!nav || !more || !nav.isConnected) return;
-    const navigation = nav.closest('.sidebar-navigation');
-    if (navigation && navigation.classList.contains('is-searching')) return;
     const tabs = Array.from(nav.querySelectorAll('.tab.is-tag-tab'));
     tabs.forEach(function show(node) { node.hidden = false; });
     setMore('plain');
@@ -397,41 +400,93 @@ window.SidebarTabs = (function createSidebarTabs() {
     input.addEventListener('blur', function leave() { finish(true); });
   }
 
-  /** @brief 按住标签页签：横向移动 5 像素后开始拖动排序（单击照常切换）。 @param {PointerEvent} event 按下。 */
+  /**
+   * @brief 按住标签页签，或最后一格菜单中收起的页签（第五次反馈）：移动 5 像素后开始拖动排序，没移动就是单击。
+   * @param {PointerEvent} event 按下。
+   */
   function pressTab(event) {
-    const node = event.target.closest ? event.target.closest('.tab.is-tag-tab') : null;
-    if (!node || event.button !== 0 || !nav || !nav.contains(node) || press) return;
-    press = { node: node, tag: tagOf(node.dataset.tab), x: event.clientX, pointerId: event.pointerId, active: false, index: -1 };
+    const node = event.target.closest ? event.target.closest('.tab.is-tag-tab, .tab-menu .note-context-item[data-tab]') : null;
+    if (!node || event.button !== 0 || !nav || press) return;
+    const fromMenu = Boolean(node.closest('.tab-menu'));
+    if (!fromMenu && !nav.contains(node)) return;
+    press = { node: node, tag: tagOf(node.dataset.tab), x: event.clientX, y: event.clientY, pointerId: event.pointerId, active: false, index: -1, region: '', timer: 0 };
     window.addEventListener('pointermove', movePress, true);
     window.addEventListener('pointerup', endPress, true);
     window.addEventListener('pointercancel', endPress, true);
   }
 
-  /** @brief 拖动中：插入线落在可见的标签页签之间；放回原处不显示。 @param {PointerEvent} event 移动。 */
+  /** @return {Array<HTMLElement>} 页签栏中显示着的标签页签。 */
+  function visibleTabs() { return nav ? Array.from(nav.querySelectorAll('.tab.is-tag-tab')).filter(function shown(node) { return !node.hidden; }) : []; }
+
+  /** @return {Array<HTMLElement>} 打开着的最后一格菜单中收起的页签。 */
+  function menuTabs() { return Array.from(document.querySelectorAll('.tab-menu .note-context-item[data-tab]')); }
+
+  /**
+   * @brief 指针处的插入位置（按页签栏的顺序计）：页签栏中按横向位置落在显示着的页签之间，菜单中按纵向位置落在收起的页签之间。
+   * @param {number} x 横坐标。 @param {number} y 纵坐标。 @return {{index:number,region:string}} 位置与所在的区域；不在两处时 index 为 -1。
+   */
+  function dropAt(x, y) {
+    const items = menuTabs(), list = items.length ? items[0].closest('.tab-menu') : null;
+    if (list) {
+      const box = list.getBoundingClientRect();
+      if (x >= box.left && x <= box.right && y >= box.top && y <= box.bottom) {
+        let row = items.findIndex(function below(node) { const rect = node.getBoundingClientRect(); return y < rect.top + rect.height / 2; });
+        if (row < 0) row = items.length;
+        return { index: visibleTabs().length + row, region: 'menu' };
+      }
+    }
+    const bar = nav.getBoundingClientRect(), tabs = visibleTabs();
+    if (y < bar.top - 8 || y > bar.bottom + 8 || x < bar.left || x > bar.right) return { index: -1, region: '' };
+    let index = tabs.findIndex(function before(node) { const rect = node.getBoundingClientRect(); return x < rect.left + rect.width / 2; });
+    if (index < 0) index = tabs.length;
+    return { index: index, region: 'bar' };
+  }
+
+  /** @brief 画出插入线：页签栏中是竖线，菜单中是横线（小圆点在左端）。 @param {number} index 位置。 @param {string} region 区域。 */
+  function paintDrop(index, region) {
+    if (index < 0) { if (dropLine) dropLine.remove(); return; }
+    if (!dropLine) { dropLine = el('span', 'sidebar-tab-drop'); dropLine.setAttribute('aria-hidden', 'true'); }
+    if (!dropLine.isConnected) document.body.append(dropLine);
+    dropLine.classList.toggle('is-horizontal', region === 'menu');
+    if (region === 'menu') {
+      const items = menuTabs(), row = index - visibleTabs().length, box = items[Math.min(row, items.length - 1)].getBoundingClientRect();
+      dropLine.style.left = box.left + 'px';
+      dropLine.style.top = (row < items.length ? box.top : box.bottom) + 'px';
+      dropLine.style.width = box.width + 'px';
+      dropLine.style.height = '';
+      return;
+    }
+    const tabs = visibleTabs(), anchor = tabs.length ? tabs[Math.min(index, tabs.length - 1)].getBoundingClientRect() : more.getBoundingClientRect();
+    dropLine.style.left = (tabs.length && index >= tabs.length ? anchor.right : anchor.left) + 'px';
+    dropLine.style.top = anchor.top + 'px';
+    dropLine.style.width = '';
+    dropLine.style.height = anchor.height + 'px';
+  }
+
+  /**
+   * @brief 拖动中：插入线落在页签栏或菜单中；放回原处不显示。拖到最后一格上停 0.6 秒展开菜单（与拖动卡片相同），可以放进收起的页签之间。
+   * @param {PointerEvent} event 移动。
+   */
   function movePress(event) {
     if (!press || event.pointerId !== press.pointerId) return;
     if (!press.active) {
-      if (Math.abs(event.clientX - press.x) < 5) return;
+      if (Math.hypot(event.clientX - press.x, event.clientY - press.y) < 5) return;
       press.active = true;
       press.node.classList.add('is-drag-source');
       document.body.classList.add('is-dragging-tab');
     }
     event.preventDefault();
-    const tabs = Array.from(nav.querySelectorAll('.tab.is-tag-tab')).filter(function visible(node) { return !node.hidden; });
-    let index = tabs.findIndex(function before(node) { const box = node.getBoundingClientRect(); return event.clientX < box.left + box.width / 2; });
-    if (index < 0) index = tabs.length;
-    const from = tabs.indexOf(press.node);
-    press.index = index === from || index === from + 1 ? -1 : index;
-    if (press.index < 0 || !tabs.length) { if (dropLine) dropLine.remove(); return; }
-    if (!dropLine) { dropLine = el('span', 'sidebar-tab-drop'); dropLine.setAttribute('aria-hidden', 'true'); }
-    if (!dropLine.isConnected) document.body.append(dropLine);
-    const box = tabs[Math.min(index, tabs.length - 1)].getBoundingClientRect();
-    dropLine.style.left = (index < tabs.length ? box.left : box.right) + 'px';
-    dropLine.style.top = box.top + 'px';
-    dropLine.style.height = box.height + 'px';
+    const box = more && more.isConnected ? more.getBoundingClientRect() : null;
+    const overMore = Boolean(box) && event.clientX >= box.left && event.clientX <= box.right && event.clientY >= box.top && event.clientY <= box.bottom;
+    if (overMore && !menuTabs().length && !press.timer) press.timer = window.setTimeout(function expand() { if (press && press.active) openMenu({ dragging: true }); if (press) press.timer = 0; }, 600);
+    else if (!overMore && press.timer) { window.clearTimeout(press.timer); press.timer = 0; }
+    const at = dropAt(event.clientX, event.clientY), from = pinnedTags().findIndex(function same(item) { return tagKey(item) === tagKey(press.tag); });
+    press.index = at.index < 0 || at.index === from || at.index === from + 1 ? -1 : at.index;
+    press.region = at.region;
+    paintDrop(press.index, press.region);
   }
 
-  /** @brief 松开：排到插入线处并保存；没拖动就是单击。 @param {PointerEvent} event 松开或取消。 */
+  /** @brief 松开：排到插入线处并保存，放进菜单时菜单留着显示新的顺序；没拖动就是单击。 @param {PointerEvent} event 松开或取消。 */
   function endPress(event) {
     if (!press || event.pointerId !== press.pointerId) return;
     window.removeEventListener('pointermove', movePress, true);
@@ -439,6 +494,7 @@ window.SidebarTabs = (function createSidebarTabs() {
     window.removeEventListener('pointercancel', endPress, true);
     const done = press;
     press = null;
+    window.clearTimeout(done.timer);
     if (dropLine) dropLine.remove();
     if (!done.active) return;
     done.node.classList.remove('is-drag-source');
@@ -452,7 +508,10 @@ window.SidebarTabs = (function createSidebarTabs() {
     if (to > from) to -= 1;
     list.splice(from, 1);
     list.splice(to, 0, done.tag);
-    if (savePinned(list)) renderNotes();
+    if (menuTabs().length && window.NoteMenus) window.NoteMenus.close({ restoreFocus: false });
+    if (!savePinned(list)) return;
+    renderNotes();
+    if (done.region === 'menu') openMenu({ dragging: true });
   }
 
   /* ==================== 新建卡片带上页签的标签 ==================== */
@@ -479,6 +538,12 @@ window.SidebarTabs = (function createSidebarTabs() {
     return tag && !(skipTag && tagKey(skipTag) === tagKey(tag)) ? tag : '';
   }
 
+  /** @return {string} 新建卡片上去掉了的当前页签的标签（保存后提示「放回」，第五次反馈）；没有去掉时为空。 */
+  function skippedTag() {
+    const tag = tagOf(ui.tab);
+    return tag && skipTag && tagKey(skipTag) === tagKey(tag) ? tag : '';
+  }
+
   /** 保存新建记录之后恢复默认（下一条照常带上页签的标签）。 */
   function resetDraftTag() { skipTag = ''; syncComposerTag(); }
 
@@ -491,12 +556,14 @@ window.SidebarTabs = (function createSidebarTabs() {
     if (!target) return;
     installed = true;
     target.addEventListener('pointerdown', pressTab);
-    target.addEventListener('click', function swallow(event) { if (suppressClick) { event.preventDefault(); event.stopImmediatePropagation(); } }, true);
+    // 菜单中收起的页签也可以拖动（菜单挂在 body 下）；拖动松开后的那次单击不切换页签，也不触发菜单项。
+    document.addEventListener('pointerdown', function pressMenuTab(event) { if (event.target.closest && event.target.closest('.tab-menu .note-context-item[data-tab]')) pressTab(event); });
+    document.addEventListener('click', function swallow(event) { if (suppressClick) { event.preventDefault(); event.stopImmediatePropagation(); } }, true);
     target.addEventListener('dblclick', function rename(event) { const node = event.target.closest('.tab.is-tag-tab'); if (node) { event.preventDefault(); startRename(tagOf(node.dataset.tab)); } });
     target.addEventListener('contextmenu', function contextMenu(event) { const node = event.target.closest('.tab.is-tag-tab'); if (node) openTabMenu(tagOf(node.dataset.tab), event, false); });
     if (window.ResizeObserver) { observer = new ResizeObserver(function resized() { layout(); }); observer.observe(target.parentElement || target); }
     window.addEventListener('sidenotes:settings-changed', function settingsChanged() { window.requestAnimationFrame(layout); });
   }
 
-  return Object.freeze({ tagOf: tagOf, tabOf: tabOf, pinnedTags: pinnedTags, pinnedTagOf: pinnedTagOf, exists: exists, belongs: belongs, label: label, select: select, pin: pin, unpin: unpin, render: render, layout: layout, openMenu: openMenu, draftTag: draftTag, resetDraftTag: resetDraftTag });
+  return Object.freeze({ tagOf: tagOf, tabOf: tabOf, pinnedTags: pinnedTags, pinnedTagOf: pinnedTagOf, findPinned: findPinned, allTags: allTags, order: order, name: name, homeOf: homeOf, exists: exists, belongs: belongs, label: label, select: select, pin: pin, unpin: unpin, render: render, layout: layout, openMenu: openMenu, draftTag: draftTag, skippedTag: skippedTag, resetDraftTag: resetDraftTag });
 })();

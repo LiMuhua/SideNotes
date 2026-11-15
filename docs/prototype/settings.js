@@ -472,8 +472,12 @@ window.SideNotesSettings = (function createSettingsController() {
     return save({ cloud: { ...state.settings.cloud, ...patch } });
   }
 
-  /** @brief 创建图标式外部链接按钮。 @param {string} label 文字。 @param {string} url 地址。 @param {string} glyph 图标。 @return {HTMLElement} 链接。 */
-  function externalLink(label, url, glyph = '↗') {
+  /**
+   * @brief 创建图标式外部链接按钮。
+   * @param {string} label 文字。 @param {string} url 地址。 @param {string} glyph 图标。 @param {string} note 名称后面的灰色小字（致谢的许可证）。
+   * @return {HTMLElement} 链接。
+   */
+  function externalLink(label, url, glyph = '↗', note = '') {
     const node = el('a', 'resource-link settings-external-link');
     node.href = url;
     node.target = '_blank';
@@ -481,7 +485,9 @@ window.SideNotesSettings = (function createSettingsController() {
     // 以「i:」开头的是雪碧图中的图标（项目链接），其余是文字符号（开源致谢）。
     const symbol = glyph.startsWith('i:') ? icon(glyph.slice(2)) : el('span', 'resource-icon', glyph);
     symbol.setAttribute('aria-hidden', 'true');
-    node.append(symbol, el('span', '', label), icon('arrow-up-right'));
+    node.append(symbol, el('span', 'resource-name', label));
+    if (note) { node.classList.add('has-note'); node.append(el('span', 'resource-note', note)); }
+    node.append(icon('arrow-up-right'));
     return node;
   }
 
@@ -1231,11 +1237,14 @@ window.SideNotesSettings = (function createSettingsController() {
     const toastControls = el('div', 'settings-runtime-controls');
     toastControls.append(select('通知弹出位置', [['top-center', '顶部正中'], ['top-right', '右上角'], ['bottom-center', '底部正中']], state.settings.toastPosition, function toastPosition(value) { return save({ toastPosition: value }); }));
     toastField.append(el('div', 'settings-runtime-name', '通知位置'), toastControls);
-    // 记录窗口的标签页位置（第四次反馈）：顶部横排或左侧竖排；窗口标题栏上的按钮切换的是同一项设置。
+    // 记录窗口的标签页位置（第四次反馈）：顶部横排或左侧竖排，默认左侧（第五次反馈）；窗口标题栏上的按钮切换的是同一项设置。
+    // 四项排成两行两列（第五次反馈）：列表加载、整理提醒；通知位置、窗口标签页。
     const tabsField = el('div', 'settings-runtime-field');
     const tabsControls = el('div', 'settings-runtime-controls');
     tabsControls.append(select('记录窗口的标签页位置', [['top', '顶部'], ['side', '左侧']], state.settings.windowTabs, function windowTabs(value) { return save({ windowTabs: value }); }));
-    tabsField.append(el('div', 'settings-runtime-name', '窗口标签页'), tabsControls);
+    const tabsName = el('div', 'settings-runtime-name', '窗口标签页');
+    tabsName.append(help('窗口标签页', '记录窗口中标签页的位置，窗口标题栏上的按钮也能切换'));
+    tabsField.append(tabsName, tabsControls);
     grid.append(loading, tidy, toastField, tabsField);
     card.append(grid);
     return card;
@@ -1986,25 +1995,31 @@ window.SideNotesSettings = (function createSettingsController() {
 
   /* ==================== 关于与设置框架 ==================== */
 
-  /** @brief 关于：图标、名称、一句介绍与版本号；项目入口、开源致谢与调试都是小块按钮。 @param {HTMLElement} panel 容器。 */
+  /**
+   * @brief 关于（第五次反馈）：标题与其他页一样在最上面，内容从上往下排，排完还空就留空。第一块是图标、名称与一句介绍，
+   * 右侧是版本号与「检查更新」；项目与开源致谢的链接是铺满整行的等宽块（每行三块），致谢的块写许可证；调试只有一个按钮。
+   * @param {HTMLElement} panel 容器。
+   */
   function renderAbout(panel) {
     const hero = el('div', 'about-hero settings-about-logo');
     const logo = el('img');
     logo.src = window.SideNotesAppIcons.resolve(state.settings.appIcon).src;
     logo.alt = '';
     const version = (window.PrototypeFlags && window.PrototypeFlags.version) || '';
-    hero.append(logo, el('h3', '', 'SideNotes'), el('span', 'settings-version', '交互原型 ' + version), el('p', 'setting-description', '藏在屏幕边上的速记本'));
+    const release = el('div', 'about-release');
+    release.append(el('span', 'settings-version', '交互原型 ' + version), action('检查更新', function checkAboutUpdate() { checkForUpdates(); }, 'restore', 'resource-link settings-update-button'));
+    hero.append(logo, el('h3', '', 'SideNotes'), el('p', 'setting-description', '藏在屏幕边上的速记本'), release);
     panel.append(hero);
     const project = group('项目');
-    const addresses = el('div', 'resource-links about-links settings-about-links');
+    const addresses = el('div', 'resource-links about-links settings-about-links about-tiles');
     addresses.append(externalLink('GitHub', 'https://github.com/', 'i:code'), externalLink('官方网站', 'https://example.com/', 'i:globe'), externalLink('支持项目', 'https://github.com/sponsors', 'i:heart'));
-    addresses.append(action('检查更新', function checkAboutUpdate() { checkForUpdates(); }, 'restore', 'resource-link settings-update-button'));
     project.append(addresses);
     panel.append(project);
     const credits = group('开源致谢');
-    const list = el('div', 'resource-links settings-credits');
-    [['Tauri', 'https://tauri.app/', '◈'], ['React', 'https://react.dev/', '⚛'], ['Vite', 'https://vite.dev/', 'ϟ'], ['SQLite', 'https://sqlite.org/', '▱'], ['Filee', 'https://github.com/KnifeLemon/Filee', '▣'], ['Maple Mono', 'https://github.com/subframe7536/maple-font', 'Aa']].forEach(function credit(item) {
-      list.append(externalLink(item[0], item[1], item[2]));
+    const list = el('div', 'resource-links settings-credits about-tiles');
+    // 许可证取自各项目的仓库或 package.json（2026-11-15 核对）。
+    [['Tauri', 'https://tauri.app/', '◈', 'MIT / Apache-2.0'], ['React', 'https://react.dev/', '⚛', 'MIT'], ['Vite', 'https://vite.dev/', 'ϟ', 'MIT'], ['SQLite', 'https://sqlite.org/', '▱', '公有领域'], ['Filee', 'https://github.com/KnifeLemon/Filee', '▣', 'MIT'], ['Maple Mono', 'https://github.com/subframe7536/maple-font', 'Aa', 'OFL-1.1']].forEach(function credit(item) {
+      list.append(externalLink(item[0], item[1], item[2], item[3]));
     });
     credits.append(list);
     panel.append(credits);

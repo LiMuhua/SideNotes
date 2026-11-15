@@ -60,6 +60,8 @@
    * @param {object} note 记录。 @param {string} from 原页签。 @param {string} to 目标页签。 @return {object} 要改的字段。
    */
   function tabPatch(note,from,to){
+    // 搜索结果来自各个页签（第五次反馈）：from 为 home 时按每条记录自己所在的页签算。
+    if(from==='home')from=window.SidebarTabs.homeOf(note);
     if(to==='pinned')return {pinned:true};
     const patch={},tabs=window.SidebarTabs,fromTag=tabs.tagOf(from),toTag=tabs.tagOf(to);
     if(to==='workspace'&&from==='pinned')patch.pinned=false;
@@ -77,16 +79,22 @@
    */
   function moveRecords(source,destination,from=ui.tab){
     const ids=new Set(source||[]),previous=new Map();if(!ids.size)return false;const changedAt=Date.now();
+    // 来自搜索结果时，已经在目的地的记录不动（不改标签，也不打乱它的顺序）。
+    if(from==='home'&&destination!=='trash')state.notes.forEach(function already(note){if(ids.has(note.id)&&window.SidebarTabs.homeOf(note)===destination)ids.delete(note.id);});
+    if(!ids.size){toast('已经在'+window.SidebarTabs.label(destination));return false;}
+    const homes=new Set(state.notes.filter(function moving(note){return ids.has(note.id);}).map(function home(note){return window.SidebarTabs.homeOf(note);})),fromLabel=from==='home'?(homes.size===1?window.SidebarTabs.label(Array.from(homes)[0]):'原来的页签'):window.SidebarTabs.label(from);
     const notes=state.notes.map(function change(note){if(!ids.has(note.id)||note.status==='trash')return note;previous.set(note.id,{status:note.status,pinned:note.pinned,deletedAt:note.deletedAt,previousStatus:note.previousStatus,order:note.order,text:note.text,updatedAt:note.updatedAt});
       if(destination==='trash')return {...note,status:'trash',previousStatus:'active',deletedAt:changedAt,updatedAt:changedAt};
       return {...note,...tabPatch(note,from,destination),status:'active',order:null,updatedAt:changedAt};});
     if(!persistSnapshot(notes)){toast('移动未保存，请重试',null,true);return false;}
-    let message=destination==='trash'?'已移入回收站 '+ids.size+' 条记录':'已移到'+window.SidebarTabs.label(destination)+' '+ids.size+' 条记录';
-    if(destination==='workspace'){const still=notes.filter(function moved(note){return ids.has(note.id);}).map(window.SidebarTabs.pinnedTagOf).filter(Boolean);if(still.length)message='已移出'+window.SidebarTabs.label(from)+'，'+(still.length<ids.size?still.length+' 条':'')+'仍在「'+still[0]+'」'+(new Set(still).size>1?'等页签':'');}
+    let message=destination==='trash'?'已移入回收站'+(ids.size>1?' '+ids.size+' 条记录':''):'已移到'+window.SidebarTabs.label(destination)+' '+ids.size+' 条记录';
+    if(destination==='workspace'){const still=notes.filter(function moved(note){return ids.has(note.id);}).map(window.SidebarTabs.pinnedTagOf).filter(Boolean);if(still.length)message='已移出'+fromLabel+'，'+(still.length<ids.size?still.length+' 条':'')+'仍在「'+still[0]+'」'+(new Set(still).size>1?'等页签':'');}
     clearSelection();renderNotes();toast(message,{label:'撤销',run:function undoBatch(){const restored=state.notes.map(function restore(note){return previous.has(note.id)?{...note,...previous.get(note.id)}:note;});if(persistSnapshot(restored))renderNotes();}});return true;
   }
   /** @brief 菜单「移到…」（第四次反馈）：与把卡片拖到页签上相同。 @param {Array<string>} ids 记录。 @param {string} destination 页签。 @return {boolean} 是否成功。 */
-  function moveTo(ids,destination){return destination!==ui.tab&&moveRecords(ids,destination,ui.tab);}
+  function moveTo(ids,destination){return typeof isSearching==='function'&&isSearching()?moveRecords(ids,destination,'home'):destination!==ui.tab&&moveRecords(ids,destination,ui.tab);}
+  /** @brief 移入回收站（第五次反馈：不再确认）：提示条可以撤销，多条一次撤销全部恢复。 @param {Array<string>} ids 记录。 @return {boolean} 是否成功。 */
+  function trash(ids){return moveRecords(ids,'trash');}
   /** @brief 取得记录标题用于落点提示。 @param {object} note 记录。 @return {string} 短标题。 */
   function noteTitle(note){const first=String(note&&note.text||'').split(/\r?\n/).find(function content(text){return text.trim();})||'图片记录';return first.trim().slice(0,18);}
   /** @brief 清除当前插入线。 @param {object} gesture 手势。 */
@@ -101,7 +109,7 @@
   /** @brief 在悬停 Tab 后切换列表，保留当前拖动手势。 @param {object} gesture 手势。 @param {string} destination 目标 Tab。 */
   function activateDragTab(gesture,destination){
     if(tools.gesture!==gesture||!gesture.active||gesture.tabCandidate!==destination||destination===ui.tab)return;
-    ui.tab=destination;ui.selectedTag='';ui.query='';elements.searchInput.value='';if(typeof closeTagMenu==='function')closeTagMenu();renderNotes({reset:true});
+    ui.tab=destination;ui.selectedTag='';ui.query='';elements.searchInput.value='';ui.searchReturn=null;if(typeof closeTagMenu==='function')closeTagMenu();if(ui.searchOpen&&typeof toggleSearch==='function')toggleSearch(false);renderNotes({reset:true});
     gesture.targetMode='tab';gesture.targetDestination=destination;gesture.targetId='';
     const tab=document.querySelector('.sidebar-tabs [data-tab="'+destination+'"]');if(tab)tab.classList.add('is-drag-target');
     gesture.label.textContent=gesture.ids.size+' 条 · 已进入'+tab.textContent.replace(/\d+/g,'').trim()+'，松开移动或继续拖到卡片间排序';
@@ -138,6 +146,8 @@
       return;
     }
     clearTabTarget(gesture);gesture.targetMode='list';
+    // 搜索结果按页签分组，不能在其中排序（第五次反馈）；拖到页签上可以移过去。
+    if(typeof isSearching==='function'&&isSearching()){gesture.label.textContent=gesture.ids.size+' 条 · 搜索结果中不能排序，可以拖到页签上';return;}
     const listBounds=elements.noteList.getBoundingClientRect();
     if(gesture.x<listBounds.left-14||gesture.x>listBounds.right+14){gesture.label.textContent=gesture.ids.size+' 条 · 移入记录列表后松开';return;}
     const candidates=Array.from(elements.noteList.querySelectorAll('.note-card[data-note-id]')).filter(function eligible(card){return !gesture.ids.has(card.dataset.noteId);});
@@ -178,7 +188,7 @@
   function scrollDuringGesture(){const gesture=tools.gesture;if(!gesture||!gesture.active){tools.scrollFrame=0;return;}if(gesture.targetMode==='tab'||gesture.targetMode==='trash'){tools.scrollFrame=window.requestAnimationFrame(scrollDuringGesture);return;}const bounds=elements.noteList.getBoundingClientRect(),margin=38;let speed=0;if(gesture.y<bounds.top+margin)speed=-Math.ceil((bounds.top+margin-gesture.y)/4);else if(gesture.y>bounds.bottom-margin)speed=Math.ceil((gesture.y-bounds.bottom+margin)/4);speed=Math.max(-22,Math.min(22,speed));if(speed){elements.noteList.scrollTop+=speed;paintGesture(gesture);}tools.scrollFrame=window.requestAnimationFrame(scrollDuringGesture);}
   /** @brief 长按到阈值后启动拖动，不把手部轻微漂移判定为取消。 @param {object} gesture 按压。 */
   function activateSort(gesture){
-    if(tools.gesture!==gesture||ui.editing||ui.modal||ui.expandedTags.size)return;gesture.active=true;gesture.originTab=ui.tab;gesture.targetMode='list';gesture.card.classList.remove('is-sort-pending');gesture.card.classList.add('is-sorting');invalidateCardClick();
+    if(tools.gesture!==gesture||ui.editing||ui.modal||ui.expandedTags.size)return;gesture.active=true;gesture.originTab=typeof isSearching==='function'&&isSearching()?'home':ui.tab;gesture.targetMode='list';gesture.card.classList.remove('is-sort-pending');gesture.card.classList.add('is-sorting');invalidateCardClick();
     gesture.ids=selected.has(gesture.id)&&selected.size?new Set(selectedIds()):new Set([gesture.id]);
     document.body.classList.add('is-sorting-cards');elements.noteList.querySelectorAll('.note-card').forEach(function mark(card){card.classList.toggle('is-sorting-member',gesture.ids.has(card.dataset.noteId));});
     const selection=window.getSelection();if(selection&&selection.removeAllRanges)selection.removeAllRanges();
@@ -270,5 +280,5 @@
     if(window.MutationObserver){tools.observer=new window.MutationObserver(function listChanged(){refresh();});tools.observer.observe(elements.noteList,{childList:true,subtree:true});}
     refresh();
   }
-  window.NoteInteractions=Object.freeze({initialize:initialize,refresh:refresh,clearSelection:clearSelection,hasSelection:hasSelection,isBusy:isBusy,cancelGesture:cancelGesture,selectedIds:selectedIds,moveTo:moveTo});
+  window.NoteInteractions=Object.freeze({initialize:initialize,refresh:refresh,clearSelection:clearSelection,hasSelection:hasSelection,isBusy:isBusy,cancelGesture:cancelGesture,selectedIds:selectedIds,moveTo:moveTo,trash:trash});
 })();

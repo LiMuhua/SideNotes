@@ -151,6 +151,7 @@ window.NoteWindows = (function createNoteWindows() {
     const pin = button('置顶窗口', '', 'pin', 'icon-button note-window-pin');
     pin.setAttribute('aria-pressed', 'false');
     const close = button('关闭窗口', '', 'x', 'icon-button');
+    close.setAttribute('aria-keyshortcuts', 'Shift+Escape');
     actions.append(layout, pin, close);
     header.append(emoji, title, strip, grip, actions);
     // 正文外面一层横排的容器：标签页放在左侧时，标签栏挪到这里、排在正文之前。
@@ -196,7 +197,10 @@ window.NoteWindows = (function createNoteWindows() {
       if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
-        if (entry.editing) finishEditing(entry, false); else closeTab(entry, entry.active);
+        // Shift+Esc 关闭整个窗口（第五次反馈：Esc 只能一页一页地关），编辑中的内容与单击 × 一样先保存。
+        // 桌面端另有 Ctrl+W 关闭当前页、Ctrl+Shift+W 与 Alt+F4 关闭窗口，浏览器中这些组合键被浏览器占用，原型做不了。
+        if (event.shiftKey) closeEntry(entry);
+        else if (entry.editing) finishEditing(entry, false); else closeTab(entry, entry.active);
       } else if (save && entry.editing) {
         event.preventDefault();
         event.stopPropagation();

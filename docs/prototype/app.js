@@ -192,7 +192,7 @@ function normalizeSettings(value = {}) {
     cardMaxHeight: Number.isFinite(Number(value.cardMaxHeight)) && value.cardMaxHeight !== null && value.cardMaxHeight !== '' ? Math.max(120,Math.min(600,Math.round(Number(value.cardMaxHeight)))) : 220,
     toastPosition: ['top-center','top-right','bottom-center'].includes(value.toastPosition) ? value.toastPosition : 'top-center',
     // 记录窗口的标签页位置（第四次反馈）：顶部横排，或左侧竖排；窗口中的按钮与设置都可以切换。
-    windowTabs: value.windowTabs === 'side' ? 'side' : 'top',
+    windowTabs: value.windowTabs === 'top' ? 'top' : 'side', // 记录窗口的标签页默认在左侧（第五次反馈）
     // 固定为页签的标签（第四次反馈）：按页签栏的顺序保存，不带 #；只由用户手动固定，不会自动加入。
     pinnedTags: normalizePinnedTags(value.pinnedTags),
     // 移出后收起：100–10000 毫秒，下拉框列出常用的 300、600、1000（与现有应用一致）。
@@ -400,33 +400,147 @@ function renderNotes(options={}) {
   if(ui.listObserver){ui.listObserver.disconnect();ui.listObserver=null;}
   // 页签栏（第四次反馈）：随记、置顶与固定的标签，放不下的收进最后一格；条数只写在随记与当前页签上（tabs.js）。
   window.SidebarTabs.render();
-  const notes=state.notes.filter(function visible(n){return inCurrentTab(n)&&(!ui.selectedTag||hasTag(n,ui.selectedTag))&&matchesQuery(n,ui.query);}).sort(compareNoteOrder);
+  // 全局搜索（第五次反馈）：有搜索词时列表是全部记录中的匹配结果，按页签分组，与当前页签和标签筛选无关；
+  // 页签栏不标出当前页签，新建卡片收起。没有搜索词时是当前页签（及标签筛选），置顶在前。
+  const searching=isSearching();
+  const notes=searching?searchResults():state.notes.filter(function visible(n){return inCurrentTab(n)&&(!ui.selectedTag||hasTag(n,ui.selectedTag));}).sort(compareNoteOrder);
   const pinned=notes.filter(function pinned(n){return n.pinned;}),normal=notes.filter(function normal(n){return !n.pinned;});
-  const key=[ui.tab,ui.selectedTag,ui.query,state.settings.lazyLoading,state.settings.pageSize].join('|');const same=ui.listKey===key&&!options.reset;
-  const target=state.settings.lazyLoading?(same?Math.max(state.settings.pageSize,ui.visibleCount||0):state.settings.pageSize):notes.length;
+  const key=[searching?'search':ui.tab,searching?'':ui.selectedTag,searching?searchTerms():'',state.settings.lazyLoading,state.settings.pageSize].join('|');const same=ui.listKey===key&&!options.reset;
   const oldScroll=elements.noteList.scrollTop;
+  // 开始搜索时记下原来的列表与滚动位置，结束搜索回到原来的页签时还原。
+  if(searching&&ui.listKey&&!ui.listKey.startsWith('search|')&&!ui.searchReturn)ui.searchReturn={key:ui.listKey,scroll:oldScroll,count:ui.visibleCount};
+  const restore=!searching&&ui.searchReturn&&ui.searchReturn.key===key?ui.searchReturn:null;if(!searching)ui.searchReturn=null;
+  const target=state.settings.lazyLoading?(same?Math.max(state.settings.pageSize,ui.visibleCount||0):Math.max(state.settings.pageSize,restore?restore.count:0)):notes.length;
+  document.getElementById('sidebar-navigation').classList.toggle('is-search-results',searching);elements.sidebar.classList.toggle('is-search-results',searching);
   elements.noteList.querySelectorAll('.note-edit-input').forEach(function dispose(input){if(input.liveMarkdown)input.liveMarkdown.destroy();});
   elements.noteList.replaceChildren();
-  ui.listItems=pinned.concat(normal);ui.listKey=key;ui.visibleCount=0;ui.sentinel=null;ui.loading=false;
-  if(!notes.length){const empty=el('div','empty-state');empty.append(el('h3','',ui.query||ui.selectedTag?'没有匹配的记录':'暂无记录'),el('p','',ui.query||ui.selectedTag?'调整搜索或标签筛选。':'在上方直接输入。'));if(ui.query||ui.selectedTag)empty.append(button('清除筛选','clear-filters','','button secondary'));elements.noteList.append(empty);}
+  ui.listGroups=searching?searchGroups(notes):null;
+  ui.listItems=searching?ui.listGroups.reduce(function flat(items,group){return items.concat(group.notes);},[]):pinned.concat(normal);ui.listKey=key;ui.visibleCount=0;ui.sentinel=null;ui.loading=false;
+  if(!notes.length){const empty=el('div','empty-state');empty.append(el('h3','',searching||ui.selectedTag?'没有匹配的记录':'暂无记录'),el('p','',searching?'搜索的是全部记录，换个词试试。':ui.selectedTag?'调整标签筛选。':'在上方直接输入。'));if(searching)empty.append(button('清除搜索','end-search','','button secondary'));else if(ui.selectedTag)empty.append(button('清除筛选','clear-filters','','button secondary'));elements.noteList.append(empty);}
   else appendNextPage(target);
-  elements.noteList.scrollTop=same?oldScroll:0;renderListSummary(notes);elements.noteList.setAttribute('aria-label',notes.length+' 条记录');syncCardTabStops();elements.clearSearch.hidden=!ui.query;
+  elements.noteList.scrollTop=same?oldScroll:restore?restore.scroll:0;renderListSummary(notes);elements.noteList.setAttribute('aria-label',notes.length+' 条记录');syncCardTabStops();elements.clearSearch.hidden=!ui.query;
   renderTagMenu();renderWorkspaceNudge();refreshSearchSummary();if(window.NoteInteractions)window.NoteInteractions.refresh();if(window.NoteWindows)window.NoteWindows.refresh();
 }
 
 /**
- * @brief 列表顶栏的条数；按标签筛选时是筛选条（第四次反馈）：条数与标签之后是「固定为页签」（这个标签还没固定时）
- * 与「合并」（筛出两条以上时，把它们合并成一条，见 merge.js）。
- * @param {Array} notes 当前列表中的记录。
+ * @brief 筛选行（第五次反馈：保持两行，筛选行在页签栏下面）。左边的标签下拉同时写标签与条数：选了标签时是「# 产品 · 2 条」，
+ * 后面的 × 清除筛选；没选时是「# 全部标签」（条数已经写在当前页签上）。选了标签时后面是「固定为页签」（这个标签还没固定时）
+ * 与「合并」（筛出两条以上时，见 merge.js）。搜索时这一行被搜索框盖住，结果的条数写在搜索框里；只搜一个标签时，
+ * 搜索框里同样有这两个按钮。
+ * @param {Array} notes 当前列表中的记录（搜索时是全部结果）。
  */
 function renderListSummary(notes){
-  const summary=elements.listSummary;summary.replaceChildren(el('span','list-summary-text',notes.length+' 条'+(ui.selectedTag?' · #'+ui.selectedTag:'')));
-  if(!ui.selectedTag)return;
-  const actions=el('span','list-summary-actions');
-  const tabs=window.SidebarTabs,pinned=tabs.pinnedTags().some(function same(tag){return tagKey(tag)===tagKey(ui.selectedTag);});
-  if(!pinned){const pin=button('固定为页签','pin-filter-tag','','list-summary-action');pin.textContent='固定为页签';pin.dataset.tag=ui.selectedTag;actions.append(pin);}
-  if(notes.length>1){const merge=button('合并这 '+notes.length+' 条','merge-filtered','','list-summary-action');merge.textContent='合并';actions.append(merge);}
-  if(actions.childElementCount)summary.append(actions);
+  const searching=isSearching(),filtered=Boolean(ui.selectedTag),trigger=elements.tagFilterButton;
+  trigger.parentElement.classList.toggle('is-filtered',filtered);trigger.classList.toggle('is-filtered',filtered);
+  trigger.querySelector('.tag-filter-label').textContent=filtered?ui.selectedTag:'全部标签';
+  if(!searching){const count=trigger.querySelector('.tag-filter-count');count.hidden=!filtered;count.textContent=filtered?'· '+notes.length+' 条':'';trigger.setAttribute('aria-label',filtered?'标签 #'+ui.selectedTag+'，'+notes.length+' 条，更换标签':'按标签筛选');}
+  elements.tagFilterClear.hidden=!filtered;
+  elements.listSummary.replaceChildren(...(!searching&&filtered?filterActions(ui.selectedTag,notes):[]));
+  elements.searchCount.hidden=!searching;elements.searchCount.textContent=searching?notes.length+' 条':'';
+  elements.searchActions.replaceChildren(...(searching?filterActions(singleSearchTag(),notes):[]));
+}
+
+/**
+ * @brief 按一个标签筛选或搜索时的两个按钮：「固定为页签」（这个标签还没固定时）与「合并」（两条以上时）。
+ * @param {string} tag 标签，为空时没有按钮。 @param {Array} notes 筛出的记录。 @return {HTMLElement[]} 按钮。
+ */
+function filterActions(tag,notes){
+  if(!tag)return [];const actions=[];
+  if(!window.SidebarTabs.findPinned(tag)){const pin=button('固定为页签','pin-filter-tag','','list-summary-action');pin.dataset.tag=tag;actions.push(pin);}
+  if(notes.length>1){const merge=button('合并这 '+notes.length+' 条','merge-filtered','','list-summary-action');merge.textContent='合并';merge.dataset.tag=tag;actions.push(merge);}
+  return actions;
+}
+
+/* ==================== 全局搜索（第五次反馈） ==================== */
+
+/** @return {string} 实际的搜索词：去掉只有 # 还没写标签名的部分（刚输入 # 时只弹出标签候选，列表不变）。 */
+function searchTerms(){return ui.query.replace(/(^|\s)#(?=\s|$)/gu,' ').trim();}
+/** @return {boolean} 是否在搜索：有搜索词时列表是全部记录中的结果。 */
+function isSearching(){return Boolean(searchTerms());}
+/** @return {Array} 全部未删除记录中与搜索词匹配的（不分页签）。写完整的已有标签（如 #产品）只匹配这个标签，没写完的按前缀匹配。 */
+function searchResults(){
+  const known=new Set(window.SidebarTabs.allTags().map(function key(item){return tagKey(item.tag);})),terms=searchTerms();
+  return state.notes.filter(function match(note){return note.status==='active'&&matchesQuery(note,terms,known);});
+}
+/**
+ * @brief 搜索结果按页签分组：每条记录放在页签栏中第一个包含它的页签（随记、置顶、固定的标签依次），组的顺序与页签栏相同，组内置顶在前。
+ * @param {Array} notes 结果。 @return {Array<{tab:string,notes:Array,start:number,count:number}>} 非空的组与它在列表中的起点。
+ */
+function searchGroups(notes){
+  const groups=window.SidebarTabs.order().map(function group(tab){return {tab:tab,notes:[]};}),byTab=new Map(groups.map(function index(group){return [group.tab,group];}));
+  notes.forEach(function place(note){(byTab.get(window.SidebarTabs.homeOf(note))||groups[0]).notes.push(note);});
+  let start=0;
+  return groups.filter(function nonempty(group){return group.notes.length;}).map(function measure(group){
+    group.notes.sort(function order(a,b){return (a.pinned===b.pinned?0:a.pinned?-1:1)||compareNoteOrder(a,b);});
+    const result={tab:group.tab,notes:group.notes,start:start,count:group.notes.length};start+=group.notes.length;return result;
+  });
+}
+/**
+ * @brief 搜索结果的组标题：页签的图标、名称与条数，右侧「转到」切到这个页签（结束搜索）。
+ * @param {object} group 组。 @return {HTMLElement} 组标题。
+ */
+function renderSearchGroup(group){
+  const tabs=window.SidebarTabs,head=el('div','search-group');head.dataset.groupTab=group.tab;
+  const title=el('span','search-group-title');title.append(icon(group.tab==='pinned'?'pin':group.tab==='workspace'?'note':'hash'),el('span','search-group-name',tabs.name(group.tab)),el('span','search-group-count',String(group.count)));
+  const go=el('button','search-group-go');go.type='button';go.dataset.action='go-to-tab';go.dataset.goTab=group.tab;go.setAttribute('aria-label','转到'+tabs.label(group.tab));go.append(el('span','','转到'),icon('arrow-right'));
+  head.append(title,go);return head;
+}
+/** @return {string} 搜索词只是一个已有的标签（如「#产品」）时返回这个标签的写法，否则为空；这时搜索框里出现「固定为页签」「合并」。 */
+function singleSearchTag(){
+  const match=/^#([\p{L}\p{N}_-]+)$/u.exec(searchTerms());if(!match)return '';
+  const key=tagKey(match[1]),found=window.SidebarTabs.allTags().find(function same(item){return tagKey(item.tag)===key;});
+  return found?found.tag:'';
+}
+/** @brief 结束搜索：清空搜索词，收起搜索框，回到原来的页签与滚动位置。 @param {object} options focusButton：焦点回到放大镜。 */
+function endSearch(options={}){ui.query='';elements.searchInput.value='';closeTagMenu();if(ui.searchOpen)toggleSearch(false,options);renderNotes();}
+/** @brief 把搜索词换成这段文字（搜索时点卡片上的标签：搜这个标签）。 @param {string} text 搜索词。 */
+function setSearchQuery(text){
+  if(!ui.searchOpen)toggleSearch(true);
+  elements.searchInput.value=text;ui.query=text;closeTagMenu();renderNotes();
+  elements.searchInput.focus();elements.searchInput.setSelectionRange(text.length,text.length);
+}
+/** @return {string|null} 光标前正在输入的标签（# 之后的部分，可以为空）；不在标签上时为 null。 */
+function tagTokenAtCaret(){
+  const input=elements.searchInput,end=input.selectionStart==null?input.value.length:input.selectionStart;
+  const match=/(?:^|\s)#([\p{L}\p{N}_-]*)$/u.exec(input.value.slice(0,end));return match?match[1]:null;
+}
+/** 在搜索框里输入 # 时弹出全部记录中的标签候选（按输入的前缀），光标离开标签时收起。 */
+function refreshTagSuggestions(){
+  const token=ui.searchOpen&&document.activeElement===elements.searchInput?tagTokenAtCaret():null;
+  if(token===null){if(ui.tagMenuMode==='suggest')closeTagMenu();return;}
+  ui.tagMenuMode='suggest';ui.tagToken=token;renderTagMenu();elements.tagDropdown.hidden=false;
+}
+/** @brief 用候选补全搜索框里正在输入的标签，后面加一个空格接着输入。 @param {string} tag 标签。 */
+function completeTagToken(tag){
+  const input=elements.searchInput,end=input.selectionStart==null?input.value.length:input.selectionStart;
+  const head=input.value.slice(0,end);let before=head.replace(/(^|\s)#[\p{L}\p{N}_-]*$/u,function token(_,space){return space+'#'+tag+' ';});
+  if(before===head)before=(head&&!/\s$/.test(head)?head+' ':head)+'#'+tag+' ';
+  const after=input.value.slice(end).replace(/^[\p{L}\p{N}_-]*\s?/u,'');
+  if(!ui.searchOpen)toggleSearch(true);
+  input.value=before+after;ui.query=input.value;closeTagMenu();renderNotes();
+  input.focus();input.setSelectionRange(before.length,before.length);
+}
+/**
+ * @brief 切到一个页签（单击页签、搜索结果的「转到」）：结束搜索，清除标签筛选；给出记录时滚到它并高亮。
+ * @param {string} tab 页签。 @param {object} options noteId：转到这条记录；reset：回到列表顶部。 @return {boolean} 是否切换。
+ */
+function goToTab(tab,options={}){
+  if(!finishEdit())return false;
+  ui.tab=window.SidebarTabs.exists(tab)?tab:'workspace';ui.selectedTag='';ui.query='';elements.searchInput.value='';ui.searchReturn=null;closeTagMenu();
+  if(ui.searchOpen)toggleSearch(false);
+  renderNotes({reset:Boolean(options.reset||options.noteId)});
+  if(options.noteId)locateNote(options.noteId);
+  return true;
+}
+/** @brief 在列表中找到这条记录（按需加载到它），滚到中间、高亮并闪一下。 @param {string} id 记录。 */
+function locateNote(id){
+  const index=ui.listItems.findIndex(function same(note){return note.id===id;});if(index<0)return;
+  if(ui.visibleCount<=index)appendNextPage(index+1-ui.visibleCount);
+  const card=Array.from(elements.noteList.querySelectorAll('.note-card')).find(function same(node){return node.dataset.noteId===id;});if(!card)return;
+  setCurrentCard(id);card.focus({preventScroll:true});
+  card.scrollIntoView({block:'center',behavior:window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
+  card.classList.remove('is-located');void card.offsetWidth;card.classList.add('is-located');
+  window.setTimeout(function settle(){card.classList.remove('is-located');},1600);
 }
 
 /** 创建可直接输入的空白卡片，工具与提交操作分别排列。 */
@@ -505,11 +619,26 @@ function saveDraft(origin,options={}){
   const tabTag=origin==='sidebar'?window.SidebarTabs.draftTag():'',text=window.NoteContent.canonicalize(tabTag?withTag(state.draft.text,tabTag):state.draft.text);
   const note={id:createId(),text:text,images:keepReferencedImages(state.draft.text,state.draft.images).map(function clone(image){return {...image};}),pinned:targetTab==='pinned',status:'active',collapsed:false,emoji:window.NoteEmoji.pick(state.notes.map(function current(n){return n.emoji;})),createdAt:now,updatedAt:now};
   if(!persistSnapshot([note,...state.notes],{text:'',images:[],updatedAt:now})){persistDraft();toast('没有保存成功，草稿和图片仍在，可导出备份后重试',null,true);renderDraft();return;}
+  // 去掉了新建卡片上的页签标签（第五次反馈）：保存前记下，提示里可以放回。
+  const skipped=origin==='sidebar'?window.SidebarTabs.skippedTag():'';
   ui.composer=false;if(origin==='sidebar')window.SidebarTabs.resetDraftTag();renderDraft();renderNotes();
   if(origin==='capture'){
     if(collapse)hideCapture();else showCapture();
   }else if(collapse)hideSidebar(true);else{showSidebar({focus:false});focusNewComposer();}
-  toast('记录已保存');
+  announceSaved(note,origin==='sidebar'?ui.tab:'',skipped);
+}
+
+/**
+ * @brief 新记录的提示（第五次反馈）：在侧栏新建、而它不在当前页签里显示时，写明记在了哪里，「查看」切过去并高亮这一条；
+ * 是因为去掉了新建卡片上的页签标签时，还有「放回」：补上这个标签。其余情况照旧提示「记录已保存」。
+ * @param {object} note 新记录。 @param {string} tab 新建时的页签，速记浮窗为空。 @param {string} skipped 去掉了的页签标签。
+ */
+function announceSaved(note,tab,skipped){
+  const tabs=window.SidebarTabs;
+  if(!tab||tabs.belongs(note,tab)){toast('记录已保存');return;}
+  const home=tabs.homeOf(note),actions=[{label:'查看',run:function view(){goToTab(home,{noteId:note.id});}}];
+  if(skipped)actions.push({label:'放回「'+skipped+'」',run:function putBack(){const current=state.notes.find(function same(item){return item.id===note.id;});if(current&&updateNote(note.id,{text:withTag(current.text,skipped)}))toast('已放回「'+skipped+'」');}});
+  toast('已记在「'+tabs.name(home)+'」',actions);
 }
 
 /** @brief 开始事务式编辑，标签整理和拖动优先于正文。 @param {string} id 记录标识。 */
@@ -554,7 +683,7 @@ function cancelHide() {
 function scheduleHide(){
   cancelHide();
   /** @brief 检查当前是否允许自动收起。 @return {boolean} 是否应保留侧栏。 */
-  function keepVisible(){return ui.locked||ui.modal||window.matchMedia&&window.matchMedia('(max-width: 480px)').matches||ui.resizing||ui.searchOpen||window.NoteMenus&&window.NoteMenus.isOpen()||window.NoteInteractions&&(window.NoteInteractions.isBusy()||window.NoteInteractions.hasSelection())||ui.editing||(ui.composer&&(state.draft.text.trim()||state.draft.images.length||ui.pendingImages))||ui.expandedTags.size||window.NoteWindows&&window.NoteWindows.isDragging();}
+  function keepVisible(){return ui.locked||ui.modal||window.matchMedia&&window.matchMedia('(max-width: 480px)').matches||ui.resizing||ui.searchOpen&&document.activeElement===elements.searchInput||window.NoteMenus&&window.NoteMenus.isOpen()||window.NoteInteractions&&(window.NoteInteractions.isBusy()||window.NoteInteractions.hasSelection())||ui.editing||(ui.composer&&(state.draft.text.trim()||state.draft.images.length||ui.pendingImages))||ui.expandedTags.size||window.NoteWindows&&window.NoteWindows.isDragging();}
   if(keepVisible())return;
   ui.hideTimer=window.setTimeout(function hideAfterDelay(){if(!elements.sidebar.matches(':hover')&&!keepVisible())hideSidebar();},state.settings.hideDelay);
 }
@@ -563,7 +692,8 @@ function scheduleHide(){
 function showSidebar(options={}){
   const wasOpen=elements.sidebar.classList.contains('open')&&!elements.sidebar.inert;
   cancelHide();elements.sidebar.inert=false;elements.sidebar.setAttribute('aria-hidden','false');elements.sidebar.classList.add('open');
-  if(!wasOpen&&options.focus!==false&&!ui.modal&&!ui.editing){
+  // 有搜索结果时重新滑出，保留结果与搜索框（新建卡片在搜索时收起）。
+  if(!wasOpen&&options.focus!==false&&!ui.modal&&!ui.editing&&!isSearching()){
     if(ui.searchOpen)toggleSearch(false);
     queueComposerFocus();
   }
@@ -654,26 +784,30 @@ function toastRegion(){
   return region;
 }
 
-/** @brief 显示提示，可附带撤销操作。 @param {string} message 消息。 @param {object|null} action 操作。 @param {boolean} error 是否错误。 */
+/**
+ * @brief 显示提示，可附带操作（撤销、查看等）。
+ * @param {string} message 消息。 @param {object|Array<object>|null} action 一个或几个操作：label 与 run。 @param {boolean} error 是否错误。
+ */
 function toast(message, action = null, error = false) {
   if (!elements.toastRegion) return;
   const region = toastRegion();
   const item = el('div', 'toast' + (error ? ' error' : ''));
   if (error) item.setAttribute('role', 'alert');
   item.append(icon(error ? 'alert' : 'check-circle'), el('span', '', message));
-  if (action) {
-    const control = el('button', 'toast-action', action.label);
+  const actions = Array.isArray(action) ? action : action ? [action] : [];
+  actions.forEach(function appendAction(entry) {
+    const control = el('button', 'toast-action', entry.label);
     control.type = 'button';
-    control.addEventListener('click', function runToastAction() { action.run(); item.remove(); });
+    control.addEventListener('click', function runToastAction() { entry.run(); item.remove(); });
     item.append(control);
-  }
+  });
   const close = button('关闭提示', '', 'x');
   close.addEventListener('click', function closeToast() { item.remove(); });
   item.append(close);
   region.append(item);
   while (region.children.length > 3) region.firstElementChild.remove();
   // 停留 6 秒，带撤销 9 秒；指针停在提示条上或焦点在提示条内时暂停计时（本次提出）。
-  let remaining = action ? 9000 : 6000, started = 0, timer = 0;
+  let remaining = actions.length ? 9000 : 6000, started = 0, timer = 0;
   const resume = function resumeToast() { window.clearTimeout(timer); started = Date.now(); timer = window.setTimeout(function dismissToast() { item.remove(); }, remaining); };
   const pause = function pauseToast() { window.clearTimeout(timer); remaining = Math.max(1000, remaining - (Date.now() - started)); };
   item.addEventListener('pointerenter', pause);
@@ -748,7 +882,9 @@ function textAttachment(note,kind,target,label){
   const context={kind:kind,source:'text',note:note,label:label,src:kind==='image'?target:'',path:kind==='file'?target:'',markdown:undefined,start:-1,end:-1};
   if(!note)return context;
   const text=note.text,pattern=kind==='image'?/!\[((?:\\.|[^\]\\])*)\]\(\s*<?([^)\s>]+)>?\s*\)/g:/(?<!!)\[((?:\\.|[^\]\\])*)\]\(\s*<?([^)>]+?)>?\s*\)/g;
-  let match;while((match=pattern.exec(text))){if(match[2]===target||kind==='image'&&target.startsWith(match[2])){context.markdown=match[0];context.start=match.index;context.end=match.index+match[0].length;break;}}
+  // 文件按路径比较（第五次反馈）：卡片上的文件块记的是换算后的路径（file:///C:/… 写成 C:\…），与原文中的地址写法不同。
+  const content=window.NoteContent,samePath=function samePath(address){const path=content.filePath(address);return Boolean(path)&&path===(content.filePath(target)||target);};
+  let match;while((match=pattern.exec(text))){if(match[2]===target||kind==='image'&&target.startsWith(match[2])||kind==='file'&&samePath(match[2])){context.markdown=match[0];context.start=match.index;context.end=match.index+match[0].length;break;}}
   return context;
 }
 
@@ -880,6 +1016,8 @@ function openAttachment(context){
       if(rewriteAttachment(context,replacement,'已修改附件'))closeModal();
     }catch(error){toast('未能更换：'+(error.message||'读取失败'),null,true);}
   });
+  // 没有预览也没有原文时（例如原文中找不到这一段），不留下一块空白（第五次反馈）。
+  dialog.body.classList.toggle('is-empty',!area&&!input);
   const footer=dialog.footer;
   if(!strip){const open=button('打开','','external','button secondary');open.addEventListener('click',function openDirect(){openAttachmentDirect(context);});footer.append(open);}
   const replace=button('更换','','upload','button secondary');replace.addEventListener('click',function chooseReplacement(){picker.click();});
@@ -940,14 +1078,15 @@ function showCopiedAttachments(note,result){const dialog=openModal('复制与附
 
 
 
-/** @brief 删除前请求确认。 @param {object} note 记录。 */
+/**
+ * @brief 移入回收站（第五次反馈：不再弹确认框，提示条可以撤销）。这张卡片在多选之中时，移入全部选中的记录，一次撤销全部恢复。
+ * 永久删除与清空回收站仍要确认（settings.js）。
+ * @param {object} note 记录。
+ */
 function requestDelete(note) {
-  confirmAction({ title: '将这条记录移入回收站？', description: '“' + (note.text.split('\n')[0] || '图片记录').slice(0, 70) + '”会暂存于回收站，可在设置中恢复。', confirmLabel: '移入回收站', run: function moveToTrash() {
-    const prior = note.status;
-    if (!updateNote(note.id, { status: 'trash', previousStatus: prior, deletedAt: Date.now() })) return false;
-    toast('已移入回收站', { label: '撤销', run: function undoDelete() { updateNote(note.id, { status: prior, deletedAt: null }); } });
-    return true;
-  } });
+  const selection=window.NoteInteractions&&window.NoteInteractions.hasSelection()?window.NoteInteractions.selectedIds():[];
+  const ids=selection.length>1&&selection.includes(note.id)?selection:[note.id];
+  if(window.NoteInteractions)window.NoteInteractions.trash(ids);
 }
 
 /** @brief 在操作按钮旁显示卡片上下文菜单。 @param {object} note 记录。 @param {HTMLElement|Event} anchor 定位来源。 */
@@ -1043,7 +1182,8 @@ function openSettings(section='appearance') { window.SideNotesSettings.open(type
 
 /** @brief 分发记录、标签与窗口操作。 @param {MouseEvent} event 点击事件。 */
 function handleAction(event) {
-  const tab=event.target.closest('[data-tab]');if(tab){if(!finishEdit())return;ui.tab=tab.dataset.tab;ui.query='';ui.selectedTag='';elements.searchInput.value='';closeTagMenu();renderNotes();return;}
+  // 单击页签：切到这个页签；搜索时结束搜索，再点一下当前页签清除标签筛选。
+  const tab=event.target.closest('[data-tab]');if(tab){goToTab(tab.dataset.tab);return;}
   const control=event.target.closest('[data-action]');if(!control||control.disabled)return;const action=control.dataset.action,card=control.closest('[data-note-id]'),note=card&&state.notes.find(function find(n){return n.id===card.dataset.noteId;});
   switch(action){
     case 'hide-sidebar':hideSidebar(true);break;
@@ -1067,7 +1207,9 @@ function handleAction(event) {
     case 'copy-note':if(note)copyNote(note);break;
     case 'pin-note':if(note)updateNote(note.id,{pinned:!note.pinned});break;
     case 'pin-filter-tag':window.SidebarTabs.pin(control.dataset.tag);break;
-    case 'merge-filtered':window.NoteMerge.open({ids:ui.listItems.map(function id(item){return item.id;}),tag:ui.selectedTag});break;
+    case 'merge-filtered':window.NoteMerge.open({ids:ui.listItems.map(function id(item){return item.id;}),tag:control.dataset.tag||ui.selectedTag});break;
+    case 'go-to-tab':goToTab(control.dataset.goTab,{reset:true});break;
+    case 'end-search':endSearch();break;
     case 'more-note':if(note)openNoteOptions(note,control);break;
     case 'toggle-note-collapse':if(note&&window.NoteMenus)window.NoteMenus.toggleCollapsed(note);break;
     case 'finish-edit':finishEdit();break;
@@ -1077,16 +1219,17 @@ function handleAction(event) {
     case 'attach-edit-image':ui.editAttachmentHold=ui.editing;ui.attachmentTarget=note.id;elements.imagePicker.click();break;
     case 'attach-edit-file':ui.editAttachmentHold=ui.editing;ui.attachmentTarget=note.id;elements.attachmentPicker.click();break;
     case 'remove-edit-image':removeEditImage(control.dataset.imageId);break;
-    case 'filter-tag':if(card){window.clearTimeout(ui.tagClickTimer);if(!ui.expandedTags.has(note.id))ui.tagClickTimer=window.setTimeout(function filterAfterClick(){selectTag(control.dataset.tag);},550);}else selectTag(control.dataset.tag);break;
-    case 'clear-tag':ui.selectedTag='';closeTagMenu();renderNotes();break;
+    // 卡片上的标签：搜索时改为搜这个标签（全局），不搜索时按标签筛选当前页签；搜索框的标签候选补全正在输入的标签。
+    case 'filter-tag':if(card){window.clearTimeout(ui.tagClickTimer);if(!ui.expandedTags.has(note.id))ui.tagClickTimer=window.setTimeout(function filterAfterClick(){if(isSearching())setSearchQuery('#'+control.dataset.tag+' ');else selectTag(control.dataset.tag);},550);}else if(ui.tagMenuMode==='suggest')completeTagToken(control.dataset.tag);else selectTag(control.dataset.tag);break;
+    case 'clear-tag':{const focused=control===elements.tagFilterClear;ui.selectedTag='';closeTagMenu();renderNotes();if(focused)elements.tagFilterButton.focus();break;}
     case 'clear-filters':ui.selectedTag='';ui.query='';elements.searchInput.value='';renderNotes();break;
     case 'expand-tags':{const id=note?note.id:control.dataset.noteId;if(!finishTagRename(false))break;const expanded=ui.expandedTags.has(id);ui.expandedTags.clear();if(!expanded)ui.expandedTags.add(id);renderNotes();break;}
     case 'remove-note-tag':if(note)removeNoteTag(note,control.dataset.tag);break;
-    case 'toggle-tag-menu':{const show=elements.tagDropdown.hidden;renderTagMenu();elements.tagDropdown.hidden=!show;control.setAttribute('aria-expanded',String(show));break;}
+    case 'toggle-tag-menu':{const show=elements.tagDropdown.hidden||ui.tagMenuMode==='suggest';ui.tagMenuMode='filter';renderTagMenu();elements.tagDropdown.hidden=!show;control.setAttribute('aria-expanded',String(show));break;}
     case 'manage-tag':manageTag(control.dataset.tag);break;
-    case 'focus-tag-search':toggleSearch(true);closeTagMenu();elements.searchInput.value='#';ui.query='#';elements.searchInput.focus();elements.searchInput.setSelectionRange(1,1);renderNotes();break;
+    case 'focus-tag-search':toggleSearch(true);closeTagMenu();elements.searchInput.value='#';ui.query='#';elements.searchInput.focus();elements.searchInput.setSelectionRange(1,1);renderNotes();refreshTagSuggestions();break;
     case 'snooze-tidy':{const next={...state.settings,tidySnoozeUntil:Date.now()+7*86400000};if(persistSnapshot(state.notes,state.draft,next))renderWorkspaceNudge();break;}
-    case 'tidy-workspace':ui.tab='workspace';ui.selectedTag='';ui.query='';elements.searchInput.value='';renderNotes();toast('可以把同一类的记录固定为页签，或合并成一条。');break;
+    case 'tidy-workspace':goToTab('workspace');toast('可以把同一类的记录固定为页签，或合并成一条。');break;
     case 'tidy-settings':openSettings('appearance');break;
     case 'settings':openSettings();break;case 'close-modal':closeModal();break;
     case 'export-data':exportData();break;case 'import-data':elements.importPicker.click();break;case 'open-trash':openTrash();break;
@@ -1125,7 +1268,7 @@ function syncCardTabStops(){
 
 /**
  * @brief 卡片列表的键盘操作（interactions.md 3.2）。
- * @details ↑ ↓ 移动并高亮，Home、End 到两端，Enter 编辑，Delete 移入回收站（先确认），
+ * @details ↑ ↓ 移动并高亮，Home、End 到两端，Enter 编辑，Delete 移入回收站（不确认，提示条可以撤销；在多选之中时是全部选中的），
  * Shift+F10 或菜单键在卡片左上角附近打开卡片菜单。只处理焦点落在卡片本身的按键，卡片内的按钮与编辑区各自处理。
  * @param {KeyboardEvent} event 按键。
  */
@@ -1219,11 +1362,13 @@ function handleKeyboard(event){
   if(escape&&ui.resizing){event.preventDefault();finishSidebarResize(false);return;}
   if(escape&&ui.expandedTags.size){event.preventDefault();cancelTagRename();closeExpandedTags();return;}
   // Esc 逐级退出（interactions.md 3.4）：菜单与弹窗、拖动、编辑、新建卡片失焦（有草稿时，草稿保留）、多选、搜索，最后收起侧栏。
-  if(escape&&elements.tagDropdown&&!elements.tagDropdown.hidden){event.preventDefault();closeTagMenu();elements.tagFilterButton.focus();return;}
+  if(escape&&elements.tagDropdown&&!elements.tagDropdown.hidden){event.preventDefault();const suggesting=ui.tagMenuMode==='suggest';closeTagMenu();(suggesting?elements.searchInput:elements.tagFilterButton).focus();return;}
   if(ui.editing&&(escape||shortcut(event,'save'))&&!(window.NoteWindows&&window.NoteWindows.owns(event.target))){event.preventDefault();if(escape)cancelEdit();else finishEdit();return;}
   if(escape&&elements.sidebarComposer&&elements.sidebarComposer.contains(document.activeElement)&&(state.draft.text.trim()||state.draft.images.length)){event.preventDefault();document.activeElement.blur();ui.composer=false;return;}
   if(escape&&window.NoteInteractions&&window.NoteInteractions.hasSelection()){event.preventDefault();window.NoteInteractions.clearSelection();return;}
-  if(escape&&ui.searchOpen){event.preventDefault();ui.query='';elements.searchInput.value='';toggleSearch(false,{focusButton:true});renderNotes();return;}
+  if(escape&&ui.searchOpen){event.preventDefault();endSearch({focusButton:true});return;}
+  // 标签筛选也逐级退出（第五次反馈：没有快速退出筛选的方式）：清除筛选之后再按 Esc 才收起侧栏。
+  if(escape&&ui.selectedTag&&elements.sidebar.classList.contains('open')&&!elements.capture.contains(document.activeElement)){event.preventDefault();ui.selectedTag='';closeTagMenu();renderNotes();return;}
   // Ctrl+, 打开设置（本次提出），编辑中同样可用；Ctrl+C 复制高亮或多选的记录，有选中文字时保留浏览器的复制。
   if(shortcut(event,'settings')){event.preventDefault();openSettings();return;}
   if((event.ctrlKey||event.metaKey)&&!event.shiftKey&&!event.altKey&&event.code==='KeyC'&&!ui.editing){const typing=event.target&&event.target.closest&&event.target.closest('input,textarea,select,[contenteditable="true"]'),selection=window.getSelection&&window.getSelection();if(!typing&&!(selection&&String(selection).trim())&&copyCurrentOrSelected()){event.preventDefault();return;}}
@@ -1231,13 +1376,13 @@ function handleKeyboard(event){
   if(handleCurrentCardKey(event))return;
   if(!ui.sortPress&&(event.key==='Enter'||event.key===' ')){ui.skipCardClick=false;ui.consumeClick=false;}
   if(shortcut(event,'search')||shortcut(event,'newNote')){
-    event.preventDefault();ui.skipCardClick=false;if(shortcut(event,'search'))toggleSearch(true);else{if(!finishEdit())return;showSidebar({focus:false});focusNewComposer();}return;
+    event.preventDefault();ui.skipCardClick=false;if(shortcut(event,'search'))toggleSearch(true);else{if(!finishEdit())return;if(isSearching())endSearch();showSidebar({focus:false});focusNewComposer();}return;
   }
   if(shortcut(event,'capture')){event.preventDefault();showCapture();return;}
   if(shortcut(event,'sidebar')){
     event.preventDefault();ui.skipCardClick=false;if(!finishEdit())return;
     if(elements.capture.classList.contains('open'))hideCapture();
-    if(ui.searchOpen)toggleSearch(false);showSidebar({focus:false});focusNewComposer();return;
+    if(isSearching())endSearch();else if(ui.searchOpen)toggleSearch(false);showSidebar({focus:false});focusNewComposer();return;
   }
   if(shortcut(event,'save')&&(elements.capture.contains(event.target)||elements.sidebarComposer.contains(event.target))){event.preventDefault();const fromCapture=elements.capture.contains(event.target);saveDraft(fromCapture?'capture':'sidebar',{collapse:fromCapture});return;}
   if(escape){event.preventDefault();if(elements.capture.classList.contains('open')&&(elements.capture.contains(document.activeElement)||!elements.sidebar.classList.contains('open')))hideCapture();else if(elements.sidebar.classList.contains('open'))hideSidebar(true);else if(elements.capture.classList.contains('open'))hideCapture();}
@@ -1269,7 +1414,7 @@ function changeSetting(event) {
 
 /** 连接页面元素并注册交互。 */
 function initialize() {
-  const ids = { resizer:'sidebar-resizer', versionButton:'app-version', tagDropdown:'tag-dropdown', tagFilterButton:'tag-filter-button', syncWarning:'sync-warning', workspaceNudge:'workspace-nudge', sidebar: 'sidebar', edgeTrigger: 'edge-trigger', capture: 'capture', noteList: 'note-list', listSummary: 'list-summary', searchInput: 'search-input', clearSearch: 'clear-search', storageStatus: 'storage-status', draftInput: 'draft-input', attachmentList: 'attachment-list', imagePicker: 'image-picker', charCount: 'capture-char-count', saveNote: 'save-note', modalRoot: 'modal-root', toastRegion: 'toast-region' };
+  const ids = { resizer:'sidebar-resizer', versionButton:'app-version', tagDropdown:'tag-dropdown', tagFilterButton:'tag-filter-button', syncWarning:'sync-warning', workspaceNudge:'workspace-nudge', sidebar: 'sidebar', edgeTrigger: 'edge-trigger', capture: 'capture', noteList: 'note-list', listSummary: 'list-summary', tagFilterClear: 'tag-filter-clear', searchCount: 'search-count', searchActions: 'search-actions', searchInput: 'search-input', clearSearch: 'clear-search', storageStatus: 'storage-status', draftInput: 'draft-input', attachmentList: 'attachment-list', imagePicker: 'image-picker', charCount: 'capture-char-count', saveNote: 'save-note', modalRoot: 'modal-root', toastRegion: 'toast-region' };
   Object.entries(ids).forEach(function collectElement(entry) { elements[entry[0]] = document.getElementById(entry[1]); });
   elements.searchInput.type='text';elements.searchInput.setAttribute('role','searchbox');
   loadState();
@@ -1289,7 +1434,7 @@ function initialize() {
   elements.importPicker = importPicker;
   const filePicker=el('input');filePicker.type='file';filePicker.hidden=true;filePicker.id='reference-file-picker';document.body.append(filePicker);elements.filePicker=filePicker;
   filePicker.addEventListener('change',function chosenFile(){const file=filePicker.files[0];if(!file)return;const p=ui.pendingFilePath;window.NoteContent.registerFile(p,file);filePicker.value='';openFileReference(p);});
-  document.addEventListener('click',function dismissTagMenu(event){if(!event.target.closest('.tag-filter-wrap'))closeTagMenu();});
+  document.addEventListener('click',function dismissTagMenu(event){if(!event.target.closest('.tag-filter-wrap, #tag-dropdown, #header-search'))closeTagMenu();});
   window.addEventListener('sidenotes:sync-status',function syncChanged(){setStorageStatus(ui.storageWriteError);});
   window.addEventListener('sidenotes:settings-changed',function settingsChanged(event){const patch=event.detail&&event.detail.patch||{};if(elements.resizer)elements.resizer.dataset.edge=state.settings.edge;if(Object.prototype.hasOwnProperty.call(patch,'lazyLoading')||Object.prototype.hasOwnProperty.call(patch,'pageSize'))renderNotes({reset:true});renderWorkspaceNudge();resizeDraftInput();scheduleTagLayout();setStorageStatus(ui.storageWriteError);});
   applySettings();
@@ -1297,7 +1442,7 @@ function initialize() {
   renderDraft();
   document.addEventListener('pointerdown', protectTagFocus, true);
   // 搜索展开时点到别处（包括卡片区域）即收起搜索：卡片按下时为长按排序阻止了浏览器默认的失焦，这里主动让搜索框失焦。
-  document.addEventListener('pointerdown',function blurSearchOutside(event){if(!ui.searchOpen)return;const wrap=document.getElementById('header-search');if(wrap.contains(event.target))return;if(wrap.contains(document.activeElement))document.activeElement.blur();},true);
+  document.addEventListener('pointerdown',function blurSearchOutside(event){if(!ui.searchOpen)return;const wrap=document.getElementById('header-search');if(wrap.contains(event.target)||elements.tagDropdown.contains(event.target))return;if(wrap.contains(document.activeElement))document.activeElement.blur();},true);
   if(!window.PointerEvent)document.addEventListener('mousedown', protectTagFocus, true);
   document.addEventListener('click', dismissTagEditing, true);
   document.addEventListener('click', trackPinnedReturn, true);
@@ -1319,7 +1464,23 @@ function initialize() {
     if (!finishEdit()) return;
     ui.query = elements.searchInput.value;
     renderNotes();
-    if(ui.query.includes('#')){elements.tagDropdown.hidden=false;elements.tagFilterButton.setAttribute('aria-expanded','true');}
+    refreshTagSuggestions();
+  });
+  // 标签候选：Enter 用第一个候选补全，↓ 移进候选；光标移出标签时收起。
+  elements.searchInput.addEventListener('keydown', function suggestKeys(event) {
+    if (event.isComposing || elements.tagDropdown.hidden || ui.tagMenuMode !== 'suggest') return;
+    const first = elements.tagDropdown.querySelector('[data-action="filter-tag"]');
+    if (event.key === 'Enter' && first) { event.preventDefault(); completeTagToken(first.dataset.tag); }
+    else if (event.key === 'ArrowDown' && first) { event.preventDefault(); first.focus(); }
+  });
+  elements.searchInput.addEventListener('keyup', function caretMoved(event) { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) refreshTagSuggestions(); });
+  elements.tagDropdown.addEventListener('keydown', function moveInMenu(event) {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    const options = Array.from(elements.tagDropdown.querySelectorAll('.tag-option')), index = options.indexOf(document.activeElement);
+    if (index < 0) return;
+    event.preventDefault();
+    if (event.key === 'ArrowUp' && index === 0 && ui.tagMenuMode === 'suggest') { elements.searchInput.focus(); return; }
+    options[Math.max(0, Math.min(options.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)))].focus();
   });
   elements.clearSearch.addEventListener('click', function clearSearch() { ui.query = ''; elements.searchInput.value = ''; renderNotes(); elements.searchInput.focus(); });
   // 单击与悬停共用一种高亮（T66）：高亮的卡片是 Ctrl+C 与键盘操作的对象；双击进入编辑（interactions.md 第二、四节）。
@@ -1389,38 +1550,48 @@ function tagKey(tag) { return String(tag).normalize('NFKC').toLocaleLowerCase();
 function hasTag(note,tag) { return noteParts(note).tags.some(function same(item){return tagKey(item)===tagKey(tag);}); }
 /** @brief 判断记录是否属于当前页签。 @param {object} note 记录。 @return {boolean} 是否属于。 */
 function inCurrentTab(note) { return window.SidebarTabs.belongs(note,ui.tab); }
-/** @brief 支持正文与多个标签组合搜索。 @param {object} note 记录。 @param {string} query 查询。 @return {boolean} 是否匹配。 */
-function matchesQuery(note,query) {
+/**
+ * @brief 支持正文与多个标签组合搜索。写完整的已有标签只匹配这个标签，没写完的按前缀匹配。
+ * @param {object} note 记录。 @param {string} query 查询。 @param {Set<string>} known 已有标签（tagKey），省略时一律按前缀。 @return {boolean} 是否匹配。
+ */
+function matchesQuery(note,query,known) {
   if(!String(query).trim())return true;
   const parsed=noteParts(note), tags=[];
   const text=String(query).replace(/(?:^|\s)#([\p{L}\p{N}_-]+)/gu,function collect(_,tag){tags.push(tagKey(tag));return ' ';}).trim().toLocaleLowerCase();
-  return tags.every(function matchTag(tag){return parsed.tags.some(function prefix(item){return tagKey(item).startsWith(tag);});})&&text.split(/\s+/).filter(Boolean).every(function matchText(word){return (parsed.body+' '+parsed.tags.join(' ')+' '+note.images.map(function name(i){return i.name;}).join(' ')).toLocaleLowerCase().includes(word);});
+  return tags.every(function matchTag(tag){return parsed.tags.some(function prefix(item){return known&&known.has(tag)?tagKey(item)===tag:tagKey(item).startsWith(tag);});})&&text.split(/\s+/).filter(Boolean).every(function matchText(word){return (parsed.body+' '+parsed.tags.join(' ')+' '+note.images.map(function name(i){return i.name;}).join(' ')).toLocaleLowerCase().includes(word);});
 }
 /** @brief 汇总标签并计算固定权重分数。 @return {Array} 候选与分数。 */
 function rankedTags() {
-  const grouped=new Map();state.notes.filter(inCurrentTab).forEach(function collect(note){noteParts(note).tags.forEach(function tagCount(tag){const key=tagKey(tag);if(!grouped.has(key))grouped.set(key,{tag:tag,count:0,pinned:0,updated:0});const item=grouped.get(key);item.count++;item.pinned+=note.pinned?1:0;item.updated=Math.max(item.updated,note.updatedAt);});});
-  const tagQueries=Array.from(ui.query.matchAll(/(?:^|\s)#([\p{L}\p{N}_-]+)/gu));
-  const tagMode=tagQueries.length>0;const query=tagKey(tagMode?tagQueries[tagQueries.length-1][1]:ui.query.trim());
+  // 标签下拉是当前页签中的标签；搜索框里输入 # 时是全部记录中的标签（搜索是全局的，第五次反馈）。
+  const suggest=ui.tagMenuMode==='suggest',source=suggest?state.notes.filter(function active(note){return note.status==='active';}):state.notes.filter(inCurrentTab);
+  const grouped=new Map();source.forEach(function collect(note){noteParts(note).tags.forEach(function tagCount(tag){const key=tagKey(tag);if(!grouped.has(key))grouped.set(key,{tag:tag,count:0,pinned:0,updated:0});const item=grouped.get(key);item.count++;item.pinned+=note.pinned?1:0;item.updated=Math.max(item.updated,note.updatedAt);});});
+  // 搜索框里按正在输入的标签前缀排在前面；标签下拉没有输入，按使用、条数与置顶排序。
+  const tagMode=suggest;const query=tagKey(suggest?ui.tagToken||'':'');
   return Array.from(grouped.values()).map(function score(item){const usage=state.tagUsage[tagKey(item.tag)]||{count:0,last:0};const age=(Date.now()-(Number(usage.last)||0))/86400000;item.score=40*Math.log2(1+(Number(usage.count)||0))+30*Math.max(0,1-age/14)+4*Math.min(item.count,10)+3*Math.min(item.pinned,4);item.match=Boolean(query&&(tagMode?tagKey(item.tag).startsWith(query):tagKey(item.tag).includes(query)));item.exact=Boolean(query&&tagKey(item.tag)===query);item.selected=Boolean(ui.selectedTag&&tagKey(ui.selectedTag)===tagKey(item.tag));return item;}).sort(function compare(a,b){return Number(b.exact)-Number(a.exact)||Number(b.match)-Number(a.match)||Number(b.selected)-Number(a.selected)||b.score-a.score||b.updated-a.updated||a.tag.localeCompare(b.tag,'zh-CN');});
 }
-/** 刷新最多六个候选的标签菜单。 */
+/**
+ * 刷新标签菜单（最多六个候选）。点筛选行的标签下拉时，第一项「全部标签」清除筛选，候选是当前页签中的标签，选中后筛选这个页签；
+ * 在搜索框里输入 # 时只列出全部记录中按前缀匹配的标签（第五次反馈），选中后补全搜索框里的这个标签。
+ */
 function renderTagMenu() {
   if(!elements.tagDropdown)return;
-  const trigger=elements.tagFilterButton, label=trigger.querySelector('span');if(label)label.textContent=ui.selectedTag?'#'+ui.selectedTag:'全部标签';
-  const menu=elements.tagDropdown;menu.replaceChildren();
-  const all=button('全部标签','clear-tag','','tag-option');all.append(el('span','tag-option-count',String(state.notes.filter(inCurrentTab).length)));menu.append(all);
-  const candidates=rankedTags();candidates.slice(0,6).forEach(function row(item,index){const group=el('div','tag-option-row'+(index===0&&(item.match||item.selected)?' current-tag-row':''));
+  const suggest=ui.tagMenuMode==='suggest',menu=elements.tagDropdown;menu.replaceChildren();
+  menu.classList.toggle('is-suggesting',suggest);menu.setAttribute('aria-label',suggest?'标签候选':'标签筛选');
+  if(!suggest){const all=button('全部标签','clear-tag','','tag-option');all.setAttribute('role','menuitem');all.append(el('span','tag-option-count',String(state.notes.filter(inCurrentTab).length)));menu.append(all);}
+  const ranked=rankedTags(),candidates=suggest&&ui.tagToken?ranked.filter(function matching(item){return item.match;}):ranked;
+  candidates.slice(0,6).forEach(function row(item,index){const current=!suggest&&index===0&&(item.match||item.selected),group=el('div','tag-option-row'+(current?' current-tag-row':''));
     const choice=button('#'+item.tag,'filter-tag','','tag-option');choice.dataset.tag=item.tag;choice.setAttribute('role','menuitem');choice.append(el('span','tag-option-count',String(item.count)));group.append(choice);
-    if(index===0&&(item.match||item.selected)){const manage=button('管理 #'+item.tag,'manage-tag','more');manage.dataset.tag=item.tag;group.append(manage);}menu.append(group);});
+    if(current){const manage=button('管理 #'+item.tag,'manage-tag','more');manage.dataset.tag=item.tag;group.append(manage);}menu.append(group);});
   const priority=menu.querySelector('.current-tag-row');if(priority)menu.prepend(priority);
-  if(!candidates.length)menu.append(el('p','tag-menu-empty',ui.query?'没有匹配的标签':'输入 #标签 创建分组'));
-  // 底部只有「搜索标签」一项；候选之外还有标签时，右侧写「另有 N 个」（本次提出）。
+  if(!candidates.length)menu.append(el('p','tag-menu-empty',suggest?'没有匹配的标签':'输入 #标签 创建分组'));
+  if(suggest)return;
+  // 底部只有「搜索标签」一项（在全部记录中搜索）；候选之外还有标签时，右侧写「另有 N 个」。
   const foot=el('div','tag-menu-footer'),search=button('搜索标签','focus-tag-search','search','tag-option tag-search-button');search.setAttribute('role','menuitem');if(candidates.length>6)search.append(el('span','tag-option-count','另有 '+(candidates.length-6)+' 个'));foot.append(search);menu.append(foot);
 }
 /** 关闭标签菜单。 */
-function closeTagMenu(){if(elements.tagDropdown){elements.tagDropdown.hidden=true;elements.tagFilterButton.setAttribute('aria-expanded','false');}}
+function closeTagMenu(){if(elements.tagDropdown){elements.tagDropdown.hidden=true;elements.tagFilterButton.setAttribute('aria-expanded','false');}ui.tagMenuMode='filter';}
 /** @brief 选择标签并记录最近访问。 @param {string} tag 标签。 */
-function selectTag(tag){if(!finishEdit())return;ui.selectedTag=tag;ui.query='';elements.searchInput.value='';const key=tagKey(tag),old=state.tagUsage[key]||{count:0,last:0};state.tagUsage[key]={count:Math.min(10000,(Number(old.count)||0)+1),last:Date.now()};persistSnapshot();closeTagMenu();renderNotes();}
+function selectTag(tag){if(!finishEdit())return;ui.selectedTag=tag;ui.query='';elements.searchInput.value='';if(ui.searchOpen)toggleSearch(false);const key=tagKey(tag),old=state.tagUsage[key]||{count:0,last:0};state.tagUsage[key]={count:Math.min(10000,(Number(old.count)||0)+1),last:Date.now()};persistSnapshot();closeTagMenu();renderNotes();}
 /** @brief 移除一条记录中的标签。 @param {object} note 记录。 @param {string} tag 标签。 */
 function removeNoteTag(note,tag){let text=window.NoteContent.removeTag(note.text,tag);if(!text.trim()&&!note.images.length)text=tag;if(updateNote(note.id,{text:text}))toast('已从此记录移除 #'+tag);}
 /**
@@ -1470,7 +1641,7 @@ function appendNextPage(requested){
   if(ui.loading||!ui.listItems||ui.visibleCount>=ui.listItems.length)return;ui.loading=true;
   if(ui.sentinel)ui.sentinel.remove();const count=Number.isFinite(requested)?requested:state.settings.pageSize;
   const end=Math.min(ui.listItems.length,ui.visibleCount+count),nodes=[];
-  for(let index=ui.visibleCount;index<end;index++)nodes.push(renderCard(ui.listItems[index]));
+  for(let index=ui.visibleCount;index<end;index++){const group=ui.listGroups&&ui.listGroups.find(function starts(item){return item.start===index;});if(group)nodes.push(renderSearchGroup(group));nodes.push(renderCard(ui.listItems[index]));}
   elements.noteList.append(...nodes);ui.visibleCount=end;ui.loading=false;
   if(end<ui.listItems.length){
     if(!ui.sentinel){ui.sentinel=el('div','load-more-sentinel');ui.sentinel.setAttribute('role','status');}
@@ -1722,7 +1893,8 @@ async function addPickedAttachments(files,target='draft'){
 
 /** @brief 展开或收起搜索，收起时保留查询和筛选结果。 @param {boolean} open 是否展开。 @param {object} options 焦点选项。 */
 function toggleSearch(open=true,options={}){
-  ui.searchOpen=open;const wrap=document.getElementById('header-search'),row=document.getElementById('sidebar-navigation');wrap.classList.toggle('is-open',open);row.classList.toggle('is-searching',open);const tabs=row.querySelector('.sidebar-tabs');tabs.inert=open;tabs.setAttribute('aria-hidden',String(open));document.getElementById('search-toggle').setAttribute('aria-expanded',String(open));const panel=document.getElementById('search-panel');panel.inert=!open;panel.setAttribute('aria-hidden',String(!open));refreshSearchSummary();
+  // 搜索在筛选行的右端（第五次反馈）：展开时从右向左铺满这一行，盖住标签下拉与按钮。
+  ui.searchOpen=open;const wrap=document.getElementById('header-search'),row=wrap.closest('.list-topline'),filter=row.querySelector('.list-filter');wrap.classList.toggle('is-open',open);row.classList.toggle('is-searching',open);filter.inert=open;filter.setAttribute('aria-hidden',String(open));if(!open||ui.tagMenuMode!=='suggest')closeTagMenu();document.getElementById('search-toggle').setAttribute('aria-expanded',String(open));const panel=document.getElementById('search-panel');panel.inert=!open;panel.setAttribute('aria-hidden',String(!open));refreshSearchSummary();
   if(open){showSidebar({focus:false});elements.searchInput.value=ui.query;elements.searchInput.focus();elements.searchInput.select();}else if(options.focusButton)document.getElementById('search-toggle').focus();
 }
 /** 检查更新的原型入口，关于页与版本弹窗共用。 */
@@ -1774,36 +1946,17 @@ function focusPinnedComposer(){
 }
 /** 按需滚动至列表顶部，双击品牌不影响记录数据。 */
 function scrollNotesToTop(){if(elements.noteList.scrollTo)elements.noteList.scrollTo({top:0,behavior:window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});else elements.noteList.scrollTop=0;}
-/** 同步折叠搜索中的关键词胶囊与无障碍名称。 */
-/** @brief 折叠搜索时按关键词实际宽度收缩，并限制最长显示宽度。 */
+/** 搜索框有搜索词时保持展开（全局搜索的结果在列表中），底边是强调色线。 */
 function refreshSearchSummary(){
-  const wrap=document.getElementById('header-search'),row=document.getElementById('sidebar-navigation'),trigger=document.getElementById('search-toggle');
-  if(!wrap||!trigger||!row)return;
-  const query=ui.query.trim();
-  let label=trigger.querySelector('.search-query-label');
-  if(!label){label=el('span','search-query-label');label.setAttribute('aria-hidden','true');trigger.append(label);}
-  label.textContent=query;label.hidden=!query;
-  wrap.classList.toggle('has-query',Boolean(query));
-  row.classList.toggle('has-search-query',Boolean(query));
-  if(!query||ui.searchOpen){
-    wrap.style.removeProperty('width');trigger.style.removeProperty('width');row.style.removeProperty('--search-collapsed-width');
-  }else{
-    let textWidth=0;
-    try{
-      const canvas=document.createElement('canvas'),context=canvas.getContext&&canvas.getContext('2d');
-      if(context){context.font='500 10px "Microsoft YaHei UI","Microsoft YaHei",Segoe UI,sans-serif';textWidth=context.measureText(query).width;}
-    }catch(error){/* 无 Canvas 环境使用字符宽度估算。 */}
-    if(!textWidth)textWidth=Array.from(query).reduce(function width(total,character){return total+(/[\u0000-\u00ff]/.test(character)?6.2:10);},0);
-    const rowWidth=row.clientWidth||320,maxWidth=Math.max(92,Math.min(176,rowWidth*.46));
-    const width=Math.min(maxWidth,Math.max(64,Math.ceil(textWidth)+45));
-    wrap.style.width=width+'px';trigger.style.width=width+'px';row.style.setProperty('--search-collapsed-width',width+'px');
-  }
-  trigger.setAttribute('aria-label',query?'搜索：'+query+'，点击修改':'搜索记录 · Ctrl+F');
+  const wrap=document.getElementById('header-search'),trigger=document.getElementById('search-toggle');if(!wrap||!trigger)return;
+  wrap.classList.toggle('has-query',isSearching());trigger.setAttribute('aria-label','搜索全部记录 · Ctrl+F');
 }
 /** 连接品牌双击回顶与搜索失焦收起，不抢走外部操作的焦点。 */
 function initializeHeaderInteractions(){
   const brand=document.querySelector('.sidebar-brand');brand.addEventListener('dblclick',function top(event){if(event.target.closest('button'))return;event.preventDefault();const selection=window.getSelection();if(selection&&selection.removeAllRanges)selection.removeAllRanges();scrollNotesToTop();});
-  const wrap=document.getElementById('header-search');wrap.addEventListener('focusout',function closeOnBlur(event){if(event.relatedTarget&&wrap.contains(event.relatedTarget))return;window.clearTimeout(ui.searchBlurTimer);ui.searchBlurTimer=window.setTimeout(function afterFocus(){if(ui.searchOpen&&!wrap.contains(document.activeElement))toggleSearch(false);},0);});
+  // 失焦时没有搜索词就收起；有搜索词时保持展开，结果留在列表中。移进标签候选不算失焦。
+  const wrap=document.getElementById('header-search'),inside=function inside(node){return Boolean(node&&(wrap.contains(node)||elements.tagDropdown.contains(node)));};
+  wrap.addEventListener('focusout',function closeOnBlur(event){if(inside(event.relatedTarget))return;window.clearTimeout(ui.searchBlurTimer);ui.searchBlurTimer=window.setTimeout(function afterFocus(){if(inside(document.activeElement))return;if(ui.tagMenuMode==='suggest')closeTagMenu();if(ui.searchOpen&&!isSearching())toggleSearch(false);},0);});
   window.requestAnimationFrame(function initialFocus(){if(elements.sidebar.classList.contains('open')&&!ui.searchOpen&&!ui.modal&&!ui.editing)queueComposerFocus();});
 }
 

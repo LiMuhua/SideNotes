@@ -127,11 +127,20 @@
     return selection.length > 1 && selection.includes(note.id) ? selection : [note.id];
   }
 
-  /** @return {Array<string>} 「移到…」可去的页签：随记与固定的标签页签，当前页签除外；置顶有自己的菜单项。 */
-  function moveDestinations() {
-    const tabs = window.SidebarTabs;
-    return tabs ? ['workspace'].concat(tabs.pinnedTags().map(tabs.tabOf)).filter(function other(tab) { return tab !== ui.tab; }) : [];
+  /**
+   * @return {Array<string>} 「移到…」可去的页签：随记与固定的标签页签，当前页签除外（搜索时是这条记录所在的页签除外）；置顶有自己的菜单项。
+   * @param {object} note 记录。
+   */
+  function moveDestinations(note) {
+    const tabs = window.SidebarTabs, here = searching() && note ? tabs.homeOf(note) : ui.tab;
+    return tabs ? ['workspace'].concat(tabs.pinnedTags().map(tabs.tabOf)).filter(function other(tab) { return tab !== here; }) : [];
   }
+
+  /** @return {boolean} 是否在全局搜索（app.js）。 */
+  function searching() { return typeof isSearching === 'function' && isSearching(); }
+
+  /** @brief 菜单里写的记录标题：超过 10 个字截断。 @param {object} note 记录。 @return {string} 标题。 */
+  function shortTitle(note) { const chars = Array.from(noteTitle(note)); return chars.length > 10 ? chars.slice(0, 10).join('') + '…' : chars.join(''); }
 
   /**
    * @brief 「移到…」的二级菜单（第四次反馈）：随记与固定的标签页签（当前页签除外），与把卡片拖到页签上相同。
@@ -139,7 +148,7 @@
    */
   function openMoveMenu(note) {
     const tabs = window.SidebarTabs, ids = targetIds(note);
-    openList(moveDestinations().map(function item(tab) {
+    openList(moveDestinations(note).map(function item(tab) {
       return { label: tab === 'workspace' ? '随记' : tabs.tagOf(tab), icon: tab === 'workspace' ? 'note' : 'hash', run: function move() { window.NoteInteractions.moveTo(ids, tab); } };
     }), lastAnchor, { label: '移到页签' });
   }
@@ -160,6 +169,7 @@
     else if (command === 'collapse') toggleCollapsed(note);
     else if (command === 'pin') updateNote(note.id, { pinned: !note.pinned });
     else if (command === 'move') openMoveMenu(note);
+    else if (command === 'locate') goToTab(window.SidebarTabs.homeOf(note), { noteId: note.id });
     else if (command === 'merge') window.NoteMerge.open({ ids: targetIds(note) });
     else if (command === 'merge-into') window.NoteMerge.open({ ids: targetIds(note).filter(function others(id) { return id !== note.id; }), target: note.id });
     else if (command === 'duplicate') duplicateNote(note);
@@ -202,10 +212,15 @@
     menu.setAttribute('role', 'menu');
     menu.setAttribute('aria-label', '记录操作');
     menu.dataset.noteMenu = latest.id;
-    // 多选之中的卡片（第四次反馈）：最上面是合并成一条，或把其余选中的合并到这一条。
+    // 全局搜索的结果（第五次反馈）：最上面是「转到」这条记录所在的页签，滚到它并高亮。
+    if (searching()) {
+      appendCommand(menu, 'locate', '转到' + window.SidebarTabs.label(window.SidebarTabs.homeOf(latest)), 'arrow-right');
+      appendSeparator(menu);
+    }
+    // 多选之中的卡片（第四次反馈）：最上面是合并成一条，或把其余选中的合并到这一条（第五次反馈：写出这一条的标题）。
     if (targetIds(latest).length > 1) {
       appendCommand(menu, 'merge', '合并成一条…', 'merge', { hint: targetIds(latest).length + ' 条' });
-      appendCommand(menu, 'merge-into', '合并到这条', 'merge');
+      appendCommand(menu, 'merge-into', '合并到「' + shortTitle(latest) + '」', 'merge');
       appendSeparator(menu);
     }
     appendCommand(menu, 'copy', '复制内容与附件', 'copy', { hint: 'Ctrl+C' });
@@ -214,7 +229,7 @@
     appendSeparator(menu);
     if (latest.status === 'active') appendCommand(menu, 'pin', latest.pinned ? '移到普通记录' : '置顶记录', latest.pinned ? 'pin-off' : 'pin');
     // 去掉了「归档」（第四次反馈）；换成移到随记或固定的标签页签。
-    if (moveDestinations().length) appendCommand(menu, 'move', '移到…', 'arrow-right');
+    if (moveDestinations(latest).length) appendCommand(menu, 'move', '移到…', 'arrow-right');
     appendSeparator(menu);
     appendCommand(menu, 'duplicate', '创建副本', 'duplicate');
     appendCommand(menu, 'export', '导出 Markdown', 'download');
