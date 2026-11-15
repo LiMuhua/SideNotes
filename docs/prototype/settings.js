@@ -473,7 +473,7 @@ window.SideNotesSettings = (function createSettingsController() {
   }
 
   /**
-   * @brief 创建外部链接：关于页里是文字链接（第六次反馈），图标、名称、许可证与外链箭头。
+   * @brief 创建外部链接：关于页里是带边框的按钮（第七次反馈：第六次改成的文字链接太扁平），宽度随内容，图标、名称、许可证与外链箭头。
    * @param {string} label 文字。 @param {string} url 地址。 @param {string} glyph 图标。 @param {string} note 名称后面的灰色小字（致谢的许可证）。
    * @return {HTMLElement} 链接。
    */
@@ -1238,15 +1238,20 @@ window.SideNotesSettings = (function createSettingsController() {
     toastControls.append(select('通知弹出位置', [['top-center', '顶部正中'], ['top-right', '右上角'], ['bottom-center', '底部正中']], state.settings.toastPosition, function toastPosition(value) { return save({ toastPosition: value }); }));
     toastField.append(el('div', 'settings-runtime-name', '通知位置'), toastControls);
     // 记录窗口的标签页位置（第四次反馈）：顶部横排或左侧竖排，默认左侧（第五次反馈）；窗口标题栏上的按钮切换的是同一项设置。
-    // 四项按各自的宽度排成一行，放不下才换行，新的一行开头没有竖线（第六次反馈：不按列对齐，对齐会在短的一项后面空出一段）。
+    // 固定两行（第七次反馈）：第一行窗口标签页、通知位置，第二行列表加载、整理提醒；每行按各自的宽度排开，不按列对齐
+    // （第六次反馈），太窄放不下时行内折行，新的一行开头没有竖线。
     const tabsField = el('div', 'settings-runtime-field');
     const tabsControls = el('div', 'settings-runtime-controls');
     tabsControls.append(select('记录窗口的标签页位置', [['top', '顶部'], ['side', '左侧']], state.settings.windowTabs, function windowTabs(value) { return save({ windowTabs: value }); }));
     const tabsName = el('div', 'settings-runtime-name', '窗口标签页');
     tabsName.append(help('窗口标签页', '记录窗口中标签页的位置，窗口标题栏上的按钮也能切换'));
     tabsField.append(tabsName, tabsControls);
-    grid.append(loading, tidy, toastField, tabsField);
-    card.append(grid);
+    const second = el('div', 'settings-runtime-row');
+    grid.append(tabsField, toastField);
+    second.append(loading, tidy);
+    const rows = el('div', 'settings-runtime-rows');
+    rows.append(grid, second);
+    card.append(rows);
     return card;
   }
 
@@ -1997,8 +2002,9 @@ window.SideNotesSettings = (function createSettingsController() {
 
   /**
    * @brief 关于（第五次反馈）：标题与其他页一样在最上面，内容从上往下排，排完还空就留空。第一块是图标、名称与一句介绍，
-   * 右侧是版本号与「检查更新」。项目与开源致谢是文字链接（第六次反馈：不为填满一行把按钮拉长），按内容宽度排开、放不下自然换行，
-   * 致谢的名称后面写许可证；「检查更新」「打开开发者工具」是动作，仍是按钮。
+   * 右侧是版本号与「检查更新」。项目与开源致谢是带边框的按钮（第七次反馈），按内容宽度排开、放不下自然换行，不为填满一行拉长
+   * （第六次反馈）；致谢的名称后面写许可证。项目一行最后是本项目的许可证 AGPL-3.0（第七次反馈；仓库还没有 LICENSE 文件，
+   * 链接到 GNU 官网的全文）。
    * @param {HTMLElement} panel 容器。
    */
   function renderAbout(panel) {
@@ -2012,14 +2018,15 @@ window.SideNotesSettings = (function createSettingsController() {
     hero.append(logo, el('h3', '', 'SideNotes'), el('p', 'setting-description', '藏在屏幕边上的速记本'), release);
     panel.append(hero);
     const project = group('项目');
-    const addresses = el('div', 'resource-links about-links settings-about-links about-text-links');
-    addresses.append(externalLink('GitHub', 'https://github.com/', 'i:code'), externalLink('官方网站', 'https://example.com/', 'i:globe'), externalLink('支持项目', 'https://github.com/sponsors', 'i:heart'));
+    const addresses = el('div', 'resource-links about-links settings-about-links about-link-buttons');
+    addresses.append(externalLink('GitHub', 'https://github.com/', 'i:code'), externalLink('官方网站', 'https://example.com/', 'i:globe'), externalLink('支持项目', 'https://github.com/sponsors', 'i:heart'), externalLink('AGPL-3.0', 'https://www.gnu.org/licenses/agpl-3.0.html', 'i:file-text'));
     project.append(addresses);
     panel.append(project);
     const credits = group('开源致谢');
-    const list = el('div', 'resource-links settings-credits about-text-links');
-    // 许可证取自各项目的仓库或 package.json（2026-11-15 核对）。
-    [['Tauri', 'https://tauri.app/', '◈', 'MIT / Apache-2.0'], ['React', 'https://react.dev/', '⚛', 'MIT'], ['Vite', 'https://vite.dev/', 'ϟ', 'MIT'], ['SQLite', 'https://sqlite.org/', '▱', '公有领域'], ['Filee', 'https://github.com/KnifeLemon/Filee', '▣', 'MIT'], ['Maple Mono', 'https://github.com/subframe7536/maple-font', 'Aa', 'OFL-1.1']].forEach(function credit(item) {
+    const list = el('div', 'resource-links settings-credits about-link-buttons');
+    // 只列桌面端实际用到的组件（第七次反馈）：package.json 与 src-tauri/Cargo.toml 的依赖，以及随应用打包的字体；许可证取自各项目的
+    // 仓库（2026-11-15 核对）。去掉了 Filee：它只是原型的外观参考，没有用到它的代码。
+    [['Tauri', 'https://tauri.app/', '◈', 'MIT / Apache-2.0'], ['React', 'https://react.dev/', '⚛', 'MIT'], ['Vite', 'https://vite.dev/', 'ϟ', 'MIT'], ['TypeScript', 'https://www.typescriptlang.org/', 'TS', 'Apache-2.0'], ['SQLite', 'https://sqlite.org/', '▱', '公有领域'], ['rusqlite', 'https://github.com/rusqlite/rusqlite', 'Rs', 'MIT'], ['serde', 'https://serde.rs/', '{}', 'MIT / Apache-2.0'], ['windows-rs', 'https://github.com/microsoft/windows-rs', '⊞', 'MIT / Apache-2.0'], ['Maple Mono', 'https://github.com/subframe7536/maple-font', 'Aa', 'OFL-1.1']].forEach(function credit(item) {
       list.append(externalLink(item[0], item[1], item[2], item[3]));
     });
     credits.append(list);

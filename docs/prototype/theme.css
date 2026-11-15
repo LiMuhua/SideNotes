@@ -440,7 +440,8 @@ img.brand-mark.is-small {
   gap: var(--sn-space-3);
   height: calc(var(--sn-tab-height) + var(--sn-space-4));
   margin: 0;
-  padding: 0 calc(var(--sn-space-3) * 2 + var(--local-search-size)) var(--sn-space-2) var(--sn-panel-padding);
+  /* 右侧只给放大镜留位置（它离右边 --sn-space-3）：页签一直排到放大镜前，放大镜按钮自身的留白就是两者的间距（第七次反馈）。 */
+  padding: 0 calc(var(--sn-space-3) + var(--local-search-size)) var(--sn-space-2) var(--sn-panel-padding);
   border-bottom: var(--sn-border-width) solid var(--sn-color-border-subtle);
 }
 
@@ -609,9 +610,11 @@ img.brand-mark.is-small {
   white-space: nowrap;
 }
 
-/* 旧样式给页签里的 span 都加了计数徽标的底色与内边距（styles.css 的 .tab span），名称与收起的个数还原成普通文字。 */
+/* 旧样式给页签里的 span 都加了计数徽标的底色、内边距与最小宽度（styles.css 的 .tab span），名称与收起的个数还原成普通文字。
+ * 最小宽度此前没有还原：「N ▾」里一位数也占 19px，最后一格比需要的宽 12px（第七次反馈）。 */
 .sidebar-tabs .tab :is(.tab-name, .tab-more-count),
 .sidebar-tabs .tab.active :is(.tab-name, .tab-more-count) {
+  min-width: 0;
   margin: 0;
   padding: 0;
   border: 0;
@@ -623,16 +626,17 @@ img.brand-mark.is-small {
   line-height: inherit;
 }
 
-/* 最后一格（第六次反馈）：只占一个位置，样子固定。全部放得下时是「+」（新建页签），放不下时是「N ▾」；
- * 当前页签收在菜单里时不换成它的名字，只带当前样式（下划线）。 */
+/* 最后一格（第六次反馈）：只占一个位置，样子固定。页签都放得下、后面还有位置时是「+」（新建页签），真放不下时是「N ▾」；
+ * 页签都放得下、只是放不下「+」时整格不显示（第七次反馈）。当前页签不会收进这里。 */
 .sidebar-tabs .tab-more {
   gap: var(--sn-space-1);
   padding: 0 var(--sn-space-3);
   color: var(--sn-color-text-muted);
 }
 
-.sidebar-tabs .tab-more.active {
-  color: var(--sn-color-text);
+/* 当前页签不收起（第七次反馈）：别的页签都收起后仍放不下时（侧栏很窄、页签名很长），它的名字缩短。 */
+.sidebar-tabs .tab.is-squeezed {
+  flex: 0 1 auto;
 }
 
 .sidebar-tabs .tab .tab-more-count {
@@ -1104,20 +1108,10 @@ body.is-dragging-tab * {
   color: var(--sn-color-text);
 }
 
+/* 多选按钮按下：强调色的浅底。选中的条数写在筛选行左边（第七次反馈），按钮上不再写数字。 */
 .list-topline .list-tool[aria-pressed='true'] {
-  padding: 0 var(--sn-space-2);
   background: var(--sn-color-accent-subtle);
   color: var(--sn-color-accent-text);
-}
-
-.list-topline .list-tool-count {
-  font-family: var(--sn-font-meta);
-  font-size: var(--sn-font-size-xs);
-  font-variant-numeric: tabular-nums;
-}
-
-.list-topline .list-tool-count[hidden] {
-  display: none;
 }
 
 .list-topline .list-tool:disabled {
@@ -1602,6 +1596,51 @@ body.is-dragging-tab * {
 
 .note-card .note-emoji:hover {
   background: var(--sn-color-hover);
+}
+
+/* 多选按钮按下时（第七次反馈）：标题左边的图标换成勾选框，占同样的宽度，标题不移动；右上角的快捷按钮隐藏，只留时间，
+ * 单击卡片的任何地方都是勾选或取消（interactions.js）。 */
+.note-card .note-select-mark {
+  display: none;
+}
+
+.note-list.is-selecting .note-card .note-emoji {
+  display: none;
+}
+
+.note-list.is-selecting .note-card .note-select-mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--sn-icon-size);
+  height: var(--sn-icon-size);
+  margin: 0 calc(var(--sn-space-3) / 2) 0 calc(var(--sn-space-3) / 2 - var(--sn-space-2));
+  border: calc(var(--sn-border-width) * 1.5) solid var(--sn-color-border-strong);
+  border-radius: var(--sn-radius-xs);
+  background: var(--sn-color-surface);
+  color: transparent;
+}
+
+.note-list.is-selecting .note-card .note-select-mark .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  stroke-width: calc(var(--sn-icon-stroke) * 1.6);
+}
+
+.note-list.is-selecting .note-card.is-selected .note-select-mark {
+  border-color: var(--sn-color-accent);
+  background: var(--sn-color-accent);
+  color: var(--sn-color-on-accent);
+}
+
+.note-list.is-selecting .note-card .note-side .note-actions {
+  display: none;
+}
+
+.note-list.is-selecting .note-card .note-side .note-meta {
+  visibility: visible;
+  opacity: 1;
 }
 
 .note-card .note-title {
@@ -3588,6 +3627,13 @@ body.is-dragging-attachment * {
   padding: var(--sn-space-5);
 }
 
+/* 「其它」固定两行（第七次反馈）：窗口标签页、通知位置；列表加载、整理提醒。行距与行内折行的行距相同。 */
+.settings-modal .settings-runtime-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sn-space-4);
+}
+
 /* 侧栏卡片：第一行是三项设置，下面是宽度、出入动画与卡片高度三个滑块，共用三列：名称、滑块、数值，滑块起点对齐。 */
 .settings-modal .sidebar-settings-layout {
   display: grid;
@@ -4219,7 +4265,7 @@ body.is-dragging-attachment * {
   align-self: flex-start;
 }
 
-.settings-modal :is(.about-hero ~ .settings-group, .about-hero ~ .settings-card, .about-release) :is(.resource-link:not(.settings-external-link), .button) {
+.settings-modal :is(.about-hero ~ .settings-group, .about-hero ~ .settings-card, .about-release) :is(.resource-link, .button) {
   display: inline-flex;
   align-items: center;
   gap: var(--sn-space-3);
@@ -4235,7 +4281,7 @@ body.is-dragging-attachment * {
   text-decoration: none;
 }
 
-.settings-modal :is(.about-hero ~ .settings-group, .about-hero ~ .settings-card, .about-release) :is(.resource-link:not(.settings-external-link), .button):hover {
+.settings-modal :is(.about-hero ~ .settings-group, .about-hero ~ .settings-card, .about-release) :is(.resource-link, .button):hover {
   border-color: var(--sn-color-border-strong);
   background-image: linear-gradient(var(--sn-color-hover), var(--sn-color-hover));
   text-decoration: none;
@@ -4247,38 +4293,13 @@ body.is-dragging-attachment * {
   color: var(--sn-color-text-muted);
 }
 
-/* 项目与开源致谢（第六次反馈）：文字链接，按内容宽度排开，放不下自然换行，不为填满一行而拉伸；悬停时浅底、名称换强调色。
- * 「检查更新」「打开开发者工具」是动作，仍是按钮。致谢的名称后面是许可证（灰色小字）。 */
-.settings-modal .resource-links.about-text-links {
-  gap: var(--sn-space-2) var(--sn-space-6);
-}
-
-.settings-modal .about-text-links .settings-external-link {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sn-space-2);
-  height: var(--sn-control-height-sm);
-  margin: 0 calc(var(--sn-space-2) * -1);
-  padding: 0 var(--sn-space-2);
-  border: 0;
-  border-radius: var(--sn-radius-control);
-  background: transparent;
-  color: var(--sn-color-text);
-  font-size: var(--sn-font-size-sm);
-  text-decoration: none;
+/* 项目与开源致谢（第七次反馈）：带边框的按钮，与「检查更新」「打开开发者工具」同样的样子（第六次改成的文字链接太扁平）；
+ * 按内容宽度排开，放不下自然换行，不为填满一行而拉伸（第六次反馈）。致谢的名称后面是许可证（灰色小字），最后是外链箭头。 */
+.settings-modal .about-link-buttons .settings-external-link {
   white-space: nowrap;
 }
 
-.settings-modal .about-text-links .settings-external-link:hover {
-  background: var(--sn-color-hover);
-  text-decoration: none;
-}
-
-.settings-modal .about-text-links .settings-external-link:hover .resource-name {
-  color: var(--sn-color-accent-text);
-}
-
-.settings-modal .about-text-links .settings-external-link > svg.icon:last-child {
+.settings-modal .about-link-buttons .settings-external-link > svg.icon:last-child {
   width: var(--sn-icon-size-sm);
   height: var(--sn-icon-size-sm);
 }
@@ -4629,40 +4650,44 @@ body.is-dragging-attachment * {
 }
 
 /* ---------- 提示条：反色，可带「撤销」 ----------
- * 与 Playground 相同，出现在侧栏窗口里：默认在标题区下方正中，设置中的「通知位置」可以换成右上角或底栏上方。
- * 提示条区域随字号整页缩放，屏幕坐标要除以缩放；--sidebar-width 是未缩放的侧栏宽度。 */
-.toast-region {
+ * 每个窗口有自己的提示区域，跟着窗口显示与收起（第七次反馈：此前侧栏的提示区域按屏幕坐标浮在页面上，侧栏收起后提示还停在桌面上）。
+ * 侧栏的在侧栏里，设置窗口与速记浮窗的在各自窗口里（app.js 的 toastRegion）；默认在标题区下方正中，
+ * 设置中的「通知位置」可以换成右上角或底部（侧栏在底栏上方）。窗口已按字号整页缩放，区域里不再缩放一次。 */
+.sidebar > .toast-region,
+.capture > .toast-region.capture-toast-region {
+  position: absolute;
+  z-index: var(--sn-z-popover);
   top: calc(var(--sn-header-height) + var(--sn-space-4));
   right: auto;
   bottom: auto;
-  left: calc(100vw / var(--app-zoom, 1) - var(--sidebar-width) / 2);
+  left: 50%;
+  display: flex;
+  flex-direction: column;
   align-items: center;
   gap: var(--sn-space-3);
   width: max-content;
-  max-width: calc(var(--sidebar-width) - var(--sn-space-8) * 2);
+  max-width: calc(100% - var(--sn-space-8) * 2);
+  pointer-events: none;
+  text-shadow: none;
   transform: translateX(-50%);
+  zoom: 1;
 }
 
-body[data-edge='left'] .toast-region {
-  left: calc(var(--sidebar-width) / 2);
-}
-
-[data-sn-toast='top-right'] .toast-region {
+:is([data-sn-toast='top-right'] .sidebar > .toast-region, [data-sn-toast='top-right'] .capture > .toast-region.capture-toast-region) {
   right: var(--sn-space-6);
   left: auto;
   align-items: flex-end;
   transform: none;
 }
 
-[data-sn-toast='top-right'] body[data-edge='left'] .toast-region {
-  right: auto;
-  left: calc(var(--sidebar-width) - var(--sn-space-6));
-  transform: translateX(-100%);
-}
-
-[data-sn-toast='bottom-center'] .toast-region {
+[data-sn-toast='bottom-center'] .sidebar > .toast-region {
   top: auto;
   bottom: calc(var(--sn-footer-height) + var(--sn-space-4));
+}
+
+[data-sn-toast='bottom-center'] .capture > .toast-region.capture-toast-region {
+  top: auto;
+  bottom: var(--sn-space-6);
 }
 
 .toast-region .toast {

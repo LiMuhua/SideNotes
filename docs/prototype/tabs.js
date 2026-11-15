@@ -8,9 +8,11 @@
  *   页签上写标签名（不写 #，超过 4 个字截断），显示带这个标签的记录；顺序保存在设置的 pinnedTags 中。
  * - 管理：双击页签原地改名（所有记录上的这个标签一起改）；按住拖动页签排序，插入线标出位置；
  *   右键「改名」「移出页签栏」，移出只是不再固定，记录与标签都不变，可以撤销。
- * - 最后一格只占一个位置，样子固定（第六次反馈）：页签都放得下时是「+」，单击新建页签；真放不下时，多出来的页签从右往左
- *   收进去，这一格写「N ▾」，单击打开菜单：收起的页签与「新建页签」。当前页签收在菜单里时，这一格不换成它的名字，
- *   只带当前样式（下划线），菜单里它打勾（此前写它的名字，为此按 4 个字预留宽度，后面空着一段也会收起页签）。
+ * - 最后一格只占一个位置，样子固定（第六次反馈）：页签都放得下、后面还有位置时是「+」，单击新建页签；真放不下时，
+ *   多出来的页签从右往左收进去，这一格写「N ▾」，单击打开菜单：收起的页签与「新建页签」。
+ * - 「N ▾」只在页签真放不下时出现（第七次反馈）：页签都放得下、只是放不下「+」时，不显示「+」，不为它收起页签。
+ * - 当前页签始终显示名字（第七次反馈）：它不收起；放不下时收它前面的页签，它排到「N ▾」前面（先后仍按固定的顺序）。
+ *   此前当前页签可以收在菜单里，这一格只加下划线，看不出是哪个页签。
  * - 条数只写在随记与当前页签上，省出页签栏的宽度。
  * - 在标签页签里新建记录时，新建卡片的工具栏上有一个「#标签」，保存时写进标签行；点它的 × 可以不带。
  * 依赖 app.js 的全局状态与函数（state、ui、elements、el、icon、button、renderNotes、toast、tagKey、hasTag、noteParts、
@@ -61,17 +63,20 @@ window.SidebarTabs = (function createSidebarTabs() {
     return tag ? hasTag(note, tag) : !pinnedTagOf(note);
   }
 
-  /** @return {Array<string>} 页签栏的顺序：随记、置顶与固定的标签（全局搜索的结果按这个顺序分组）。 */
+  /** @return {Array<string>} 页签栏的顺序：随记、置顶与固定的标签。 */
   function order() { return ['workspace', 'pinned'].concat(pinnedTags().map(tabOf)); }
+
+  /** @return {Array<string>} 全局搜索结果的分组顺序（第七次反馈）：置顶总在最上面，其余与页签栏相同。 */
+  function resultOrder() { return ['pinned', 'workspace'].concat(pinnedTags().map(tabOf)); }
 
   /** @brief 页签显示的名称（不带引号）。 @param {string} tab 页签。 @return {string} 名称。 */
   function name(tab) { return tab === 'pinned' ? '置顶' : tagOf(tab) || '随记'; }
 
   /**
-   * @brief 记录在页签栏中第一个出现的页签：没有已固定标签的在随记，否则置顶的在置顶，其余在它的第一个固定标签。
-   * 全局搜索的结果按它分组，「转到」也去这里。 @param {object} note 记录。 @return {string} 页签。
+   * @brief 记录所在的页签：置顶的在置顶（第七次反馈：此前没有已固定标签的置顶记录算在随记），其余没有已固定标签的在随记，
+   * 有的在它的第一个固定标签。全局搜索的结果按它分组，「转到」也去这里。 @param {object} note 记录。 @return {string} 页签。
    */
-  function homeOf(note) { return order().find(function owns(tab) { return belongs(note, tab); }) || 'workspace'; }
+  function homeOf(note) { return resultOrder().find(function owns(tab) { return belongs(note, tab); }) || 'workspace'; }
 
   /** @brief 页签在提示中的名称。 @param {string} tab 页签。 @return {string} 名称。 */
   function label(tab) { const tag = tagOf(tab); return tab === 'pinned' ? '置顶' : tag ? '「' + tag + '」' : '随记'; }
@@ -79,6 +84,12 @@ window.SidebarTabs = (function createSidebarTabs() {
   /** @brief 切换页签，与单击页签相同：结束搜索，清除标签筛选，回到列表顶部（app.js 的 goToTab）。 @param {string} tab 页签。 @return {boolean} 是否切换。 */
   function select(tab) {
     return exists(tab) && goToTab(tab, { reset: true });
+  }
+
+  /** @brief 焦点移到页签栏里的这个页签（从最后一格的菜单选中后，它排到「N ▾」前面）。 @param {string} tab 页签。 */
+  function focusTab(tab) {
+    const node = nav && Array.from(nav.querySelectorAll('.tab[data-tab]')).find(function same(item) { return item.dataset.tab === tab && !item.hidden; });
+    if (node) node.focus({ preventScroll: true });
   }
 
   /** @brief 保存固定的标签与顺序。 @param {Array<string>} list 标签。 @return {boolean} 是否成功。 */
@@ -174,22 +185,21 @@ window.SidebarTabs = (function createSidebarTabs() {
   }
 
   /**
-   * @brief 最后一格的样子（第六次反馈：固定只占一个位置）：没有收起的页签时是「+」；有时写收起的个数与 ▾，
-   * 当前页签收在里面时带当前样式，但不换成它的名字。
-   * @param {number} count 收起的个数。 @param {string} current 收在里面的当前页签，没有时为空。
+   * @brief 最后一格的样子（第六次反馈：固定只占一个位置）：没有收起的页签时是「+」；有时写收起的个数与 ▾。
+   * 当前页签不会收在里面（第七次反馈），这一格不带当前样式。
+   * @param {number} count 收起的个数。
    */
-  function setMore(count, current = '') {
+  function setMore(count) {
     more.replaceChildren();
     const add = count === 0;
     more.classList.toggle('is-add', add);
-    more.classList.toggle('active', Boolean(current));
     if (add) more.append(icon('plus'));
     else more.append(el('span', 'tab-more-count', String(count)), icon('chevron-down'));
     if (add) more.removeAttribute('aria-haspopup');
     else more.setAttribute('aria-haspopup', 'menu');
-    more.setAttribute('aria-selected', String(Boolean(current)));
-    more.setAttribute('aria-label', add ? '新建页签' : current ? '当前页签「' + current + '」收在这里，另有 ' + (count - 1) + ' 个收起的页签' : '另有 ' + count + ' 个收起的页签，新建页签');
-    more.tabIndex = current ? 0 : -1;
+    more.setAttribute('aria-selected', 'false');
+    more.setAttribute('aria-label', add ? '新建页签' : '另有 ' + count + ' 个收起的页签，新建页签');
+    more.tabIndex = -1;
   }
 
   /** 写出页签栏：随记、置顶之后是固定的标签，最后一格是菜单；只有随记与当前页签写条数。 */
@@ -227,38 +237,49 @@ window.SidebarTabs = (function createSidebarTabs() {
   function count(tab) { return state.notes.filter(function inTab(note) { return belongs(note, tab); }).length; }
 
   /**
-   * 页签放得下就全部显示（最后一格是「+」）；真放不下时，从右往左把标签页签收进最后一格，每收一个按「N ▾」的实际宽度重新量，
-   * 刚好放下为止，后面不再为别的写法预留空位（第六次反馈）。搜索的放大镜在这一行的最右边，页签栏的右侧内边距给它留了位置。
+   * 页签栏的排法（第六、七次反馈），规则与 Playground 的 model/tabLayout.ts 相同：
+   * 1. 页签都放得下就全部显示；后面还有位置时最后一格是「+」，没有位置就不显示「+」，不为它收起页签；
+   * 2. 页签真放不下时，从右往左把标签页签收进最后一格「N ▾」，每收一个按「N ▾」的实际宽度重新量，刚好放下为止；
+   * 3. 当前页签不收：放不下时收它前面的页签，它排到「N ▾」前面。别的页签都收起后仍放不下时（侧栏很窄、页签名很长），它的名字缩短。
+   * 搜索的放大镜在这一行的最右边，页签栏的右侧内边距给它留了位置。
    */
   function layout() {
     if (!nav || !more || !nav.isConnected) return;
     const tabs = Array.from(nav.querySelectorAll('.tab.is-tag-tab'));
+    const keep = tabs.find(function current(node) { return node.dataset.tab === ui.tab; }) || null;
     const overflowing = function overflowing() { return nav.scrollWidth > nav.clientWidth + 1; };
-    tabs.forEach(function show(node) { node.hidden = false; });
+    tabs.forEach(function show(node) { node.hidden = false; node.classList.remove('is-squeezed'); });
+    more.hidden = false;
     setMore(0);
-    let count = 0;
-    for (let index = tabs.length - 1; index >= 0 && overflowing(); index -= 1) {
-      tabs[index].hidden = true;
-      count += 1;
-      setMore(count);
+    if (overflowing()) {
+      // 先让出「+」：页签都放得下时不出现「N ▾」。
+      more.hidden = true;
+      if (overflowing()) {
+        more.hidden = false;
+        let count = 0;
+        for (let index = tabs.length - 1; index >= 0 && overflowing(); index -= 1) {
+          if (tabs[index] === keep) continue;
+          tabs[index].hidden = true;
+          count += 1;
+          setMore(count);
+        }
+        if (keep && overflowing()) keep.classList.add('is-squeezed');
+      }
     }
     hidden = tabs.filter(function collapsed(node) { return node.hidden; }).map(function name(node) { return tagOf(node.dataset.tab); });
-    const current = tagOf(ui.tab), activeHidden = Boolean(current) && hidden.some(function same(tag) { return tagKey(tag) === tagKey(current); });
-    setMore(hidden.length, activeHidden ? current : '');
   }
 
   /* ==================== 最后一格的菜单与新建页签 ==================== */
 
   /**
-   * @brief 最后一格的菜单：收起的页签（当前的打勾，右键可以放回页签栏或移出）与「新建页签」。拖动卡片时停在最后一格上也会打开，
-   * 菜单中的页签可以作为落点（data-tab）。
+   * @brief 最后一格的菜单：收起的页签（右键可以放回页签栏或移出）与「新建页签」。当前页签不会收在这里（第七次反馈）：
+   * 选中菜单里的页签后，它排到「N ▾」前面，焦点跟过去。拖动卡片时停在最后一格上也会打开，菜单中的页签可以作为落点（data-tab）。
    * @param {object} options dragging：拖动卡片时打开，焦点不移进菜单。
    */
   function openMenu(options = {}) {
     if (!more || !window.NoteMenus || !window.NoteMenus.openList) return;
-    const current = tagOf(ui.tab);
     const items = hidden.map(function entry(tag) {
-      return { label: tag, icon: 'hash', checked: Boolean(current) && tagKey(tag) === tagKey(current), tab: tabOf(tag), run: function choose() { if (select(tabOf(tag)) && more && more.isConnected) more.focus({ preventScroll: true }); }, context: function contextMenu(event) { openTabMenu(tag, event, true); } };
+      return { label: tag, icon: 'hash', tab: tabOf(tag), run: function choose() { if (select(tabOf(tag))) focusTab(tabOf(tag)); }, context: function contextMenu(event) { openTabMenu(tag, event, true); } };
     });
     if (items.length) items.push('separator');
     items.push({ label: '新建页签', icon: 'plus', run: function create() { startCreate(); } });
@@ -568,5 +589,5 @@ window.SidebarTabs = (function createSidebarTabs() {
     window.addEventListener('sidenotes:settings-changed', function settingsChanged() { window.requestAnimationFrame(layout); });
   }
 
-  return Object.freeze({ tagOf: tagOf, tabOf: tabOf, pinnedTags: pinnedTags, pinnedTagOf: pinnedTagOf, findPinned: findPinned, allTags: allTags, order: order, name: name, homeOf: homeOf, exists: exists, belongs: belongs, label: label, select: select, pin: pin, unpin: unpin, render: render, layout: layout, openMenu: openMenu, draftTag: draftTag, skippedTag: skippedTag, resetDraftTag: resetDraftTag });
+  return Object.freeze({ tagOf: tagOf, tabOf: tabOf, pinnedTags: pinnedTags, pinnedTagOf: pinnedTagOf, findPinned: findPinned, allTags: allTags, order: order, resultOrder: resultOrder, name: name, homeOf: homeOf, exists: exists, belongs: belongs, label: label, select: select, pin: pin, unpin: unpin, render: render, layout: layout, openMenu: openMenu, draftTag: draftTag, skippedTag: skippedTag, resetDraftTag: resetDraftTag });
 })();

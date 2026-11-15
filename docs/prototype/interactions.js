@@ -25,30 +25,44 @@
     const valid=new Set(state.notes.filter(function active(note){return note.status!=='trash';}).map(function id(note){return note.id;}));
     selected.forEach(function prune(id){if(!valid.has(id))selected.delete(id);});
     ui.selection=selected;
+    // 多选按钮按下时卡片出现勾选框（第七次反馈），由列表上的 is-selecting 控制。
+    elements.noteList.classList.toggle('is-selecting',tools.mode);
     elements.noteList.querySelectorAll('.note-card').forEach(function mark(card){
       const chosen=selected.has(card.dataset.noteId);card.classList.toggle('is-selected',chosen);card.setAttribute('aria-selected',String(chosen));
     });
-    if(typeof syncListTools==='function')syncListTools();
+    if(typeof renderFilterRow==='function')renderFilterRow();
   }
   /** 清空选择与多选模式，不更改记录内容。 */
   function clearSelection(){selected.clear();tools.mode=false;tools.anchor='';refresh();}
   /** @brief 指示是否存在选择或正在多选。 @return {boolean} 选择状态。 */
   function hasSelection(){return tools.mode||selected.size>0;}
+  /** @brief 多选按钮是否按下（第七次反馈）：按下时卡片出现勾选框，单击卡片就是勾选或取消。 @return {boolean} 是否按下。 */
+  function isSelecting(){return tools.mode;}
   /** @brief 指示是否正在按压、拖动或框选。 @return {boolean} 手势状态。 */
   function isBusy(){return Boolean(tools.gesture);}
   /**
-   * @brief 同步连续区间选择。Shift+单击从起点选到这一张：起点是上一次不按 Shift 单击的卡片（第六次反馈：此前单击卡片只高亮、
-   * 不记作起点，Shift+单击只选中一张），起点不在当前列表中时只切换这一张。
-   * @param {string} id 终点。 @param {boolean} range 是否区间选择。 @param {boolean} additive 是否追加。
+   * @brief 选中卡片（第七次反馈，与 Windows 资源管理器相同）：
+   * - Ctrl+单击：加选或减选这一张；还没有选中的卡片时，起点那张也选上（先单击卡片 1，再 Ctrl+单击卡片 2，两张都选中）；
+   * - Shift+单击：从起点选到这一张，换掉原来的选择；同时按 Ctrl 或多选按钮按下时，加进原来的选择；
+   * - 多选按钮按下时单击：勾选或取消这一张。
+   * 起点是上一次不按 Shift 单击的卡片（第六次反馈），悬停的高亮不算；起点不在当前列表中时只切换这一张。
+   * @param {string} id 卡片。 @param {boolean} range 是否区间选择。 @param {boolean} additive 是否加进原来的选择。
    */
   function choose(id,range,additive){
-    const ids=visibleIds();
-    if(range&&tools.anchor&&ids.includes(tools.anchor)){const start=ids.indexOf(tools.anchor),end=ids.indexOf(id);if(!additive)selected.clear();ids.slice(Math.min(start,end),Math.max(start,end)+1).forEach(function select(item){selected.add(item);});}
-    else{if(selected.has(id))selected.delete(id);else selected.add(id);tools.anchor=id;}
-    tools.mode=true;refresh();
+    const ids=visibleIds(),anchor=tools.anchor&&ids.includes(tools.anchor)?tools.anchor:'';
+    if(range&&anchor){const start=ids.indexOf(anchor),end=ids.indexOf(id);if(!additive)selected.clear();ids.slice(Math.min(start,end),Math.max(start,end)+1).forEach(function select(item){selected.add(item);});}
+    else{
+      if(!selected.size&&!tools.mode&&anchor&&anchor!==id)selected.add(anchor);
+      if(selected.has(id))selected.delete(id);else selected.add(id);
+      tools.anchor=id;
+    }
+    refresh();
   }
-  /** @brief 筛选行的多选按钮（第六次反馈）：没有多选时进入多选，之后单击卡片就是选中或取消；已在多选中时退出并清空。 @return {boolean} 是否进入多选。 */
-  function toggleMode(){if(hasSelection()){clearSelection();return false;}tools.mode=true;refresh();return true;}
+  /**
+   * @brief 筛选行的多选按钮（第六、七次反馈）：没按下时按下，卡片出现勾选框，已用 Ctrl 或 Shift 选中的保留；
+   * 按下时再点一下退出并清空。 @return {boolean} 是否按下。
+   */
+  function toggleMode(){if(tools.mode){clearSelection();return false;}tools.mode=true;refresh();return true;}
   /** @return {number} 选中的条数（不含已移入回收站的）。 */
   function selectedCount(){return selectedIds().length;}
   /** @brief 捕获多选点击及拖动产生的合成点击。 @param {MouseEvent} event 点击。 */
@@ -57,11 +71,16 @@
     if(tools.blockClick){tools.blockClick=false;if(event.detail!==0&&now()-tools.lastDragAt<650){consume(event);return;}}
     const interactive=target.closest('button,a,input,textarea,select,[contenteditable="true"],.modal,.capture,.tag-dropdown');
     const card=target.closest('.note-card');
-    if((!card||!elements.noteList.contains(card)||card.classList.contains('is-editing'))&&hasSelection()&&!interactive){consume(event);clearSelection();return;}
-    if(!card||!elements.noteList.contains(card)||card.classList.contains('is-editing'))return;
-    if((hasSelection()||event.ctrlKey||event.metaKey||event.shiftKey)&&!interactive){consume(event);choose(card.dataset.noteId,event.shiftKey,event.ctrlKey||event.metaKey);return;}
-    // 不按 Shift 单击卡片（只高亮）也记作区间的起点；悬停的高亮不算。
-    if(!interactive)tools.anchor=card.dataset.noteId;
+    const inList=Boolean(card&&elements.noteList.contains(card)&&!card.classList.contains('is-editing'));
+    if(!inList&&hasSelection()&&!interactive){consume(event);clearSelection();return;}
+    if(!inList)return;
+    const id=card.dataset.noteId,modifier=event.ctrlKey||event.metaKey;
+    // 多选按钮按下时：单击卡片的任何地方都是勾选或取消，卡片上的按钮、链接、待办与标签不再响应。
+    if(tools.mode){consume(event);choose(id,event.shiftKey,true);return;}
+    if((modifier||event.shiftKey)&&!interactive){consume(event);choose(id,event.shiftKey,modifier);return;}
+    // 不按键单击卡片：只选中（高亮）这一张，Ctrl 或 Shift 选中的其它卡片取消（第七次反馈：此前是取消这一张）；
+    // 它记作起点，悬停的高亮不算。
+    if(!interactive){if(selected.size)clearSelection();tools.anchor=id;}
   }
   /** @brief 多选和排序之后不再触发双击复制。 @param {MouseEvent} event 双击。 */
   function captureDoubleClick(event){const target=targetOf(event);if(target&&target.closest('.note-card')&&(hasSelection()||now()-tools.lastDragAt<650))consume(event);}
@@ -191,7 +210,7 @@
     const anchorY=gesture.startY-(elements.noteList.scrollTop-gesture.startScrollTop),left=Math.min(gesture.startX,gesture.x),top=Math.min(anchorY,gesture.y),right=Math.max(gesture.startX,gesture.x),bottom=Math.max(anchorY,gesture.y),bounds=elements.noteList.getBoundingClientRect();
     gesture.overlay.style.left=Math.max(left,bounds.left)+'px';gesture.overlay.style.top=Math.max(top,bounds.top)+'px';gesture.overlay.style.width=Math.max(0,Math.min(right,bounds.right)-Math.max(left,bounds.left))+'px';gesture.overlay.style.height=Math.max(0,Math.min(bottom,bounds.bottom)-Math.max(top,bounds.top))+'px';
     selected.clear();gesture.base.forEach(function keep(id){selected.add(id);});
-    elements.noteList.querySelectorAll('.note-card').forEach(function hit(card){const rect=card.getBoundingClientRect();if(rect.right>=left&&rect.left<=right&&rect.bottom>=top&&rect.top<=bottom)selected.add(card.dataset.noteId);});tools.mode=true;refresh();
+    elements.noteList.querySelectorAll('.note-card').forEach(function hit(card){const rect=card.getBoundingClientRect();if(rect.right>=left&&rect.left<=right&&rect.bottom>=top&&rect.top<=bottom)selected.add(card.dataset.noteId);});refresh();
   }
   /** @brief 跟随指针更新反馈及落点。 @param {object} gesture 手势。 */
   function paintGesture(gesture){if(tools.gesture!==gesture||!gesture.active)return;if(gesture.kind==='sort'){gesture.ghost.style.left=(gesture.x-gesture.grabX)/gesture.zoom+'px';gesture.ghost.style.top=(gesture.y-gesture.grabY)/gesture.zoom+'px';updateDropTarget(gesture);}else updateFrame(gesture);}
@@ -291,5 +310,5 @@
     if(window.MutationObserver){tools.observer=new window.MutationObserver(function listChanged(){refresh();});tools.observer.observe(elements.noteList,{childList:true,subtree:true});}
     refresh();
   }
-  window.NoteInteractions=Object.freeze({initialize:initialize,refresh:refresh,clearSelection:clearSelection,hasSelection:hasSelection,toggleMode:toggleMode,selectedCount:selectedCount,isBusy:isBusy,cancelGesture:cancelGesture,selectedIds:selectedIds,moveTo:moveTo,trash:trash});
+  window.NoteInteractions=Object.freeze({initialize:initialize,refresh:refresh,clearSelection:clearSelection,hasSelection:hasSelection,toggleMode:toggleMode,isSelecting:isSelecting,selectedCount:selectedCount,isBusy:isBusy,cancelGesture:cancelGesture,selectedIds:selectedIds,moveTo:moveTo,trash:trash});
 })();
