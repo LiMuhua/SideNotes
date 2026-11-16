@@ -9,7 +9,7 @@
  *   页签从右往左收进去，这一格写「N ▾」，单击打开菜单：收起的页签与「新建页签」。页签都放得下、只差「+」时不显示「+」，
  *   不为它收起页签（第七次反馈）。
  * - 末格（第八次反馈）：放不下时，最后一个显示的页签与「N ▾」合成一格。从菜单选页签只换末格里的页签，前面的页签不动；
- *   当前页签本该收起时也换进末格，始终显示名字（第七次反馈）。排法见 model/tabLayout.ts。
+ *   当前页签本该收起时也换进末格，始终显示名字（第七次反馈）。排法见 src/core/tabLayout.ts。
  *
  * Playground 没有模拟拖动（按住页签排序、把卡片拖到页签或最后一格）与菜单中收起页签的右键菜单，规则见 interactions.md 第十二节。
  */
@@ -18,7 +18,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type 
 import { isValidTag, tagKey } from '@/core/tags';
 import type { Note } from '@/core/types';
 import { allTags, findPinned, homeTab, pinnedTagOf, tabLabel, tabOfTag, tabPatch, tagOfTab, TAB_LABELS, useNotes, type SidebarTab, type SidebarView } from '../model/notes';
-import { fitTabs, type TabFit } from '../model/tabLayout';
+import { fitTabs, type TabFit } from '@/core/tabLayout';
 import { cx, useSurface } from '../ui/context';
 import { Icon, type IconName } from '../ui/Icon';
 import { Layer, useAnchoredPosition } from '../ui/layer';
@@ -167,7 +167,7 @@ export function TabsRow({ view }: { view: SidebarView }) {
   const shownCount = (tab: SidebarTab) => (tab !== 'workspace' && fit && !fit.counted ? null : countOf(tab));
 
   /**
-   * 量出显示哪些标签页签（规则见 model/tabLayout.ts）：都放得下时全部显示，后面还有位置时最后一格是「+」；放不下时按顺序能放几个
+   * 量出显示哪些标签页签（规则见 src/core/tabLayout.ts）：都放得下时全部显示，后面还有位置时最后一格是「+」；放不下时按顺序能放几个
    * 放几个，最后一个与「N ▾」合成末格，当前页签或上一次换进来的页签换进末格。宽度取自看不见的测量行（与页签栏同样的页签、
    * 最后一格的「+」与一位、两位数的「N ▾」，以及写着两个字的 probe：末格的页签名字最短留这么宽）。
    */

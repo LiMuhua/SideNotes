@@ -12,6 +12,7 @@
 import { useEffect, useMemo } from 'react';
 import { Icon } from './Icon';
 import { rankTags } from '../core/notes';
+import { belongsTo } from '../core/tabs';
 import { useStoreSlice } from '../hooks/useStore';
 import type { TabKey } from '../core/types';
 
@@ -48,9 +49,11 @@ export function TagFilter({
 }: TagFilterProps) {
   const notes = useStoreSlice((state) => state.notes);
   const tagUsage = useStoreSlice((state) => state.tagUsage);
+  const pinnedTags = useStoreSlice((state) => state.settings.pinnedTags);
+  // 候选是当前页签中的标签（与原型 rankedTags 相同）：随记与标签页签按固定的标签划分，rankTags 只区分置顶。
   const candidates = useMemo(
-    () => rankTags(notes, tab, tagUsage, query, selectedTag),
-    [notes, tab, tagUsage, query, selectedTag],
+    () => rankTags(notes.filter((note) => belongsTo(note, tab, pinnedTags)), tab, tagUsage, query, selectedTag),
+    [notes, tab, pinnedTags, tagUsage, query, selectedTag],
   );
   const shown = candidates.slice(0, MAX_CANDIDATES);
   // 首个候选命中搜索或已被选中时，移到「全部标签」之前并提供管理入口。

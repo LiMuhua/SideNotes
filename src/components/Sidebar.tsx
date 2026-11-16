@@ -15,6 +15,7 @@ import { Icon, IconSprite } from "./Icon";
 import { Composer } from "./Composer";
 import { NoteCard } from "./NoteCard";
 import { NoteMenu, type MenuAnchor, type MenuCommand } from "./NoteMenu";
+import { ContextMenu } from "./ContextMenu";
 import { SidebarMenu, type SidebarCommand } from "./SidebarMenu";
 import { TagInput } from "./TagInput";
 import { EmojiPicker } from "./EmojiPicker";
@@ -32,7 +33,23 @@ import { useCardInteractions, type ItemDrop } from "../hooks/useCardInteractions
 import { useFileDrop, type FileDropTarget } from "../hooks/useFileDrop";
 import * as store from "../core/store";
 import * as bridge from "../core/bridge";
-import { matchesQuery, shouldNudgeTidy, inTab, compareNoteOrder, noteTitle } from "../core/notes";
+import { shouldNudgeTidy, noteTitle } from "../core/notes";
+import {
+  allTags,
+  belongsTo,
+  filterNotes,
+  homeTab,
+  findPinned,
+  pinnedTagOf,
+  tabCount,
+  tabExists,
+  tabLabel,
+  tabName,
+  tabOfTag,
+  tabPatch,
+  tagOfTab,
+} from "../core/tabs";
+import { SidebarTabs, type SidebarTabsHandle } from "./SidebarTabs";
 import { insertAtDisplayLine, moveImage, moveReference } from "../core/transfer";
 import {
   chooseAndImportFiles,
@@ -42,17 +59,12 @@ import {
   type AttachmentReference,
   type ReferenceSpan,
 } from "../core/attachments";
-import { parse, removeTag, tagKey, canonicalize } from "../core/tags";
+import { parse, removeTag, tagKey, canonicalize, isValidTag, withTag } from "../core/tags";
 import { WIDTH_RANGE, sidebarWindowWidth, uiZoom } from "../core/settings";
 import { comboFromEvent, matches } from "../core/shortcuts";
 import type { EditSession, Note, NoteImage, TabKey } from "../core/types";
 import type { EditorAttachment, MarkdownEditor } from "../core/editor";
 
-const TAB_LABELS: Record<TabKey, string> = {
-  workspace: "工作区",
-  pinned: "置顶",
-  archive: "归档",
-};
 
 /** 修改记录写入失败时的提示，沿用原型 updateNote 的文案。 */
 const SAVE_FAILED_MESSAGE = "保存失败，原记录未改动。请导出备份后重试。";
@@ -71,7 +83,12 @@ export function Sidebar() {
   const toast = useToast();
 
   /* ==================== 侧栏与 Tab 状态 ==================== */
-  const [tab, setTab] = useState<TabKey>("workspace");
+  const [tabValue, setTab] = useState<TabKey>("workspace");
+  // 当前的标签页签被移出页签栏（或改名）后回到随记。
+  const tab: TabKey = tabExists(tabValue, state.settings.pinnedTags) ? tabValue : "workspace";
+  /** 「查看」「转到」要找到的记录，以及刚找到、正在闪一下的那一条。 */
+  const [locate, setLocate] = useState<{ id: string; serial: number } | null>(null);
+  const [locatedId, setLocatedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [selectedTag, setSelectedTag] = useState("");
@@ -97,6 +114,10 @@ export function Sidebar() {
   const [contextMenu, setContextMenu] = useState<{ note: Note; anchor: MenuAnchor; key: number } | null>(null);
   /** 空白处的右键菜单。 */
   const [sidebarMenu, setSidebarMenu] = useState<{ anchor: MenuAnchor; key: number } | null>(null);
+  /** 卡片菜单「移到…」的二级菜单：随记与固定的标签页签（当前页签除外）。 */
+  const [moveMenu, setMoveMenu] = useState<{ note: Note; anchor: MenuAnchor } | null>(null);
+  /** 页签栏打开的弹层（SidebarTabs）：菜单期间保持展开，输入页签名期间在获得焦点时保持展开。 */
+  const [tabsPopup, setTabsPopup] = useState<"menu" | "input" | null>(null);
   const menuSerial = useRef(0);
   /**
    * 单击选中的卡片：与指针悬停的卡片使用同一种边框高亮，指针移到另一张卡片上时只高亮那一张。
@@ -353,20 +374,12 @@ export function Sidebar() {
   }, [scheduleHide]);
 
   /* ==================== 过滤后的列表 ==================== */
-  const listNotes = useMemo(() => {
-    const baseList = state.notes
-      .filter((note) => inTab(note, tab) && matchesQuery(note, query))
-      .filter(
-        (note) =>
-          !selectedTag ||
-          parse(note.text).tags.some((item) => tagKey(item) === tagKey(selectedTag)),
-      );
-
-    // 置顶在前，再按手动顺序/创建时间排序。
-    const pinned = baseList.filter((note) => note.pinned).sort(compareNoteOrder);
-    const normal = baseList.filter((note) => !note.pinned).sort(compareNoteOrder);
-    return tab === "pinned" ? pinned : [...pinned, ...normal];
-  }, [state.notes, tab, query, selectedTag]);
+  const pinnedTags = state.settings.pinnedTags;
+  // 页签按随记、置顶与固定的标签筛选，置顶在前，再按手动顺序与创建时间（core/tabs 的 notesInTab）。
+  const listNotes = useMemo(
+    () => filterNotes(state.notes, tab, pinnedTags, query, selectedTag),
+    [state.notes, tab, pinnedTags, query, selectedTag],
+  );
 
   /* ==================== 按需加载 ==================== */
   // 开启「滚动按需加载」时先渲染一批，滚动到列表底部再追加下一批；切换页签、搜索或筛选标签后从第一批开始。
@@ -376,6 +389,36 @@ export function Sidebar() {
   const [loaded, setLoaded] = useState({ key: viewKey, count: pageSize });
   const loadedCount = loaded.key === viewKey ? Math.max(loaded.count, pageSize) : pageSize;
   const renderedNotes = useMemo(() => listNotes.slice(0, loadedCount), [listNotes, loadedCount]);
+  // 定位记录（「查看」「转到」）：先按需加载到它，渲染之后再滚过去。
+  useEffect(() => {
+    if (!locate) return;
+    const frame = window.requestAnimationFrame(() => {
+      const index = listNotes.findIndex((note) => note.id === locate.id);
+      if (index < 0) {
+        setLocate(null);
+        return;
+      }
+      if (index >= loadedCount) {
+        setLoaded({ key: viewKey, count: index + 1 });
+        return;
+      }
+      const card = listRef.current?.querySelector<HTMLElement>(`.note-card[data-note-id="${CSS.escape(locate.id)}"]`);
+      if (!card) return;
+      setCurrentId(locate.id);
+      card.focus({ preventScroll: true });
+      const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      card.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" });
+      setLocatedId(locate.id);
+      setLocate(null);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [locate, listNotes, loadedCount, viewKey]);
+  useEffect(() => {
+    if (!locatedId) return;
+    const timer = window.setTimeout(() => setLocatedId(null), 1600);
+    return () => window.clearTimeout(timer);
+  }, [locatedId]);
+
   // 列表只占一个 Tab 停靠点：编辑中的卡片，否则是高亮的卡片，没有高亮时是第一张（interactions.md 3.2）。
   const tabStopId =
     editing?.id ?? (currentId && renderedNotes.some((note) => note.id === currentId) ? currentId : renderedNotes[0]?.id);
@@ -457,7 +500,61 @@ export function Sidebar() {
     }, 0);
   }, [commitEdit]);
 
+  /** 切换页签：清空搜索、标签筛选与单击选中，页签按钮与拖动停留共用。 */
+  const switchTab = useCallback((next: TabKey) => {
+    setTab(next);
+    setQuery("");
+    setSearchOpen(false);
+    setSelectedTag("");
+    setTagMenuOpen(false);
+    setCurrentId(null);
+    if (listRef.current) listRef.current.scrollTop = 0;
+  }, []);
+
+  /** 切换页签；给出记录时在列表中找到它（按需加载到它），滚到中间、高亮并闪一下。 */
+  const goToTab = useCallback(
+    (next: TabKey, noteId?: string) => {
+      switchTab(next);
+      if (noteId) setLocate({ id: noteId, serial: Date.now() });
+    },
+    [switchTab],
+  );
+
   /* ==================== 速记 Composer ==================== */
+  // 新建卡片上的「#标签」：在标签页签中新建时带上这个标签；点 × 这条不带，换页签或保存后恢复。
+  const tabTag = tagOfTab(tab);
+  const [skipTag, setSkipTag] = useState("");
+  const draftTag = tabTag && !(skipTag && tagKey(skipTag) === tagKey(tabTag)) ? tabTag : "";
+
+  /**
+   * 新记录的提示（DS-12）：不在当前页签里显示时，写明记在了哪里，「查看」切过去并闪一下这一条；
+   * 是因为去掉了新建卡片上的页签标签时，还有「放回」：补上这个标签。其余情况照旧提示「记录已保存」。
+   */
+  const announceSaved = useCallback(
+    (note: Note, skipped: string) => {
+      const pinned = store.getState().settings.pinnedTags;
+      if (belongsTo(note, tab, pinned)) {
+        toast("记录已保存");
+        return;
+      }
+      const home = homeTab(note, pinned);
+      const actions = [{ label: "查看", run: () => goToTab(home, note.id) }];
+      if (skipped) {
+        actions.push({
+          label: `放回「${skipped}」`,
+          run: () => {
+            const current = store.getState().notes.find((item) => item.id === note.id);
+            if (!current) return;
+            void store.updateNote(note.id, { text: withTag(current.text, skipped) }).then((saved) => {
+              toast(saved ? `已放回「${skipped}」` : SAVE_FAILED_MESSAGE, null, !saved);
+            });
+          },
+        });
+      }
+      toast(`已记在「${tabName(home)}」`, actions);
+    },
+    [tab, goToTab, toast],
+  );
   const [composerText, setComposerText] = useState("");
   const composerEditorRef = useRef<MarkdownEditor | null>(null);
 
@@ -470,7 +567,8 @@ export function Sidebar() {
       // 与原型一致：草稿为空时不保存也不提示。
       const { draft } = store.getState();
       if (!draft.text.trim() && !draft.images.length) return;
-      const note = await store.saveDraftAsNote(tab);
+      // 在置顶页签中新建的置顶；在标签页签中新建的带上这个标签（新建卡片上的「#标签」，点 × 这条不带）。
+      const note = await store.saveDraftAsNote({ pinned: tab === "pinned", tag: draftTag });
       if (!note) {
         toast(
           store.getState().loadFailed
@@ -482,9 +580,11 @@ export function Sidebar() {
         return;
       }
       setComposerText("");
-      toast("记录已保存");
+      const skipped = tabTag && skipTag && tagKey(skipTag) === tagKey(tabTag) ? tabTag : "";
+      setSkipTag("");
+      announceSaved(note, skipped);
     },
-    [tab, toast],
+    [tab, draftTag, tabTag, skipTag, setSkipTag, announceSaved, toast],
   );
 
   useEffect(() => {
@@ -627,53 +727,41 @@ export function Sidebar() {
 
   /* ==================== 卡片操作 ==================== */
 
-  const handleArchiveNote = useCallback(
-    async (note: Note) => {
-      const destination = note.status === "archived" ? "workspace" : "archive";
-      const undo = await store.moveNotes([note.id], destination);
-      if (!undo) {
-        toast("操作未保存", null, true);
-        return;
-      }
-      toast(destination === "archive" ? "已归档" : "已移回工作区", {
-        label: "撤销",
-        run: () => {
-          void store.restoreNotes(undo);
-        },
+  /**
+   * 把卡片移到另一个页签（卡片菜单「移到…」，与拖到页签上相同）：到标签页签加上这个标签，从别的标签页签来时换掉原来那个；
+   * 到随记去掉当前页签的标签；到置顶只置顶。移到随记后还在别的固定标签里的，提示写明在哪里。提示条可以撤销。
+   */
+  const moveToTab = useCallback(
+    async (ids: readonly string[], destination: TabKey, origin?: TabKey) => {
+      const { notes, settings } = store.getState();
+      const pinned = settings.pinnedTags;
+      const from = origin ?? tab;
+      if (destination === from) return false;
+      const changes: Array<readonly [string, Partial<Note>]> = [];
+      const moved: Note[] = [];
+      ids.forEach((id) => {
+        const note = notes.find((item) => item.id === id);
+        if (!note || note.status !== "active") return;
+        const patch: Partial<Note> = { ...tabPatch(note, from, destination), order: null };
+        changes.push([id, patch]);
+        moved.push({ ...note, ...patch });
       });
-    },
-    [toast],
-  );
-
-  /* ==================== 卡片长按排序与多选（对应原型 interactions.js） ==================== */
-
-  /** 切换页签：清空搜索、标签筛选与单击选中，页签按钮与拖动停留共用。 */
-  const switchTab = useCallback((next: TabKey) => {
-    setTab(next);
-    setQuery("");
-    setSearchOpen(false);
-    setSelectedTag("");
-    setTagMenuOpen(false);
-    setCurrentId(null);
-  }, []);
-
-  /** 把拖动的记录移到页签或回收站，提示可撤销，对应原型 moveRecords。 */
-  const moveDragged = useCallback(
-    async (ids: string[], destination: TabKey | "trash") => {
-      const undo = await store.moveNotes(ids, destination);
+      if (!changes.length) return false;
+      const undo = await store.patchNotes(changes);
       if (!undo) {
         toast("移动未保存，请重试", null, true);
         return false;
       }
-      const message =
-        destination === "trash"
-          ? "已移入回收站"
-          : destination === "archive"
-            ? "已移到归档"
-            : destination === "pinned"
-              ? "已移到置顶"
-              : "已移到工作区";
-      toast(`${message} ${ids.length} 条记录`, {
+      let message = `已移到${tabLabel(destination)} ${changes.length} 条记录`;
+      if (destination === "workspace") {
+        const still = moved.map((note) => pinnedTagOf(note, pinned)).filter(Boolean);
+        if (still.length) {
+          const some = still.length < moved.length ? `${still.length} 条` : "";
+          const more = new Set(still.map(tagKey)).size > 1 ? "等页签" : "";
+          message = `已移出${tabLabel(from)}，${some}仍在「${still[0]}」${more}`;
+        }
+      }
+      toast(message, {
         label: "撤销",
         run: () => {
           void store.restoreNotes(undo);
@@ -681,14 +769,124 @@ export function Sidebar() {
       });
       return true;
     },
+    [tab, toast],
+  );
+
+  /* ==================== 卡片长按排序与多选（对应原型 interactions.js） ==================== */
+
+  /* ==================== 页签：固定、移出、改名与排序 ==================== */
+  const tabsRef = useRef<SidebarTabsHandle>(null);
+
+  /** 保存固定的标签与顺序；失败时提示，返回是否成功。 */
+  const savePinnedTags = useCallback(
+    async (list: string[]) => {
+      const saved = await store.updateSettings({ pinnedTags: list });
+      if (!saved) toast("页签未保存，请重试", null, true);
+      return saved;
+    },
     [toast],
+  );
+
+  /** 把标签固定成页签并切换过去；已经固定的直接切换。与已有标签只差大小写时用已有的写法。 */
+  const pinTag = useCallback(
+    (name: string): boolean => {
+      const raw = String(name || "").trim().replace(/^#/, "");
+      if (!isValidTag(raw)) {
+        toast("标签最多 40 字；使用文字、数字、下划线或短横线", null, true);
+        return false;
+      }
+      const { notes, settings } = store.getState();
+      const known = allTags(notes).find((item) => tagKey(item.tag) === tagKey(raw));
+      const tag = findPinned(settings.pinnedTags, raw) || (known ? known.tag : raw);
+      if (!findPinned(settings.pinnedTags, tag)) {
+        const previous = settings.pinnedTags;
+        void savePinnedTags([...previous, tag]).then((saved) => {
+          if (!saved) return;
+          toast(`已固定为页签「${tag}」`, {
+            label: "撤销",
+            run: () => void savePinnedTags(previous),
+          });
+        });
+      }
+      switchTab(tabOfTag(tag));
+      return true;
+    },
+    [savePinnedTags, switchTab, toast],
+  );
+
+  /** 移出页签栏：只是不再固定，记录与标签都不变；当前在这个页签时回到随记。提示条可以撤销，放回原来的位置。 */
+  const unpinTag = useCallback(
+    (tag: string) => {
+      const previous = store.getState().settings.pinnedTags;
+      const name = findPinned(previous, tag);
+      if (!name) return;
+      void savePinnedTags(previous.filter((item) => item !== name)).then((saved) => {
+        if (!saved) return;
+        if (tagKey(tagOfTab(tab)) === tagKey(name)) switchTab("workspace");
+        toast(`已把「${name}」移出页签栏`, { label: "撤销", run: () => void savePinnedTags(previous) });
+      });
+    },
+    [savePinnedTags, switchTab, tab, toast],
+  );
+
+  /** 页签改名：所有记录上的这个标签一起改（与已有标签同名时合并），固定的页签跟着改。 */
+  const renamePinnedTag = useCallback(
+    (tag: string, value: string) => {
+      const next = value.trim().replace(/^#/, "");
+      if (!next || next === tag) return;
+      if (!isValidTag(next)) {
+        toast("标签最多 40 字；使用文字、数字、下划线或短横线", null, true);
+        return;
+      }
+      return store.renameTag(tag, next).then((saved) => {
+        if (!saved) {
+          toast(SAVE_FAILED_MESSAGE, null, true);
+          return;
+        }
+        if (selectedTag && tagKey(selectedTag) === tagKey(tag)) setSelectedTag(next);
+        if (tagKey(tagOfTab(tab)) === tagKey(tag)) setTab(tabOfTag(next));
+        toast("标签已改名，所有记录一起更新");
+      });
+    },
+    [selectedTag, tab, toast],
+  );
+
+  /** 移入回收站：不确认，提示条可以撤销（DS-12）；永久删除与清空回收站仍要确认。 */
+  const moveToTrash = useCallback(async (notes: Note[]) => {
+    if (!notes.length) return false;
+    const undo = await store.moveNotes(notes.map((note) => note.id), "trash");
+    if (!undo) {
+      toast(SAVE_FAILED_MESSAGE, null, true);
+      return false;
+    }
+    toast("已移入回收站", {
+      label: "撤销",
+      run: () => {
+        // 撤销还原删除前的状态、置顶与顺序；写入失败时与原型一样提示保存失败。
+        void store.restoreNotes(undo).then((ok) => {
+          if (!ok) toast(SAVE_FAILED_MESSAGE, null, true);
+        });
+      },
+    });
+    return true;
+  }, [toast]);
+
+  /** 把拖动的记录移到页签或回收站，提示可撤销，对应原型 moveRecords；from 是开始拖动时的页签。 */
+  const moveDragged = useCallback(
+    async (ids: string[], destination: TabKey | "trash", from: TabKey) => {
+      if (destination === "trash") return moveToTrash(store.getState().notes.filter((note) => ids.includes(note.id)));
+      return moveToTab(ids, destination, from);
+    },
+    [moveToTab, moveToTrash],
   );
 
   /** 把拖动的记录插入目标之前或之后，提示可撤销，对应原型 reorder。 */
   const reorderDragged = useCallback(
-    async (ids: Set<string>, targetId: string, after: boolean) => {
+    async (ids: Set<string>, targetId: string, after: boolean, from: TabKey) => {
       const count = store.getState().notes.filter((note) => ids.has(note.id) && note.status !== "trash").length;
-      const undo = await store.reorderNotes(ids, targetId, after);
+      // 拖动时停在别的页签上切换了列表：放进这个页签的卡片同时按页签的规则加减标签。
+      const change = from !== tab ? (note: Note) => tabPatch(note, from, tab) : undefined;
+      const undo = await store.reorderNotes(ids, targetId, after, change);
       if (!undo) {
         toast("排序未保存，原顺序保持不变", null, true);
         return;
@@ -700,7 +898,7 @@ export function Sidebar() {
         },
       });
     },
-    [toast],
+    [tab, toast],
   );
 
   /** 把图片附件或正文引用移到另一张卡片，提示可撤销。 */
@@ -761,8 +959,10 @@ export function Sidebar() {
     viewKey: `${tab}\u0000${query}\u0000${selectedTag}`,
     blocked: Boolean(editing) || dialogOpen || tagsExpandedId !== null,
     onSwitchTab: switchTab,
+    onOpenTabMenu: () => tabsRef.current?.openMenu({ dragging: true, hold: true }),
+    onCloseTabMenu: () => tabsRef.current?.closeMenu(),
     onMove: moveDragged,
-    onReorder: (ids, targetId, after) => void reorderDragged(ids, targetId, after),
+    onReorder: (ids, targetId, after, from) => void reorderDragged(ids, targetId, after, from),
     onMoveItem: (drop) => void moveItem(drop),
   });
 
@@ -850,7 +1050,9 @@ export function Sidebar() {
     pinned ||
       dialogOpen ||
       contextMenu ||
+      moveMenu ||
       sidebarMenu ||
+      tabsPopup === "menu" ||
       interactions.busy ||
       fileDrop.active ||
       state.pendingAttachments > 0,
@@ -860,6 +1062,8 @@ export function Sidebar() {
       // 编辑期间一律保持展开（原型第二版去掉了「编辑时保持展开」的开关）。
       editing ||
       tagsExpandedId ||
+      // 正在输入新页签或页签的新名字，与原型输入搜索词时相同。
+      tabsPopup === "input" ||
       (composerActive && draftPending),
   );
   useEffect(() => {
@@ -905,6 +1109,15 @@ export function Sidebar() {
         }
       }
       if (event.key === "Escape") {
+        // 页签栏的菜单、改名框与新建页签面板在最上层（SidebarTabs 的 dismiss）。
+        if (tabsRef.current?.dismiss()) return;
+        if (moveMenu) {
+          // 「移到…」关闭后焦点回到它所属的卡片，与卡片菜单相同。
+          const id = moveMenu.note.id;
+          setMoveMenu(null);
+          window.requestAnimationFrame(() => focusCard(id));
+          return;
+        }
         if (contextMenu) {
           // 菜单关闭后焦点回到它所属的卡片（interactions.md 3.3）。
           const id = contextMenu.note.id;
@@ -1169,25 +1382,6 @@ export function Sidebar() {
     [isBlank, interactions, dialogOpen, toggleCollapseAll],
   );
 
-  /** 移入回收站：不确认，提示条可以撤销（DS-12）；永久删除与清空回收站仍要确认。 */
-  const moveToTrash = useCallback(async (notes: Note[]) => {
-    if (!notes.length) return false;
-    const undo = await store.moveNotes(notes.map((note) => note.id), "trash");
-    if (!undo) {
-      toast(SAVE_FAILED_MESSAGE, null, true);
-      return false;
-    }
-    toast("已移入回收站", {
-      label: "撤销",
-      run: () => {
-        // 撤销还原删除前的状态、置顶与顺序；写入失败时与原型一样提示保存失败。
-        void store.restoreNotes(undo).then((ok) => {
-          if (!ok) toast(SAVE_FAILED_MESSAGE, null, true);
-        });
-      },
-    });
-    return true;
-  }, [toast]);
 
   /**
    * 卡片的键盘操作（interactions.md 3.2）：↑ ↓ 移动并高亮，Home、End 到两端，Enter 编辑，
@@ -1241,7 +1435,7 @@ export function Sidebar() {
   );
 
   const handleMenuCommand = useCallback(
-    async (note: Note, command: MenuCommand) => {
+    async (note: Note, command: MenuCommand, anchor?: MenuAnchor) => {
       setContextMenu(null);
       switch (command) {
         case "copy":
@@ -1256,8 +1450,8 @@ export function Sidebar() {
         case "pin":
           await store.updateNote(note.id, { pinned: !note.pinned });
           break;
-        case "archive":
-          await handleArchiveNote(note);
+        case "move":
+          if (anchor) setMoveMenu({ note, anchor });
           break;
         case "duplicate":
           if (await store.duplicateNote(note, tab)) toast("已创建副本");
@@ -1283,7 +1477,7 @@ export function Sidebar() {
           break;
       }
     },
-    [tab, beginEdit, handleCopyNote, handleArchiveNote, moveToTrash, toast],
+    [tab, beginEdit, handleCopyNote, moveToTrash, toast],
   );
 
   /** 空白处菜单的命令。 */
@@ -1657,14 +1851,14 @@ export function Sidebar() {
     return () => observer.disconnect();
   }, []);
 
-  const tabCounts: Record<TabKey, number> = useMemo(
-    () => ({
-      workspace: state.notes.filter((note) => note.status === "active").length,
-      pinned: state.notes.filter((note) => note.status === "active" && note.pinned).length,
-      archive: state.notes.filter((note) => note.status === "archived").length,
-    }),
-    [state.notes],
+  /** 「移到…」可去的页签：随记与固定的标签页签，当前页签除外；置顶有自己的菜单项。 */
+  const moveDestinations = useMemo(
+    () => (["workspace", ...pinnedTags.map(tabOfTag)] as TabKey[]).filter((item) => item !== tab),
+    [pinnedTags, tab],
   );
+  // 条数只写在随记与当前页签上。
+  const workspaceCount = useMemo(() => tabCount(state.notes, "workspace", pinnedTags), [state.notes, pinnedTags]);
+  const currentCount = useMemo(() => tabCount(state.notes, tab, pinnedTags), [state.notes, tab, pinnedTags]);
   /** 筛选条显示的搜索内容；只有空白时不算在搜索。 */
   const searchText = query.trim();
 
@@ -1745,41 +1939,23 @@ export function Sidebar() {
         <div
           className={`sidebar-navigation${query ? " has-search-query" : ""}${searchOpen ? " is-searching" : ""}`}
         >
-          <nav className="sidebar-tabs" aria-label="记录列表">
-            <button
-              type="button"
-              role="tab"
-              className={`tab${tab === "workspace" ? " active" : ""}${interactions.dragTab === "workspace" ? " is-drag-target" : ""}`}
-              data-tab="workspace"
-              aria-selected={tab === "workspace"}
-              onClick={() => switchTab("workspace")}
-            >
-              工作区
-              <span data-count="workspace">{tabCounts.workspace}</span>
-            </button>
-            <button
-              type="button"
-              role="tab"
-              className={`tab${tab === "pinned" ? " active" : ""}${interactions.dragTab === "pinned" ? " is-drag-target" : ""}`}
-              data-tab="pinned"
-              aria-selected={tab === "pinned"}
-              onClick={() => switchTab("pinned")}
-            >
-              <Icon name="pin" /> 置顶
-              <span data-count="pinned">{tabCounts.pinned}</span>
-            </button>
-            <button
-              type="button"
-              role="tab"
-              className={`tab${tab === "archive" ? " active" : ""}${interactions.dragTab === "archive" ? " is-drag-target" : ""}`}
-              data-tab="archive"
-              aria-selected={tab === "archive"}
-              onClick={() => switchTab("archive")}
-            >
-              <Icon name="archive" /> 归档
-              <span data-count="archive">{tabCounts.archive}</span>
-            </button>
-          </nav>
+          <SidebarTabs
+            ref={tabsRef}
+            tab={tab}
+            searching={false}
+            notes={state.notes}
+            pinnedTags={pinnedTags}
+            workspaceCount={workspaceCount}
+            currentCount={currentCount}
+            dragTab={interactions.dragTab}
+            onSelect={switchTab}
+            onPin={pinTag}
+            onUnpin={unpinTag}
+            onRename={renamePinnedTag}
+            onManage={(tag) => setManagingTag(tag)}
+            onReorder={savePinnedTags}
+            onPopupChange={setTabsPopup}
+          />
           <div
             id="header-search"
             className={`header-search${searchOpen ? " is-open" : ""}${query ? " has-query" : ""}`}
@@ -1847,33 +2023,41 @@ export function Sidebar() {
           </div>
         </div>
 
-        {/* 整理提醒 */}
-        {nudgeVisible && tab === "workspace" ? (
-          <div className="workspace-nudge">
-            <Icon name="alert" />
-            <p>
-              <strong>工作区记录较多</strong>
-              <button type="button" onClick={() => setTab("archive")}>
-                归档旧记录
-              </button>
-              可以让工作区保持整洁
-              <button
-                type="button"
-                onClick={() => {
-                  void store.updateSettings({ tidySnoozeUntil: Date.now() + 7 * 86_400_000 });
-                  setNudgeDismissed(true);
-                }}
-              >
-                七天后再说
-              </button>
-            </p>
+        {/* 整理提醒：记录超过设置的条数时提醒整理（固定为页签或合并成一条），可以稍后再说。 */}
+        {nudgeVisible ? (
+          <div id="workspace-nudge" className="workspace-nudge">
+            <Icon name="info" />
+            <span>{`${state.notes.filter((note) => note.status === "active").length} 条记录，建议整理。`}</span>
             <button
               type="button"
-              className="icon-button"
-              aria-label="关闭提醒"
-              onClick={() => setNudgeDismissed(true)}
+              className="nudge-link"
+              data-action="tidy-workspace"
+              onClick={() => {
+                switchTab("workspace");
+                toast("可以把同一类的记录固定为页签，或合并成一条。");
+              }}
             >
-              <Icon name="x" />
+              查看
+            </button>
+            <button
+              type="button"
+              className="nudge-link"
+              data-action="snooze-tidy"
+              onClick={() => {
+                void store.updateSettings({ tidySnoozeUntil: Date.now() + 7 * 86_400_000 });
+                setNudgeDismissed(true);
+              }}
+            >
+              稍后
+            </button>
+            <button
+              type="button"
+              className="button secondary compact"
+              data-action="tidy-settings"
+              onClick={() => window.dispatchEvent(new CustomEvent("sidenotes:open-settings"))}
+            >
+              <Icon name="settings" />
+              设置
             </button>
           </div>
         ) : null}
@@ -1885,7 +2069,7 @@ export function Sidebar() {
             tab={tab}
             query={query}
             selectedTag={selectedTag}
-            total={tabCounts[tab]}
+            total={currentCount}
             open={tagMenuOpen}
             onOpenChange={setTagMenuOpen}
             onSelect={selectTag}
@@ -1914,6 +2098,8 @@ export function Sidebar() {
           }}
           onFocus={() => setComposerActive(true)}
           onSave={() => void saveComposer()}
+          tabTag={draftTag}
+          onSkipTag={() => setSkipTag(tabTag)}
           onAttachImage={() => triggerFileInput("image", "composer")}
           onAttachFile={() => triggerFileInput("file", "composer")}
           onRemoveImage={(id) => store.removeDraftImage(id)}
@@ -1939,7 +2125,7 @@ export function Sidebar() {
                 </>
               ) : null}
             </p>
-            <span className="filter-banner-count">{`${listNotes.length} / ${tabCounts[tab]} 条`}</span>
+            <span className="filter-banner-count">{`${listNotes.length} / ${currentCount} 条`}</span>
             <button type="button" className="filter-banner-clear" onClick={clearFilters}>
               显示全部
             </button>
@@ -1953,7 +2139,7 @@ export function Sidebar() {
           className={editing ? "note-list has-editing" : "note-list"}
           tabIndex={-1}
           role="list"
-          aria-label={`${TAB_LABELS[tab]}记录列表`}
+          aria-label={`${tabName(tab)}记录列表`}
           onClick={handleListClick}
           onFocus={handleListFocus}
           onMouseOver={handleListHover}
@@ -1985,6 +2171,7 @@ export function Sidebar() {
                 editing={editing}
                 current={currentId === note.id}
                 tabStop={tabStopId === note.id}
+                located={locatedId === note.id}
                 selected={interactions.selected.has(note.id)}
                 menuOpen={contextMenu?.note.id === note.id}
                 itemTarget={interactions.itemTargetId === note.id || fileDrop.targetId === note.id}
@@ -2130,8 +2317,29 @@ export function Sidebar() {
           key={contextMenu.key}
           note={contextMenu.note}
           anchor={contextMenu.anchor}
-          onCommand={(command) => void handleMenuCommand(contextMenu.note, command)}
+          canMove={moveDestinations.length > 0}
+          onCommand={(command) => void handleMenuCommand(contextMenu.note, command, contextMenu.anchor)}
           onClose={() => setContextMenu(null)}
+        />
+      ) : null}
+
+      {/* 卡片菜单「移到…」：与把卡片拖到页签上相同，多选时作用于全部选中的记录。 */}
+      {moveMenu ? (
+        <ContextMenu<TabKey>
+          entries={moveDestinations.map((destination) => ({
+            command: destination,
+            label: tabName(destination),
+            icon: destination === "workspace" ? "note" : "hash",
+          }))}
+          anchor={moveMenu.anchor}
+          label="移到页签"
+          onCommand={(destination) => {
+            const { note } = moveMenu;
+            setMoveMenu(null);
+            const ids = interactions.selected.has(note.id) && interactions.selected.size > 1 ? Array.from(interactions.selected) : [note.id];
+            void moveToTab(ids, destination);
+          }}
+          onClose={() => setMoveMenu(null)}
         />
       ) : null}
 

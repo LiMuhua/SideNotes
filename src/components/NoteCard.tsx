@@ -30,6 +30,8 @@ export interface NoteCardProps {
   current: boolean;
   /** 列表唯一的 Tab 停靠点：编辑中的卡片，否则是高亮的卡片，没有高亮时是第一张。 */
   tabStop: boolean;
+  /** 刚被「查看」「转到」找到的卡片：闪一下（theme.css 的 is-located）。 */
+  located?: boolean;
   /** 是否处于多选状态。 */
   selected: boolean;
   /** 记录菜单正为这张卡片打开。 */
@@ -340,6 +342,7 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
     note.collapsed ? 'is-collapsed' : '',
     single && !isEditing ? 'is-single' : '',
     props.current ? 'is-current' : '',
+    props.located ? 'is-located' : '',
     props.selected ? 'is-selected' : '',
     props.menuOpen ? 'is-menu-open' : '',
     props.itemTarget ? 'is-drop-target' : '',

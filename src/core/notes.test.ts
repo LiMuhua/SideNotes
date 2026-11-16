@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { parse } from './tags';
 import {
   compareNoteOrder,
   createNote,
   ensureEmoji,
   formatTime,
-  inTab,
   isExpired,
   matchesQuery,
   noteTitle,
@@ -115,13 +115,17 @@ describe('排序与页签', () => {
     expect([second, first].sort(compareNoteOrder).map((item) => item.id)).toEqual(['a', 'b']);
   });
 
-  it('按页签筛选记录', () => {
-    expect(inTab(note({ status: 'active' }), 'workspace')).toBe(true);
-    expect(inTab(note({ status: 'archived' }), 'workspace')).toBe(false);
-    expect(inTab(note({ status: 'active', pinned: true }), 'pinned')).toBe(true);
-    expect(inTab(note({ status: 'active', pinned: false }), 'pinned')).toBe(false);
-    expect(inTab(note({ status: 'archived' }), 'archive')).toBe(true);
-    expect(inTab(note({ status: 'trash' }), 'workspace')).toBe(false);
+  it('旧的归档记录读取时回到随记，正文加上 #归档', () => {
+    const migrated = normalizeNote({ id: 'a', text: '旧需求 #工作', status: 'archived', previousStatus: 'active', createdAt: 1, updatedAt: 1 });
+    expect(migrated).toMatchObject({ status: 'active', previousStatus: 'active' });
+    expect(parse(migrated?.text ?? '').tags).toEqual(['工作', '归档']);
+    // 从归档移进回收站的仍在回收站，恢复时回到随记。
+    const trashed = normalizeNote({ id: 'b', text: '旧草稿', status: 'trash', previousStatus: 'archived', deletedAt: 5, createdAt: 1, updatedAt: 1 });
+    expect(trashed).toMatchObject({ status: 'trash', previousStatus: 'active', deletedAt: 5 });
+    expect(trashed?.text).toBe('旧草稿\n\n#归档');
+    // 已经带着 #归档 的不重复添加；不是归档的记录不变。
+    expect(normalizeNote({ id: 'c', text: '已整理 #归档', status: 'archived' })?.text).toBe('已整理\n\n#归档');
+    expect(normalizeNote({ id: 'd', text: '普通 #工作', status: 'active' })?.text).toBe('普通\n\n#工作');
   });
 });
 

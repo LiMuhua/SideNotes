@@ -8,10 +8,13 @@
 /** 记录所在位置。 */
 import type { ShortcutBindings } from './shortcuts';
 
-export type NoteStatus = 'active' | 'archived' | 'trash';
+export type NoteStatus = 'active' | 'trash';
 
-/** 列表页签。 */
-export type TabKey = 'workspace' | 'pinned' | 'archive';
+/**
+ * 侧栏页签：随记（内部仍叫 workspace）、置顶与固定的标签（`tag:标签`）。
+ * 0.7.3 的「归档」去掉了，旧的归档记录迁移为带 #归档 的普通记录，见 core/notes 的 migrateArchivedNote。
+ */
+export type TabKey = 'workspace' | 'pinned' | `tag:${string}`;
 
 /** 图片附件，以 data URL 内嵌保存，便于导入原型备份。 */
 export interface NoteImage {
@@ -34,7 +37,7 @@ export interface Note {
   /** 正文是否折叠，仅保留标题行与操作行。 */
   collapsed: boolean;
   status: NoteStatus;
-  /** 移入回收站前的位置，用于恢复。 */
+  /** 移入回收站前的位置，用于恢复；去掉归档之后只有 active。 */
   previousStatus: Exclude<NoteStatus, 'trash'>;
   /** 手动排序后的序号；null 表示按创建时间倒序。 */
   order: number | null;

@@ -17,7 +17,11 @@ pub struct NoteImage {
     pub data: String,
 }
 
-/// 一条记录。`status` 取 active / archived / trash；`order` 为手动排序后的序号。
+/// 一条记录。`status` 取 active / trash；`order` 为手动排序后的序号。
+///
+/// 0.7.3 及更早版本还有 archived（归档）。去掉归档之后，旧值仍按字符串原样读写，
+/// 由前端在读库、导入备份时统一迁移为带 #归档 的普通记录（`src/core/notes.ts` 的 `migrateArchivedNote`），
+/// 下一次整体保存时写回数据库；标签的写法只在前端实现一处，这里不重复。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Note {

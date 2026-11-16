@@ -148,7 +148,8 @@ export function Capture() {
       if (hideWindow) void bridge.hideCapture();
       return;
     }
-    const note = await store.saveDraftAsNote('workspace');
+    // 速记浮窗的记录进入随记（不带页签的标签）。
+    const note = await store.saveDraftAsNote();
     if (!note) { toast('保存失败', null, true); return; }
     setLocalText('');
     if (hideWindow) void bridge.hideCapture();

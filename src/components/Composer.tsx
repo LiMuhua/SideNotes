@@ -30,6 +30,10 @@ export interface ComposerProps {
   onEmbeddedImage: (image: NoteImage) => void;
   /** 编辑面高度上限，随窗口尺寸变化。 */
   maxHeight: number;
+  /** 在标签页签中新建时带上的标签（工具栏上的「#标签 ×」）；为空时不显示。 */
+  tabTag?: string;
+  /** 点「#标签」的 ×：这条记录不带这个标签。 */
+  onSkipTag?: () => void;
 }
 
 /** 列表顶部的新建输入卡片。 */
@@ -82,6 +86,23 @@ export function Composer(props: ComposerProps) {
           <button type="button" className="icon-button" data-action="attach-file" aria-label="引用文件" onClick={props.onAttachFile}>
             <Icon name="file" />
           </button>
+          {props.tabTag ? (
+            <span className="composer-tab-tag">
+              <span className="composer-tab-tag-name">{`#${props.tabTag}`}</span>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="不带这个标签"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  props.onSkipTag?.();
+                }}
+              >
+                <Icon name="x" />
+              </button>
+            </span>
+          ) : null}
         </div>
         <span className="composer-count">{`${Array.from(props.text).length} 字`}</span>
         <div className="composer-actions">

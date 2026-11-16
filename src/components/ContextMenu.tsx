@@ -6,7 +6,7 @@
  * 外观沿用原型 note-menu.js 的类名。
  */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { Icon, type IconName } from './Icon';
 
 /** 菜单锚点：按钮元素或鼠标位置。 */
@@ -22,6 +22,12 @@ export interface MenuEntry<C extends string> {
   danger?: boolean;
   /** 附加类名，供样式区分状态（如展开与收起的箭头方向）。 */
   className?: string;
+  /** 附加在菜单项上的 data 属性（如收起的页签带 data-tab，可以作为拖动卡片的落点）。 */
+  data?: Record<`data-${string}`, string>;
+  /** 菜单项上的右键（如收起页签的「放到页签栏」「移出页签栏」）。 */
+  onContextMenu?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+  /** 在菜单项上按下指针（如拖动收起的页签排序）。 */
+  onPointerDown?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
 }
 
 /** 菜单内容：菜单项与分隔线。 */
@@ -34,11 +40,24 @@ export interface ContextMenuProps<C extends string> {
   label: string;
   /** 附加在菜单根节点上的 data 属性，便于测试与样式定位。 */
   data?: Record<`data-${string}`, string>;
+  /** 附加在菜单根节点上的类名（如页签菜单 tab-menu）。 */
+  className?: string;
+  /** 打开后把焦点移到第一项；拖动卡片时打开的菜单不移动焦点。 */
+  focus?: boolean;
   onCommand: (command: C) => void;
   onClose: () => void;
 }
 
-export function ContextMenu<C extends string>({ entries, anchor, label, data, onCommand, onClose }: ContextMenuProps<C>) {
+export function ContextMenu<C extends string>({
+  entries,
+  anchor,
+  label,
+  data,
+  className,
+  focus = true,
+  onCommand,
+  onClose,
+}: ContextMenuProps<C>) {
   const menu = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
 
@@ -75,8 +94,8 @@ export function ContextMenu<C extends string>({ entries, anchor, label, data, on
   // 定位完成、菜单可见后再把焦点交给首项：定位前菜单处于隐藏状态，无法获得焦点。
   const placed = position !== null;
   useEffect(() => {
-    if (placed) menu.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus({ preventScroll: true });
-  }, [placed]);
+    if (placed && focus) menu.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus({ preventScroll: true });
+  }, [placed, focus]);
 
   // 点击外部、窗口尺寸变化或列表滚动都收起菜单。点到侧栏窗口之外时页面收不到按下事件，
   // 只会失焦，因此窗口失焦也关闭；否则菜单一直开着，侧栏也会因此不再自动收起。
@@ -116,7 +135,7 @@ export function ContextMenu<C extends string>({ entries, anchor, label, data, on
   return (
     <div
       ref={menu}
-      className="note-context-menu"
+      className={className ? `note-context-menu ${className}` : 'note-context-menu'}
       role="menu"
       aria-label={label}
       {...data}
@@ -153,9 +172,12 @@ export function ContextMenu<C extends string>({ entries, anchor, label, data, on
             type="button"
             role="menuitem"
             data-menu-command={entry.command}
+            {...entry.data}
             className={['note-context-item', entry.danger ? 'is-danger' : '', entry.className ?? '']
               .filter(Boolean)
               .join(' ')}
+            onContextMenu={entry.onContextMenu}
+            onPointerDown={entry.onPointerDown}
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();

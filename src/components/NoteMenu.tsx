@@ -16,7 +16,7 @@ export type MenuCommand =
   | 'edit'
   | 'collapse'
   | 'pin'
-  | 'archive'
+  | 'move'
   | 'duplicate'
   | 'export'
   | 'info'
@@ -25,12 +25,14 @@ export type MenuCommand =
 export interface NoteMenuProps {
   note: Note;
   anchor: MenuAnchor;
+  /** 有可以移去的页签（随记与固定的标签页签，当前页签除外）时出现「移到…」。 */
+  canMove: boolean;
   onCommand: (command: MenuCommand) => void;
   onClose: () => void;
 }
 
-/** 按记录状态生成菜单项。 */
-function buildEntries(note: Note): MenuItems<MenuCommand> {
+/** 按记录状态生成菜单项（与原型 note-menu.js 相同：去掉了「归档」，换成移到随记或固定的标签页签）。 */
+function buildEntries(note: Note, canMove: boolean): MenuItems<MenuCommand> {
   const entries: MenuItems<MenuCommand> = [
     { command: 'copy', label: '复制内容与附件', icon: 'copy', hint: 'Ctrl+C' },
     { command: 'edit', label: '编辑内容', icon: 'edit', hint: '双击' },
@@ -49,25 +51,21 @@ function buildEntries(note: Note): MenuItems<MenuCommand> {
       icon: note.pinned ? 'pin-off' : 'pin',
     });
   }
-  entries.push({
-    command: 'archive',
-    label: note.status === 'archived' ? '移回工作区' : '归档记录',
-    icon: note.status === 'archived' ? 'restore' : 'archive',
-  });
+  if (canMove) entries.push({ command: 'move', label: '移到…', icon: 'arrow-right' });
   entries.push('separator');
   entries.push({ command: 'duplicate', label: '创建副本', icon: 'duplicate' });
   entries.push({ command: 'export', label: '导出 Markdown', icon: 'download' });
   entries.push({ command: 'info', label: '记录信息', icon: 'info' });
   entries.push('separator');
-  entries.push({ command: 'trash', label: '移入回收站', icon: 'trash', danger: true });
+  entries.push({ command: 'trash', label: '移入回收站', icon: 'trash', danger: true, hint: 'Delete' });
   return entries;
 }
 
 /** 记录操作菜单。 */
-export function NoteMenu({ note, anchor, onCommand, onClose }: NoteMenuProps) {
+export function NoteMenu({ note, anchor, canMove, onCommand, onClose }: NoteMenuProps) {
   return (
     <ContextMenu
-      entries={buildEntries(note)}
+      entries={buildEntries(note, canMove)}
       anchor={anchor}
       label="记录操作"
       data={{ 'data-note-menu': note.id }}

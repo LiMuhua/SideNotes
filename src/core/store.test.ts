@@ -20,6 +20,7 @@ import {
   initialize,
   mergeImported,
   moveNotes,
+  patchNotes,
   reloadFromDisk,
   removeTagEverywhere,
   renameTag,
@@ -102,26 +103,31 @@ describe('状态仓库', () => {
       draft: { text: '新内容 #临时', images: [], updatedAt: 1 },
       ready: true,
     });
-    const created = await saveDraftAsNote('workspace');
+    const created = await saveDraftAsNote();
     expect(created).not.toBeNull();
     expect(getState().notes).toHaveLength(2);
     expect(getState().draft.text).toBe('');
   });
 
-  it('在置顶页新建时自动置顶，在归档页新建进入归档', async () => {
+  it('在置顶页签新建时置顶，在标签页签新建时带上这个标签', async () => {
     resetForTest({ draft: { text: '内容', images: [], updatedAt: 1 }, ready: true });
-    const pinned = await saveDraftAsNote('pinned');
+    const pinned = await saveDraftAsNote({ pinned: true });
     expect(pinned?.pinned).toBe(true);
     expect(pinned?.status).toBe('active');
 
-    resetForTest({ draft: { text: '内容', images: [], updatedAt: 1 }, ready: true });
-    const archived = await saveDraftAsNote('archive');
-    expect(archived?.status).toBe('archived');
+    resetForTest({ draft: { text: '周会 #会议', images: [], updatedAt: 1 }, ready: true });
+    const tagged = await saveDraftAsNote({ tag: '开发' });
+    expect(tagged?.text).toBe('周会\n\n#会议 #开发');
+    expect(tagged?.pinned).toBe(false);
+
+    // 已经写了这个标签（不分大小写）时不重复添加。
+    resetForTest({ draft: { text: '修复 #Dev', images: [], updatedAt: 1 }, ready: true });
+    expect((await saveDraftAsNote({ tag: 'dev' }))?.text).toBe('修复\n\n#Dev');
   });
 
   it('空草稿不创建记录', async () => {
     resetForTest({ draft: { text: '   ', images: [], updatedAt: 1 }, ready: true });
-    expect(await saveDraftAsNote('workspace')).toBeNull();
+    expect(await saveDraftAsNote()).toBeNull();
     expect(saveSnapshot).not.toHaveBeenCalled();
   });
 
@@ -148,19 +154,19 @@ describe('状态仓库', () => {
     expect(getState().notes[0].updatedAt).toBe(1_700_000_000_000);
   });
 
-  it('移入回收站记住删除前位置，撤销后完整还原', async () => {
+  it('移入回收站记住删除前的状态，撤销后完整还原', async () => {
     resetForTest({
-      notes: [note({ status: 'archived', pinned: true, order: 3, previousStatus: 'active' })],
+      notes: [note({ pinned: true, order: 3, previousStatus: 'active' })],
       ready: true,
     });
     const undo = await moveNotes(['note-1'], 'trash');
-    expect(getState().notes[0]).toMatchObject({ status: 'trash', previousStatus: 'archived' });
+    expect(getState().notes[0]).toMatchObject({ status: 'trash', previousStatus: 'active' });
     expect(getState().notes[0].deletedAt).not.toBeNull();
 
     if (!undo) throw new Error('移入回收站未保存');
     expect(await restoreNotes(undo)).toBe(true);
     expect(getState().notes[0]).toMatchObject({
-      status: 'archived',
+      status: 'active',
       pinned: true,
       order: 3,
       previousStatus: 'active',
@@ -175,17 +181,25 @@ describe('状态仓库', () => {
     expect(getState().saveFailed).toBe(true);
   });
 
-  it('移到置顶会设置置顶并清除手动顺序', async () => {
-    resetForTest({ notes: [note({ order: 5 })], ready: true });
-    await moveNotes(['note-1'], 'pinned');
-    expect(getState().notes[0].pinned).toBe(true);
-    expect(getState().notes[0].order).toBeNull();
+  it('一次修改多条记录的若干字段，撤销后连修改时间一起还原', async () => {
+    resetForTest({ notes: [note({ order: 5 }), note({ id: 'note-2', text: '第二条' })], ready: true });
+    const undo = await patchNotes([
+      ['note-1', { pinned: true, order: null }],
+      ['note-2', { text: '第二条 #开发' }],
+    ]);
+    expect(getState().notes[0]).toMatchObject({ pinned: true, order: null });
+    expect(getState().notes[1].text).toBe('第二条\n\n#开发');
+    expect(getState().notes[1].updatedAt).not.toBe(1_700_000_000_000);
+    if (!undo) throw new Error('修改未保存');
+    await restoreNotes(undo);
+    expect(getState().notes[0]).toMatchObject({ pinned: false, order: 5, updatedAt: 1_700_000_000_000 });
+    expect(getState().notes[1]).toMatchObject({ text: '第二条', updatedAt: 1_700_000_000_000 });
   });
 
-  it('回收站中的记录不被再次移动', async () => {
+  it('回收站中的记录不被再次移入', async () => {
     resetForTest({ notes: [note({ status: 'trash', deletedAt: 1 })], ready: true });
-    await moveNotes(['note-1'], 'archive');
-    expect(getState().notes[0].status).toBe('trash');
+    expect(await moveNotes(['note-1'], 'trash')).toBeNull();
+    expect(getState().notes[0].deletedAt).toBe(1);
   });
 
   it('排序写入连续序号', async () => {
@@ -318,11 +332,11 @@ describe('状态仓库', () => {
 
   it('从回收站恢复到删除前的位置', async () => {
     resetForTest({
-      notes: [note({ id: 'a', status: 'trash', previousStatus: 'archived', deletedAt: 1 })],
+      notes: [note({ id: 'a', status: 'trash', previousStatus: 'active', deletedAt: 1 })],
       ready: true,
     });
     await restoreFromTrash(['a']);
-    expect(getState().notes[0].status).toBe('archived');
+    expect(getState().notes[0].status).toBe('active');
     expect(getState().notes[0].deletedAt).toBeNull();
   });
 
@@ -424,7 +438,7 @@ describe('状态仓库', () => {
       expect(getState()).toMatchObject({ ready: true, loadFailed: true, notes: [] });
 
       changeDraft('启动后立即新建的记录');
-      expect(await saveDraftAsNote('workspace')).toBeNull();
+      expect(await saveDraftAsNote()).toBeNull();
       expect(await updateSettings({ theme: 'dark' })).toBe(false);
       expect(saveSnapshot).not.toHaveBeenCalled();
       expect(saveSettings).not.toHaveBeenCalled();
@@ -455,5 +469,18 @@ describe('状态仓库', () => {
       expect(await retryStorage()).toBe(true);
       expect(saveSnapshot.mock.calls[0][0].map((item) => item.id)).toEqual(['from-disk']);
     });
+  });
+
+  it('改名时固定的页签跟着改，新名称已经固定时合并成一个页签', async () => {
+    resetForTest({
+      notes: [note({ id: 'a', text: '周报 #工作' }), note({ id: 'b', text: '计划 #生活' })],
+      settings: { ...getState().settings, pinnedTags: ['工作', '生活', '阅读'] },
+      ready: true,
+    });
+    expect(await renameTag('工作', '工作日志')).toBe(true);
+    expect(getState().settings.pinnedTags).toEqual(['工作日志', '生活', '阅读']);
+    expect(getState().notes[0].text).toBe('周报\n\n#工作日志');
+    expect(await renameTag('生活', '阅读')).toBe(true);
+    expect(getState().settings.pinnedTags).toEqual(['工作日志', '阅读']);
   });
 });

@@ -32,3 +32,16 @@ body[data-window='settings'] .settings-modal.modal {
   box-shadow: none;
   animation: none;
 }
+
+/* 页签栏的测量行（SidebarTabs）：与页签栏同样的页签，看不见，按内容排开，只用来量各个页签的宽度。
+ * 原型直接在页签栏里逐个隐藏页签来量；React 不便改动它渲染的节点，改用这一行。 */
+.sidebar-navigation .sidebar-tabs.tabs-measure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: max-content;
+  max-width: none;
+  overflow: visible;
+  visibility: hidden;
+  pointer-events: none;
+}

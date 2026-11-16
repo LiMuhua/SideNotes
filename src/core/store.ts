@@ -10,7 +10,7 @@
 
 import * as bridge from './bridge';
 import type { StoreChange } from './bridge';
-import { canonicalize, compose, hasTag, parse, removeTag, tagKey } from './tags';
+import { canonicalize, compose, hasTag, parse, removeTag, tagKey, withTag } from './tags';
 import { compareNoteOrder, createId, createNote, ensureEmoji, MAX_IMAGES_PER_NOTE, suggestTags } from './notes';
 import { DEFAULT_SETTINGS, normalizeSettings } from './settings';
 import { createSampleNotes, shouldLoadSampleData } from '../debug/sample-notes';
@@ -281,16 +281,15 @@ export interface BatchUndo {
   previous: Map<string, Partial<Note>>;
 }
 
-/** 把一批记录移动到目标位置。 */
-export async function moveNotes(
-  ids: Iterable<string>,
-  destination: TabKey | 'trash',
-): Promise<BatchUndo | null> {
+/**
+ * 把一批记录移入回收站，返回撤销所需的原值；写入失败返回 null。
+ * 记下移入前的位置（去掉归档之后只有 active），恢复时回到原来的页签。
+ */
+export async function moveNotes(ids: Iterable<string>, destination: 'trash'): Promise<BatchUndo | null> {
   const targets = new Set(ids);
-  if (!targets.size) return null;
+  if (!targets.size || destination !== 'trash') return null;
   const previous = new Map<string, Partial<Note>>();
   const changedAt = Date.now();
-
   const notes = state.notes.map((note) => {
     if (!targets.has(note.id) || note.status === 'trash') return note;
     previous.set(note.id, {
@@ -300,26 +299,32 @@ export async function moveNotes(
       previousStatus: note.previousStatus,
       order: note.order,
     });
-    if (destination === 'trash') {
-      return {
-        ...note,
-        status: 'trash' as NoteStatus,
-        previousStatus: note.status === 'archived' ? ('archived' as const) : ('active' as const),
-        deletedAt: changedAt,
-        updatedAt: changedAt,
-      };
-    }
-    return {
-      ...note,
-      status: destination === 'archive' ? ('archived' as NoteStatus) : ('active' as NoteStatus),
-      pinned: destination === 'archive' ? note.pinned : destination === 'pinned',
-      order: null,
-      updatedAt: changedAt,
-    };
+    return { ...note, status: 'trash' as NoteStatus, previousStatus: 'active' as const, deletedAt: changedAt, updatedAt: changedAt };
   });
-
+  if (!previous.size) return null;
   const saved = await persist({ notes });
   return saved ? { previous } : null;
+}
+
+/**
+ * 一次修改多条记录的若干字段（如把卡片移到另一个页签：加减标签、置顶），返回撤销所需的原值；写入失败返回 null。
+ * 原值包括修改时间，撤销后修改时间也回到原来的。
+ */
+export async function patchNotes(changes: ReadonlyArray<readonly [string, Partial<Note>]>): Promise<BatchUndo | null> {
+  const byId = new Map(changes);
+  if (!byId.size) return null;
+  const previous = new Map<string, Partial<Note>>();
+  const changedAt = Date.now();
+  const notes = state.notes.map((note) => {
+    const patch = byId.get(note.id);
+    if (!patch) return note;
+    const before: Partial<Note> = { updatedAt: note.updatedAt };
+    for (const key of Object.keys(patch) as Array<keyof Note>) (before as Record<string, unknown>)[key] = note[key];
+    previous.set(note.id, before);
+    return { ...note, ...patch, ...(patch.text !== undefined ? { text: canonicalize(patch.text) } : {}), updatedAt: changedAt };
+  });
+  if (!previous.size) return null;
+  return (await persist({ notes })) ? { previous } : null;
 }
 
 /**
@@ -381,6 +386,8 @@ export async function reorderNotes(
   ids: Set<string>,
   targetId: string,
   after: boolean,
+  /** 拖动时停在别的页签上切换了列表：放进这个页签的卡片同时按页签的规则加减标签（core/tabs 的 tabPatch）。 */
+  change?: (note: Note) => Partial<Note>,
 ): Promise<BatchUndo | null> {
   const target = state.notes.find((note) => note.id === targetId);
   if (!target || ids.has(targetId)) return null;
@@ -402,7 +409,7 @@ export async function reorderNotes(
   const previous = new Map<string, Partial<Note>>();
   state.notes.forEach((note) => {
     if (ranks.has(note.id)) {
-      previous.set(note.id, { order: note.order, status: note.status, pinned: note.pinned });
+      previous.set(note.id, { order: note.order, status: note.status, pinned: note.pinned, text: note.text });
     }
   });
 
@@ -410,6 +417,7 @@ export async function reorderNotes(
     ranks.has(note.id)
       ? {
           ...note,
+          ...(change && ids.has(note.id) ? change(note) : {}),
           order: ranks.get(note.id) ?? null,
           status: ids.has(note.id) ? target.status : note.status,
           pinned: ids.has(note.id) ? target.pinned : note.pinned,
@@ -510,12 +518,15 @@ export function setPendingAttachments(delta: number): void {
   setState({ pendingAttachments: Math.max(0, state.pendingAttachments + delta) });
 }
 
-/** 保存草稿为新记录，返回新记录；失败返回 null。 */
-export async function saveDraftAsNote(tab: TabKey): Promise<Note | null> {
+/**
+ * 保存草稿为新记录，返回新记录；失败返回 null。
+ * 在置顶页签中新建的置顶；在标签页签中新建的带上这个标签（新建卡片上的「#标签」，去掉时不带）。
+ */
+export async function saveDraftAsNote(options: { pinned?: boolean; tag?: string } = {}): Promise<Note | null> {
   if (!state.draft.text.trim() && !state.draft.images.length) return null;
-  const note = createNote(state.draft.text, state.draft.images, {
-    pinned: tab === 'pinned',
-    status: tab === 'archive' ? 'archived' : 'active',
+  const text = options.tag ? withTag(state.draft.text, options.tag) : state.draft.text;
+  const note = createNote(text, state.draft.images, {
+    pinned: Boolean(options.pinned),
     existing: state.notes,
   });
   const saved = await persist({
@@ -533,11 +544,10 @@ export async function commitEdit(id: string, text: string, images: NoteImage[]):
   return persist({ notes });
 }
 
-/** 创建记录副本，归属当前页签。 */
+/** 创建记录副本，与原记录在同一个页签：正文与标签相同，在置顶页签中复制的仍置顶。 */
 export async function duplicateNote(note: Note, tab: TabKey): Promise<boolean> {
   const duplicate = createNote(note.text, note.images, {
     pinned: tab === 'pinned',
-    status: tab === 'archive' ? 'archived' : 'active',
     existing: state.notes,
   });
   return persist({ notes: [duplicate, ...state.notes] });
@@ -555,7 +565,7 @@ export async function trackTagUsage(tag: string): Promise<boolean> {
 }
 
 /**
- * 在所有记录中重命名标签；新名称已存在时两者合并。
+ * 在所有记录中重命名标签；新名称已存在时两者合并。固定为页签的标签一起改名。
  *
  * 与原型 manageTag 一致：只改标签，不动正文；访问统计随之迁移到新名称。
  */
@@ -574,7 +584,17 @@ export async function renameTag(tag: string, next: string): Promise<boolean> {
     tagUsage[newKey] = tagUsage[oldKey];
     if (newKey !== oldKey) delete tagUsage[oldKey];
   }
-  return persist({ notes, tagUsage });
+  // 固定为页签的标签跟着改名，位置不变；新名称已经固定时两个页签合并成一个。
+  const pinned = state.settings.pinnedTags;
+  const settings = pinned.some((item) => tagKey(item) === oldKey)
+    ? {
+        ...state.settings,
+        pinnedTags: pinned.some((item) => tagKey(item) === newKey && newKey !== oldKey)
+          ? pinned.filter((item) => tagKey(item) !== oldKey)
+          : pinned.map((item) => (tagKey(item) === oldKey ? next : item)),
+      }
+    : undefined;
+  return persist({ notes, tagUsage, ...(settings ? { settings } : {}) });
 }
 
 /**

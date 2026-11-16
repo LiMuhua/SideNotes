@@ -22,6 +22,8 @@ import type { Note, TabKey } from '../core/types';
 const HOLD_DELAY = 300;
 /** 拖动时停在页签上多久切换过去。 */
 const TAB_SWITCH_DELAY = 240;
+/** 拖动中停在页签栏最后一格上多久展开菜单。 */
+const TAB_MENU_DELAY = 600;
 /** 拖动结束后多久之内的点击视为拖动产生的合成点击。 */
 const CLICK_GUARD = 650;
 /** 不参与手势、保留自身行为的控件。 */
@@ -65,10 +67,14 @@ export interface CardInteractionOptions {
   blocked: boolean;
   /** 拖动中停在页签上时切换页签。 */
   onSwitchTab: (tab: TabKey) => void;
-  /** 移到页签或回收站，返回是否保存成功。 */
-  onMove: (ids: string[], destination: TabKey | 'trash') => Promise<boolean>;
-  /** 插入到目标记录之前或之后。 */
-  onReorder: (ids: Set<string>, targetId: string, after: boolean) => void;
+  /** 拖动中停在页签栏最后一格上：展开收起的页签，菜单中的页签可以作为落点。 */
+  onOpenTabMenu: () => void;
+  /** 拖动结束：收起拖动中展开的页签菜单。 */
+  onCloseTabMenu: () => void;
+  /** 移到页签或回收站，返回是否保存成功；from 是开始拖动时的页签。 */
+  onMove: (ids: string[], destination: TabKey | 'trash', from: TabKey) => Promise<boolean>;
+  /** 插入到目标记录之前或之后；拖动中切换过页签时，from 是开始拖动时的页签。 */
+  onReorder: (ids: Set<string>, targetId: string, after: boolean, from: TabKey) => void;
   /** 把图片附件或正文引用移到另一张卡片。 */
   onMoveItem: (drop: ItemDrop) => void;
 }
@@ -126,6 +132,8 @@ interface Gesture {
   after: boolean;
   tabCandidate: string;
   tabTimer: number;
+  /** 停在页签栏最后一格上展开过菜单：结束时收起。 */
+  menuOpened: boolean;
   ghost: HTMLElement | null;
   label: HTMLElement | null;
   guide: HTMLElement | null;
@@ -331,15 +339,34 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
       }
     };
 
+    /**
+     * 记录指针停着的页签，短暂停留后切换过去（与原型 interactions.js 相同）。最后一格停 0.6 秒展开菜单，
+     * 菜单中收起的页签可以作为落点；菜单里的页签只作落点，不切换列表。
+     */
     const setTabTarget = (gesture: Gesture, tab: HTMLElement): void => {
-      const destination = tab.dataset.tab ?? '';
+      const slot = tab.classList.contains('tab-more');
+      const inMenu = Boolean(tab.closest('.tab-menu'));
+      const destination = slot ? 'more' : (tab.dataset.tab ?? '');
       if (gesture.tabCandidate !== destination) {
         window.clearTimeout(gesture.tabTimer);
         gesture.tabTimer = 0;
+      } else if (gesture.tabTimer) {
+        return;
       }
       gesture.tabCandidate = destination;
       setTabHighlight(destination);
-      if (destination !== opts().tab && !gesture.tabTimer) {
+      if (slot) {
+        if (!gesture.menuOpened) {
+          gesture.tabTimer = window.setTimeout(() => {
+            gesture.tabTimer = 0;
+            if (t.gesture !== gesture || !gesture.active) return;
+            gesture.menuOpened = true;
+            opts().onOpenTabMenu();
+          }, TAB_MENU_DELAY);
+        }
+        return;
+      }
+      if (!inMenu && destination !== opts().tab && !gesture.tabTimer) {
         gesture.tabTimer = window.setTimeout(() => {
           gesture.tabTimer = 0;
           activateDragTab(gesture, destination as TabKey);
@@ -374,20 +401,31 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
         trash.classList.remove('is-target');
       }
       const hit = document.elementFromPoint(gesture.x, gesture.y);
-      const tabTarget = hit?.closest<HTMLElement>('.sidebar-tabs [data-tab]') ?? null;
+      const tabTarget =
+        hit?.closest<HTMLElement>('.sidebar-tabs:not(.tabs-measure) [data-tab], .sidebar-tabs .tab-more:not(.is-add), .tab-menu [data-tab]') ?? null;
       if (tabTarget) {
         setTabTarget(gesture, tabTarget);
         gesture.targetMode = 'tab';
         gesture.targetDestination = tabTarget.dataset.tab ?? '';
         if (label) {
-          label.textContent =
-            gesture.targetDestination === opts().tab
+          label.textContent = !gesture.targetDestination
+            ? `${gesture.ids.size} 条 · 停留后展开收起的页签`
+            : gesture.targetDestination === opts().tab
               ? `${gesture.ids.size} 条 · 当前为${tabName(tabTarget)}，继续拖入列表排序`
-              : `${gesture.ids.size} 条 · 停留后可切换到${tabName(tabTarget)}`;
+              : tabTarget.closest('.tab-menu')
+                ? `${gesture.ids.size} 条 · 松开后移到${tabName(tabTarget)}`
+                : `${gesture.ids.size} 条 · 停留后可切换到${tabName(tabTarget)}`;
         }
         return;
       }
       clearTabTarget(gesture);
+      // 拖动中展开的页签菜单里，页签之间的空白、分隔线与「新建页签」都不是落点；也不算在列表里，免得列表跟着滚动。
+      if (hit?.closest('.tab-menu')) {
+        gesture.targetMode = 'tab';
+        gesture.targetDestination = '';
+        if (label) label.textContent = `${gesture.ids.size} 条 · 移到收起的页签上松开`;
+        return;
+      }
       gesture.targetMode = 'list';
       const list = opts().listRef.current;
       if (!list) return;
@@ -438,7 +476,7 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
       gesture.targetId = note.id;
       gesture.after = best.after;
       setDropTarget({ id: note.id, after: best.after });
-      const group = note.status === 'archived' ? '归档' : note.pinned ? '置顶' : '普通';
+      const group = note.pinned ? '置顶' : '普通';
       const position = best.after ? '之后' : '之前';
       if (label) label.textContent = `${gesture.ids.size} 条 · 松开后放到「${shortTitle(note)}」${position}`;
       if (gesture.guide && gesture.guideLabel) {
@@ -680,6 +718,8 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
       if (!gesture) return false;
       window.clearTimeout(gesture.timer);
       clearTabTarget(gesture);
+      // 停在最后一格上展开过页签菜单：松开、Esc 或指针取消都在这里收起（菜单在拖动期间不因滚动与指针事件关闭）。
+      if (gesture.menuOpened) opts().onCloseTabMenu();
       if (t.frame) window.cancelAnimationFrame(t.frame);
       if (t.scrollFrame) window.cancelAnimationFrame(t.scrollFrame);
       t.frame = 0;
@@ -755,6 +795,7 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
         after: false,
         tabCandidate: '',
         tabTimer: 0,
+        menuOpened: false,
         ghost: null,
         label: null,
         guide: null,
@@ -844,14 +885,14 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
       if (!active || kind !== 'sort') return;
       const moveTo = (destination: TabKey | 'trash'): void => {
         void opts()
-          .onMove(Array.from(ids), destination)
+          .onMove(Array.from(ids), destination, originTab)
           .then((saved) => {
             if (saved) clearSelection();
           });
       };
       if (targetMode === 'trash') moveTo('trash');
       else if (targetMode === 'tab' && targetDestination && targetDestination !== originTab) moveTo(targetDestination as TabKey);
-      else if (targetMode === 'list' && targetId) opts().onReorder(ids, targetId, after);
+      else if (targetMode === 'list' && targetId) opts().onReorder(ids, targetId, after, originTab);
     };
 
     /** 捕获多选点击，以及拖动之后浏览器补发的点击。 */

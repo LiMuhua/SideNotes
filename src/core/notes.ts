@@ -6,7 +6,7 @@
  */
 
 import { isValidEmoji, pickEmoji } from './emoji';
-import { canonicalize, parse, tagKey } from './tags';
+import { canonicalize, parse, tagKey, withTag } from './tags';
 import type { Draft, Note, NoteImage, NoteStatus, Settings, TabKey } from './types';
 
 /** 单张图片上限，与附件读取和截图粘贴保持一致。 */
@@ -53,20 +53,18 @@ export function normalizeNote(value: unknown): Note | null {
     : [];
   if (!input.text.trim() && !images.length) return null;
 
-  const status: NoteStatus = ['active', 'archived', 'trash'].includes(input.status as string)
-    ? (input.status as NoteStatus)
-    : 'active';
   const created = normalizeTimestamp(input.createdAt);
 
-  return {
+  return migrateArchivedNote({
     id: typeof input.id === 'string' && input.id.length > 0 && input.id.length < 100 ? input.id : createId(),
     text: canonicalize(input.text),
     emoji: isValidEmoji(input.emoji) ? input.emoji : '',
     images,
     pinned: Boolean(input.pinned),
     collapsed: Boolean(input.collapsed),
-    status,
-    previousStatus: input.previousStatus === 'archived' ? 'archived' : 'active',
+    // 旧数据中的 archived 由 migrateArchivedNote 改为 active 并加上 #归档。
+    status: (input.status === 'trash' ? 'trash' : input.status === 'archived' ? 'archived' : 'active') as NoteStatus,
+    previousStatus: (input.previousStatus === 'archived' ? 'archived' : 'active') as 'active',
     order: Number.isFinite(Number(input.order)) && input.order !== null ? Number(input.order) : null,
     createdAt: created,
     updatedAt: normalizeTimestamp(input.updatedAt, created),
@@ -74,6 +72,24 @@ export function normalizeNote(value: unknown): Note | null {
       input.deletedAt === null || input.deletedAt === undefined
         ? null
         : normalizeTimestamp(input.deletedAt, Date.now()),
+  });
+}
+
+/** 旧的归档记录加上的标签。 */
+export const ARCHIVE_TAG = '归档';
+
+/**
+ * 去掉「归档」之后的迁移（原型第二版，DS-11）：旧的归档记录（包括从归档移进回收站的）回到随记，正文加上 #归档，
+ * 可以用这个标签找回或固定成页签。读库、导入备份与跨窗口同步都经过 normalizeNote，在那里调用；
+ * 数据库里的旧取值在下一次保存时改写。
+ */
+export function migrateArchivedNote<T extends { text: string; status: string; previousStatus: string }>(note: T): T {
+  if (note.status !== 'archived' && note.previousStatus !== 'archived') return note;
+  return {
+    ...note,
+    text: canonicalize(withTag(note.text, ARCHIVE_TAG)),
+    status: note.status === 'trash' ? 'trash' : 'active',
+    previousStatus: 'active',
   };
 }
 
@@ -137,12 +153,6 @@ export function compareNoteOrder(a: Note, b: Note): number {
   const left = a.order ?? -a.createdAt;
   const right = b.order ?? -b.createdAt;
   return left - right || b.createdAt - a.createdAt || a.id.localeCompare(b.id);
-}
-
-/** 判断记录是否属于当前页签。 */
-export function inTab(note: Note, tab: TabKey): boolean {
-  if (tab === 'archive') return note.status === 'archived';
-  return note.status === 'active' && (tab !== 'pinned' || note.pinned);
 }
 
 /**
@@ -283,7 +293,8 @@ export function rankTags(
   selectedTag: string,
   now = Date.now(),
 ): RankedTag[] {
-  const grouped = groupTags(notes.filter((note) => inTab(note, tab)));
+  // 标签页签与随记由调用方先按页签筛好（core/tabs 的 notesInTab），这里只区分置顶。
+  const grouped = groupTags(notes.filter((note) => note.status === 'active' && (tab !== 'pinned' || note.pinned)));
 
   const tagQueries = Array.from(query.matchAll(/(?:^|\s)#([\p{L}\p{N}_-]+)/gu));
   const tagMode = tagQueries.length > 0;

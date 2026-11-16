@@ -137,3 +137,9 @@ export function isValidTag(tag: string): boolean {
 export function hasTag(text: string, tag: string): boolean {
   return parse(text).tags.some((item) => tagKey(item) === tagKey(tag));
 }
+
+/** 给原文带上一个标签；已经带着（不分大小写）时不变。 */
+export function withTag(text: string, tag: string): string {
+  const parsed = parse(text);
+  return parsed.tags.some((item) => tagKey(item) === tagKey(tag)) ? text : compose(parsed.body, [...parsed.tags, tag]);
+}

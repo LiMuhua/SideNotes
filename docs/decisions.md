@@ -366,6 +366,25 @@
 
 **代价**：旧样式层与 `theme.css` 之间靠级联层决定结果，层内的 `!important` 反而压过 `theme.css`；`theme.css` 是原型文件的副本，原型改动后要手动同步；`prototype.css` 中仍有大量旧规则只是被覆盖，没有删掉。
 
+## 35. 去掉归档的迁移只在前端做一处；页签规则与排法搬进 src/core
+
+**决定**：2026-11-16 实现页签（T78）时：
+
+- 旧的归档记录（`status` 为 `archived`，或从归档移进回收站、`previousStatus` 为 `archived`）由前端的 `normalizeNote` 迁移：回到随记或仍在回收站，正文加上 #归档（`src/core/notes.ts` 的 `migrateArchivedNote`）。读库、导入备份与跨窗口同步都经过它；数据库里的旧取值在下一次整体保存时写回。Rust 端仍把 `status` 当字符串原样读写，不做迁移。
+- 页签的规则（`src/core/tabs.ts`）与页签栏的排法（`src/core/tabLayout.ts` 的 `fitTabs`）连同测试从 Playground 搬进 `src/core`，Playground 改为从这里引用，不改设计。
+- 页签的菜单、改名框与新建页签面板放在侧栏 Esc 分层的最上层（`SidebarTabs` 的 `dismiss`），打开期间侧栏保持展开。
+
+**原因**：
+
+- 加标签要按标签行的写法重写正文（`src/core/tags.ts`），在 Rust 里再写一遍会与前端不一致；所有读入记录的路径本来就经过 `normalizeNote`，迁移放在那里一处即可覆盖数据库与旧备份。
+- 桌面端与 Playground 用同一份排法，测试只有一份，交接文档也要求搬进 `src/core`。
+- 侧栏在捕获阶段处理 Esc，先于这些控件自己的处理；不放进分层，Esc 会越过它们收起侧栏。
+
+**代价**：
+
+- 数据库在下一次保存之前仍是旧值；这期间降级到 0.7.3，旧的归档记录仍在归档里。
+- Playground 引用 `src/core` 的页签模块，`claude` 上为此做的改动要等下一次合并才回到 `design-system`。
+
 ## 设计系统（DS01）
 
 以下决策属于 `design-system` 分支的设计系统工作，用 `DS-` 编号，与应用的决策编号分开，合并时不会冲突。

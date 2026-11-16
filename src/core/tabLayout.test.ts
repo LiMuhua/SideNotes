@@ -1,5 +1,5 @@
 /**
- * 页签栏的排法（第六、七、八次反馈，playground/src/model/tabLayout.ts，与交互原型 tabs.js 的 layout 相同）：
+ * 页签栏的排法（第六、七、八次反馈，src/core/tabLayout.ts，与交互原型 tabs.js 的 layout 相同）：
  *
  * - 都放得下、后面还有位置时全部显示，最后一格是「+」；只差「+」时不显示「+」，不为它收起页签（第七次反馈）；
  * - 真放不下时按顺序能放几个放几个，按「N ▾」的实际宽度算，不为别的写法预留空位（第六次反馈）；
@@ -12,7 +12,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { fitTabs, type TabMetrics } from '../playground/src/model/tabLayout';
+import { fitTabs, type TabMetrics } from './tabLayout';
 
 /** 固定部分 100，间距 4；「+」宽 24，「N ▾」一位数宽 30、两位数宽 36（比一个页签窄，与实际相同）。 */
 const base: Omit<TabMetrics, 'available' | 'tags'> = {

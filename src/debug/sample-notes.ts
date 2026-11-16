@@ -5,12 +5,12 @@
  * 通过 `pnpm dev` 启动后访问 `?debug-data=1`，或在控制台执行
  * `localStorage.setItem('sidenotes:debug-data', '1')` 后刷新来启用。
  *
- * 数据覆盖工作区、置顶、归档与回收站，用于直观检查列表密度、
+ * 数据覆盖随记、置顶、旧版本的归档（载入时迁移为带 #归档 的普通记录）与回收站，用于直观检查列表密度、
  * 折叠态、标签筛选与回收站保留期等界面表现。
  */
 
 import { canonicalize } from '../core/tags';
-import { createId } from '../core/notes';
+import { createId, migrateArchivedNote } from '../core/notes';
 import type { Note, NoteStatus } from '../core/types';
 
 /** 调试开关键：出现且值为 `1` 时载入示例数据。 */
@@ -39,7 +39,8 @@ interface SampleSeed {
   ago: number;
   pinned?: boolean;
   collapsed?: boolean;
-  status?: NoteStatus;
+  /** 旧数据中的「归档」也保留在示例里，载入时迁移为带 #归档 的普通记录（演示迁移）。 */
+  status?: NoteStatus | 'archived';
   previousStatus?: 'active' | 'archived';
   /** 回收站条目的删除时间相对毫秒数。 */
   deletedAgo?: number;
@@ -193,19 +194,19 @@ const SAMPLES: SampleSeed[] = [
 export function createSampleNotes(now = Date.now()): Note[] {
   return SAMPLES.map((sample) => {
     const updatedAt = now - sample.ago;
-    return {
+    return migrateArchivedNote({
       id: createId(),
       text: canonicalize(sample.text),
       emoji: sample.emoji,
       images: [],
       pinned: Boolean(sample.pinned),
       collapsed: Boolean(sample.collapsed),
-      status: sample.status ?? 'active',
-      previousStatus: sample.previousStatus ?? 'active',
+      status: (sample.status ?? 'active') as NoteStatus,
+      previousStatus: (sample.previousStatus ?? 'active') as 'active',
       order: null,
       createdAt: updatedAt,
       updatedAt,
       deletedAt: sample.deletedAgo ? now - sample.deletedAgo : null,
-    };
+    });
   });
 }
