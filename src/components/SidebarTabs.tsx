@@ -75,6 +75,8 @@ export interface SidebarTabsProps {
   onReorder: (list: string[]) => Promise<boolean>;
   /** 打开的弹层：menu 是最后一格的菜单或页签的右键菜单，input 是新建页签面板或改名框（侧栏据此保持展开）。 */
   onPopupChange?: (popup: 'menu' | 'input' | null) => void;
+  /** 搜索框展开、盖住了页签栏：页签不可交互，读屏软件也不读（与原型 toggleSearch 相同）。 */
+  covered?: boolean;
 }
 
 type Point = { x: number; y: number };
@@ -117,6 +119,7 @@ export function SidebarTabs({
   onManage,
   onReorder,
   onPopupChange,
+  covered = false,
 }: SidebarTabsProps) {
   const nav = useRef<HTMLElement>(null);
   const measure = useRef<HTMLElement>(null);
@@ -593,7 +596,15 @@ export function SidebarTabs({
 
   return (
     <>
-      <nav ref={nav} className="sidebar-tabs" role="tablist" aria-label="记录列表" onKeyDown={handleKeyDown}>
+      <nav
+        ref={nav}
+        className="sidebar-tabs"
+        role="tablist"
+        aria-label="记录列表"
+        aria-hidden={covered || undefined}
+        inert={covered || undefined}
+        onKeyDown={handleKeyDown}
+      >
         {fixedTab('workspace', false)}
         {fixedTab('pinned', false)}
         {shown.map(tagTab)}

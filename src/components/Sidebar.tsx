@@ -9,7 +9,7 @@
  * 所以原型的 slideOut 动画对应的是 `bridge.hideSidebar()` 调用。
  */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { Icon, IconSprite } from "./Icon";
 import { Composer } from "./Composer";
@@ -50,6 +50,8 @@ import {
   tagOfTab,
 } from "../core/tabs";
 import { SidebarTabs, type SidebarTabsHandle } from "./SidebarTabs";
+import { knownTags, searchGroups, searchTerms, singleSearchTag, wordTag, SEARCH_PLACEHOLDER, type SearchGroup } from "../core/search";
+import { listHits, setSearchHits } from "../core/searchHighlight";
 import { insertAtDisplayLine, moveImage, moveReference } from "../core/transfer";
 import {
   chooseAndImportFiles,
@@ -375,17 +377,30 @@ export function Sidebar() {
 
   /* ==================== 过滤后的列表 ==================== */
   const pinnedTags = state.settings.pinnedTags;
-  // 页签按随记、置顶与固定的标签筛选，置顶在前，再按手动顺序与创建时间（core/tabs 的 notesInTab）。
+  // 全局搜索（DS-12–DS-15，core/search）：有搜索词时列表是全部记录中的结果，按页签分组，与当前页签和标签筛选无关；
+  // 没有搜索词时是当前页签（及标签筛选），置顶在前，再按手动顺序与创建时间（core/tabs 的 notesInTab）。
+  const searchText = searchTerms(query);
+  const searching = Boolean(searchText);
+  const resultGroups = useMemo(
+    () => (searching ? searchGroups(state.notes, pinnedTags, query) : []),
+    [searching, state.notes, pinnedTags, query],
+  );
   const listNotes = useMemo(
-    () => filterNotes(state.notes, tab, pinnedTags, query, selectedTag),
-    [state.notes, tab, pinnedTags, query, selectedTag],
+    () => (searching ? resultGroups.flatMap((group) => group.notes) : filterNotes(state.notes, tab, pinnedTags, "", selectedTag)),
+    [searching, resultGroups, state.notes, tab, pinnedTags, selectedTag],
+  );
+  /** 每组第一条记录的 id 对应的组：列表中在这条记录之前写组标题。 */
+  const groupStarts = useMemo(
+    () => new Map<string, SearchGroup>(resultGroups.map((group) => [group.notes[0].id, group])),
+    [resultGroups],
   );
 
   /* ==================== 按需加载 ==================== */
   // 开启「滚动按需加载」时先渲染一批，滚动到列表底部再追加下一批；切换页签、搜索或筛选标签后从第一批开始。
   // 只影响渲染：多选、全选、收起全部与复制仍按整个列表处理。
   const pageSize = state.settings.lazyLoading ? state.settings.pageSize : Number.POSITIVE_INFINITY;
-  const viewKey = `${tab}\u0000${query}\u0000${selectedTag}`;
+  // 搜索时的视图与页签、标签筛选无关（与原型 renderNotes 的 key 相同）。
+  const viewKey = searching ? `search\u0000${searchText}` : `${tab}\u0000\u0000${selectedTag}`;
   const [loaded, setLoaded] = useState({ key: viewKey, count: pageSize });
   const loadedCount = loaded.key === viewKey ? Math.max(loaded.count, pageSize) : pageSize;
   const renderedNotes = useMemo(() => listNotes.slice(0, loadedCount), [listNotes, loadedCount]);
@@ -440,6 +455,65 @@ export function Sidebar() {
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [hasMore, viewKey, loadedCount, pageSize]);
+
+  /* ==================== 结束搜索时回到原来的位置 ==================== */
+  // 与原型 renderNotes 的 searchReturn 相同：开始搜索时记下原来列表的视图、滚动位置与已加载的条数，
+  // 结束搜索（Esc、清空）回到原来的页签与标签筛选时还原；「转到」去别处时不还原。
+  // 滚动位置随滚动记下：切到搜索结果时列表已经换了内容，那时再读就晚了。
+  const listMemo = useRef({ key: viewKey, scroll: 0, count: loadedCount });
+  const searchReturn = useRef<{ key: string; scroll: number; count: number } | null>(null);
+  const pendingScroll = useRef<number | null>(null);
+  const shownKey = useRef(viewKey);
+  const rememberScroll = useCallback(() => {
+    if (searching || !listRef.current) return;
+    listMemo.current = { key: viewKey, scroll: listRef.current.scrollTop, count: loadedCount };
+  }, [searching, viewKey, loadedCount]);
+  useLayoutEffect(() => {
+    const previous = shownKey.current;
+    if (previous === viewKey) return;
+    shownKey.current = viewKey;
+    const list = listRef.current;
+    const wasSearching = previous.startsWith("search\u0000");
+    if (searching && !wasSearching) {
+      // 开始搜索：结果从顶部开始。
+      searchReturn.current = listMemo.current.key === previous ? listMemo.current : null;
+      if (list) list.scrollTop = 0;
+      return;
+    }
+    if (searching) {
+      if (list) list.scrollTop = 0;
+      return;
+    }
+    const saved = searchReturn.current;
+    searchReturn.current = null;
+    if (wasSearching && saved && saved.key === viewKey) {
+      // 结束搜索、回到原来的列表：先按需加载到原来的条数，渲染之后再滚回去。
+      setLoaded({ key: viewKey, count: saved.count });
+      pendingScroll.current = saved.scroll;
+    } else if (wasSearching && list) {
+      list.scrollTop = 0;
+    }
+  }, [viewKey, searching]);
+  useLayoutEffect(() => {
+    if (pendingScroll.current === null || !listRef.current) return;
+    listRef.current.scrollTop = pendingScroll.current;
+    pendingScroll.current = null;
+    rememberScroll();
+  });
+
+  /* ==================== 搜索命中的高亮 ==================== */
+  // 标题与正文按文字、标签按「#标签」标出（core/searchHighlight，CSS 自定义高亮，不改动卡片的节点）。
+  // 每次渲染后重新计算：卡片的内容、按需加载出的卡片与编辑都会改变要标的文字。
+  const knownTagKeys = useMemo(() => knownTags(state.notes), [state.notes]);
+  useEffect(() => {
+    const list = listRef.current;
+    if (!searching || !list) {
+      setSearchHits("sidebar", []);
+      return;
+    }
+    setSearchHits("sidebar", listHits(list, searchText, knownTagKeys, { text: ".note-title, .note-content", tag: ".tag-chip" }));
+  });
+  useEffect(() => () => setSearchHits("sidebar", []), []);
 
   /* ==================== 整理提醒（纯派生值，叠加本次会话内的关闭标记） ==================== */
   const nudgeVisible = !nudgeDismissed && shouldNudgeTidy(state.notes, state.settings);
@@ -511,14 +585,37 @@ export function Sidebar() {
     if (listRef.current) listRef.current.scrollTop = 0;
   }, []);
 
-  /** 切换页签；给出记录时在列表中找到它（按需加载到它），滚到中间、高亮并闪一下。 */
+  /**
+   * 切换页签；给出记录时在列表中找到它（按需加载到它），滚到中间、高亮并闪一下。
+   * 搜索结果的「转到」与「已记在」的「查看」共用：去别处，结束搜索时不回到原来的滚动位置。
+   */
   const goToTab = useCallback(
     (next: TabKey, noteId?: string) => {
+      searchReturn.current = null;
       switchTab(next);
       if (noteId) setLocate({ id: noteId, serial: Date.now() });
     },
     [switchTab],
   );
+
+  /** 结束搜索（Esc、空状态的「清除搜索」）：清空搜索词，收起搜索框，回到原来的页签、标签筛选与滚动位置。 */
+  const endSearch = useCallback(() => {
+    setQuery("");
+    setSearchOpen(false);
+    setTagMenuOpen(false);
+  }, []);
+
+  /** 把搜索词换成这段文字并聚焦搜索框（筛选行的「#开发 N 条」、搜索时点卡片上的标签）。 */
+  const setSearchQuery = useCallback((text: string) => {
+    setSearchOpen(true);
+    setQuery(text);
+    setTagMenuOpen(false);
+    window.setTimeout(() => {
+      const input = document.getElementById("search-input") as HTMLInputElement | null;
+      input?.focus();
+      input?.setSelectionRange(text.length, text.length);
+    }, 0);
+  }, []);
 
   /* ==================== 速记 Composer ==================== */
   // 新建卡片上的「#标签」：在标签页签中新建时带上这个标签；点 × 这条不带，换页签或保存后恢复。
@@ -733,21 +830,31 @@ export function Sidebar() {
    * 到随记去掉当前页签的标签；到置顶只置顶。移到随记后还在别的固定标签里的，提示写明在哪里。提示条可以撤销。
    */
   const moveToTab = useCallback(
-    async (ids: readonly string[], destination: TabKey, origin?: TabKey) => {
+    async (ids: readonly string[], destination: TabKey, origin?: TabKey | "home") => {
       const { notes, settings } = store.getState();
       const pinned = settings.pinnedTags;
-      const from = origin ?? tab;
+      // 来自全局搜索的结果（origin 为 home）时，每条记录按它自己所在的页签算，已经在目的地的不动（与原型 moveRecords 相同）。
+      const fromSearch = origin === "home";
+      const from = fromSearch ? null : origin ?? tab;
       if (destination === from) return false;
       const changes: Array<readonly [string, Partial<Note>]> = [];
       const moved: Note[] = [];
+      const homes = new Set<TabKey>();
       ids.forEach((id) => {
         const note = notes.find((item) => item.id === id);
         if (!note || note.status !== "active") return;
-        const patch: Partial<Note> = { ...tabPatch(note, from, destination), order: null };
+        const source = from ?? homeTab(note, pinned);
+        if (source === destination) return;
+        homes.add(source);
+        const patch: Partial<Note> = { ...tabPatch(note, source, destination), order: null };
         changes.push([id, patch]);
         moved.push({ ...note, ...patch });
       });
-      if (!changes.length) return false;
+      if (!changes.length) {
+        if (fromSearch) toast(`已经在${tabLabel(destination)}`);
+        return false;
+      }
+      const fromLabel = from ? tabLabel(from) : homes.size === 1 ? tabLabel(Array.from(homes)[0]) : "原来的页签";
       const undo = await store.patchNotes(changes);
       if (!undo) {
         toast("移动未保存，请重试", null, true);
@@ -759,7 +866,7 @@ export function Sidebar() {
         if (still.length) {
           const some = still.length < moved.length ? `${still.length} 条` : "";
           const more = new Set(still.map(tagKey)).size > 1 ? "等页签" : "";
-          message = `已移出${tabLabel(from)}，${some}仍在「${still[0]}」${more}`;
+          message = `已移出${fromLabel}，${some}仍在「${still[0]}」${more}`;
         }
       }
       toast(message, {
@@ -876,9 +983,9 @@ export function Sidebar() {
   const moveDragged = useCallback(
     async (ids: string[], destination: TabKey | "trash", from: TabKey) => {
       if (destination === "trash") return moveToTrash(store.getState().notes.filter((note) => ids.includes(note.id)));
-      return moveToTab(ids, destination, from);
+      return moveToTab(ids, destination, searching ? "home" : from);
     },
-    [moveToTab, moveToTrash],
+    [moveToTab, moveToTrash, searching],
   );
 
   /** 把拖动的记录插入目标之前或之后，提示可撤销，对应原型 reorder。 */
@@ -957,8 +1064,9 @@ export function Sidebar() {
     visibleNotes: listNotes,
     notes: state.notes,
     tab,
-    viewKey: `${tab}\u0000${query}\u0000${selectedTag}`,
+    viewKey,
     blocked: Boolean(editing) || dialogOpen || tagsExpandedId !== null,
+    searching,
     onSwitchTab: switchTab,
     onOpenTabMenu: () => tabsRef.current?.openMenu({ dragging: true, hold: true }),
     onCloseTabMenu: () => tabsRef.current?.closeMenu(),
@@ -1167,9 +1275,9 @@ export function Sidebar() {
           return;
         }
         // 关闭搜索框并清空搜索词，标签筛选保留。
-        if (searchOpen) {
-          setSearchOpen(false);
-          setQuery("");
+        // 结束搜索：搜索框收起但还有搜索词（点放大镜收起时保留）时同样结束，回到原来的页签与滚动位置。
+        if (searchOpen || searchText) {
+          endSearch();
           return;
         }
         if (selectedTag) {
@@ -1454,6 +1562,10 @@ export function Sidebar() {
         case "move":
           if (anchor) setMoveMenu({ note, anchor });
           break;
+        case "locate":
+          // 搜索结果的「转到」：切到这条记录所在的页签，滚到它并闪一下。
+          goToTab(homeTab(note, store.getState().settings.pinnedTags), note.id);
+          break;
         case "duplicate":
           if (await store.duplicateNote(note, tab)) toast("已创建副本");
           else toast("副本未创建", null, true);
@@ -1478,7 +1590,7 @@ export function Sidebar() {
           break;
       }
     },
-    [tab, beginEdit, handleCopyNote, moveToTrash, toast],
+    [tab, beginEdit, handleCopyNote, moveToTrash, goToTab, toast],
   );
 
   /** 空白处菜单的命令。 */
@@ -1806,6 +1918,15 @@ export function Sidebar() {
     [editing, commitEdit],
   );
 
+  /** 点卡片上的标签：平时按这个标签筛选；搜索时改搜这个标签（与原型 setSearchQuery 相同）。 */
+  const filterByTag = useCallback(
+    (tag: string) => {
+      if (searching) setSearchQuery(`#${tag}`);
+      else selectTag(tag);
+    },
+    [searching, setSearchQuery, selectTag],
+  );
+
   const clearTagFilter = useCallback(() => {
     setSelectedTag("");
     setTagMenuOpen(false);
@@ -1852,16 +1973,22 @@ export function Sidebar() {
     return () => observer.disconnect();
   }, []);
 
-  /** 「移到…」可去的页签：随记与固定的标签页签，当前页签除外；置顶有自己的菜单项。 */
-  const moveDestinations = useMemo(
-    () => (["workspace", ...pinnedTags.map(tabOfTag)] as TabKey[]).filter((item) => item !== tab),
-    [pinnedTags, tab],
+  /** 「移到…」可去的页签：随记与固定的标签页签，当前页签除外（搜索时是这条记录所在的页签除外）；置顶有自己的菜单项。 */
+  const moveTargets = useCallback(
+    (note: Note) => {
+      const here = searching ? homeTab(note, pinnedTags) : tab;
+      return (["workspace", ...pinnedTags.map(tabOfTag)] as TabKey[]).filter((item) => item !== here);
+    },
+    [pinnedTags, searching, tab],
   );
   // 条数只写在随记与当前页签上。
   const workspaceCount = useMemo(() => tabCount(state.notes, "workspace", pinnedTags), [state.notes, pinnedTags]);
   const currentCount = useMemo(() => tabCount(state.notes, tab, pinnedTags), [state.notes, tab, pinnedTags]);
-  /** 筛选条显示的搜索内容；只有空白时不算在搜索。 */
-  const searchText = query.trim();
+  // 筛选行后面的操作：搜的词正好是已有标签时改搜它；按一个标签筛选或只搜一个已有标签时可以固定为页签。
+  const wordMatch = useMemo(() => (searching ? wordTag(query, state.notes) : null), [searching, query, state.notes]);
+  const filterTag = searching ? singleSearchTag(query, state.notes) : selectedTag;
+  // 收起/展开全部按当前列表决定：还有展开的卡片时收起全部，全部收起后展开全部（原型 syncListTools）。
+  const collapseNext = listNotes.some((note) => !note.collapsed);
 
   // 底部存储状态：读库失败与写入失败都显示为异常。
   const storageError = state.loadFailed || state.saveFailed;
@@ -1872,7 +1999,7 @@ export function Sidebar() {
       <IconSprite />
       <aside
         ref={asideRef}
-        className={editing ? "sidebar open has-editing" : "sidebar open"}
+        className={["sidebar open", editing ? "has-editing" : "", searching ? "is-search-results" : ""].filter(Boolean).join(" ")}
         data-edge={state.settings.edge}
         onMouseEnter={cancelHide}
         onMouseLeave={scheduleHide}
@@ -1943,7 +2070,7 @@ export function Sidebar() {
           <SidebarTabs
             ref={tabsRef}
             tab={tab}
-            searching={false}
+            searching={searching}
             notes={state.notes}
             pinnedTags={pinnedTags}
             workspaceCount={workspaceCount}
@@ -1956,6 +2083,7 @@ export function Sidebar() {
             onManage={(tag) => setManagingTag(tag)}
             onReorder={savePinnedTags}
             onPopupChange={setTabsPopup}
+            covered={searchOpen}
           />
           <div
             id="header-search"
@@ -1965,14 +2093,20 @@ export function Sidebar() {
             <button
               type="button"
               className={`icon-button search-toggle${searchOpen ? " is-active" : ""}`}
-              aria-label={`搜索记录 · ${searchKeys}`}
+              aria-label={`搜索全部记录 · ${searchKeys}`}
               aria-controls="search-panel"
               aria-expanded={searchOpen}
               onClick={() => {
+                // 与原型 toggleSearch 相同：收起时保留搜索词与结果，再点一次回到搜索框。
                 const next = !searchOpen;
                 setSearchOpen(next);
-                if (!next) setQuery("");
-                else setTimeout(() => document.getElementById("search-input")?.focus(), 50);
+                if (next) {
+                  window.setTimeout(() => {
+                    const input = document.getElementById("search-input") as HTMLInputElement | null;
+                    input?.focus();
+                    input?.select();
+                  }, 50);
+                }
               }}
             >
               <Icon name="search" />
@@ -1984,21 +2118,21 @@ export function Sidebar() {
               inert={!searchOpen || undefined}
             >
               <label htmlFor="search-input" className="sr-only">
-                搜索记录与标签
+                搜索全部记录与标签
               </label>
               {/* 输入 #标签 时以灰字联想已有标签，Tab 选用；不再展开标签菜单。 */}
               <TagInput
                 id="search-input"
                 type="search"
-                placeholder="搜索记录、#标签…"
+                placeholder={SEARCH_PLACEHOLDER}
                 autoComplete="off"
                 search
                 value={query}
                 onValueChange={setQuery}
                 onBlur={(event) => {
-                  // 失焦时若未输入内容则自动收起搜索面板。
+                  // 失焦时没有搜索词就收起；有搜索词时保持展开，结果留在列表中（只写了 # 不算搜索词）。
                   if (
-                    !query &&
+                    !searchText &&
                     !event.currentTarget
                       .closest("#header-search")
                       ?.contains(event.relatedTarget as Node | null)
@@ -2013,8 +2147,9 @@ export function Sidebar() {
                   className="icon-button"
                   aria-label="清空搜索"
                   onClick={() => {
+                    // 与原型相同：清空搜索词，搜索框留着、焦点回到输入框；列表回到原来的页签与标签筛选。
                     setQuery("");
-                    setSelectedTag("");
+                    document.getElementById("search-input")?.focus();
                   }}
                 >
                   <Icon name="x" />
@@ -2063,21 +2198,67 @@ export function Sidebar() {
           </div>
         ) : null}
 
-        {/* 列表顶部：记录数、标签筛选 */}
+        {/* 筛选行（原型 renderFilterRow）：左边写列表里是什么——平时是标签下拉，搜索时是结果条数；后面是这时能做的操作：
+            搜的词正好是已有标签时「#开发 N 条」改搜这个标签，按一个还没固定的标签筛选或搜索时「固定为页签」。
+            右边是对整个列表的操作。「已选 N 条」「合并」与多选按钮随选中与合并实现（T80）。 */}
         <div className="list-topline">
-          <p id="list-summary">{`${listNotes.length} 条${selectedTag ? ` · #${selectedTag}` : ""}`}</p>
-          <TagFilter
-            tab={tab}
-            query={query}
-            selectedTag={selectedTag}
-            total={currentCount}
-            open={tagMenuOpen}
-            onOpenChange={setTagMenuOpen}
-            onSelect={selectTag}
-            onClear={clearTagFilter}
-            onManage={manageTag}
-            onSearch={searchTags}
-          />
+          <div className="list-filter">
+            {searching ? (
+              <span id="search-summary" className="search-summary">{`${listNotes.length} 条`}</span>
+            ) : (
+              <TagFilter
+                tab={tab}
+                selectedTag={selectedTag}
+                total={currentCount}
+                filteredCount={listNotes.length}
+                open={tagMenuOpen}
+                onOpenChange={setTagMenuOpen}
+                onSelect={selectTag}
+                onClear={clearTagFilter}
+                onManage={manageTag}
+                onSearch={searchTags}
+              />
+            )}
+            <p id="list-summary">
+              {wordMatch ? (
+                <button
+                  type="button"
+                  className="list-summary-action word-tag-action"
+                  data-action="search-word-tag"
+                  data-tag={wordMatch.tag}
+                  aria-label={`改搜标签 #${wordMatch.tag}，${wordMatch.count} 条`}
+                  onClick={() => setSearchQuery(`#${wordMatch.tag}`)}
+                >
+                  <span className="word-tag-name">{`#${wordMatch.tag}`}</span>
+                  <span className="word-tag-count">{`${wordMatch.count} 条`}</span>
+                </button>
+              ) : null}
+              {filterTag && !findPinned(pinnedTags, filterTag) ? (
+                <button
+                  type="button"
+                  className="list-summary-action"
+                  data-action="pin-filter-tag"
+                  data-tag={filterTag}
+                  onClick={() => pinTag(filterTag)}
+                >
+                  固定为页签
+                </button>
+              ) : null}
+            </p>
+          </div>
+          <div className="list-tools">
+            <button
+              id="collapse-all"
+              type="button"
+              className="icon-button list-tool"
+              data-action="toggle-collapse-all"
+              aria-label={collapseNext ? "收起全部卡片" : "展开全部卡片"}
+              disabled={!listNotes.length}
+              onClick={() => void toggleCollapseAll()}
+            >
+              <Icon name={collapseNext ? "fold" : "unfold"} />
+            </button>
+          </div>
         </div>
 
         {/* 读库或保存失败提示：读库失败时已暂停保存，导出备份也没有意义。 */}
@@ -2109,30 +2290,6 @@ export function Sidebar() {
           maxHeight={Math.min(340, window.innerHeight * 0.42)}
         />
 
-        {/* 搜索或按标签筛选时，列表上方显示醒目的筛选条：当前条件与匹配条数，一键回到全部记录。 */}
-        {searchText || selectedTag ? (
-          <div className="filter-banner" role="status">
-            <Icon name="search" />
-            <p className="filter-banner-text">
-              {searchText ? (
-                <>
-                  搜索「<strong>{searchText}</strong>」
-                </>
-              ) : null}
-              {searchText && selectedTag ? "，" : null}
-              {selectedTag ? (
-                <>
-                  标签 <strong>#{selectedTag}</strong>
-                </>
-              ) : null}
-            </p>
-            <span className="filter-banner-count">{`${listNotes.length} / ${currentCount} 条`}</span>
-            <button type="button" className="filter-banner-clear" onClick={clearFilters}>
-              显示全部
-            </button>
-          </div>
-        ) : null}
-
         {/* 记录列表 */}
         <div
           ref={listRef}
@@ -2142,6 +2299,7 @@ export function Sidebar() {
           role="list"
           aria-label={`${tabName(tab)}记录列表`}
           onClick={handleListClick}
+          onScroll={rememberScroll}
           onFocus={handleListFocus}
           onMouseOver={handleListHover}
           onDoubleClick={handleListDoubleClick}
@@ -2150,9 +2308,13 @@ export function Sidebar() {
         >
           {listNotes.length === 0 ? (
             <div className="empty-state">
-              <h3>{query || selectedTag ? "没有匹配的记录" : "暂无记录"}</h3>
-              <p>{query || selectedTag ? "调整搜索或标签筛选。" : "在上方直接输入。"}</p>
-              {query || selectedTag ? (
+              <h3>{searching || selectedTag ? "没有匹配的记录" : "暂无记录"}</h3>
+              <p>{searching ? "搜索的是全部记录，换个词试试。" : selectedTag ? "调整标签筛选。" : "在上方直接输入。"}</p>
+              {searching ? (
+                <button type="button" className="button secondary" data-action="end-search" onClick={endSearch}>
+                  清除搜索
+                </button>
+              ) : selectedTag ? (
                 <button
                   type="button"
                   className="button secondary"
@@ -2166,8 +2328,12 @@ export function Sidebar() {
             </div>
           ) : (
             renderedNotes.map((note) => (
+              // 搜索结果按页签分组：每组第一条之前写组标题（Fragment 让卡片的位置不随组标题变化）。
+              <Fragment key={note.id}>
+              {searching && groupStarts.has(note.id) ? (
+                <SearchGroupHeader group={groupStarts.get(note.id)!} onGo={(next) => goToTab(next)} />
+              ) : null}
               <NoteCard
-                key={note.id}
                 note={note}
                 editing={editing}
                 current={currentId === note.id}
@@ -2205,7 +2371,7 @@ export function Sidebar() {
                 onCopy={() => void handleCopyNote(note)}
                 onTogglePin={() => void store.updateNote(note.id, { pinned: !note.pinned })}
                 onMore={(anchor) => openNoteMenu(note, anchor)}
-                onFilterTag={selectTag}
+                onFilterTag={filterByTag}
                 onRemoveTag={async (tag) => {
                   const newText = removeTag(note.text, tag);
                   await store.commitEdit(note.id, newText, note.images);
@@ -2227,6 +2393,7 @@ export function Sidebar() {
                 onEmbeddedImage={(image) => handleEmbeddedImage(note, image)}
                 onTaskToggle={(offset, checked) => void handleTaskToggle(note.id, offset, checked)}
               />
+              </Fragment>
             ))
           )}
           {hasMore ? (
@@ -2318,7 +2485,8 @@ export function Sidebar() {
           key={contextMenu.key}
           note={contextMenu.note}
           anchor={contextMenu.anchor}
-          canMove={moveDestinations.length > 0}
+          canMove={moveTargets(contextMenu.note).length > 0}
+          locateLabel={searching ? `转到${tabLabel(homeTab(contextMenu.note, pinnedTags))}` : undefined}
           onCommand={(command) => void handleMenuCommand(contextMenu.note, command, contextMenu.anchor)}
           onClose={() => setContextMenu(null)}
         />
@@ -2327,7 +2495,7 @@ export function Sidebar() {
       {/* 卡片菜单「移到…」：与把卡片拖到页签上相同，多选时作用于全部选中的记录。 */}
       {moveMenu ? (
         <ContextMenu<TabKey>
-          entries={moveDestinations.map((destination) => ({
+          entries={moveTargets(moveMenu.note).map((destination) => ({
             command: destination,
             label: tabName(destination),
             icon: destination === "workspace" ? "note" : "hash",
@@ -2338,7 +2506,7 @@ export function Sidebar() {
             const { note } = moveMenu;
             setMoveMenu(null);
             const ids = interactions.selected.has(note.id) && interactions.selected.size > 1 ? Array.from(interactions.selected) : [note.id];
-            void moveToTab(ids, destination);
+            void moveToTab(ids, destination, searching ? "home" : undefined);
           }}
           onClose={() => setMoveMenu(null)}
         />
@@ -2393,5 +2561,29 @@ export function Sidebar() {
         />
       ) : null}
     </>
+  );
+}
+
+/** 搜索结果的组标题（原型 renderSearchGroup）：页签的图标、名称与条数，右侧「转到」切到这个页签并结束搜索。 */
+function SearchGroupHeader({ group, onGo }: { group: SearchGroup; onGo: (tab: TabKey) => void }) {
+  return (
+    <div className="search-group" data-group-tab={group.tab}>
+      <span className="search-group-title">
+        <Icon name={group.tab === "pinned" ? "pin" : group.tab === "workspace" ? "note" : "hash"} />
+        <span className="search-group-name">{tabName(group.tab)}</span>
+        <span className="search-group-count">{String(group.notes.length)}</span>
+      </span>
+      <button
+        type="button"
+        className="search-group-go"
+        data-action="go-to-tab"
+        data-go-tab={group.tab}
+        aria-label={`转到${tabLabel(group.tab)}`}
+        onClick={() => onGo(group.tab)}
+      >
+        <span>转到</span>
+        <Icon name="arrow-right" />
+      </button>
+    </div>
   );
 }

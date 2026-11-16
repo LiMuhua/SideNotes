@@ -1,5 +1,5 @@
 /**
- * 全局搜索（第五次反馈）：Playground 的规则（playground/src/model/notes.tsx）与交互原型的 app.js 相同。
+ * 全局搜索（第五次反馈）：src/core/search.ts 的规则（T79 从 Playground 搬来）与交互原型的 app.js 相同。
  *
  * - 搜索全部未删除的记录，与当前页签无关；只写 # 还没写标签名时不算搜索；
  * - 文字与标签分开搜（第八次反馈）：不带 # 的词只搜标题、正文与附件名，带 # 的词只搜标签；搜的词正好是已有标签时，
@@ -11,8 +11,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { Note } from '@/core/types';
-import { homeTab, searchGroups, searchTerms, singleSearchTag, wordTag } from '../playground/src/model/notes';
+import type { Note } from './types';
+import { homeTab } from './tabs';
+import { searchGroups, searchTerms, singleSearchTag, wordTag } from './search';
 
 let sequence = 0;
 function note(text: string, extra: Partial<Note> = {}): Note {

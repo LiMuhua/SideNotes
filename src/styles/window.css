@@ -45,3 +45,10 @@ body[data-window='settings'] .settings-modal.modal {
   visibility: hidden;
   pointer-events: none;
 }
+
+/* 搜索命中（原型第二版第七、八次反馈）：用 CSS 自定义高亮标出（core/searchHighlight），不改动卡片的节点；
+ * 只能设颜色，没有圆角。规则与 Playground 的 base.css 相同，原型改用 mark.search-hit（theme.css）。 */
+::highlight(sn-search-hit) {
+  background-color: var(--sn-color-highlight);
+  color: inherit;
+}

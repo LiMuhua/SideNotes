@@ -13,10 +13,11 @@
  */
 
 import { createContext, useCallback, useContext, useMemo, useReducer, useState, type ReactNode } from 'react';
-import { compareNoteOrder, createNote, migrateArchivedNote } from '@/core/notes';
+import { createNote, migrateArchivedNote } from '@/core/notes';
+import { matchesSearch, searchGroups, searchTerms, singleSearchTag, wordTag, type SearchGroup } from '@/core/search';
 import { DEFAULT_SETTINGS } from '@/core/settings';
 import { canonicalize, compose, hasTag, parse, removeTag, tagKey } from '@/core/tags';
-import { allTags, filterNotes, homeTab, resultOrder, tabCount, tabExists, tagOfTab } from '@/core/tabs';
+import { filterNotes, tabCount, tabExists, tagOfTab } from '@/core/tabs';
 import type { Note, NoteStatus, Settings, TabKey, TagUsage } from '@/core/types';
 import { createSampleNotes } from '@/debug/sample-notes';
 import { CUSTOM_APP_ICON, DEFAULT_APP_ICON } from './appIcons';
@@ -347,75 +348,8 @@ export { withTag } from '@/core/tags';
 
 /* ==================== 全局搜索（第五次反馈，与交互原型相同） ==================== */
 
-/** 实际的搜索词：去掉只有 # 还没写标签名的部分（刚输入 # 时只联想标签，列表不变）。 */
-export function searchTerms(query: string): string {
-  return query.replace(/(^|\s)#(?=\s|$)/gu, ' ').trim();
-}
-
-/**
- * 搜索匹配，文字与标签分开搜（第八次反馈，与交互原型的 matchesQuery 相同）：不带 # 的词只搜标题、正文与附件名，不再命中标签；
- * 带 # 的词只搜标签，写完整的已有标签（如 #产品）只匹配这个标签，没写完的按前缀匹配。两种可以一起写，同时满足。
- * @param known 已有标签的 tagKey。
- */
-export function matchesSearch(note: Note, terms: string, known: ReadonlySet<string>): boolean {
-  if (!terms) return true;
-  const parsed = parse(note.text);
-  const tags: string[] = [];
-  const text = terms
-    .replace(/(?:^|\s)#([\p{L}\p{N}_-]+)/gu, (_match, tag: string) => {
-      tags.push(tagKey(tag));
-      return ' ';
-    })
-    .trim()
-    .toLocaleLowerCase();
-  const keys = parsed.tags.map(tagKey);
-  if (!tags.every((tag) => keys.some((key) => (known.has(tag) ? key === tag : key.startsWith(tag))))) return false;
-  const haystack = `${parsed.body} ${note.images.map((image) => image.name).join(' ')}`.toLocaleLowerCase();
-  return text
-    .split(/\s+/)
-    .filter(Boolean)
-    .every((word) => haystack.includes(word));
-}
-
-export interface SearchGroup {
-  tab: SidebarTab;
-  notes: Note[];
-}
-
-/** 全部未删除记录中的搜索结果，按页签分组：组的顺序与页签栏相同，组内置顶在前，再按手动顺序与创建时间。 */
-export function searchGroups(notes: readonly Note[], pinned: readonly string[], query: string): SearchGroup[] {
-  const terms = searchTerms(query);
-  if (!terms) return [];
-  const known = new Set(allTags(notes).map((item) => tagKey(item.tag)));
-  const groups = new Map<SidebarTab, Note[]>(resultOrder(pinned).map((tab) => [tab, []]));
-  notes.forEach((note) => {
-    if (note.status !== 'active' || !matchesSearch(note, terms, known)) return;
-    groups.get(homeTab(note, pinned))?.push(note);
-  });
-  return Array.from(groups, ([tab, list]) => ({
-    tab,
-    notes: list.sort((a, b) => Number(b.pinned) - Number(a.pinned) || compareNoteOrder(a, b)),
-  })).filter((group) => group.notes.length);
-}
-
-/** 搜索词只是一个已有的标签（如「#产品」）时返回这个标签的写法，否则为空；这时搜索框里有「固定为页签」「合并」。 */
-export function singleSearchTag(query: string, notes: readonly Note[]): string {
-  const match = /^#([\p{L}\p{N}_-]+)$/u.exec(searchTerms(query));
-  if (!match) return '';
-  const key = tagKey(match[1]);
-  return allTags(notes).find((item) => tagKey(item.tag) === key)?.tag ?? '';
-}
-
-/**
- * 搜的词正好是一个已有标签的名称时（如「开发」）返回这个标签与条数，否则为空（第八次反馈）：文字与标签分开搜之后，
- * 筛选行的结果条数后面出现「#开发 8 条」，点它改搜这个标签。
- */
-export function wordTag(query: string, notes: readonly Note[]): { tag: string; count: number } | null {
-  const word = searchTerms(query);
-  if (!/^[\p{L}\p{N}_-]+$/u.test(word)) return null;
-  const key = tagKey(word);
-  return allTags(notes).find((item) => tagKey(item.tag) === key) ?? null;
-}
+// 搜索规则搬进了 src/core/search（实现桌面端时，T79），这里引用并原样导出。
+export { matchesSearch, searchGroups, searchTerms, singleSearchTag, wordTag, type SearchGroup };
 
 /* ==================== 侧栏的界面状态 ==================== */
 

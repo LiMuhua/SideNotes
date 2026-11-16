@@ -65,6 +65,11 @@ export interface CardInteractionOptions {
   viewKey: string;
   /** 编辑、弹窗或标签整理期间不启动手势。 */
   blocked: boolean;
+  /**
+   * 正在全局搜索：结果按页签分组，不能在其中排序，也不在停留时切换页签；拖到页签上照样移过去，
+   * 每条记录按它自己所在的页签计算（与原型 interactions.js 相同）。
+   */
+  searching: boolean;
   /** 拖动中停在页签上时切换页签。 */
   onSwitchTab: (tab: TabKey) => void;
   /** 拖动中停在页签栏最后一格上：展开收起的页签，菜单中的页签可以作为落点。 */
@@ -366,7 +371,7 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
         }
         return;
       }
-      if (!inMenu && destination !== opts().tab && !gesture.tabTimer) {
+      if (!inMenu && !opts().searching && destination !== opts().tab && !gesture.tabTimer) {
         gesture.tabTimer = window.setTimeout(() => {
           gesture.tabTimer = 0;
           activateDragTab(gesture, destination as TabKey);
@@ -427,6 +432,14 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
         return;
       }
       gesture.targetMode = 'list';
+      // 搜索结果按页签分组，不能在其中排序；拖到页签上可以移过去。
+      if (opts().searching) {
+        gesture.targetId = '';
+        setDropTarget(null);
+        if (gesture.guide) gesture.guide.hidden = true;
+        if (label) label.textContent = `${gesture.ids.size} 条 · 搜索结果中不能排序，可以拖到页签上`;
+        return;
+      }
       const list = opts().listRef.current;
       if (!list) return;
       const listBounds = list.getBoundingClientRect();

@@ -17,6 +17,7 @@ export type MenuCommand =
   | 'collapse'
   | 'pin'
   | 'move'
+  | 'locate'
   | 'duplicate'
   | 'export'
   | 'info'
@@ -27,13 +28,16 @@ export interface NoteMenuProps {
   anchor: MenuAnchor;
   /** 有可以移去的页签（随记与固定的标签页签，当前页签除外）时出现「移到…」。 */
   canMove: boolean;
+  /** 全局搜索时最上面的「转到「X」」：切到这条记录所在的页签（与原型 note-menu.js 相同）；不在搜索时省略。 */
+  locateLabel?: string;
   onCommand: (command: MenuCommand) => void;
   onClose: () => void;
 }
 
 /** 按记录状态生成菜单项（与原型 note-menu.js 相同：去掉了「归档」，换成移到随记或固定的标签页签）。 */
-function buildEntries(note: Note, canMove: boolean): MenuItems<MenuCommand> {
+function buildEntries(note: Note, canMove: boolean, locateLabel?: string): MenuItems<MenuCommand> {
   const entries: MenuItems<MenuCommand> = [
+    ...(locateLabel ? [{ command: 'locate' as const, label: locateLabel, icon: 'arrow-right' as const }, 'separator' as const] : []),
     { command: 'copy', label: '复制内容与附件', icon: 'copy', hint: 'Ctrl+C' },
     { command: 'edit', label: '编辑内容', icon: 'edit', hint: '双击' },
     {
@@ -62,10 +66,10 @@ function buildEntries(note: Note, canMove: boolean): MenuItems<MenuCommand> {
 }
 
 /** 记录操作菜单。 */
-export function NoteMenu({ note, anchor, canMove, onCommand, onClose }: NoteMenuProps) {
+export function NoteMenu({ note, anchor, canMove, locateLabel, onCommand, onClose }: NoteMenuProps) {
   return (
     <ContextMenu
-      entries={buildEntries(note, canMove)}
+      entries={buildEntries(note, canMove, locateLabel)}
       anchor={anchor}
       label="记录操作"
       data={{ 'data-note-menu': note.id }}

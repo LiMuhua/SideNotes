@@ -1,12 +1,11 @@
 /**
- * 标签筛选菜单。
+ * 筛选行左边的标签下拉（原型第二版，与交互原型 app.js 的 renderFilterRow、renderTagMenu、rankedTags 与 selectTag 相同）。
  *
- * 结构与行为对应原型 app.js 的 renderTagMenu、rankedTags 与 selectTag：
- * 「全部标签」清除筛选；随后列出评分最高的六个标签，点击即按该标签筛选记录；
- * 排在首位且命中搜索或已被选中的标签移到最上方，并提供「管理」入口；
- * 底部提示剩余标签数量，可转到 #标签 搜索。
+ * - 按钮平时写「# 全部标签」；按标签筛选时写「# 产品 · 2 条」，后面的 × 清除筛选（条数已经写在当前页签上，平时不再写）。
+ * - 菜单：「全部标签」清除筛选，随后是当前页签中评分最高的六个标签，点击即按这个标签筛选；选中的标签移到最上面，
+ *   带「管理」入口。底部只有「搜索标签」（在全部记录中搜），候选之外还有标签时写「另有 N 个」。
+ * - 搜索时筛选行左边换成结果条数，这里不显示（见侧栏）。按钮与选项不加悬停提示，名称只写在 aria-label 中。
  * 展开状态由侧栏统一管理：点击按钮展开，切换页签或按 Esc 时收起。
- * 搜索框输入 # 时不再展开菜单，改为在输入框中以灰字联想标签（见 TagInput）。
  */
 
 import { useEffect, useMemo } from 'react';
@@ -18,15 +17,14 @@ import type { TabKey } from '../core/types';
 
 /** 菜单中最多展示的候选数，与原型一致。 */
 const MAX_CANDIDATES = 6;
-/** 候选标签的悬停说明，列出评分权重。 */
-const SCORE_HINT = '访问频率 40 · 近期访问 30 · 条数 4 · 置顶 3';
 
 export interface TagFilterProps {
   tab: TabKey;
-  query: string;
   selectedTag: string;
   /** 当前页签内的记录总数，显示在「全部标签」一行。 */
   total: number;
+  /** 按标签筛出的条数，写在按钮上。 */
+  filteredCount: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelect: (tag: string) => void;
@@ -37,9 +35,9 @@ export interface TagFilterProps {
 
 export function TagFilter({
   tab,
-  query,
   selectedTag,
   total,
+  filteredCount,
   open,
   onOpenChange,
   onSelect,
@@ -52,13 +50,14 @@ export function TagFilter({
   const pinnedTags = useStoreSlice((state) => state.settings.pinnedTags);
   // 候选是当前页签中的标签（与原型 rankedTags 相同）：随记与标签页签按固定的标签划分，rankTags 只区分置顶。
   const candidates = useMemo(
-    () => rankTags(notes.filter((note) => belongsTo(note, tab, pinnedTags)), tab, tagUsage, query, selectedTag),
-    [notes, tab, pinnedTags, tagUsage, query, selectedTag],
+    () => rankTags(notes.filter((note) => belongsTo(note, tab, pinnedTags)), tab, tagUsage, '', selectedTag),
+    [notes, tab, pinnedTags, tagUsage, selectedTag],
   );
   const shown = candidates.slice(0, MAX_CANDIDATES);
-  // 首个候选命中搜索或已被选中时，移到「全部标签」之前并提供管理入口。
-  const priority = shown.length > 0 && (shown[0].match || shown[0].selected) ? shown[0] : null;
+  // 选中的标签排在首位时移到「全部标签」之前，并提供管理入口。
+  const priority = shown.length > 0 && shown[0].selected ? shown[0] : null;
   const others = priority ? shown.slice(1) : shown;
+  const filtered = Boolean(selectedTag);
 
   // 点击菜单以外的位置收起，与原型的文档级点击处理一致。
   useEffect(() => {
@@ -76,7 +75,6 @@ export function TagFilter({
       className="tag-option"
       data-action="filter-tag"
       aria-label={`#${tag}`}
-      title={SCORE_HINT}
       data-tag={tag}
       role="menuitem"
       onClick={() => onSelect(tag)}
@@ -87,19 +85,35 @@ export function TagFilter({
   );
 
   return (
-    <div className="tag-filter-wrap">
+    <div className={filtered ? 'tag-filter-wrap is-filtered' : 'tag-filter-wrap'}>
       <button
         id="tag-filter-button"
         type="button"
-        className="tag-filter-button"
+        className={filtered ? 'tag-filter-button is-filtered' : 'tag-filter-button'}
         data-action="toggle-tag-menu"
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-controls="tag-dropdown"
+        aria-label={filtered ? `标签 #${selectedTag}，${filteredCount} 条，更换标签` : '按标签筛选'}
         onClick={() => onOpenChange(!open)}
       >
         <Icon name="hash" />
-        <span>{selectedTag ? `#${selectedTag}` : '全部标签'}</span>
+        <span className="tag-filter-label">{filtered ? selectedTag : '全部标签'}</span>
+        <span className="tag-filter-count" hidden={!filtered}>
+          {filtered ? `· ${filteredCount} 条` : ''}
+        </span>
         <Icon name="chevron-down" />
+      </button>
+      <button
+        id="tag-filter-clear"
+        type="button"
+        className="icon-button tag-filter-clear"
+        data-action="clear-tag"
+        aria-label="清除标签筛选"
+        hidden={!filtered}
+        onClick={onClear}
+      >
+        <Icon name="x" />
       </button>
       <div id="tag-dropdown" className="tag-dropdown" role="menu" aria-label="标签筛选" hidden={!open}>
         {priority ? (
@@ -110,7 +124,6 @@ export function TagFilter({
               className="icon-button"
               data-action="manage-tag"
               aria-label={`管理 #${priority.tag}`}
-              title={`管理 #${priority.tag}`}
               data-tag={priority.tag}
               onClick={() => onManage(priority.tag)}
             >
@@ -118,14 +131,7 @@ export function TagFilter({
             </button>
           </div>
         ) : null}
-        <button
-          type="button"
-          className="tag-option"
-          data-action="clear-tag"
-          aria-label="全部标签"
-          title="全部标签"
-          onClick={onClear}
-        >
+        <button type="button" className="tag-option" data-action="clear-tag" aria-label="全部标签" role="menuitem" onClick={onClear}>
           全部标签
           <span className="tag-option-count">{total}</span>
         </button>
@@ -134,25 +140,21 @@ export function TagFilter({
             {option(item.tag, item.count)}
           </div>
         ))}
-        {candidates.length === 0 ? (
-          <p className="tag-menu-empty">{query ? '没有匹配的标签' : '输入 #标签 创建分组'}</p>
-        ) : null}
+        {candidates.length === 0 ? <p className="tag-menu-empty">输入 #标签 创建分组</p> : null}
         <div className="tag-menu-footer">
-          <span>
-            {candidates.length > MAX_CANDIDATES
-              ? `另有 ${candidates.length - MAX_CANDIDATES} 个标签，使用搜索查找`
-              : '搜索 #标签 可快速定位'}
-          </span>
           <button
             type="button"
-            className="tag-search-button"
+            className="tag-option tag-search-button"
             data-action="focus-tag-search"
-            aria-label="搜索"
-            title="搜索"
+            aria-label="搜索标签"
+            role="menuitem"
             onClick={onSearch}
           >
             <Icon name="search" />
-            搜索
+            搜索标签
+            {candidates.length > MAX_CANDIDATES ? (
+              <span className="tag-option-count">{`另有 ${candidates.length - MAX_CANDIDATES} 个`}</span>
+            ) : null}
           </button>
         </div>
       </div>
