@@ -1,6 +1,6 @@
 # SideNotes 交互原型 0.7.4
 
-更新日期：2026-11-14。入口：[index.html](index.html)。原生 HTML、CSS、JavaScript，无需构建或联网；样式直接引用 [设计令牌](../design-system/tokens/)。
+更新日期：2026-11-16。入口：[index.html](index.html)。原生 HTML、CSS、JavaScript，无需构建或联网；样式直接引用 [设计令牌](../design-system/tokens/)。实现到桌面应用的交接见[原型第二版交接实现](../原型第二版交接实现.md)。
 
 原型与 Playground 由同一个开发服务器提供，地址去掉了 `docs` 一层。在仓库根目录执行：
 
