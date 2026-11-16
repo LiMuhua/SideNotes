@@ -13,18 +13,19 @@
  * 按标签筛选时筛选条上有「固定为页签」与「合并」，多选后右键可以「合并成一条…」或「合并到这条」（MergeDialog.tsx）。
  */
 
-import { Fragment, useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import type { MarkdownEditor } from '@/core/editor';
 import { noteTitle, shouldNudgeTidy } from '@/core/notes';
 import { tagKey } from '@/core/tags';
 import { WIDTH_RANGE } from '@/core/settings';
 import type { EdgeSide, Note } from '@/core/types';
 import { copyText } from '../model/clipboard';
-import { belongsTo, homeTab, pinnedTagOf, tabLabel, tabName, tabOfTag, tagOfTab, TAB_LABELS, useNotes, useSidebarView, withTag, type SidebarTab, type SidebarView, type SidebarViewOptions } from '../model/notes';
+import { allTags, belongsTo, homeTab, pinnedTagOf, searchTerms, tabLabel, tabName, tabOfTag, tagOfTab, TAB_LABELS, useNotes, useSidebarView, withTag, type SidebarTab, type SidebarView, type SidebarViewOptions } from '../model/notes';
 import { Button } from '../ui/Button';
 import { cx, useSurface, useFormFactor } from '../ui/context';
 import { ContextMenu, type MenuItem } from '../ui/Menu';
 import { EmptyState } from '../ui/Misc';
+import { listHits, setSearchHits } from '../ui/searchHighlight';
 import { useToast } from '../ui/Tabs';
 import { Composer } from './Composer';
 import { MergeDialog, type MergeRequest } from './MergeDialog';
@@ -86,6 +87,18 @@ export function SidebarPanel(props: SidebarPanelProps) {
   const [composer, setComposer] = useState<MarkdownEditor | null>(null);
   const anchor = useRef<string | null>(null);
   const [menu, setMenu] = useState<MenuState>(null);
+  // 搜索命中的高亮（第七次反馈）：每次渲染后按当前的搜索词重新标出，结束搜索或卸载时去掉。
+  const hits = useId();
+  useLayoutEffect(() => {
+    const list = root.current;
+    if (!list || !view.searching) {
+      setSearchHits(hits, []);
+      return;
+    }
+    // 标出范围是读取渲染后的文字节点，只能在提交之后做。
+    setSearchHits(hits, listHits(list, searchTerms(view.query), new Set(allTags(data.notes).map((item) => tagKey(item.tag)))));
+  });
+  useEffect(() => () => setSearchHits(hits, []), [hits]);
   const [infoNote, setInfoNote] = useState<Note | null>(null);
   const [emojiNote, setEmojiNote] = useState<Note | null>(null);
   const [managingTag, setManagingTag] = useState<string | null>(null);
@@ -288,28 +301,34 @@ export function SidebarPanel(props: SidebarPanelProps) {
   };
 
   /**
-   * 单击、Ctrl 单击与 Shift 单击：沿用资源管理器的多选习惯（T09）。Shift 单击从上一次单击的卡片选到这一张（第六次反馈），
-   * 起点不在当前列表中（例如换过页签）时只切换这一张，不再从列表顶部选起。
+   * 单击、Ctrl 单击与 Shift 单击：沿用资源管理器的多选习惯（T09，第七次反馈与交互原型相同）。
+   * - 单击：只选中这一张，Ctrl 或 Shift 选中的其它卡片取消（第七次反馈：此前已有多选时单击是取消这一张）；
+   * - Ctrl 单击：加选或减选这一张；还没有选中的卡片时，上一次单击的那张一起选上；
+   * - Shift 单击：从上一次单击的卡片选到这一张（第六次反馈），换掉原来的选择；同时按 Ctrl 或多选按钮按下时加进原来的选择；
+   *   起点不在当前列表中（例如换过页签）时只切换这一张；
+   * - 多选按钮按下时单击：勾选或取消这一张。
    */
   const selectCard = (note: Note, event: MouseEvent) => {
     const start = anchor.current ?? view.selectedId;
     const from = start ? items.findIndex((item) => item.id === start) : -1;
+    const additive = event.ctrlKey || event.metaKey || view.selectMode;
     if (event.shiftKey && from >= 0) {
       const to = items.findIndex((item) => item.id === note.id);
       const [a, b] = [from, to].sort((x, y) => x - y);
-      view.setChecked(new Set(items.slice(a, b + 1).map((item) => item.id)));
+      const range = items.slice(a, b + 1).map((item) => item.id);
+      view.setChecked(new Set(additive ? [...view.checked, ...range] : range));
       view.select(note.id);
       return;
     }
     anchor.current = note.id;
-    // 多选中（已有多选，或点了筛选行的多选按钮）单击与 Ctrl 单击一样切换这张卡片（现有行为）；单击空白处才清除多选。
-    if (event.ctrlKey || event.metaKey || event.shiftKey || view.selecting) {
+    if (additive || event.shiftKey) {
       const next = new Set(view.checked);
-      // Ctrl 单击开始多选时，原来高亮的那张一起选上；点多选按钮进入的不带上。
-      if (!next.size && !view.selecting && view.selectedId && view.selectedId !== note.id) next.add(view.selectedId);
+      if (!next.size && !view.selectMode && start && start !== note.id && from >= 0) next.add(start);
       if (next.has(note.id)) next.delete(note.id);
       else next.add(note.id);
       view.setChecked(next);
+    } else if (view.checked.size) {
+      view.clearSelection();
     }
     view.select(note.id);
   };
@@ -417,6 +436,7 @@ export function SidebarPanel(props: SidebarPanelProps) {
           tab={view.tab}
           active={active}
           checked={view.checked.has(note.id)}
+          selectMode={view.selectMode}
           editing={editing === note.id}
           dimmed={Boolean(editing && editing !== note.id)}
           maxHeight={settings.cardMaxHeight}
@@ -503,6 +523,8 @@ export function SidebarPanel(props: SidebarPanelProps) {
         view={view}
         onPin={tabs.pin}
         onMerge={(tag) => setMerging({ ids: items.map((note) => note.id), tag })}
+        onMergeChecked={() => setMerging({ ids: items.filter((note) => view.checked.has(note.id)).map((note) => note.id) })}
+        onTrashChecked={() => trash(items.filter((note) => view.checked.has(note.id)))}
         onManageTag={setManagingTag}
         onSearchTags={() => {
           // 打开搜索并预填 #，光标停在 # 之后，继续输入即按标签查找（现有应用的「搜索」）。

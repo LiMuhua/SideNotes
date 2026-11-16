@@ -221,7 +221,8 @@
   align-items: stretch;
   gap: var(--sn-space-3);
   height: calc(var(--sn-tab-height) + var(--sn-space-4));
-  padding: 0 calc(var(--sn-space-3) * 2 + var(--local-search-size)) var(--sn-space-2) var(--sn-panel-padding);
+  /* 右侧只给放大镜留位置（它离右边 --sn-space-3）：页签一直排到放大镜前，放大镜按钮自身的留白就是两者的间距（第七次反馈）。 */
+  padding: 0 calc(var(--sn-space-3) + var(--local-search-size)) var(--sn-space-2) var(--sn-panel-padding);
   border-bottom: var(--sn-border-width) solid var(--sn-color-border-subtle);
 }
 
@@ -350,16 +351,24 @@
   box-shadow: var(--sn-shadow-sm);
 }
 
-/* 最后一格（第六次反馈）：只占一个位置，样子固定。全部放得下时是「+」，单击新建页签；放不下时是「N ▾」，单击打开菜单；
- * 当前页签收在菜单里时不换成它的名字，只带当前样式。 */
+/* 最后一格（第六次反馈）：只占一个位置，样子固定。页签都放得下、后面还有位置时是「+」，单击新建页签；真放不下时是「N ▾」，
+ * 单击打开菜单；页签都放得下、只是放不下「+」时整格不显示（第七次反馈）。当前页签不会收进这里。 */
 .sn-tab-more {
   gap: var(--sn-space-1);
   padding: 0 var(--sn-space-3);
   color: var(--sn-color-text-muted);
 }
 
-.sn-tab-more[aria-selected='true'] {
-  color: var(--sn-color-text);
+/* 当前页签不收起（第七次反馈）：别的页签都收起后仍放不下时（侧栏很窄、页签名很长），它的名字缩短。 */
+.sn-side-tab.is-squeezed {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.sn-side-tab.is-squeezed .sn-side-tab-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sn-tab-more[aria-expanded='true'] {
@@ -686,7 +695,8 @@
   color: inherit;
 }
 
-/* 「固定为页签」「合并」：强调色的小号文字按钮，跟在标签下拉之后；只搜一个标签时跟在结果的条数之后。 */
+/* 「固定为页签」「合并」：强调色的小号文字按钮，跟在标签下拉之后；只搜一个标签时跟在结果的条数之后；
+ * 有选中的卡片时是「合并」「移入回收站」，跟在「已选 N 条」之后（第七次反馈）。 */
 .sn-topline-actions {
   display: inline-flex;
   flex: none;
@@ -726,7 +736,7 @@
   background: var(--sn-color-accent-subtle);
 }
 
-/* 搜索时筛选行左边的结果条数（与标签下拉里的条数同一种写法），标签下拉在搜索时不用。 */
+/* 搜索时筛选行左边的结果条数与有选中卡片时的「已选 N 条」（与标签下拉里的条数同一种写法），这时不用标签下拉。 */
 .sn-topline-search-count {
   flex: none;
   padding: 0 var(--sn-space-3);
@@ -737,7 +747,7 @@
   white-space: nowrap;
 }
 
-/* 筛选行右边的列表操作（第六次反馈）：小号图标按钮；多选中按下（强调色浅底），图标后面写选中的条数。 */
+/* 筛选行右边的列表操作（第六次反馈）：小号图标按钮；多选按钮按下时是强调色浅底，选中的条数写在左边（第七次反馈）。 */
 .sn-topline-tools {
   display: inline-flex;
   flex: none;
@@ -750,17 +760,6 @@
   color: var(--sn-color-text-muted);
 }
 
-.sn-topline-tool:has(.sn-topline-tool-count) {
-  gap: var(--sn-space-1);
-  width: auto;
-  padding: 0 var(--sn-space-2);
-}
-
-.sn-topline-tool-count {
-  font-family: var(--sn-font-meta);
-  font-size: var(--sn-font-size-xs);
-  font-variant-numeric: tabular-nums;
-}
 
 /* 标签筛选菜单（现有应用的 TagFilter）：候选标签右侧是条数；首位标签旁边是「管理」；底部提示与「搜索」。 */
 /* 宽度跟着内容走（本次提出）：最长的一项加上左右的内边距，条数与标签之间多留一点空。 */
@@ -1186,6 +1185,42 @@
 
 .sn-note-emoji:hover {
   background: var(--sn-color-hover);
+}
+
+/* 多选按钮按下时（第七次反馈）：图标的位置换成勾选框，占同样的宽度，标题不移动；右上角的快捷按钮隐藏，只留时间。 */
+.sn-note-check {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--sn-icon-size);
+  height: var(--sn-icon-size);
+  margin: calc((var(--sn-control-height-sm) - var(--sn-icon-size)) / 2) calc(var(--sn-space-3) / 2) 0 calc(var(--sn-space-3) / 2 - var(--sn-space-2));
+  border: calc(var(--sn-border-width) * 1.5) solid var(--sn-color-border-strong);
+  border-radius: var(--sn-radius-xs);
+  background: var(--sn-color-surface);
+  color: transparent;
+}
+
+.sn-note-check > .sn-icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  stroke-width: calc(var(--sn-icon-stroke) * 1.6);
+}
+
+.sn-note.is-checked .sn-note-check {
+  border-color: var(--sn-color-accent);
+  background: var(--sn-color-accent);
+  color: var(--sn-color-on-accent);
+}
+
+.sn-note.is-selecting .sn-note-actions {
+  display: none;
+}
+
+.sn-note.is-selecting .sn-note-meta {
+  visibility: visible;
+  opacity: 1;
 }
 
 .sn-note-title {

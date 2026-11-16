@@ -251,6 +251,9 @@ export interface ListToplineProps {
   onPin?: (tag: string) => void;
   /** 「合并」：把筛出或搜出的记录合并成一条。 */
   onMerge?: (tag: string) => void;
+  /** 有选中的卡片时的「合并」「移入回收站」（第七次反馈），与右键菜单的同名操作相同。 */
+  onMergeChecked?: () => void;
+  onTrashChecked?: () => void;
 }
 
 /**
@@ -265,7 +268,7 @@ export function useCollapseAll(view: SidebarView) {
     const ids = view.items.filter((note) => note.collapsed !== target).map((note) => note.id);
     if (!ids.length) return;
     data.setCollapsed(ids, target);
-    toast({ message: `已${target ? '收起' : '展开'} ${ids.length} 张卡片`, action: { label: '撤销', run: () => data.setCollapsed(ids, !target) } });
+    toast({ message: `已${target ? '收起' : '展开'} ${ids.length} 张卡片`, action: { label: '撤销', run: () => data.setCollapsed(ids, !target) }, key: 'collapse-all' });
   };
   return { collapse, run };
 }
@@ -276,7 +279,7 @@ export function useCollapseAll(view: SidebarView) {
  * 搜索时（搜索框在页签栏）标签下拉换成结果的条数，只搜一个已有标签时同样跟着这两个按钮。
  * 右边是对整个列表的操作：多选（进入后单击卡片即选中或取消，写已选的条数）与收起/展开全部，最右一个在放大镜的正下方。
  */
-export function ListTopline({ view, onManageTag, onSearchTags, onPin, onMerge }: ListToplineProps) {
+export function ListTopline({ view, onManageTag, onSearchTags, onPin, onMerge, onMergeChecked, onTrashChecked }: ListToplineProps) {
   const [open, setOpen] = useState(false);
   const [button, setButton] = useState<HTMLButtonElement | null>(null);
   const collapseAll = useCollapseAll(view);
@@ -285,7 +288,22 @@ export function ListTopline({ view, onManageTag, onSearchTags, onPin, onMerge }:
   return (
     <div className="sn-topline">
       <div className="sn-topline-filter">
-        {view.searching ? (
+        {selected ? (
+          // 有选中的卡片时（第七次反馈）：选中的条数与能对它们做的事，「移到…」在右键菜单里。
+          <>
+            <span className="sn-topline-search-count">已选 {selected} 条</span>
+            <span className="sn-topline-actions">
+              {selected > 1 ? (
+                <button type="button" className="sn-topline-action" onClick={onMergeChecked}>
+                  合并
+                </button>
+              ) : null}
+              <button type="button" className="sn-topline-action" onClick={onTrashChecked}>
+                移入回收站
+              </button>
+            </span>
+          </>
+        ) : view.searching ? (
           <>
             <span className="sn-topline-search-count">{view.items.length} 条</span>
             {view.searchTag ? <FilterActions view={view} tag={view.searchTag} onPin={onPin} onMerge={onMerge} /> : null}
@@ -319,15 +337,15 @@ export function ListTopline({ view, onManageTag, onSearchTags, onPin, onMerge }:
         )}
       </div>
       <div className="sn-topline-tools">
+        {/* 多选按钮按下时卡片出现勾选框；选中的条数写在左边（第七次反馈），按钮上不再写数字。 */}
         <button
           type="button"
           className="sn-icon-button is-sm is-ghost sn-topline-tool"
-          aria-pressed={view.selecting}
-          aria-label={view.selecting ? (selected ? `已选 ${selected} 条，退出多选` : '退出多选') : '多选'}
+          aria-pressed={view.selectMode}
+          aria-label={view.selectMode ? '退出多选' : '多选'}
           onClick={view.toggleSelecting}
         >
           <Icon name="check-square" />
-          {selected ? <span className="sn-topline-tool-count">{selected}</span> : null}
         </button>
         <IconButton
           icon={collapseAll.collapse ? 'fold' : 'unfold'}

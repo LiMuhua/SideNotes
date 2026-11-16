@@ -69,7 +69,11 @@ export function NotesSection() {
 
   return (
     <PageSection id="gallery-cards" title="记录卡片" description="同一张卡片的各种状态。悬停与单击共用一个高亮；编辑中的卡片成为视觉焦点，其余卡片变淡（T21）。">
-      <Demo title="默认、高亮与多选" note="高亮时显示操作按钮；多选的卡片用强调色浅底。" wide>
+      <Demo
+        title="默认、高亮与多选"
+        note="高亮时显示操作按钮；多选的卡片用强调色浅底。多选按钮按下时（第七次反馈），标题左边的图标换成勾选框，右上角只留时间，单击卡片就是勾选或取消。"
+        wide
+      >
         <div className="sn-card-matrix">
           <StateCell label="默认">
             <PanelSample list>
@@ -84,6 +88,12 @@ export function NotesSection() {
           <StateCell label="多选">
             <PanelSample list>
               <StaticCard note={pick(0)} checked />
+            </PanelSample>
+          </StateCell>
+          <StateCell label="多选按钮按下">
+            <PanelSample list>
+              <StaticCard note={pick(0)} selectMode checked />
+              <StaticCard note={pick(1)} selectMode />
             </PanelSample>
           </StateCell>
         </div>
@@ -159,12 +169,13 @@ export function PartsSection() {
   const plain = useSidebarView();
   const wide = useSidebarView();
   const narrow = useSidebarView();
-  // 示例数据固定的标签中排在最后的「参考」，窄侧栏里收在最后一格。
+  // 示例数据固定的标签中排在最后的「参考」：窄侧栏里本该收进最后一格，它是当前页签时排到「N ▾」前面（第七次反馈）。
   const narrowHidden = useSidebarView({ tab: tabOfTag('参考') });
   const suggesting = useSidebarView({ searchOpen: true, query: '#工' });
   const searching = useSidebarView({ searchOpen: true, query: '#阅读' });
   const tagged = useSidebarView({ tag: '阅读' });
   const selecting = useSidebarView({ checked: notesInTab(data.notes, 'workspace', data.pinnedTags).slice(0, 3).map((note) => note.id) });
+  const selectMode = useSidebarView({ selectMode: true });
 
   return (
     <PageSection id="gallery-parts" title="侧栏部件" description="页签、筛选行与搜索、搜索结果的分组、整理提醒、新建卡片与底栏，都是侧栏中真实的组件。">
@@ -178,7 +189,7 @@ export function PartsSection() {
       </Demo>
       <Demo
         title="最后一格"
-        note="只占一个位置，样子固定（第六次反馈）：页签都放得下时是「+」，单击新建页签；真放不下时多出来的页签从右往左收进来，写「N ▾」，单击打开菜单。当前页签收在里面时只加当前样式，不换成它的名字。"
+        note="只占一个位置，样子固定（第六次反馈）：页签都放得下、后面还有位置时是「+」，单击新建页签；真放不下时多出来的页签从右往左收进来，写「N ▾」，单击打开菜单；页签都放得下、只差「+」时不显示，不为它收起页签（第七次反馈）。当前页签不收：放不下时收它前面的页签，它排到「N ▾」前面（第七次反馈）。"
       >
         <div className="sn-card-matrix">
           <StateCell label="放得下时">
@@ -192,7 +203,7 @@ export function PartsSection() {
               <SidebarNav view={narrow} />
             </PanelSample>
           </StateCell>
-          <StateCell label="当前是收起的页签">
+          <StateCell label="当前页签排到「N ▾」前面">
             <PanelSample className="is-narrow">
               <SidebarNav view={narrowHidden} />
             </PanelSample>
@@ -201,7 +212,7 @@ export function PartsSection() {
       </Demo>
       <Demo
         title="筛选行"
-        note="页签栏下面一行（第五、六次反馈：保持两行）。左边写列表里是什么：标签下拉同时写标签与条数，× 清除筛选，选了标签时后面是「固定为页签」与「合并」。右边是对整个列表的操作：多选（多选中写已选的条数）与收起/展开全部。"
+        note="页签栏下面一行（第五、六次反馈：保持两行）。左边写列表里是什么：标签下拉同时写标签与条数，× 清除筛选，选了标签时后面是「固定为页签」与「合并」；有选中的卡片时换成「已选 N 条」与「合并」「移入回收站」（第七次反馈）。右边是对整个列表的操作：多选（按下后卡片出现勾选框）与收起/展开全部。"
       >
         <div className="sn-card-matrix">
           <StateCell label="没有筛选">
@@ -214,16 +225,21 @@ export function PartsSection() {
               <ListTopline view={tagged} onManageTag={noop} onSearchTags={noop} onPin={noop} onMerge={noop} />
             </PanelSample>
           </StateCell>
-          <StateCell label="多选中">
+          <StateCell label="多选按钮按下">
             <PanelSample>
-              <ListTopline view={selecting} onManageTag={noop} onSearchTags={noop} />
+              <ListTopline view={selectMode} onManageTag={noop} onSearchTags={noop} />
+            </PanelSample>
+          </StateCell>
+          <StateCell label="选中 3 条">
+            <PanelSample>
+              <ListTopline view={selecting} onManageTag={noop} onSearchTags={noop} onMergeChecked={noop} onTrashChecked={noop} />
             </PanelSample>
           </StateCell>
         </div>
       </Demo>
       <Demo
         title="搜索"
-        note="搜索全部记录，与当前页签无关；搜索框在页签栏，展开时盖住页签。输入 # 时以灰字联想已有标签，Tab 选用，↑ ↓ 切换候选（T41）。结果的条数写在筛选行左边，只搜一个标签时还有「固定为页签」与「合并」。结果按页签分组，组标题右侧「转到」切到这个页签。"
+        note="搜索全部记录，与当前页签无关；搜索框在页签栏，展开时盖住页签。输入 # 时以灰字联想已有标签，Tab 选用，↑ ↓ 切换候选（T41）。结果的条数写在筛选行左边，只搜一个标签时还有「固定为页签」与「合并」。结果按页签分组，置顶组总在最上面，组标题右侧「转到」切到这个页签；标题、正文与标签中命中的文字高亮（第七次反馈）。"
       >
         <div className="sn-card-matrix">
           <StateCell label="标签联想">

@@ -209,8 +209,25 @@ export function AppearancePanel() {
         </RangeGroup>
       </SettingsCard>
 
-      {/* 其它（第六次反馈）：四项按各自的宽度排成一行，放不下才折行；不按列对齐，对齐会在短的一项后面空出一段。 */}
+      {/* 其它：固定两行（第七次反馈）——窗口标签页、通知位置；列表加载、整理提醒。每行按各自的宽度排开，不按列对齐
+          （第六次反馈：对齐会在短的一项后面空出一段），太窄时行内折行。 */}
       <SettingsCard title="其它">
+        <FieldRow>
+          <Field label="窗口标签页" help="记录窗口中标签页的位置，窗口标题栏上的按钮也能切换">
+            <Select
+              aria-label="记录窗口的标签页位置"
+              value={windowTabs}
+              onChange={setWindowTabs}
+              options={[
+                { value: 'top', label: '顶部' },
+                { value: 'side', label: '左侧' },
+              ]}
+            />
+          </Field>
+          <Field label="通知位置">
+            <Select aria-label="通知弹出位置" value={settings.toastPosition} onChange={(toastPosition) => updateSettings({ toastPosition })} options={TOAST_POSITIONS} />
+          </Field>
+        </FieldRow>
         <FieldRow>
           <Field label="列表加载" help="滚动到列表底部时按批加载">
             <Switch label="滚动按需加载" hideLabel checked={settings.lazyLoading} onChange={(lazyLoading) => updateSettings({ lazyLoading })} />
@@ -239,20 +256,6 @@ export function AppearancePanel() {
               }}
             />
             <span className="sn-set-unit">条</span>
-          </Field>
-          <Field label="通知位置">
-            <Select aria-label="通知弹出位置" value={settings.toastPosition} onChange={(toastPosition) => updateSettings({ toastPosition })} options={TOAST_POSITIONS} />
-          </Field>
-          <Field label="窗口标签页" help="记录窗口中标签页的位置，窗口标题栏上的按钮也能切换">
-            <Select
-              aria-label="记录窗口的标签页位置"
-              value={windowTabs}
-              onChange={setWindowTabs}
-              options={[
-                { value: 'top', label: '顶部' },
-                { value: 'side', label: '左侧' },
-              ]}
-            />
           </Field>
         </FieldRow>
       </SettingsCard>

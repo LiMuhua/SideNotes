@@ -35,6 +35,11 @@ export interface NoteCardProps {
   active: boolean;
   /** 多选中。 */
   checked: boolean;
+  /**
+   * 多选按钮按下（第七次反馈）：标题左边的图标换成勾选框，右上角的快捷按钮隐藏，单击卡片的任何地方都是勾选或取消
+   * （卡片上的按钮、链接、待办与标签不再响应）。
+   */
+  selectMode?: boolean;
   /** 「转到」的这一条（第五次反馈）：强调色外圈闪一下，动画结束时调用 onLocated。 */
   located?: boolean;
   onLocated?: () => void;
@@ -88,6 +93,7 @@ export function NoteCard(props: NoteCardProps) {
         props.located && 'is-located',
         active && 'is-active',
         checked && 'is-checked',
+        props.selectMode && 'is-selecting',
         editing && 'is-editing',
         dimmed && 'is-dimmed',
         note.collapsed && 'is-collapsed',
@@ -101,6 +107,12 @@ export function NoteCard(props: NoteCardProps) {
       onMouseLeave={() => props.onHover(null)}
       onAnimationEnd={(event) => {
         if (props.located && event.animationName === 'sn-note-located') props.onLocated?.();
+      }}
+      onClickCapture={(event) => {
+        if (!props.selectMode || editing) return;
+        event.preventDefault();
+        event.stopPropagation();
+        props.onSelect(event);
       }}
       onClick={(event) => {
         if (!editing) props.onSelect(event);
@@ -119,18 +131,24 @@ export function NoteCard(props: NoteCardProps) {
       onKeyDown={props.onKeyDown}
     >
       <header className="sn-note-head">
-        <button
-          type="button"
-          className="sn-note-emoji"
-          tabIndex={innerTab}
-          aria-label="更换 Emoji"
-          onClick={(event) => {
-            event.stopPropagation();
-            props.onEmoji();
-          }}
-        >
-          {note.emoji}
-        </button>
+        {props.selectMode ? (
+          <span className="sn-note-check" aria-hidden="true">
+            <Icon name="check" />
+          </span>
+        ) : (
+          <button
+            type="button"
+            className="sn-note-emoji"
+            tabIndex={innerTab}
+            aria-label="更换 Emoji"
+            onClick={(event) => {
+              event.stopPropagation();
+              props.onEmoji();
+            }}
+          >
+            {note.emoji}
+          </button>
+        )}
         <h3 className="sn-note-title">{display.structured ? noteTitle(note) : <MarkdownInline text={titleText} />}</h3>
         <div className="sn-note-side">
           <div className="sn-note-meta">
@@ -219,6 +237,7 @@ export function NoteCard(props: NoteCardProps) {
               key={tag}
               type="button"
               className="sn-note-tag"
+              data-tag={tag}
               tabIndex={innerTab}
               onClick={(event) => {
                 event.stopPropagation();

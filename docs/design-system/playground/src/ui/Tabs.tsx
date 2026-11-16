@@ -109,6 +109,8 @@ export interface ToastOptions {
   action?: ToastAction;
   /** 多个操作（第五次反馈：新记录不在当前页签时有「查看」与「放回」），排在 action 之后。 */
   actions?: readonly ToastAction[];
+  /** 同一种操作的提示（如收起/展开全部）：新的一条替换旧的，不叠在一起，旧提示的「撤销」也不会退回更早的状态（第七次反馈）。 */
+  key?: string;
 }
 
 interface ToastEntry extends ToastOptions {
@@ -152,8 +154,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     (options: ToastOptions) => {
       toastSequence += 1;
       const toast = { ...options, id: toastSequence };
-      // 同时最多保留三条，最新的在最上面。
-      setToasts((current) => [toast, ...current].slice(0, 3));
+      // 同一种操作的提示替换旧的；同时最多保留三条，最新的在最上面。
+      setToasts((current) => [toast, ...current.filter((item) => !options.key || item.key !== options.key)].slice(0, 3));
       schedule(toast);
     },
     [schedule],

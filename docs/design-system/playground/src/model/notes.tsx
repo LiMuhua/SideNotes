@@ -399,9 +399,14 @@ export function filterNotes(notes: readonly Note[], tab: SidebarTab, pinned: rea
   return notesInTab(notes, tab, pinned).filter((note) => matchesQuery(note, query) && (!tag || hasTagKey(note, tag)));
 }
 
-/** 页签栏的顺序：随记、置顶与固定的标签（全局搜索的结果按这个顺序分组）。 */
+/** 页签栏的顺序：随记、置顶与固定的标签。 */
 export function tabOrder(pinned: readonly string[]): SidebarTab[] {
   return ['workspace', 'pinned', ...pinned.map(tabOfTag)];
+}
+
+/** 全局搜索结果的分组顺序（第七次反馈）：置顶总在最上面，其余与页签栏相同。 */
+export function resultOrder(pinned: readonly string[]): SidebarTab[] {
+  return ['pinned', 'workspace', ...pinned.map(tabOfTag)];
 }
 
 /** 页签显示的名称（不带引号）：随记、置顶或标签名。 */
@@ -410,11 +415,11 @@ export function tabName(tab: SidebarTab): string {
 }
 
 /**
- * 记录在页签栏中第一个出现的页签（第五次反馈）：没有已固定标签的在随记，否则置顶的在置顶，其余在它的第一个固定标签。
- * 全局搜索的结果按它分组，「转到」也去这里。
+ * 记录所在的页签（第五次反馈）：置顶的在置顶（第七次反馈：此前没有已固定标签的置顶记录算在随记），其余没有已固定标签的
+ * 在随记，有的在它的第一个固定标签。全局搜索的结果按它分组，「转到」也去这里。
  */
 export function homeTab(note: Note, pinned: readonly string[]): SidebarTab {
-  return tabOrder(pinned).find((tab) => belongsTo(note, tab, pinned)) ?? 'workspace';
+  return resultOrder(pinned).find((tab) => belongsTo(note, tab, pinned)) ?? 'workspace';
 }
 
 /* ==================== 全局搜索（第五次反馈，与交互原型相同） ==================== */
@@ -458,7 +463,7 @@ export function searchGroups(notes: readonly Note[], pinned: readonly string[], 
   const terms = searchTerms(query);
   if (!terms) return [];
   const known = new Set(allTags(notes).map((item) => tagKey(item.tag)));
-  const groups = new Map<SidebarTab, Note[]>(tabOrder(pinned).map((tab) => [tab, []]));
+  const groups = new Map<SidebarTab, Note[]>(resultOrder(pinned).map((tab) => [tab, []]));
   notes.forEach((note) => {
     if (note.status !== 'active' || !matchesSearch(note, terms, known)) return;
     groups.get(homeTab(note, pinned))?.push(note);
@@ -528,6 +533,8 @@ export interface SidebarViewOptions {
   tag?: string;
   /** 初始选中的记录（组件页「多选中」的示例）。 */
   checked?: readonly string[];
+  /** 初始时多选按钮按下（组件页的示例）。 */
+  selectMode?: boolean;
 }
 
 /** 一个侧栏实例的界面状态：页签、搜索、标签筛选、选中、悬停、编辑与多选。 */
@@ -541,8 +548,8 @@ export function useSidebarView(options: SidebarViewOptions = {}) {
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(options.editingId ?? null);
   const [checked, setChecked] = useState<ReadonlySet<string>>(() => new Set(options.checked ?? []));
-  // 筛选行的多选按钮（第六次反馈）：进入多选后单击卡片就是选中或取消，还没选中任何一张时也在多选中。
-  const [selectMode, setSelectMode] = useState(false);
+  // 筛选行的多选按钮（第六次反馈）：按下后卡片出现勾选框（第七次反馈），单击卡片就是勾选或取消，还没选中任何一张时也按着。
+  const [selectMode, setSelectMode] = useState(Boolean(options.selectMode));
   // 新建卡片上去掉了的页签标签（第四次反馈：在标签页签中新建时默认带上这个标签，点 × 这一条不带）。
   const [skippedTag, setSkippedTag] = useState('');
   // 「转到」一条记录：列表滚到它并闪一下（第五次反馈），处理完清空。
@@ -576,11 +583,11 @@ export function useSidebarView(options: SidebarViewOptions = {}) {
     setSelectMode(false);
   }, []);
   const selecting = selectMode || checked.size > 0;
-  /** 多选按钮：没有多选时进入多选；已在多选中时退出并清空。 */
+  /** 多选按钮（第六、七次反馈）：没按下时按下，已用 Ctrl 或 Shift 选中的保留；按下时再点退出并清空。 */
   const toggleSelecting = useCallback(() => {
-    if (selecting) clearSelection();
+    if (selectMode) clearSelection();
     else setSelectMode(true);
-  }, [selecting, clearSelection]);
+  }, [selectMode, clearSelection]);
   /** 按标签筛选（现有应用的 selectTag）：清空搜索词，并记一次访问作为标签菜单的评分依据。 */
   const { trackTagUsage } = data;
   const selectTag = useCallback(
@@ -638,8 +645,10 @@ export function useSidebarView(options: SidebarViewOptions = {}) {
     setEditingId,
     checked,
     setChecked,
-    /** 是否在多选中：点了多选按钮，或已经选中了记录。 */
+    /** 是否在多选中：按下了多选按钮，或已经选中了记录（Esc 先退出多选）。 */
     selecting,
+    /** 多选按钮是否按下（第七次反馈）：按下时卡片出现勾选框，单击卡片就是勾选或取消。 */
+    selectMode,
     toggleSelecting,
     clearSelection,
     clearFilters,

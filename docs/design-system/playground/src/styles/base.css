@@ -131,6 +131,12 @@
   border-radius: var(--sn-radius-xs);
 }
 
+/* 搜索命中（第七次反馈）：用 CSS 自定义高亮标出（ui/searchHighlight.ts），不改动文字节点；只能设颜色，没有圆角。 */
+::highlight(sn-search-hit) {
+  background-color: var(--sn-color-highlight);
+  color: inherit;
+}
+
 /* ---------- 浮层根节点：覆盖整个作用域，本身不拦截指针 ---------- */
 .sn-layer-root {
   position: absolute;

@@ -1155,6 +1155,8 @@ button.sn-shortcut-key:hover {
   gap: var(--sn-space-3);
 }
 
+/* 关于页的按钮（第七次反馈）：动作与链接同一种带边框的样子，宽度随内容，放不下自然换行，不为填满一行拉长（第六次反馈）。
+ * 致谢的名称后面是许可证（灰色小字），链接最后是斜箭头。 */
 .sn-link-chip {
   display: inline-flex;
   align-items: center;
@@ -1166,6 +1168,7 @@ button.sn-shortcut-key:hover {
   background: var(--sn-color-surface-raised);
   color: var(--sn-color-text);
   font-size: var(--sn-font-size-sm);
+  white-space: nowrap;
 }
 
 .sn-link-chip:hover {
@@ -1180,41 +1183,6 @@ button.sn-shortcut-key:hover {
 }
 
 .sn-link-glyph {
-  color: var(--sn-color-text-muted);
-}
-
-/* 项目与开源致谢（第六次反馈）：文字链接，按内容宽度排开，放不下自然换行，不为填满一行而拉伸；悬停时浅底、名称换强调色。
- * 「检查更新」「打开开发者工具」是动作，仍是按钮（sn-link-chip）。致谢的名称后面是许可证（灰色小字）。 */
-.sn-chip-row.is-text {
-  gap: var(--sn-space-2) var(--sn-space-6);
-}
-
-.sn-text-link {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sn-space-2);
-  height: var(--sn-control-height-sm);
-  margin: 0 calc(var(--sn-space-2) * -1);
-  padding: 0 var(--sn-space-2);
-  border: 0;
-  border-radius: var(--sn-radius-control);
-  background: transparent;
-  color: var(--sn-color-text);
-  font-size: var(--sn-font-size-sm);
-  white-space: nowrap;
-}
-
-.sn-text-link:hover {
-  background: var(--sn-color-hover);
-}
-
-.sn-text-link:hover .sn-text-link-label {
-  color: var(--sn-color-accent-text);
-}
-
-.sn-text-link .sn-icon {
-  width: var(--sn-icon-size-sm);
-  height: var(--sn-icon-size-sm);
   color: var(--sn-color-text-muted);
 }
 

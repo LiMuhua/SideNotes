@@ -3,7 +3,8 @@
  *
  * - 搜索全部未删除的记录，与当前页签无关；只写 # 还没写标签名时不算搜索；
  * - 写完整的已有标签只匹配这个标签，没写完的按前缀匹配；
- * - 结果按页签分组：每条记录放在页签栏中第一个包含它的页签（随记、置顶、固定的标签依次），组内置顶在前；
+ * - 结果按页签分组：每条记录放在它所在的页签——置顶的在置顶（第七次反馈），其余没有固定标签的在随记，有的在第一个固定标签；
+ *   置顶组总在最上面，其余与页签栏的顺序相同，组内置顶在前；
  * - 只搜一个已有标签时，搜索框里出现「固定为页签」「合并」。
  */
 
@@ -41,9 +42,10 @@ const trashed = note('发布草稿\n\n#开发', { status: 'trash' });
 const notes = [plain, pinnedPlain, dev, product, manager, trashed];
 
 describe('全局搜索', () => {
-  it('记录在页签栏中第一个包含它的页签：没有固定标签的在随记，置顶的在置顶，其余在第一个固定标签', () => {
+  it('记录所在的页签：置顶的在置顶，其余没有固定标签的在随记，有的在第一个固定标签', () => {
     expect(homeTab(plain, pinned)).toBe('workspace');
-    expect(homeTab(pinnedPlain, pinned)).toBe('workspace');
+    // 第七次反馈：没有固定标签的置顶记录也在置顶（此前算在随记）。
+    expect(homeTab(pinnedPlain, pinned)).toBe('pinned');
     expect(homeTab(note('置顶的开发\n\n#开发', { pinned: true }), pinned)).toBe('pinned');
     expect(homeTab(dev, pinned)).toBe('tag:开发');
     expect(homeTab(product, pinned)).toBe('tag:产品');
@@ -57,10 +59,12 @@ describe('全局搜索', () => {
     expect(ids).toEqual([dev.id]);
   });
 
-  it('结果按页签栏的顺序分组，组内置顶在前', () => {
+  it('置顶组总在最上面，其余按页签栏的顺序分组，组内置顶在前', () => {
     const groups = searchGroups(notes, pinned, '#生活');
-    expect(groups.map((group) => group.tab)).toEqual(['workspace']);
-    expect(groups[0].notes.map((item) => item.id)).toEqual([pinnedPlain.id, plain.id]);
+    expect(groups.map((group) => group.tab)).toEqual(['pinned', 'workspace']);
+    expect(groups.map((group) => group.notes.map((item) => item.id))).toEqual([[pinnedPlain.id], [plain.id]]);
+    const pinnedDev = note('置顶的开发\n\n#开发', { pinned: true });
+    expect(searchGroups([...notes, pinnedDev], pinned, '#开发').map((group) => group.tab)).toEqual(['pinned', 'tag:开发']);
     expect(searchGroups(notes, pinned, '#产').map((group) => [group.tab, group.notes.length])).toEqual([
       ['workspace', 1],
       ['tag:开发', 1],

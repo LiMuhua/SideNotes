@@ -420,31 +420,27 @@ export function TrashPanel() {
 
 /* ==================== 关于 ==================== */
 
-/** 开源致谢：名称、符号、用途与许可证（第五次反馈：块的第二行写许可证；2026-11-15 按各项目的仓库或 package.json 核对）。 */
-const CREDITS: ReadonlyArray<{ name: string; glyph: string; note: string; license: string }> = [
-  { name: 'Tauri', glyph: '◈', note: '桌面与跨平台运行时', license: 'MIT / Apache-2.0' },
-  { name: 'React', glyph: '⚛', note: '界面方案参考', license: 'MIT' },
-  { name: 'Vite', glyph: 'ϟ', note: '开发与构建工具', license: 'MIT' },
-  { name: 'SQLite', glyph: '▱', note: '本地数据方案参考', license: '公有领域' },
-  { name: 'Filee', glyph: '▣', note: '桌面外观与交互参考', license: 'MIT' },
-  { name: 'Maple Mono', glyph: 'Aa', note: '内置默认字体 Maple Mono NF CN', license: 'OFL-1.1' },
+/**
+ * 开源致谢：桌面端实际用到的组件（第七次反馈：package.json 与 src-tauri/Cargo.toml 的依赖，以及随应用打包的字体），
+ * 名称、符号、用途与许可证；许可证取自各项目的仓库（2026-11-15 核对）。去掉了 Filee：它只是原型的外观参考，没有用到它的代码。
+ */
+const CREDITS: ReadonlyArray<{ name: string; glyph: string; use: string; license: string }> = [
+  { name: 'Tauri', glyph: '◈', use: '桌面与跨平台运行时，以及官方插件', license: 'MIT / Apache-2.0' },
+  { name: 'React', glyph: '⚛', use: '界面', license: 'MIT' },
+  { name: 'Vite', glyph: 'ϟ', use: '开发与构建', license: 'MIT' },
+  { name: 'TypeScript', glyph: 'TS', use: '前端语言', license: 'Apache-2.0' },
+  { name: 'SQLite', glyph: '▱', use: '本地数据库', license: '公有领域' },
+  { name: 'rusqlite', glyph: 'Rs', use: '在 Rust 中使用 SQLite', license: 'MIT' },
+  { name: 'serde', glyph: '{}', use: 'Rust 的数据序列化', license: 'MIT / Apache-2.0' },
+  { name: 'windows-rs', glyph: '⊞', use: '窗口定位、DWM 与系统字体', license: 'MIT / Apache-2.0' },
+  { name: 'Maple Mono', glyph: 'Aa', use: '内置默认字体 Maple Mono NF CN', license: 'OFL-1.1' },
 ];
 
-/** 小块按钮：关于页的动作（检查更新、打开开发者工具）。 */
-function LinkChip({ icon, label, onClick }: { icon: IconName; label: string; onClick: () => void }) {
-  return (
-    <button type="button" className="sn-link-chip" onClick={onClick}>
-      <Icon name={icon} />
-      <span className="sn-link-label">{label}</span>
-    </button>
-  );
-}
-
 /**
- * 文字链接（第六次反馈：不为填满一行把按钮拉长）：项目链接与开源致谢，按内容宽度排开、放不下自然换行；
- * 外部链接带一个斜箭头，致谢的名称后面写许可证（note）。
+ * 关于页的按钮：动作（检查更新、打开开发者工具）与链接（项目、开源致谢）同一种带边框的样子（第七次反馈：第六次改成的文字链接
+ * 太扁平），宽度随内容，放不下自然换行，不为填满一行拉长（第六次反馈）。链接带一个斜箭头，致谢的名称后面写许可证（note）。
  */
-function TextLink({
+function LinkChip({
   icon,
   glyph,
   label,
@@ -460,16 +456,16 @@ function TextLink({
   onClick: () => void;
 }) {
   return (
-    <button type="button" className="sn-text-link" onClick={onClick}>
+    <button type="button" className="sn-link-chip" onClick={onClick}>
       {icon ? <Icon name={icon} /> : null}
       {glyph ? (
         <span className="sn-link-glyph" aria-hidden="true">
           {glyph}
         </span>
       ) : null}
-      <span className="sn-text-link-label">{label}</span>
+      <span className="sn-link-label">{label}</span>
       {note ? <span className="sn-link-note">{note}</span> : null}
-      {external ? <Icon name="arrow-up-right" /> : null}
+      {external ? <Icon name="arrow-up-right" className="sn-link-external" /> : null}
     </button>
   );
 }
@@ -480,7 +476,8 @@ export function AboutPanel() {
   const open = (label: string) => toast({ message: `打开${label}（示例）` });
   return (
     // 第五次反馈：标题与其他页一样在最上面，内容从上往下排，排完还空就留空；「检查更新」放在版本号旁边。
-    // 第六次反馈：项目与开源致谢是文字链接（不再是铺满整行的等宽块），致谢的名称后面写许可证；动作仍是按钮。
+    // 第七次反馈：项目与开源致谢是带边框的按钮，宽度随内容；项目一行最后是本项目的许可证 AGPL-3.0（仓库还没有 LICENSE 文件，
+    // 桌面端链接到 GNU 官网的全文）。
     <SettingsPage title="关于">
       <div className="sn-about-hero">
         <AppIcon />
@@ -496,17 +493,18 @@ export function AboutPanel() {
       </div>
       <section className="sn-about-section">
         <h4 className="sn-set-card-title">项目</h4>
-        <div className="sn-chip-row is-text">
-          <TextLink icon="code" label="GitHub" external onClick={() => open('GitHub')} />
-          <TextLink icon="globe" label="官方网站" external onClick={() => open('官方网站')} />
-          <TextLink icon="heart" label="支持项目" onClick={() => toast({ message: '赞助入口暂未开放，欢迎通过反馈与代码贡献支持项目' })} />
+        <div className="sn-chip-row">
+          <LinkChip icon="code" label="GitHub" external onClick={() => open('GitHub')} />
+          <LinkChip icon="globe" label="官方网站" external onClick={() => open('官方网站')} />
+          <LinkChip icon="heart" label="支持项目" onClick={() => toast({ message: '赞助入口暂未开放，欢迎通过反馈与代码贡献支持项目' })} />
+          <LinkChip icon="file-text" label="AGPL-3.0" external onClick={() => open('许可证全文 AGPL-3.0')} />
         </div>
       </section>
       <section className="sn-about-section">
         <h4 className="sn-set-card-title">开源致谢</h4>
-        <div className="sn-chip-row is-text">
+        <div className="sn-chip-row">
           {CREDITS.map((credit) => (
-            <TextLink key={credit.name} glyph={credit.glyph} label={credit.name} note={credit.license} external onClick={() => open(credit.name)} />
+            <LinkChip key={credit.name} glyph={credit.glyph} label={credit.name} note={credit.license} external onClick={() => open(credit.name)} />
           ))}
         </div>
       </section>

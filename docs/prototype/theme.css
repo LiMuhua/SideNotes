@@ -1950,6 +1950,11 @@ mark {
   color: inherit;
 }
 
+/* 搜索命中（第七次反馈，app.js 的 markSearchHits）：高亮底色；与 Playground 的 CSS 自定义高亮一样不带圆角。 */
+.note-card mark.search-hit {
+  border-radius: 0;
+}
+
 .markdown-body .file-reference,
 .md-editor-file {
   display: inline-flex;
