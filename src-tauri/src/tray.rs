@@ -7,8 +7,11 @@ use tauri::{AppHandle, Emitter, Manager, Runtime};
 use crate::error::AppResult;
 use crate::windows::{CAPTURE_LABEL, SIDEBAR_LABEL};
 
-/// 构建托盘图标与菜单。左键单击切换侧栏，右键展开菜单。
-pub fn setup<R: Runtime>(app: &AppHandle<R>) -> AppResult<()> {
+/// 构建托盘图标与菜单。左键单击显示侧栏，右键展开菜单。
+///
+/// 显示侧栏与速记浮窗直接在这里完成（侧栏用前端最近一次给出的布局），不经过侧栏页面的脚本：
+/// 页面卡住或崩溃时，托盘仍能把窗口叫出来。设置与退出要用到前端的状态，仍发给前端处理。
+pub fn setup(app: &AppHandle) -> AppResult<()> {
     let open_sidebar = MenuItem::with_id(app, "tray-sidebar", "显示侧栏", true, None::<&str>)?;
     let open_capture = MenuItem::with_id(app, "tray-capture", "快捷速记", true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "tray-settings", "设置…", true, None::<&str>)?;
@@ -28,10 +31,10 @@ pub fn setup<R: Runtime>(app: &AppHandle<R>) -> AppResult<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "tray-sidebar" => {
-                let _ = app.emit("sidenotes://tray-sidebar", ());
+                let _ = crate::windows::show_sidebar(app, &crate::windows::last_layout());
             }
             "tray-capture" => {
-                let _ = app.emit("sidenotes://tray-capture", ());
+                let _ = crate::windows::show_capture(app);
             }
             "tray-settings" => {
                 let _ = app.emit("sidenotes://tray-settings", ());
@@ -49,7 +52,7 @@ pub fn setup<R: Runtime>(app: &AppHandle<R>) -> AppResult<()> {
                 ..
             } = event
             {
-                let _ = tray.app_handle().emit("sidenotes://tray-sidebar", ());
+                let _ = crate::windows::show_sidebar(tray.app_handle(), &crate::windows::last_layout());
             }
         })
         .build(app)?;

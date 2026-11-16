@@ -46,6 +46,27 @@ pub const SETTINGS_VISIBILITY_EVENT: &str = "sidenotes://settings-visibility";
 /// 避免快速移入移出时两段动画互相拉扯。
 static SIDEBAR_ANIMATION: AtomicU64 = AtomicU64::new(0);
 
+/// 最近一次由前端给出的侧栏布局（显示、收起、切换与按设置对齐时都会带上）。
+///
+/// 贴边、托盘与全局快捷键直接在这里显示或切换侧栏，不再绕经侧栏页面的脚本：页面卡住、崩溃，
+/// 或开发模式下同一事件订阅了两次时，侧栏照样能唤出与收起。
+static SIDEBAR_LAYOUT: Mutex<Option<SidebarLayout>> = Mutex::new(None);
+
+fn remember_layout(layout: &SidebarLayout) {
+    if let Ok(mut slot) = SIDEBAR_LAYOUT.lock() {
+        *slot = Some(layout.clone());
+    }
+}
+
+/// 最近一次的侧栏布局；前端还没给出时用默认设置（贴右边、宽 400、动画 260 毫秒）。
+pub fn last_layout() -> SidebarLayout {
+    SIDEBAR_LAYOUT
+        .lock()
+        .ok()
+        .and_then(|slot| slot.clone())
+        .unwrap_or_else(|| SidebarLayout { edge: "right".into(), width: 400.0, anim_duration: 260.0 })
+}
+
 /// 侧栏几何配置，由前端设置驱动。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -120,13 +141,71 @@ fn work_area(monitor: &Monitor) -> (f64, f64, f64, f64) {
 
 /// 计算侧栏的贴边位置、尺寸与屏幕外位置。
 fn sidebar_geometry(sidebar: &WebviewWindow, layout: &SidebarLayout, prefer_cursor: bool) -> AppResult<SidebarGeometry> {
+    let left_edge = layout.edge == "left";
     let monitor = pick_monitor(sidebar, prefer_cursor)?;
-    Ok(place_sidebar(
-        work_area(&monitor),
-        layout.width,
-        layout.edge == "left",
-        frame_inset(sidebar),
-    ))
+    let monitors = sidebar.available_monitors().unwrap_or_default();
+    let monitor = dock_monitor(monitor, &monitors, left_edge);
+    Ok(place_sidebar(work_area(&monitor), layout.width, left_edge, frame_inset(sidebar)))
+}
+
+/// 屏幕的整屏矩形（物理像素）：左、上、右、下。
+type Rect = (i32, i32, i32, i32);
+
+fn bounds(monitor: &Monitor) -> Rect {
+    let position = monitor.position();
+    let size = monitor.size();
+    (position.x, position.y, position.x + size.width as i32, position.y + size.height as i32)
+}
+
+/// `other` 是否挨着 `rect` 的左边或右边（纵向有重叠）。屏幕的坐标是整数，相接时边线重合，留 1 像素的误差。
+fn touches(rect: Rect, other: Rect, left_edge: bool) -> bool {
+    let (left, top, right, bottom) = rect;
+    let (other_left, other_top, other_right, other_bottom) = other;
+    let adjacent = if left_edge { (other_right - left).abs() <= 1 } else { (other_left - right).abs() <= 1 };
+    adjacent && other_top < bottom && other_bottom > top
+}
+
+/// 屏幕的这一边是否在整个桌面的外沿：没有别的屏幕挨着它。
+///
+/// 两块屏幕相接的一边不算边缘：指针从一块屏幕划到另一块时会经过这里，在这里唤出的侧栏停在两块屏幕之间，
+/// 收起时又滑进旁边那块屏幕，看起来整个侧栏从一块屏幕移到了另一块。
+fn edge_is_outer(rect: Rect, others: &[Rect], left_edge: bool) -> bool {
+    !others.iter().any(|&other| other != rect && touches(rect, other, left_edge))
+}
+
+/// 停靠侧栏的屏幕在 `rects` 中的位置：从 `start` 开始，这一边挨着别的屏幕时换到挨着的那一块
+/// （纵向重叠最多的），直到外沿。
+fn dock_index(rects: &[Rect], start: usize, left_edge: bool) -> usize {
+    let mut current = start;
+    for _ in 0..rects.len() {
+        let rect = rects[current];
+        let next = rects
+            .iter()
+            .enumerate()
+            .filter(|&(index, &other)| index != current && other != rect && touches(rect, other, left_edge))
+            .max_by_key(|&(_, &(_, top, _, bottom))| bottom.min(rect.3) - top.max(rect.1))
+            .map(|(index, _)| index);
+        match next {
+            Some(index) => current = index,
+            None => break,
+        }
+    }
+    current
+}
+
+/// 停靠侧栏的屏幕：选中的屏幕这一边挨着别的屏幕时，换到外沿所在的那一块。
+fn dock_monitor(monitor: Monitor, monitors: &[Monitor], left_edge: bool) -> Monitor {
+    let rects: Vec<Rect> = monitors.iter().map(bounds).collect();
+    let Some(start) = rects.iter().position(|&rect| rect == bounds(&monitor)) else {
+        return monitor;
+    };
+    monitors[dock_index(&rects, start, left_edge)].clone()
+}
+
+/// 指针所在的这块屏幕，侧栏所贴的一边是否在整个桌面的外沿（贴边唤出只在外沿触发）。
+pub fn is_outer_edge(window: &WebviewWindow, monitor: &Monitor, left_edge: bool) -> bool {
+    let others: Vec<Rect> = window.available_monitors().unwrap_or_default().iter().map(bounds).collect();
+    edge_is_outer(bounds(monitor), &others, left_edge)
 }
 
 /// 窗口外框左上角到内容区左上角的偏移（逻辑像素）。
@@ -200,6 +279,7 @@ fn animate_x(sidebar: &WebviewWindow, from: f64, to: f64, y: f64, duration: u64,
 
 /// 按设置重新对齐侧栏（不做动画，用于宽度或边缘变更）。
 pub fn align_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
+    remember_layout(layout);
     let sidebar = window(app, SIDEBAR_LABEL)?;
     // 可见时跟随侧栏所在屏幕；隐藏时按鼠标所在屏幕预先摆好。
     let visible = sidebar.is_visible().unwrap_or(false);
@@ -277,8 +357,43 @@ pub fn disable_sidebar_transitions(app: &AppHandle) {
     let _ = app;
 }
 
+/// 侧栏与速记浮窗的所有者：一个从不显示的隐藏窗口。
+///
+/// 没有所有者的窗口，tao 会加上 WS_EX_APPWINDOW；`skipTaskbar` 只去掉任务栏按钮，窗口仍出现在
+/// Alt+Tab 与 Win+Tab 中。tao 每次显示、隐藏还会按自己的标志重写扩展样式，事后加的 WS_EX_TOOLWINDOW 留不住。
+/// 被拥有的窗口不出现在任务栏、Alt+Tab 与 Win+Tab 中；所有者从不显示、也不会最小化，被拥有的窗口照常显示。
+/// 在主线程上创建，随进程退出销毁。
+#[cfg(windows)]
+pub fn create_owner_window() -> Option<::windows::Win32::Foundation::HWND> {
+    use ::windows::core::w;
+    use ::windows::Win32::Foundation::HINSTANCE;
+    use ::windows::Win32::System::LibraryLoader::GetModuleHandleW;
+    use ::windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, WS_EX_TOOLWINDOW, WS_POPUP};
+
+    // SAFETY：系统预定义的 STATIC 窗口类不需要注册，其余参数都是按值传入的常量；创建失败时返回 None。
+    unsafe {
+        let module = GetModuleHandleW(None).ok()?;
+        CreateWindowExW(
+            WS_EX_TOOLWINDOW,
+            w!("STATIC"),
+            w!(""),
+            WS_POPUP,
+            0,
+            0,
+            0,
+            0,
+            None,
+            None,
+            Some(HINSTANCE(module.0)),
+            None,
+        )
+        .ok()
+    }
+}
+
 /// 显示侧栏：从屏幕外平滑滑入；若正在收起，则从当前位置滑回。
 pub fn show_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
+    remember_layout(layout);
     let sidebar = window(app, SIDEBAR_LABEL)?;
     let generation = SIDEBAR_ANIMATION.fetch_add(1, Ordering::SeqCst) + 1;
     let visible = sidebar.is_visible().unwrap_or(false);
@@ -305,13 +420,20 @@ pub fn show_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
     // 动画放到后台线程，避免阻塞命令调用与主线程事件循环。
     let handle = sidebar.clone();
     std::thread::spawn(move || {
-        animate_x(&handle, start_x, geometry.final_x, geometry.y, duration, generation);
+        // 上一次收起的线程可能在这次显示之前刚过了代次检查，随后才把窗口藏起来（见 hide_sidebar）；
+        // 滑入结束时仍是这一次的请求而窗口不可见，就再显示一次。
+        if animate_x(&handle, start_x, geometry.final_x, geometry.y, duration, generation)
+            && !handle.is_visible().unwrap_or(true)
+        {
+            let _ = handle.show();
+        }
     });
     Ok(())
 }
 
 /// 隐藏侧栏：先平滑滑出屏幕，再真正隐藏窗口。
 pub fn hide_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
+    remember_layout(layout);
     let sidebar = window(app, SIDEBAR_LABEL)?;
     if !sidebar.is_visible().unwrap_or(false) {
         return Ok(());
@@ -332,8 +454,10 @@ pub fn hide_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
         // 被新的显示请求打断时保持可见，由新动画处理位置。
         if animate_x(&handle, start_x, geometry.offscreen_x, geometry.y, duration, generation) {
             let _ = handle.hide();
-            // 收起后复位到贴边位置，避免下次对齐时从错误坐标开始。
-            let _ = handle.set_position(LogicalPosition::new(geometry.final_x, geometry.y));
+            // 收起后复位到贴边位置，避免下次对齐时从错误坐标开始；隐藏的同时来了新的显示请求时不动，交给它摆放。
+            if SIDEBAR_ANIMATION.load(Ordering::SeqCst) == generation {
+                let _ = handle.set_position(LogicalPosition::new(geometry.final_x, geometry.y));
+            }
         }
     });
     Ok(())
@@ -341,6 +465,7 @@ pub fn hide_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
 
 /// 切换侧栏可见性，返回切换后的状态。
 pub fn toggle_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<bool> {
+    remember_layout(layout);
     let sidebar = window(app, SIDEBAR_LABEL)?;
     if sidebar.is_visible().unwrap_or(false) {
         hide_sidebar(app, layout)?;
@@ -653,5 +778,37 @@ mod tests {
         assert!(close(geometry.final_x, 2144.0));
         assert!(close(geometry.offscreen_x, 2560.0));
         assert!(close(geometry.y, 0.0));
+    }
+
+
+    /// 用户的两块屏幕：4K 主屏在右，竖放的 1600×2560 副屏在左（物理像素）。
+    const PRIMARY: Rect = (0, 0, 3840, 2160);
+    const SECONDARY: Rect = (-1600, 0, 0, 2560);
+
+    #[test]
+    fn edges_shared_by_two_monitors_are_not_outer() {
+        let all = [PRIMARY, SECONDARY];
+        // 贴右边：主屏的右边是外沿，副屏的右边与主屏相接，不算（指针跨屏时不唤出）。
+        assert!(edge_is_outer(PRIMARY, &all, false));
+        assert!(!edge_is_outer(SECONDARY, &all, false));
+        // 贴左边：反过来。
+        assert!(edge_is_outer(SECONDARY, &all, true));
+        assert!(!edge_is_outer(PRIMARY, &all, true));
+        // 只有一块屏幕时两边都是外沿；上下错开、没有纵向重叠的屏幕不算相接。
+        assert!(edge_is_outer(PRIMARY, &[PRIMARY], false));
+        assert!(edge_is_outer(PRIMARY, &[PRIMARY, (3840, 2160, 5760, 3240)], false));
+    }
+
+    #[test]
+    fn sidebar_docks_on_the_outer_edge() {
+        let all = [PRIMARY, SECONDARY];
+        // 指针在副屏上按快捷键：贴右边的侧栏停到主屏右边，贴左边的停在副屏左边。
+        assert_eq!(dock_index(&all, 1, false), 0);
+        assert_eq!(dock_index(&all, 1, true), 1);
+        assert_eq!(dock_index(&all, 0, true), 1);
+        assert_eq!(dock_index(&all, 0, false), 0);
+        // 三块屏幕排成一行：从最左边一路换到最右边。
+        let row = [(0, 0, 1920, 1080), (1920, 0, 3840, 1080), (3840, 0, 5760, 1080)];
+        assert_eq!(dock_index(&row, 0, false), 2);
     }
 }

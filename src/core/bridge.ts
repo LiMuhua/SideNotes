@@ -44,16 +44,6 @@ export interface SidebarLayout {
 
 /** 后端事件名。 */
 export const APP_EVENTS = {
-  /** 鼠标进入屏幕边缘热区。 */
-  edgeEnter: 'sidenotes://edge-enter',
-  /** 全局热键：呼出速记浮窗。 */
-  hotkeyCapture: 'sidenotes://hotkey-capture',
-  /** 全局热键：呼出侧栏。 */
-  hotkeySidebar: 'sidenotes://hotkey-sidebar',
-  /** 托盘：显示侧栏。 */
-  traySidebar: 'sidenotes://tray-sidebar',
-  /** 托盘：快捷速记。 */
-  trayCapture: 'sidenotes://tray-capture',
   /** 托盘：打开设置。 */
   traySettings: 'sidenotes://tray-settings',
   /** 托盘：请求退出。 */
@@ -297,29 +287,14 @@ export function hideSidebar(layout: SidebarLayout): Promise<void> {
   return call<void>('hide_sidebar', { layout }, undefined as unknown as void);
 }
 
-/** 切换侧栏，返回切换后的可见状态。 */
-export function toggleSidebar(layout: SidebarLayout): Promise<boolean> {
-  return call<boolean>('toggle_sidebar', { layout }, true);
-}
-
 /** 按设置重新对齐侧栏并同步边缘监视开关。 */
 export function applySidebarLayout(layout: SidebarLayout, edgeTrigger: boolean): Promise<void> {
   return call<void>('apply_sidebar_layout', { layout, edgeTrigger }, undefined as unknown as void);
 }
 
-/** 显示速记浮窗。 */
-export function showCapture(): Promise<void> {
-  return call<void>('show_capture', undefined, undefined as unknown as void);
-}
-
 /** 隐藏速记浮窗。 */
 export function hideCapture(): Promise<void> {
   return call<void>('hide_capture', undefined, undefined as unknown as void);
-}
-
-/** 切换速记浮窗。 */
-export function toggleCapture(): Promise<boolean> {
-  return call<boolean>('toggle_capture', undefined, true);
 }
 
 /** 系统文本缩放比例：页面像素比与窗口缩放比例之比，读取失败时按 1 处理。 */
@@ -398,11 +373,6 @@ export async function windowScaleFactor(): Promise<number> {
   } catch {
     return window.devicePixelRatio;
   }
-}
-
-/** 同步固定状态：固定时保留任务栏图标便于 Alt+Tab 切回。 */
-export function setSidebarPinned(pinned: boolean): Promise<void> {
-  return call<void>('set_sidebar_pinned', { pinned }, undefined as unknown as void);
 }
 
 /** 退出应用。 */
@@ -616,6 +586,32 @@ export async function requestNotifications(): Promise<boolean> {
 export async function onAppEvent(event: string, handler: () => void): Promise<UnlistenFn> {
   if (!isDesktop()) return () => {};
   return listen(event, () => handler());
+}
+
+/**
+ * 一次建立几个订阅，返回立即可用的取消函数，供 effect 的清理使用。
+ *
+ * 订阅是异步建立的，清理可能先于建立完成执行：开发模式下 StrictMode 会挂载、卸载再挂载一次，
+ * 热更新也会重跑 effect。迟到的订阅在建立后立即取消，否则同一事件会留下两个处理函数，
+ * 按一次快捷键切换两次，窗口显示后立刻又被收起。
+ */
+export function subscribeAll(pending: ReadonlyArray<Promise<UnlistenFn>>): () => void {
+  let disposed = false;
+  const active: UnlistenFn[] = [];
+  for (const subscription of pending) {
+    subscription
+      .then((unlisten) => {
+        if (disposed) unlisten();
+        else active.push(unlisten);
+      })
+      .catch(() => {
+        /* 订阅失败时没有需要取消的处理函数。 */
+      });
+  }
+  return () => {
+    disposed = true;
+    active.splice(0).forEach((unlisten) => unlisten());
+  };
 }
 
 /** 向所有窗口广播一次数据变化；通知失败不影响本窗口已完成的写入。 */

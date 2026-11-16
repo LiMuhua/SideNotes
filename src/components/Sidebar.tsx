@@ -624,11 +624,12 @@ export function Sidebar() {
     window.dispatchEvent(new CustomEvent("sidenotes:focus-composer"));
   }, [commitEdit]);
 
-  /** 固定或取消固定侧栏：标题栏按钮与空白处菜单共用。 */
+  /**
+   * 固定或取消固定侧栏：标题栏按钮与空白处菜单共用。固定只让侧栏保持展开；
+   * 侧栏不出现在任务栏、Alt+Tab 与 Win+Tab 中（2026-11-16 用户要求，见后端 windows::create_owner_window）。
+   */
   const togglePinned = useCallback(() => {
-    const next = !pinned;
-    setPinned(next);
-    void bridge.setSidebarPinned(next);
+    setPinned(!pinned);
   }, [pinned]);
 
   /* ==================== 窗口失焦自动收起 ==================== */

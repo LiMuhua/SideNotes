@@ -286,7 +286,15 @@ export function useFileDrop(options: FileDropOptions): { targetId: string | null
     };
 
     const handleDrop = (event: DragEvent): void => {
-      if (!isFileDrag(event) || !opts.current.enabled()) return;
+      if (!isFileDrag(event) || !opts.current.enabled()) {
+        // 拖动途中改为不接收（例如期间打开了弹窗）：照样结束这次拖动，
+        // 否则「正在拖入文件」一直为真，侧栏会因此永远保持展开。
+        if (dragging) {
+          cleanup();
+          restoreFocus();
+        }
+        return;
+      }
       event.preventDefault();
       const target = locate(event.clientX, event.clientY) ?? lastTarget;
       const files = Array.from(event.dataTransfer?.files ?? []);

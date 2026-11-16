@@ -3,21 +3,21 @@
 //! 按键可在设置中更换，保存在设置的 `shortcuts` 中，写法与前端 core/shortcuts 一致（如 Ctrl+Shift+Space），
 //! 启动时按设置注册。注册失败（多半被其他程序占用）不阻断启动，记下失败的编号由设置页提示；
 //! 在设置中更换时实际注册一次新的按键，被占用时恢复原样并返回原因。
+//!
+//! 按下时直接在这里切换窗口，不经过前端页面：页面卡住或崩溃时快捷键照样有效；以前由页面订阅事件再切换，
+//! 开发模式下同一事件订阅了两次，按一次切换两次，窗口显示后立刻又被收起。
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 use crate::commands::HotkeyState;
 use crate::error::{AppError, AppResult};
 
-/// 可以设置的全局快捷键：编号、按下时发出的事件与默认按键。
-const BINDINGS: [(&str, &str, &str); 2] = [
-    ("capture", "sidenotes://hotkey-capture", "Ctrl+Shift+Space"),
-    ("sidebar", "sidenotes://hotkey-sidebar", "Alt+Shift+S"),
-];
+/// 可以设置的全局快捷键：编号与默认按键。capture 切换速记浮窗，sidebar 切换侧栏。
+const BINDINGS: [(&str, &str); 2] = [("capture", "Ctrl+Shift+Space"), ("sidebar", "Alt+Shift+S")];
 
 fn other(message: impl Into<String>) -> AppError {
     AppError::Other(message.into())
@@ -82,31 +82,38 @@ fn parse(combo: &str) -> AppResult<Shortcut> {
         .ok_or_else(|| other("无法识别的快捷键"))
 }
 
-/// 设置中保存的全局快捷键：编号、事件名与按键；没有保存或写法无效时用默认按键。
-fn configured(settings: &serde_json::Value) -> Vec<(&'static str, &'static str, String)> {
+/// 设置中保存的全局快捷键：编号与按键；没有保存或写法无效时用默认按键。
+fn configured(settings: &serde_json::Value) -> Vec<(&'static str, String)> {
     BINDINGS
         .iter()
-        .map(|(id, event, default)| {
+        .map(|(id, default)| {
             let combo = settings
                 .get("shortcuts")
                 .and_then(|shortcuts| shortcuts.get(*id))
                 .and_then(serde_json::Value::as_str)
                 .filter(|combo| accelerator(combo).is_some())
                 .unwrap_or(default);
-            (*id, *event, combo.to_string())
+            (*id, combo.to_string())
         })
         .collect()
 }
 
-/// 注册一个全局快捷键，按下时发出 `event`。
-fn register(app: &AppHandle, event: &'static str, combo: &str) -> AppResult<()> {
+/// 按下全局快捷键：切换速记浮窗或侧栏（侧栏用前端最近一次给出的布局）。
+fn trigger(app: &AppHandle, id: &str) {
+    let _ = match id {
+        "capture" => crate::windows::toggle_capture(app),
+        _ => crate::windows::toggle_sidebar(app, &crate::windows::last_layout()),
+    };
+}
+
+/// 注册编号为 `id` 的全局快捷键。
+fn register(app: &AppHandle, id: &'static str, combo: &str) -> AppResult<()> {
     let shortcut = parse(combo)?;
-    let handle = app.clone();
     app.global_shortcut()
-        .on_shortcut(shortcut, move |_app, _shortcut, state| {
+        .on_shortcut(shortcut, move |app, _shortcut, state| {
             // 只响应按下，避免松开时重复切换。
             if state.state() == ShortcutState::Pressed {
-                let _ = handle.emit(event, ());
+                trigger(app, id);
             }
         })
         .map_err(|_| other("已被其他程序占用，请换一个"))
@@ -121,8 +128,8 @@ fn unregister(app: &AppHandle, combo: &str) {
 /// 启动时按设置注册全部全局快捷键；注册失败的记入 `failed`，按键仍记作当前设置。
 pub fn register_all(app: &AppHandle, settings: &serde_json::Value) -> HotkeyState {
     let mut state = HotkeyState::default();
-    for (id, event, combo) in configured(settings) {
-        if register(app, event, &combo).is_err() {
+    for (id, combo) in configured(settings) {
+        if register(app, id, &combo).is_err() {
             state.failed.push(id.to_string());
         }
         state.bound.insert(id.to_string(), combo);
@@ -139,7 +146,7 @@ pub fn apply(app: &AppHandle, hotkeys: &Mutex<HotkeyState>, wanted: &HashMap<Str
     let mut state = hotkeys.lock().map_err(|_| other("快捷键状态异常，请重启应用"))?;
     let mut next = state.bound.clone();
     for (id, combo) in wanted {
-        if !BINDINGS.iter().any(|(key, _, _)| key == id) {
+        if !BINDINGS.iter().any(|(key, _)| key == id) {
             return Err(other("未知的全局快捷键"));
         }
         parse(combo)?;
@@ -151,28 +158,28 @@ pub fn apply(app: &AppHandle, hotkeys: &Mutex<HotkeyState>, wanted: &HashMap<Str
     }
 
     // 要重新注册的：给出的按键与正在生效的不同，或者原来就没有注册成功。
-    let changes: Vec<(&'static str, &'static str, Option<String>, String)> = BINDINGS
+    let changes: Vec<(&'static str, Option<String>, String)> = BINDINGS
         .iter()
-        .filter_map(|(id, event, _)| {
+        .filter_map(|(id, _)| {
             let combo = wanted.get(*id)?.clone();
             let active = state.bound.get(*id).filter(|_| !state.failed.iter().any(|failed| failed == id)).cloned();
-            (active.as_deref() != Some(combo.as_str())).then_some((*id, *event, active, combo))
+            (active.as_deref() != Some(combo.as_str())).then_some((*id, active, combo))
         })
         .collect();
-    for (_, _, active, _) in &changes {
+    for (_, active, _) in &changes {
         if let Some(previous) = active {
             unregister(app, previous);
         }
     }
     let mut registered: Vec<&str> = Vec::new();
-    for (_, event, _, combo) in &changes {
-        if let Err(error) = register(app, event, combo) {
+    for (id, _, combo) in &changes {
+        if let Err(error) = register(app, *id, combo) {
             for combo in registered {
                 unregister(app, combo);
             }
-            for (id, event, active, _) in &changes {
+            for (id, active, _) in &changes {
                 if let Some(previous) = active {
-                    if register(app, event, previous).is_err() && !state.failed.iter().any(|failed| failed == id) {
+                    if register(app, *id, previous).is_err() && !state.failed.iter().any(|failed| failed == id) {
                         state.failed.push((*id).to_string());
                     }
                 }
@@ -181,7 +188,7 @@ pub fn apply(app: &AppHandle, hotkeys: &Mutex<HotkeyState>, wanted: &HashMap<Str
         }
         registered.push(combo);
     }
-    state.failed.retain(|failed| !changes.iter().any(|(id, _, _, _)| id == failed));
+    state.failed.retain(|failed| !changes.iter().any(|(id, _, _)| id == failed));
     state.bound = next;
     Ok(())
 }
@@ -213,9 +220,9 @@ mod tests {
     #[test]
     fn reads_configured_bindings_with_defaults() {
         let settings = serde_json::json!({ "shortcuts": { "capture": "Ctrl+Alt+N", "sidebar": "Hyper+X" } });
-        let combos: Vec<String> = configured(&settings).into_iter().map(|(_, _, combo)| combo).collect();
+        let combos: Vec<String> = configured(&settings).into_iter().map(|(_, combo)| combo).collect();
         assert_eq!(combos, vec!["Ctrl+Alt+N".to_string(), "Alt+Shift+S".to_string()]);
-        let defaults: Vec<String> = configured(&serde_json::Value::Null).into_iter().map(|(_, _, combo)| combo).collect();
+        let defaults: Vec<String> = configured(&serde_json::Value::Null).into_iter().map(|(_, combo)| combo).collect();
         assert_eq!(defaults, vec!["Ctrl+Shift+Space".to_string(), "Alt+Shift+S".to_string()]);
     }
 }

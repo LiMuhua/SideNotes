@@ -222,12 +222,6 @@ pub fn hide_sidebar(app: AppHandle, layout: SidebarLayout) -> AppResult<()> {
     windows::hide_sidebar(&app, &layout)
 }
 
-/// 切换侧栏，返回切换后的可见状态。
-#[tauri::command]
-pub fn toggle_sidebar(app: AppHandle, layout: SidebarLayout) -> AppResult<bool> {
-    windows::toggle_sidebar(&app, &layout)
-}
-
 /// 按设置重新对齐侧栏，用于宽度或边缘变更。
 #[tauri::command]
 pub fn apply_sidebar_layout(
@@ -240,22 +234,10 @@ pub fn apply_sidebar_layout(
     windows::align_sidebar(&app, &layout)
 }
 
-/// 显示速记浮窗。
-#[tauri::command]
-pub fn show_capture(app: AppHandle) -> AppResult<()> {
-    windows::show_capture(&app)
-}
-
 /// 隐藏速记浮窗。
 #[tauri::command]
 pub fn hide_capture(app: AppHandle) -> AppResult<()> {
     windows::hide_capture(&app)
-}
-
-/// 切换速记浮窗。
-#[tauri::command]
-pub fn toggle_capture(app: AppHandle) -> AppResult<bool> {
-    windows::toggle_capture(&app)
 }
 
 /// 显示设置窗口。`text_scale` 为系统文本缩放比例，用于把设置窗口的设计尺寸换算为窗口尺寸。
@@ -436,15 +418,4 @@ pub fn quit_app(app: AppHandle) {
     crate::shortcuts::unregister_all(&app);
     crate::tray::hide_all(&app);
     app.exit(0);
-}
-
-/// 把窗口置顶状态同步给侧栏，对应原型的"固定侧栏"。
-#[tauri::command]
-pub fn set_sidebar_pinned(app: AppHandle, pinned: bool) -> AppResult<()> {
-    let sidebar = app
-        .get_webview_window(windows::SIDEBAR_LABEL)
-        .ok_or_else(|| AppError::Other("侧栏窗口不存在".into()))?;
-    // 固定时保留任务栏图标，便于用 Alt+Tab 切回。
-    sidebar.set_skip_taskbar(!pinned)?;
-    Ok(())
 }

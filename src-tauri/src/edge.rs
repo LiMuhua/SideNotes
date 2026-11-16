@@ -1,14 +1,17 @@
 //! 屏幕边缘唤出侧栏。
 //!
 //! Windows 下没有"整个桌面的鼠标移入"事件，这里以轻量轮询实现：
-//! 后台线程按固定间隔读取指针位置，仅在越过边缘热区且侧栏隐藏时发出事件。
+//! 后台线程按固定间隔读取指针位置，仅在越过边缘热区且侧栏隐藏时唤出。
 //! 轮询间隔 120 ms，远低于单次 CPU 可感知负载，又足够跟上正常移动速度。
+//!
+//! 只有整个桌面的外沿算边缘：两块屏幕相接的一边，指针跨屏时必然经过，不唤出（见 windows::is_outer_edge）。
+//! 唤出直接在这里完成，用前端最近一次给出的布局，不经过侧栏页面的脚本。
 
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
+use std::sync::{Arc, OnceLock};
+use std::time::{Duration, Instant};
 
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 
 use crate::windows::{SidebarLayout, SIDEBAR_LABEL};
 
@@ -34,7 +37,8 @@ impl EdgeWatcher {
         Self {
             enabled: AtomicBool::new(true),
             left_edge: AtomicBool::new(false),
-            last_trigger: AtomicI64::new(0),
+            // 启动后的第一次唤出不受冷却限制。
+            last_trigger: AtomicI64::new(-TRIGGER_COOLDOWN_MS),
         }
     }
 
@@ -56,12 +60,10 @@ impl Default for EdgeWatcher {
     }
 }
 
-/// 取得当前毫秒时间戳。
+/// 自启动以来的毫秒数，用于冷却。用单调时钟：系统时间往回调时，按墙上时间算的冷却会一直挡住唤出。
 fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|value| value.as_millis() as i64)
-        .unwrap_or(0)
+    static START: OnceLock<Instant> = OnceLock::new();
+    START.get_or_init(Instant::now).elapsed().as_millis() as i64
 }
 
 /// 启动后台轮询线程。线程随应用退出自然结束，无需显式停止句柄。
@@ -98,7 +100,7 @@ pub fn spawn(app: AppHandle, watcher: Arc<EdgeWatcher>) {
         // 仅在纵向处于工作区内时响应，避免贴着屏幕角落误触。
         let within_vertical = cursor.y >= area.position.y as f64
             && cursor.y <= (area.position.y as f64 + area.size.height as f64);
-        if !hit || !within_vertical {
+        if !hit || !within_vertical || !crate::windows::is_outer_edge(&sidebar, &monitor, on_left) {
             continue;
         }
 
@@ -107,7 +109,6 @@ pub fn spawn(app: AppHandle, watcher: Arc<EdgeWatcher>) {
             continue;
         }
         watcher.last_trigger.store(now, Ordering::Relaxed);
-        // 由前端决定是否展开：编辑中、弹窗或拖动期间可以忽略本次唤出。
-        let _ = app.emit("sidenotes://edge-enter", ());
+        let _ = crate::windows::show_sidebar(&app, &crate::windows::last_layout());
     });
 }

@@ -79,8 +79,19 @@ pub fn run() {
             // 窗口在状态就绪后才创建。配置中的窗口默认先于 setup 创建，页面会在
             // manage 之前调用 load_snapshot 而失败，以空列表启动；此后的整体写入
             // 会覆盖数据库中的其它记录。配置里三个窗口均设为 create: false，统一在此创建。
+            // 侧栏与速记浮窗交给一个隐藏的所有者窗口，不出现在任务栏、Alt+Tab 与 Win+Tab 中（见 windows::create_owner_window）。
+            #[cfg(windows)]
+            let owner = windows::create_owner_window();
             for config in handle.config().app.windows.iter().filter(|config| !config.create) {
-                WebviewWindowBuilder::from_config(&handle, config)?.build()?;
+                let builder = WebviewWindowBuilder::from_config(&handle, config)?;
+                #[cfg(windows)]
+                let builder = match owner {
+                    Some(owner) if config.label == windows::SIDEBAR_LABEL || config.label == windows::CAPTURE_LABEL => {
+                        builder.owner_raw(owner)
+                    }
+                    _ => builder,
+                };
+                builder.build()?;
             }
             windows::disable_sidebar_transitions(&handle);
 
@@ -120,11 +131,8 @@ pub fn run() {
             commands::stop_shortcut_recording,
             commands::show_sidebar,
             commands::hide_sidebar,
-            commands::toggle_sidebar,
             commands::apply_sidebar_layout,
-            commands::show_capture,
             commands::hide_capture,
-            commands::toggle_capture,
             commands::show_settings,
             commands::hide_settings,
             commands::set_ui_zoom,
@@ -144,7 +152,6 @@ pub fn run() {
             commands::auto_snapshot,
             commands::restore_snapshot,
             commands::copy_file_paths,
-            commands::set_sidebar_pinned,
             commands::quit_app,
         ])
         .run(tauri::generate_context!())
