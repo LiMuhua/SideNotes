@@ -279,6 +279,8 @@ export async function updateNote(id: string, patch: Partial<Note>): Promise<bool
 export interface BatchUndo {
   /** 变更前的部分字段。 */
   previous: Map<string, Partial<Note>>;
+  /** 这次新建的记录（如合并成的新卡片），撤销时删除。 */
+  created?: string[];
 }
 
 /**
@@ -354,11 +356,63 @@ export async function updateNotes(
 
 /** 按撤销信息还原批量修改；原值中带有修改时间时一并还原，否则记为现在修改。 */
 export async function restoreNotes(undo: BatchUndo): Promise<boolean> {
-  const notes = state.notes.map((note) => {
-    const previous = undo.previous.get(note.id);
-    return previous ? { ...note, updatedAt: Date.now(), ...previous } : note;
-  });
+  const created = new Set(undo.created ?? []);
+  const notes = state.notes
+    .filter((note) => !created.has(note.id))
+    .map((note) => {
+      const previous = undo.previous.get(note.id);
+      return previous ? { ...note, updatedAt: Date.now(), ...previous } : note;
+    });
   return persist({ notes });
+}
+
+/**
+ * 合并成一条（与交互原型 merge.js 的 commit 相同）：新卡片放在原来第一条的位置、置顶跟随第一条
+ * （合并到已有的卡片时改写那一张），原记录移到回收站（keep 时不动）。
+ * 返回合并成的记录与撤销所需的原值，撤销时删除新卡片、还原其余记录；写入失败返回 null，记录保持原样。
+ * @param sources 来源记录，按列表中的顺序；不含 target。
+ */
+export async function mergeNotes(options: {
+  sources: readonly Note[];
+  target: Note | null;
+  text: string;
+  images: NoteImage[];
+  keep: boolean;
+}): Promise<{ id: string; undo: BatchUndo } | null> {
+  const { sources, target, text, images, keep } = options;
+  if (!sources.length) return null;
+  const now = Date.now();
+  const ids = new Set(sources.map((note) => note.id));
+  const previous = new Map<string, Partial<Note>>();
+  let notes = state.notes.map((note) => {
+    if (target && note.id === target.id) {
+      previous.set(note.id, { text: note.text, images: note.images, updatedAt: note.updatedAt });
+      return { ...note, text: canonicalize(text), images: images.map((image) => ({ ...image })), updatedAt: now };
+    }
+    if (!keep && ids.has(note.id) && note.status !== 'trash') {
+      previous.set(note.id, {
+        status: note.status,
+        previousStatus: note.previousStatus,
+        deletedAt: note.deletedAt,
+        updatedAt: note.updatedAt,
+      });
+      return { ...note, status: 'trash' as NoteStatus, previousStatus: 'active' as const, deletedAt: now, updatedAt: now };
+    }
+    return note;
+  });
+  const created: string[] = [];
+  let id = target?.id ?? '';
+  if (!target) {
+    const first = sources[0];
+    const merged = createNote(text, images, { pinned: first.pinned, existing: state.notes });
+    // 排在原来第一条的位置：用它的排序值（没有手动排过序时按创建时间排，换算成同样的值）。
+    merged.order = first.order ?? -first.createdAt;
+    id = merged.id;
+    created.push(merged.id);
+    notes = [merged, ...notes];
+  }
+  if (!(await persist({ notes }))) return null;
+  return { id, undo: { previous, created } };
 }
 
 /**

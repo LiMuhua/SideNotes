@@ -8,11 +8,13 @@
  * - 合并到已有卡片：标题不变；按小标题对号，新内容追加到同名小节末尾，没有的小节加在最后；
  *   只有共同标签的内容加在第一个小标题之前。
  * - 图片：按来源顺序去掉重复，最多 12 张。
+ *
+ * 原在 Playground 的 model/merge.ts，实现桌面端时搬进 src/core（T80），Playground 从这里引用。
  */
 
-import { noteTitle } from '@/core/notes';
-import { compose, parse, tagKey } from '@/core/tags';
-import type { Note, NoteImage } from '@/core/types';
+import { noteTitle } from './notes';
+import { compose, parse, tagKey } from './tags';
+import type { Note, NoteImage } from './types';
 
 export type MergeFormat = 'list' | 'text';
 

@@ -19,6 +19,7 @@ import {
   getState,
   initialize,
   mergeImported,
+  mergeNotes,
   moveNotes,
   patchNotes,
   reloadFromDisk,
@@ -194,6 +195,33 @@ describe('状态仓库', () => {
     await restoreNotes(undo);
     expect(getState().notes[0]).toMatchObject({ pinned: false, order: 5, updatedAt: 1_700_000_000_000 });
     expect(getState().notes[1]).toMatchObject({ text: '第二条', updatedAt: 1_700_000_000_000 });
+  });
+
+  it('合并成一条：新卡片放在第一条的位置，原记录进回收站，撤销后新卡片删除、原记录还原', async () => {
+    const first = note({ id: 'a', text: '牛奶 #采购', order: 2, pinned: true });
+    const second = note({ id: 'b', text: '鸡蛋 #采购', order: 5 });
+    resetForTest({ notes: [first, second, note({ id: 'c', text: '别的' })], ready: true });
+    const result = await mergeNotes({ sources: [first, second], target: null, text: '# 采购\n\n- [ ] 牛奶\n- [ ] 鸡蛋\n\n#采购', images: [], keep: false });
+    if (!result) throw new Error('合并未保存');
+    const merged = getState().notes.find((item) => item.id === result.id);
+    expect(merged).toMatchObject({ order: 2, pinned: true, status: 'active' });
+    expect(getState().notes.filter((item) => item.status === 'trash').map((item) => item.id).sort()).toEqual(['a', 'b']);
+    await restoreNotes(result.undo);
+    expect(getState().notes.some((item) => item.id === result.id)).toBe(false);
+    expect(getState().notes.map((item) => [item.id, item.status])).toEqual([['a', 'active'], ['b', 'active'], ['c', 'active']]);
+  });
+
+  it('合并到已有的卡片：改写那一张，勾了保留原记录时来源不动', async () => {
+    const target = note({ id: 't', text: '清单' });
+    const source = note({ id: 's', text: '补充' });
+    resetForTest({ notes: [target, source], ready: true });
+    const result = await mergeNotes({ sources: [source], target, text: '清单\n\n补充', images: [], keep: true });
+    expect(result?.id).toBe('t');
+    expect(getState().notes.find((item) => item.id === 't')?.text).toBe('清单\n\n补充');
+    expect(getState().notes.find((item) => item.id === 's')?.status).toBe('active');
+    if (!result) throw new Error('合并未保存');
+    await restoreNotes(result.undo);
+    expect(getState().notes.find((item) => item.id === 't')?.text).toBe('清单');
   });
 
   it('回收站中的记录不被再次移入', async () => {

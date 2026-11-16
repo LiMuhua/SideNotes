@@ -18,6 +18,7 @@ import { NoteMenu, type MenuAnchor, type MenuCommand } from "./NoteMenu";
 import { ContextMenu } from "./ContextMenu";
 import { SidebarMenu, type SidebarCommand } from "./SidebarMenu";
 import { TagInput } from "./TagInput";
+import { MergeDialog } from "./MergeDialog";
 import { EmojiPicker } from "./EmojiPicker";
 import { TagFilter } from "./TagFilter";
 import { TagManageDialog } from "./TagManageDialog";
@@ -33,7 +34,7 @@ import { useCardInteractions, type ItemDrop } from "../hooks/useCardInteractions
 import { useFileDrop, type FileDropTarget } from "../hooks/useFileDrop";
 import * as store from "../core/store";
 import * as bridge from "../core/bridge";
-import { shouldNudgeTidy, noteTitle } from "../core/notes";
+import { shouldNudgeTidy, noteTitle, compareNoteOrder } from "../core/notes";
 import {
   allTags,
   belongsTo,
@@ -206,8 +207,10 @@ export function Sidebar() {
   );
 
   // 对话框打开期间鼠标移出侧栏不收起，否则对话框会随侧栏一起消失。
+  /** 合并成一条的弹窗：来源（按列表中的顺序）、合并到的已有卡片与按标签合并时的标签。 */
+  const [mergeRequest, setMergeRequest] = useState<{ notes: Note[]; target: Note | null; tag?: string } | null>(null);
   const dialogOpen = Boolean(
-    managingTag || attachmentDialog || emojiTarget || changelogOpen || guideVisible,
+    managingTag || attachmentDialog || emojiTarget || changelogOpen || guideVisible || mergeRequest,
   );
   // 卡片菜单与对话框渲染在侧栏元素之外，鼠标移上去就会触发侧栏的 mouseleave。
   // 与原型的 keepVisible 一致：到点时按最新状态再判断一次，避免先移出侧栏、随后才打开对话框时仍被收起。
@@ -1075,6 +1078,74 @@ export function Sidebar() {
     onMoveItem: (drop) => void moveItem(drop),
   });
 
+  /* ==================== 选中与合并成一条（原型 interactions.js、merge.js） ==================== */
+  /** 选中的记录（不含已移入回收站的），按记录的顺序。 */
+  const selectedIds = useMemo(
+    () => state.notes.filter((note) => interactions.selected.has(note.id) && note.status !== "trash").map((note) => note.id),
+    [state.notes, interactions.selected],
+  );
+
+  /**
+   * 打开合并弹窗（原型 NoteMerge.open）：来源按列表中的顺序（置顶在前），不在列表里的按记录顺序接在后面；
+   * 合并到已有卡片时那一张不算来源。来源不够时提示。
+   */
+  const openMerge = useCallback(
+    (options: { ids: readonly string[]; target?: string; tag?: string }) => {
+      const { notes } = store.getState();
+      const wanted = new Set(options.ids);
+      const target = options.target ? notes.find((note) => note.id === options.target && note.status !== "trash") ?? null : null;
+      const listed = listNotes.filter((note) => wanted.has(note.id));
+      const rest = notes.filter((note) => wanted.has(note.id) && !listed.some((item) => item.id === note.id)).sort(compareNoteOrder);
+      const sources = [...listed, ...rest].filter((note) => note.status !== "trash" && note.id !== target?.id);
+      if (sources.length < (target ? 1 : 2)) {
+        toast("至少要有两条记录才能合并");
+        return;
+      }
+      if (editing) void commitEdit();
+      setContextMenu(null);
+      setMergeRequest({ notes: sources, target, tag: options.tag });
+    },
+    [listNotes, editing, commitEdit, toast],
+  );
+
+  /**
+   * 写入合并结果（原型 merge.js 的 commit）：新卡片放在原来第一条的位置并进入编辑，原记录移到回收站（勾了保留时不动）；
+   * 合并成的卡片不在当前页签里时切到它所在的页签。提示条一次撤销全部恢复。
+   */
+  const commitMerge = useCallback(
+    async (request: { notes: Note[]; target: Note | null }, text: string, images: NoteImage[], keep: boolean) => {
+      const result = await store.mergeNotes({ sources: request.notes, target: request.target, text, images, keep });
+      if (!result) {
+        toast("合并未保存，原记录保持不变", null, true);
+        return false;
+      }
+      interactions.clearSelection();
+      const { notes, settings } = store.getState();
+      const merged = notes.find((note) => note.id === result.id);
+      if (merged && !belongsTo(merged, tab, settings.pinnedTags)) {
+        const tag = pinnedTagOf(merged, settings.pinnedTags);
+        switchTab(merged.pinned && tab === "pinned" ? "pinned" : tag ? tabOfTag(tag) : "workspace");
+      }
+      const unique = new Set([...(request.target ? [request.target] : []), ...request.notes].flatMap((note) => note.images.map((image) => image.id)));
+      const dropped = Math.max(0, unique.size - images.length);
+      toast(
+        `${request.target ? "已合并到这条 " : "已合并 "}${request.notes.length} 条${keep ? "" : "，原记录在回收站"}${
+          dropped ? `；图片超过 12 张，后面 ${dropped} 张没有带过来` : ""
+        }`,
+        {
+          label: "撤销",
+          run: () => {
+            if (editingRef.current?.id === result.id) cancelEdit();
+            void store.restoreNotes(result.undo);
+          },
+        },
+      );
+      if (merged) window.setTimeout(() => beginEdit(merged), 0);
+      return true;
+    },
+    [interactions, tab, switchTab, toast, cancelEdit, beginEdit],
+  );
+
   /* ==================== 从资源管理器拖入文件 ==================== */
 
   /** 放下拖入的文件：保存为附件副本，插到落点（编辑面中的位置，或预览卡片的段落之间，可撤销）。 */
@@ -1203,7 +1274,10 @@ export function Sidebar() {
   useEffect(() => {
     const handler = (event: KeyboardEvent): void => {
       const shortcuts = store.getState().settings.shortcuts;
-      if (matches(event, shortcuts, "save")) {
+      // 对话框里的保存快捷键交给对话框自己（合并成一条的「合并」、附件弹窗的「应用修改」），
+      // 否则在对话框里按 Ctrl+Enter 会保存新建卡片的草稿。
+      const inDialog = event.target instanceof Element && Boolean(event.target.closest(".modal"));
+      if (matches(event, shortcuts, "save") && !inDialog) {
         event.preventDefault();
         event.stopImmediatePropagation();
         if (editing) {
@@ -1240,6 +1314,10 @@ export function Sidebar() {
         }
         if (emojiTarget) {
           setEmojiTarget(null);
+          return;
+        }
+        if (mergeRequest) {
+          setMergeRequest(null);
           return;
         }
         if (managingTag) {
@@ -1530,7 +1608,11 @@ export function Sidebar() {
       if (event.key === "Delete" && plain) {
         event.preventDefault();
         setCurrentId(note.id);
-        void moveToTrash([note]);
+        // 多选之中的卡片：作用于全部选中的记录（与原型 requestDelete 相同）。
+        const ids = interactions.selected.has(note.id) && interactions.selected.size > 1 ? interactions.selected : new Set([note.id]);
+        void moveToTrash(store.getState().notes.filter((item) => ids.has(item.id) && item.status !== "trash")).then((done) => {
+          if (done && ids.size > 1) interactions.clearSelection();
+        });
         return;
       }
       if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
@@ -1540,7 +1622,7 @@ export function Sidebar() {
         openNoteMenu(note, { x: box.left + 24, y: box.top + 32 });
       }
     },
-    [beginEdit, focusCard, moveToTrash, openNoteMenu],
+    [beginEdit, focusCard, moveToTrash, openNoteMenu, interactions],
   );
 
   const handleMenuCommand = useCallback(
@@ -1585,12 +1667,23 @@ export function Sidebar() {
         case "info":
           window.dispatchEvent(new CustomEvent("sidenotes:note-info", { detail: note }));
           break;
-        case "trash":
-          await moveToTrash([note]);
+        case "trash": {
+          // 多选之中的卡片：作用于全部选中的记录（与原型 note-menu.js 的 targetIds 相同）。
+          const ids = interactions.selected.has(note.id) && interactions.selected.size > 1 ? interactions.selected : new Set([note.id]);
+          if (await moveToTrash(store.getState().notes.filter((item) => ids.has(item.id) && item.status !== "trash"))) {
+            interactions.clearSelection();
+          }
+          break;
+        }
+        case "merge":
+          openMerge({ ids: selectedIds });
+          break;
+        case "merge-into":
+          openMerge({ ids: selectedIds, target: note.id });
           break;
       }
     },
-    [tab, beginEdit, handleCopyNote, moveToTrash, goToTab, toast],
+    [tab, beginEdit, handleCopyNote, moveToTrash, goToTab, toast, interactions, openMerge, selectedIds],
   );
 
   /** 空白处菜单的命令。 */
@@ -2198,12 +2291,15 @@ export function Sidebar() {
           </div>
         ) : null}
 
-        {/* 筛选行（原型 renderFilterRow）：左边写列表里是什么——平时是标签下拉，搜索时是结果条数；后面是这时能做的操作：
-            搜的词正好是已有标签时「#开发 N 条」改搜这个标签，按一个还没固定的标签筛选或搜索时「固定为页签」。
-            右边是对整个列表的操作。「已选 N 条」「合并」与多选按钮随选中与合并实现（T80）。 */}
+        {/* 筛选行（原型 renderFilterRow）：左边写列表里是什么——有选中的卡片时是「已选 N 条」，搜索时是结果条数，平时是标签下拉；
+            后面是这时能做的操作：选中时「合并」「移入回收站」；搜的词正好是已有标签时「#开发 N 条」改搜这个标签；
+            按一个标签筛选或只搜一个已有标签时「固定为页签」（还没固定时）与「合并」（两条以上时）。
+            右边是对整个列表的操作：多选与收起/展开全部。 */}
         <div className="list-topline">
           <div className="list-filter">
-            {searching ? (
+            {selectedIds.length ? (
+              <span id="selection-summary" className="search-summary selection-summary">{`已选 ${selectedIds.length} 条`}</span>
+            ) : searching ? (
               <span id="search-summary" className="search-summary">{`${listNotes.length} 条`}</span>
             ) : (
               <TagFilter
@@ -2220,7 +2316,33 @@ export function Sidebar() {
               />
             )}
             <p id="list-summary">
-              {wordMatch ? (
+              {selectedIds.length ? (
+                <>
+                  {selectedIds.length > 1 ? (
+                    <button
+                      type="button"
+                      className="list-summary-action"
+                      data-action="merge-selection"
+                      onClick={() => openMerge({ ids: selectedIds })}
+                    >
+                      合并
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="list-summary-action"
+                    data-action="trash-selection"
+                    onClick={() => {
+                      void moveToTrash(state.notes.filter((note) => selectedIds.includes(note.id))).then((done) => {
+                        if (done) interactions.clearSelection();
+                      });
+                    }}
+                  >
+                    移入回收站
+                  </button>
+                </>
+              ) : null}
+              {!selectedIds.length && wordMatch ? (
                 <button
                   type="button"
                   className="list-summary-action word-tag-action"
@@ -2233,7 +2355,7 @@ export function Sidebar() {
                   <span className="word-tag-count">{`${wordMatch.count} 条`}</span>
                 </button>
               ) : null}
-              {filterTag && !findPinned(pinnedTags, filterTag) ? (
+              {!selectedIds.length && filterTag && !findPinned(pinnedTags, filterTag) ? (
                 <button
                   type="button"
                   className="list-summary-action"
@@ -2244,9 +2366,32 @@ export function Sidebar() {
                   固定为页签
                 </button>
               ) : null}
+              {!selectedIds.length && filterTag && listNotes.length > 1 ? (
+                <button
+                  type="button"
+                  className="list-summary-action"
+                  data-action="merge-filtered"
+                  data-tag={filterTag}
+                  aria-label={`合并这 ${listNotes.length} 条`}
+                  onClick={() => openMerge({ ids: listNotes.map((note) => note.id), tag: filterTag })}
+                >
+                  合并
+                </button>
+              ) : null}
             </p>
           </div>
           <div className="list-tools">
+            <button
+              id="select-mode"
+              type="button"
+              className="icon-button list-tool"
+              data-action="toggle-select-mode"
+              aria-pressed={interactions.selecting}
+              aria-label={interactions.selecting ? "退出多选" : "多选"}
+              onClick={interactions.toggleMode}
+            >
+              <Icon name="check-square" />
+            </button>
             <button
               id="collapse-all"
               type="button"
@@ -2294,7 +2439,7 @@ export function Sidebar() {
         <div
           ref={listRef}
           id="note-list"
-          className={editing ? "note-list has-editing" : "note-list"}
+          className={["note-list", editing ? "has-editing" : "", interactions.selecting ? "is-selecting" : ""].filter(Boolean).join(" ")}
           tabIndex={-1}
           role="list"
           aria-label={`${tabName(tab)}记录列表`}
@@ -2487,6 +2632,7 @@ export function Sidebar() {
           anchor={contextMenu.anchor}
           canMove={moveTargets(contextMenu.note).length > 0}
           locateLabel={searching ? `转到${tabLabel(homeTab(contextMenu.note, pinnedTags))}` : undefined}
+          mergeCount={interactions.selected.has(contextMenu.note.id) ? selectedIds.length : 0}
           onCommand={(command) => void handleMenuCommand(contextMenu.note, command, contextMenu.anchor)}
           onClose={() => setContextMenu(null)}
         />
@@ -2546,6 +2692,16 @@ export function Sidebar() {
       {guideVisible ? <UsageGuide onClose={closeGuide} /> : null}
 
       {/* 标签管理：重命名或合并、全局移除 */}
+      {mergeRequest ? (
+        <MergeDialog
+          notes={mergeRequest.notes}
+          target={mergeRequest.target}
+          tag={mergeRequest.tag}
+          onConfirm={(text, images, keep) => commitMerge(mergeRequest, text, images, keep)}
+          onClose={() => setMergeRequest(null)}
+        />
+      ) : null}
+
       {managingTag ? (
         <TagManageDialog
           tag={managingTag}

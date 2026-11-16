@@ -4,7 +4,7 @@
  * 一行是「标题」与「格式」（清单、段落），下面是按卡片排版的实时预览，末尾是合并后的标签；底栏左侧「保留原记录」，
  * 右侧「合并」（合并到已有卡片时是「合并到这条」，标题不变）。点按钮或 Ctrl+Enter 才写入。
  * 写入后新卡片放在原来第一条的位置并进入编辑，原记录移到回收站（勾了「保留原记录」时不动），提示条一次撤销全部恢复。
- * 合并的规则见 model/merge.ts。
+ * 合并的规则见 src/core/merge.ts（T80 从 Playground 搬去）。
  */
 
 import { useState } from 'react';
@@ -12,7 +12,7 @@ import { Markdown } from '@/components/Markdown';
 import { createNote, noteTitle } from '@/core/notes';
 import { parse } from '@/core/tags';
 import type { Note } from '@/core/types';
-import { composeInto, composeNew, defaultFormat, defaultTitle, mergedImages, type MergeFormat } from '../model/merge';
+import { composeInto, composeNew, defaultFormat, defaultTitle, mergedImages, type MergeFormat } from '@/core/merge';
 import { useNotes } from '../model/notes';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';

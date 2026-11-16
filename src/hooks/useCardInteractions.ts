@@ -103,6 +103,10 @@ export interface CardInteractions {
   busy: boolean;
   /** 存在选择或处于多选模式。 */
   hasSelection: boolean;
+  /** 多选按钮按下：卡片出现勾选框，单击就是勾选（列表加上 is-selecting）。 */
+  selecting: boolean;
+  /** 按下或松开多选按钮；松开时清空选择。 */
+  toggleMode: () => void;
   /** 拖动图片或引用时指针所在的目标卡片。 */
   itemTargetId: string | null;
   /** 供事件处理函数同步读取最新状态。 */
@@ -237,6 +241,20 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
     commitSelection();
   }, [commitSelection]);
 
+  /**
+   * 筛选行的多选按钮（原型 toggleMode）：没按下时按下，卡片出现勾选框，已用 Ctrl 或 Shift 选中的保留；
+   * 按下时再点一下退出并清空。
+   */
+  const toggleMode = useCallback(() => {
+    const t = tools.current;
+    if (t.mode) {
+      clearSelection();
+      return;
+    }
+    t.mode = true;
+    commitSelection();
+  }, [clearSelection, commitSelection]);
+
   const isBusy = useCallback(() => Boolean(tools.current.gesture), []);
   const isSelecting = useCallback(() => tools.current.mode || tools.current.selected.size > 0, []);
 
@@ -278,19 +296,27 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
     };
 
     /** 单击选择：Shift 选择连续区间，否则切换单张卡片。 */
+    /**
+     * 选中卡片（原型第二版 choose，与 Windows 资源管理器相同）：
+     * - Ctrl+单击：加选或减选这一张；还没有选中的卡片时，起点那张也选上（先单击卡片 1，再 Ctrl+单击卡片 2，两张都选中）；
+     * - Shift+单击：从起点选到这一张，换掉原来的选择；同时按 Ctrl 或多选按钮按下时，加进原来的选择；
+     * - 多选按钮按下时单击：勾选或取消这一张。
+     * 起点是上一次不按 Shift 单击的卡片，悬停的高亮不算；起点不在当前列表中时只切换这一张。
+     */
     const choose = (id: string, range: boolean, additive: boolean): void => {
       const ids = visibleIds();
-      if (range && t.anchor && ids.includes(t.anchor)) {
-        const start = ids.indexOf(t.anchor);
+      const anchor = t.anchor && ids.includes(t.anchor) ? t.anchor : '';
+      if (range && anchor) {
+        const start = ids.indexOf(anchor);
         const end = ids.indexOf(id);
         if (!additive) t.selected.clear();
         ids.slice(Math.min(start, end), Math.max(start, end) + 1).forEach((item) => t.selected.add(item));
       } else {
+        if (!t.selected.size && !t.mode && anchor && anchor !== id) t.selected.add(anchor);
         if (t.selected.has(id)) t.selected.delete(id);
         else t.selected.add(id);
         t.anchor = id;
       }
-      t.mode = true;
       commitSelection();
     };
 
@@ -930,9 +956,24 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
         }
         return;
       }
-      if ((hasSelection() || event.ctrlKey || event.metaKey || event.shiftKey) && !interactive && card?.dataset.noteId) {
+      const id = card?.dataset.noteId;
+      if (!id) return;
+      const modifier = event.ctrlKey || event.metaKey;
+      // 多选按钮按下时：单击卡片的任何地方都是勾选或取消，卡片上的按钮、链接、待办与标签不再响应。
+      if (t.mode) {
         consume(event);
-        choose(card.dataset.noteId, event.shiftKey, event.ctrlKey || event.metaKey);
+        choose(id, event.shiftKey, true);
+        return;
+      }
+      if ((modifier || event.shiftKey) && !interactive) {
+        consume(event);
+        choose(id, event.shiftKey, modifier);
+        return;
+      }
+      // 不按键单击卡片：只选中（高亮）这一张，Ctrl 或 Shift 选中的其它卡片取消；它记作起点。
+      if (!interactive) {
+        if (t.selected.size) clearSelection();
+        t.anchor = id;
       }
     };
 
@@ -1013,10 +1054,12 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
     sorting,
     busy,
     hasSelection: mode || selected.size > 0,
+    selecting: mode,
     itemTargetId,
     isBusy,
     isSelecting,
     clearSelection,
     selectAll,
+    toggleMode,
   };
 }

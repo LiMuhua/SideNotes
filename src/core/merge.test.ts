@@ -1,5 +1,5 @@
 /**
- * 合并成一条（第四次反馈）：Playground 的合并规则（playground/src/model/merge.ts）与交互原型的 merge.js 相同。
+ * 合并成一条（第四次反馈）：src/core/merge.ts 的规则（T80 从 Playground 搬来）与交互原型的 merge.js 相同。
  *
  * - 共同标签作标题，其余标签各成一个二级小节，只有共同标签的记录放在最前，带多个其他标签的合成一节；
  * - 清单格式下每条记录是一个待办，段落格式下整段放入；标签取并集；
@@ -7,9 +7,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { parse } from '@/core/tags';
-import type { Note } from '@/core/types';
-import { commonTags, composeInto, composeNew, defaultFormat, defaultTitle } from '../playground/src/model/merge';
+import { parse } from './tags';
+import type { Note } from './types';
+import { commonTags, composeInto, composeNew, defaultFormat, defaultTitle } from './merge';
 
 let sequence = 0;
 function note(text: string): Note {
