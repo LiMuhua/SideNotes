@@ -449,8 +449,9 @@ function renderCard(note) {
 }
 
 /**
- * @brief 标出搜索命中的文字（第七次反馈）：标题、正文与标签中的搜索词加上高亮底色（mark.search-hit，与正文里的 mark 同一种底色）；
- * 「#标签」只标在标签上（写完整的已有标签只标这个标签，没写完的按前缀）。命中跨过格式（如一半加粗）时不标，匹配本身不受影响。
+ * @brief 标出搜索命中的文字（第七次反馈）：搜索词在标题与正文中加上高亮底色（mark.search-hit，与正文里的 mark 同一种底色）；
+ * 「#标签」只标在标签上（写完整的已有标签只标这个标签，没写完的按前缀）。文字不再标在标签上（第八次反馈：文字与标签分开搜）。
+ * 命中跨过格式（如一半加粗）时不标，匹配本身不受影响。
  * @param {HTMLElement} card 卡片。
  */
 function markSearchHits(card){
@@ -459,7 +460,7 @@ function markSearchHits(card){
   card.querySelectorAll('.note-title, .note-content').forEach(function markText(root){wrapHits(root,words);});
   card.querySelectorAll('.tag-chip').forEach(function markTag(chip){
     const key=tagKey(chip.dataset.tag||''),tag=tags.find(function hit(item){return known.has(item)?key===item:key.startsWith(item);});
-    wrapHits(chip,tag?words.concat('#'+tag):words);
+    if(tag)wrapHits(chip,['#'+tag]);
   });
 }
 
@@ -545,7 +546,7 @@ function renderFilterRow(){
   elements.tagFilterClear.hidden=!filtered;
   elements.searchSummary.hidden=!searching||chosen>0;elements.searchSummary.textContent=searching?notes.length+' 条':'';
   elements.selectionSummary.hidden=!chosen;elements.selectionSummary.textContent=chosen?'已选 '+chosen+' 条':'';
-  elements.listSummary.replaceChildren(...(chosen?selectionActions(chosen):searching?filterActions(singleSearchTag(),notes):filtered?filterActions(ui.selectedTag,notes):[]));
+  elements.listSummary.replaceChildren(...(chosen?selectionActions(chosen):searching?wordTagActions().concat(filterActions(singleSearchTag(),notes)):filtered?filterActions(ui.selectedTag,notes):[]));
   syncListTools();
 }
 
@@ -597,6 +598,18 @@ function filterActions(tag,notes){
   if(!window.SidebarTabs.findPinned(tag)){const pin=button('固定为页签','pin-filter-tag','','list-summary-action');pin.dataset.tag=tag;actions.push(pin);}
   if(notes.length>1){const merge=button('合并这 '+notes.length+' 条','merge-filtered','','list-summary-action');merge.textContent='合并';merge.dataset.tag=tag;actions.push(merge);}
   return actions;
+}
+
+/**
+ * @brief 搜的词正好是一个已有标签的名称时（如「开发」），结果条数后面的「#开发 8 条」（第八次反馈）：文字与标签分开搜之后，
+ * 点它改搜这个标签。 @return {HTMLElement[]} 按钮，没有时为空。
+ */
+function wordTagActions(){
+  const match=/^[\p{L}\p{N}_-]+$/u.exec(searchTerms());if(!match)return [];
+  const key=tagKey(match[0]),found=window.SidebarTabs.allTags().find(function same(item){return tagKey(item.tag)===key;});if(!found)return [];
+  const action=button('改搜标签 #'+found.tag+'，'+found.count+' 条','search-word-tag','','list-summary-action word-tag-action');
+  action.textContent='';action.append(el('span','word-tag-name','#'+found.tag),el('span','word-tag-count',found.count+' 条'));action.dataset.tag=found.tag;
+  return [action];
 }
 
 /* ==================== 全局搜索（第五次反馈） ==================== */
@@ -1377,6 +1390,7 @@ function handleAction(event) {
     case 'merge-filtered':window.NoteMerge.open({ids:ui.listItems.map(function id(item){return item.id;}),tag:control.dataset.tag||ui.selectedTag});break;
     case 'go-to-tab':goToTab(control.dataset.goTab,{reset:true});break;
     case 'end-search':endSearch();break;
+    case 'search-word-tag':setSearchQuery('#'+control.dataset.tag);break;
     case 'more-note':if(note)openNoteOptions(note,control);break;
     case 'toggle-note-collapse':if(note&&window.NoteMenus)window.NoteMenus.toggleCollapsed(note);break;
     case 'finish-edit':finishEdit();break;
@@ -1593,6 +1607,7 @@ function initialize() {
   if(window.LiveMarkdown){window.LiveMarkdown.attach(elements.draftInput,{value:state.draft.text,minHeight:100,maxHeight:340});window.LiveMarkdown.attach(elements.sidebarDraft,{value:state.draft.text,minHeight:56,maxHeight:240});}
   initializeSidebarResize();
   initializeListLoading();
+  initializeListFade();
   initializeContentDrop();
   refreshVersionBadge();
   initializeHeaderInteractions();
@@ -1722,14 +1737,16 @@ function hasTag(note,tag) { return noteParts(note).tags.some(function same(item)
 /** @brief 判断记录是否属于当前页签。 @param {object} note 记录。 @return {boolean} 是否属于。 */
 function inCurrentTab(note) { return window.SidebarTabs.belongs(note,ui.tab); }
 /**
- * @brief 支持正文与多个标签组合搜索。写完整的已有标签只匹配这个标签，没写完的按前缀匹配。
+ * @brief 文字与标签分开搜（第八次反馈）：不带 # 的词只搜标题、正文与附件名，不再命中标签；带 # 的词只搜标签，写完整的已有标签
+ * 只匹配这个标签，没写完的按前缀匹配。两种可以一起写，同时满足。此前不带 # 的词也搜标签，带这个标签的卡片挤在结果里。
  * @param {object} note 记录。 @param {string} query 查询。 @param {Set<string>} known 已有标签（tagKey），省略时一律按前缀。 @return {boolean} 是否匹配。
  */
 function matchesQuery(note,query,known) {
   if(!String(query).trim())return true;
   const parsed=noteParts(note), tags=[];
   const text=String(query).replace(/(?:^|\s)#([\p{L}\p{N}_-]+)/gu,function collect(_,tag){tags.push(tagKey(tag));return ' ';}).trim().toLocaleLowerCase();
-  return tags.every(function matchTag(tag){return parsed.tags.some(function prefix(item){return known&&known.has(tag)?tagKey(item)===tag:tagKey(item).startsWith(tag);});})&&text.split(/\s+/).filter(Boolean).every(function matchText(word){return (parsed.body+' '+parsed.tags.join(' ')+' '+note.images.map(function name(i){return i.name;}).join(' ')).toLocaleLowerCase().includes(word);});
+  const haystack=(parsed.body+' '+note.images.map(function name(i){return i.name;}).join(' ')).toLocaleLowerCase();
+  return tags.every(function matchTag(tag){return parsed.tags.some(function prefix(item){return known&&known.has(tag)?tagKey(item)===tag:tagKey(item).startsWith(tag);});})&&text.split(/\s+/).filter(Boolean).every(function matchText(word){return haystack.includes(word);});
 }
 /** @brief 汇总标签并计算固定权重分数。 @return {Array} 候选与分数。 */
 function rankedTags() {
@@ -1823,6 +1840,54 @@ function appendNextPage(requested){
   scheduleTagLayout();if(window.NoteInteractions)window.NoteInteractions.refresh();
 }
 /** 连接滚动降级入口，批次追加不增加人为等待。 */
+/* ==================== 列表边缘的渐隐（第八次反馈） ==================== */
+
+/**
+ * @brief 记录列表上下边缘的渐隐：卡片与组标题滚到列表的上边或下边时，在 --sn-space-6 内逐渐变淡，不再被一刀截断；
+ * 只在那一侧还有内容时出现，刚开始滚动时随滚动距离由浅到深。遮罩写进各自的 --local-edge-fade（theme.css）。
+ * 遮罩不加在列表上：列表带遮罩时，磨砂玻璃卡片的背景模糊只能取到列表里的内容，透出的壁纸不再模糊。
+ */
+function fadeListEdges(){
+  ui.listFadeFrame=0;const list=elements.noteList;if(!list||!list.isConnected)return;
+  const size=parseFloat(window.getComputedStyle(list).getPropertyValue('--sn-space-6'))||0;
+  const box=list.getBoundingClientRect(),scale=list.offsetHeight?box.height/list.offsetHeight:1,rest=list.scrollHeight-list.clientHeight-list.scrollTop;
+  // 按字号缩放时滚动位置有小数，滚到头还差不到一像素，算作那一侧没有内容。
+  const above=list.scrollTop<1?0:Math.min(list.scrollTop,size),below=rest<1?0:Math.min(rest,size);
+  const items=Array.from(list.querySelectorAll(':scope > .note-card, :scope > .search-group')),rects=items.map(function measure(item){return item.getBoundingClientRect();});
+  items.forEach(function fade(item,index){
+    const mask=edgeMask((rects[index].top-box.top)/scale-list.clientTop,rects[index].height/scale,list.clientHeight,above,below,size);
+    if(mask)item.style.setProperty('--local-edge-fade',mask);else item.style.removeProperty('--local-edge-fade');
+  });
+}
+/**
+ * @brief 一项的遮罩（与 Playground 的 ui/edgeFade.ts 相同）：上边一段从全透明到不透明、下边一段从不透明到全透明，长度都是 size，
+ * 随上下还有的内容（最多 size）从可见区之外移进来：上面没有内容时，上边这一段整个在可见区之外，看不出变淡。
+ * @param {number} top 这一项的上边到可见区上边的距离（CSS 像素，在上面时为负）。 @param {number} height 这一项的高度。
+ * @param {number} view 可见区的高度。 @param {number} above 上面还有的内容。 @param {number} below 下面还有的内容。 @param {number} size 渐隐的长度。
+ * @return {string} 遮罩，这一项不在渐隐的位置时为空。
+ */
+function edgeMask(top,height,view,above,below,size){
+  const start=above-size-top,end=view-below-top,fadeTop=above>0&&start+size>0&&start<height,fadeBottom=below>0&&end<height&&end+size>0;
+  if(!fadeTop&&!fadeBottom)return '';
+  const px=function px(value){return Math.round(value*10)/10+'px';};
+  const stops=fadeTop?['transparent '+px(start),'#000 '+px(start+size)]:['#000 0px'];
+  if(fadeBottom)stops.push('#000 '+px(end),'transparent '+px(end+size));
+  return 'linear-gradient(to bottom, '+stops.join(', ')+')';
+}
+/** 滚动、列表或卡片的尺寸变化、卡片增减之后，下一帧重算渐隐。 */
+function scheduleListFade(){if(!ui.listFadeFrame)ui.listFadeFrame=window.requestAnimationFrame(fadeListEdges);}
+/** 安装一次：滚动时、列表与其中各项的尺寸变化时、项目增减时重算。 */
+function initializeListFade(){
+  const list=elements.noteList;if(!list)return;
+  list.addEventListener('scroll',scheduleListFade,{passive:true});
+  const resized=window.ResizeObserver?new ResizeObserver(scheduleListFade):null;
+  if(resized)resized.observe(list);
+  const watch=function watch(node){if(resized&&node.nodeType===1&&node.matches('.note-card, .search-group'))resized.observe(node);};
+  Array.from(list.children).forEach(watch);
+  if(window.MutationObserver)new MutationObserver(function changed(records){records.forEach(function record(item){item.addedNodes.forEach(watch);item.removedNodes.forEach(function forget(node){if(resized&&node.nodeType===1)resized.unobserve(node);});});scheduleListFade();}).observe(list,{childList:true});
+  scheduleListFade();
+}
+
 function initializeListLoading(){elements.noteList.addEventListener('scroll',function nearListEnd(){if(state.settings.lazyLoading&&ui.sentinel&&elements.noteList.scrollHeight-elements.noteList.scrollTop-elements.noteList.clientHeight<=96)appendNextPage();},{passive:true});}
 /** @brief 根据操作区以外的实际宽度展示尽可能多的标签。 @param {HTMLElement} card 记录卡片。 */
 function fitCardTags(card){

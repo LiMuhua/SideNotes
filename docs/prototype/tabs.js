@@ -11,8 +11,8 @@
  * - 最后一格只占一个位置，样子固定（第六次反馈）：页签都放得下、后面还有位置时是「+」，单击新建页签；真放不下时，
  *   多出来的页签从右往左收进去，这一格写「N ▾」，单击打开菜单：收起的页签与「新建页签」。
  * - 「N ▾」只在页签真放不下时出现（第七次反馈）：页签都放得下、只是放不下「+」时，不显示「+」，不为它收起页签。
- * - 当前页签始终显示名字（第七次反馈）：它不收起；放不下时收它前面的页签，它排到「N ▾」前面（先后仍按固定的顺序）。
- *   此前当前页签可以收在菜单里，这一格只加下划线，看不出是哪个页签。
+ * - 末格（第八次反馈）：放不下时，最后一个显示的页签与「N ▾」合成一格。从菜单选页签只换末格里的页签，前面的页签不动；
+ *   当前页签本该收起时也换进末格，始终显示名字（第七次反馈）。此前选中的页签排到「N ▾」前面，宽的页签会把前面几个挤掉。
  * - 条数只写在随记与当前页签上，省出页签栏的宽度。
  * - 在标签页签里新建记录时，新建卡片的工具栏上有一个「#标签」，保存时写进标签行；点它的 × 可以不带。
  * 依赖 app.js 的全局状态与函数（state、ui、elements、el、icon、button、renderNotes、toast、tagKey、hasTag、noteParts、
@@ -24,6 +24,9 @@ window.SidebarTabs = (function createSidebarTabs() {
   let more = null; // 最后一格
   let observer = null;
   let hidden = []; // 收起的标签页签（标签名，按页签栏的顺序）
+  let swapped = ''; // 上一次换进末格的标签（第八次反馈）：切到前面的页签后末格仍是它
+  let slotTab = ''; // 末格里的页签（标签名）；没有收起的页签时为空
+  let probe = null; // 量两个字宽的看不见的元素：末格的页签名字最短留这么宽
   let panel = null; // 新建页签的输入面板
   let chip = null; // 新建卡片工具栏上的「#标签」
   let skipTag = ''; // 新建卡片中去掉了的页签标签
@@ -86,7 +89,7 @@ window.SidebarTabs = (function createSidebarTabs() {
     return exists(tab) && goToTab(tab, { reset: true });
   }
 
-  /** @brief 焦点移到页签栏里的这个页签（从最后一格的菜单选中后，它排到「N ▾」前面）。 @param {string} tab 页签。 */
+  /** @brief 焦点移到页签栏里的这个页签（从最后一格的菜单选中后，它换进末格）。 @param {string} tab 页签。 */
   function focusTab(tab) {
     const node = nav && Array.from(nav.querySelectorAll('.tab[data-tab]')).find(function same(item) { return item.dataset.tab === tab && !item.hidden; });
     if (node) node.focus({ preventScroll: true });
@@ -129,15 +132,17 @@ window.SidebarTabs = (function createSidebarTabs() {
     return true;
   }
 
-  /** @brief 收起的页签放回页签栏：换到页签栏的最后一个位置，原来那个收进菜单。 @param {string} tag 标签。 */
+  /**
+   * @brief 收起的页签放回页签栏：换进末格，原来那个回到菜单，不切换页签（第八次反馈：与从菜单选页签一样只换末格，
+   * 此前改动固定的顺序）。末格里是当前页签时不能换，菜单里不出现这一项。 @param {string} tag 标签。
+   */
   function promote(tag) {
-    const list = pinnedTags().slice(), from = list.findIndex(function same(item) { return tagKey(item) === tagKey(tag); });
-    const visible = list.length - hidden.length;
-    if (from < visible || from < 0) return;
-    list.splice(from, 1);
-    list.splice(Math.max(0, visible - 1), 0, tag);
-    if (savePinned(list)) renderNotes();
+    swapped = tag;
+    layout();
   }
+
+  /** @return {boolean} 末格里是当前页签：它不能被换走（菜单中收起的页签不出现「放到页签栏」）。 */
+  function slotIsCurrent() { return Boolean(slotTab) && tagKey(slotTab) === tagKey(tagOf(ui.tab)); }
 
   /** @return {Array<{tag:string,count:number}>} 未删除记录中的全部标签与条数，条数多的在前。 */
   function allTags() {
@@ -237,43 +242,115 @@ window.SidebarTabs = (function createSidebarTabs() {
   function count(tab) { return state.notes.filter(function inTab(note) { return belongs(note, tab); }).length; }
 
   /**
-   * 页签栏的排法（第六、七次反馈），规则与 Playground 的 model/tabLayout.ts 相同：
+   * 页签栏的排法（第六、七、八次反馈），规则与 Playground 的 model/tabLayout.ts 相同：
    * 1. 页签都放得下就全部显示；后面还有位置时最后一格是「+」，没有位置就不显示「+」，不为它收起页签；
-   * 2. 页签真放不下时，从右往左把标签页签收进最后一格「N ▾」，每收一个按「N ▾」的实际宽度重新量，刚好放下为止；
-   * 3. 当前页签不收：放不下时收它前面的页签，它排到「N ▾」前面。别的页签都收起后仍放不下时（侧栏很窄、页签名很长），它的名字缩短。
-   * 搜索的放大镜在这一行的最右边，页签栏的右侧内边距给它留了位置。
+   * 2. 页签真放不下时，按页签栏的顺序能放几个放几个，其余从右往左收进「N ▾」，按它的实际宽度刚好放下为止；
+   *    最后一个显示的页签与「N ▾」合成末格（第八次反馈），两者紧挨着，中间一条短竖线；
+   * 3. 末格可以换成收起的页签：当前页签本该收起时是它（始终显示名字），否则是上一次换进来的（切到前面的页签后保留）；
+   *    换进来的页签较窄、空出的位置放得下菜单里排在最前的页签时，它补到末格前面；
+   * 4. 显示哪些页签按不写当前页签条数时的宽度定（第八次反馈），切换页签时前面的页签不变。条数或换进来的页签多出的宽度
+   *    依次这样让出：不显示「+」，不写当前页签的条数，末格页签的名字缩短（最短留两个字），最后才收起前面的页签。
+   * 搜索的放大镜在这一行的最右边，页签栏的右侧内边距给它留了位置。改名时页签换成输入框，不重排。
    */
   function layout() {
-    if (!nav || !more || !nav.isConnected) return;
-    const tabs = Array.from(nav.querySelectorAll('.tab.is-tag-tab'));
-    const keep = tabs.find(function current(node) { return node.dataset.tab === ui.tab; }) || null;
+    if (!nav || !more || !nav.isConnected || nav.querySelector('.tab-rename-input')) return;
+    const active = document.activeElement && nav.contains(document.activeElement) ? document.activeElement : null;
+    const tabs = pinnedTags().map(function find(tag) { return nav.querySelector('.tab.is-tag-tab[data-tab="' + CSS.escape(tabOf(tag)) + '"]'); }).filter(Boolean);
+    // 按固定的顺序复位（上一次可能把换进末格的页签挪到了「N ▾」前面），全部显示后再量。
+    tabs.forEach(function reset(node) { nav.insertBefore(node, more); node.hidden = false; node.classList.remove('is-squeezed', 'is-slot', 'is-swapped'); });
+    // 两个字的宽度（与页签同样的字体与字距）：末格页签的名字最短留这么宽。
+    if (!probe) { probe = el('span', 'tab-name-probe', '汉字'); probe.setAttribute('aria-hidden', 'true'); }
+    if (!probe.isConnected) nav.append(probe);
     const overflowing = function overflowing() { return nav.scrollWidth > nav.clientWidth + 1; };
-    tabs.forEach(function show(node) { node.hidden = false; node.classList.remove('is-squeezed'); });
+    const hiddenCount = function hiddenCount() { return tabs.filter(function collapsed(node) { return node.hidden; }).length; };
+    const join = function join(node) {
+      tabs.forEach(function clear(item) { item.classList.toggle('is-slot', item === node); });
+      more.classList.toggle('is-joined', Boolean(node));
+    };
+    const current = tabs.find(function same(node) { return node.dataset.tab === ui.tab; }) || null;
+    // 当前页签的条数（随记的条数一直显示，不算）：先按不写它时的宽度排，切换页签时显示哪些页签不变。
+    const selected = Array.from(nav.querySelectorAll('.tab[data-tab]')).find(function same(node) { return node.dataset.tab === ui.tab; });
+    const counter = ui.tab !== 'workspace' && selected ? selected.querySelector('[data-count]') : null;
+    if (counter) counter.hidden = true;
+    let mode = 'add', last = null, pick = null;
+    join(null);
     more.hidden = false;
     setMore(0);
     if (overflowing()) {
       // 先让出「+」：页签都放得下时不出现「N ▾」。
       more.hidden = true;
-      if (overflowing()) {
+      mode = 'none';
+      // 没有固定的标签时没有可收的页签，「+」不显示就是了。
+      if (overflowing() && tabs.length) {
         more.hidden = false;
-        let count = 0;
-        for (let index = tabs.length - 1; index >= 0 && overflowing(); index -= 1) {
-          if (tabs[index] === keep) continue;
-          tabs[index].hidden = true;
-          count += 1;
-          setMore(count);
+        mode = 'count';
+        // 1. 按顺序从右往左收起，刚好放下为止；最后一个显示的页签与「N ▾」合成末格。
+        let shown = tabs.length;
+        do {
+          shown -= 1;
+          tabs[shown].hidden = true;
+          setMore(tabs.length - shown);
+          join(shown > 0 ? tabs[shown - 1] : null);
+        } while (shown > 0 && overflowing());
+        const occupant = shown > 0 ? tabs[shown - 1] : null;
+        last = occupant;
+        // 2. 换进末格的页签：当前页签本该收起时是它；否则是上一次换进来的，末格本来是当前页签时不换。
+        const kept = swapped ? tabs.find(function same(node) { return tagKey(tagOf(node.dataset.tab)) === tagKey(swapped); }) || null : null;
+        if (current && current.hidden) pick = current;
+        else if (kept && kept.hidden && (!occupant || current !== occupant)) pick = kept;
+        if (pick) {
+          if (occupant) occupant.hidden = true;
+          pick.hidden = false;
+          pick.classList.add('is-swapped');
+          nav.insertBefore(pick, more);
+          join(pick);
+          setMore(hiddenCount());
+          last = pick;
         }
-        if (keep && overflowing()) keep.classList.add('is-squeezed');
       }
     }
+    // 以下按写条数时的宽度。
+    if (counter) counter.hidden = false;
+    if (mode === 'add' && overflowing()) more.hidden = true;
+    // 3. 换进来的较窄：菜单里排在最前的页签补到末格前面，补到放不下为止（写条数、名字不缩短时量）。
+    if (pick && !overflowing()) {
+      for (const node of tabs) {
+        if (!node.hidden) continue;
+        node.hidden = false;
+        setMore(hiddenCount());
+        if (!overflowing()) continue;
+        node.hidden = true;
+        setMore(hiddenCount());
+        break;
+      }
+    }
+    // 4. 多出的宽度：先不写当前页签的条数，再缩短末格页签的名字（最短两个字），仍放不下才收起前面的页签。
+    if (counter && overflowing()) counter.hidden = true;
+    if (mode === 'count' && last) {
+      const name = last.querySelector('.tab-name');
+      const shortest = Math.min(name ? name.getBoundingClientRect().width : 0, probe.getBoundingClientRect().width);
+      while (overflowing()) {
+        last.classList.add('is-squeezed');
+        if (!overflowing() && name && name.getBoundingClientRect().width >= shortest - 0.5) break;
+        last.classList.remove('is-squeezed');
+        const front = tabs.filter(function shownBefore(node) { return !node.hidden && node !== last; });
+        if (!front.length) { last.classList.add('is-squeezed'); break; }
+        front[front.length - 1].hidden = true;
+        setMore(hiddenCount());
+      }
+      // 当前页签在末格时记下它：切到前面的页签后末格仍是它（第八次反馈）。
+      if (current && last === current) swapped = tagOf(current.dataset.tab);
+    }
+    slotTab = last ? tagOf(last.dataset.tab) : '';
     hidden = tabs.filter(function collapsed(node) { return node.hidden; }).map(function name(node) { return tagOf(node.dataset.tab); });
+    if (active && active.isConnected && document.activeElement !== active && !active.hidden) active.focus({ preventScroll: true });
   }
 
   /* ==================== 最后一格的菜单与新建页签 ==================== */
 
   /**
    * @brief 最后一格的菜单：收起的页签（右键可以放回页签栏或移出）与「新建页签」。当前页签不会收在这里（第七次反馈）：
-   * 选中菜单里的页签后，它排到「N ▾」前面，焦点跟过去。拖动卡片时停在最后一格上也会打开，菜单中的页签可以作为落点（data-tab）。
+   * 选中菜单里的页签后，它换进末格（第八次反馈），焦点跟过去。拖动卡片时停在最后一格上也会打开，菜单中的页签可以作为落点（data-tab）。
    * @param {object} options dragging：拖动卡片时打开，焦点不移进菜单。
    */
   function openMenu(options = {}) {
@@ -295,7 +372,7 @@ window.SidebarTabs = (function createSidebarTabs() {
     event.preventDefault();
     event.stopPropagation();
     const items = [];
-    if (collapsed) items.push({ label: '放到页签栏', icon: 'arrow-up', run: function promoteTab() { promote(tag); } });
+    if (collapsed && !slotIsCurrent()) items.push({ label: '放到页签栏', icon: 'arrow-up', run: function promoteTab() { promote(tag); } });
     items.push({ label: '改名', icon: 'edit', hint: collapsed ? '' : '双击', run: function renameTab() { if (collapsed) manageTag(tag); else startRename(tag); } });
     items.push('separator');
     items.push({ label: '移出页签栏', icon: 'x', run: function removeTab() { unpin(tag); } });
@@ -446,42 +523,48 @@ window.SidebarTabs = (function createSidebarTabs() {
   function menuTabs() { return Array.from(document.querySelectorAll('.tab-menu .note-context-item[data-tab]')); }
 
   /**
-   * @brief 指针处的插入位置（按页签栏的顺序计）：页签栏中按横向位置落在显示着的页签之间，菜单中按纵向位置落在收起的页签之间。
-   * @param {number} x 横坐标。 @param {number} y 纵坐标。 @return {{index:number,region:string}} 位置与所在的区域；不在两处时 index 为 -1。
+   * @brief 指针处的插入位置：index 按固定的顺序计（保存用），at 是显示上的位置（画插入线用）。页签栏中按横向位置落在显示着的
+   * 页签之间，菜单中按纵向位置落在收起的页签之间。换进末格的页签不在它本来的位置（第八次反馈）：落在它前后时，排到前面
+   * 最后一个页签之后。
+   * @param {number} x 横坐标。 @param {number} y 纵坐标。 @return {{index:number,at:number,region:string}} 不在两处时 index 为 -1。
    */
   function dropAt(x, y) {
-    const items = menuTabs(), list = items.length ? items[0].closest('.tab-menu') : null;
-    if (list) {
-      const box = list.getBoundingClientRect();
+    const list = pinnedTags();
+    const position = function position(node) { const tag = tagOf(node.dataset.tab); return list.findIndex(function same(item) { return tagKey(item) === tagKey(tag); }); };
+    const items = menuTabs(), menu = items.length ? items[0].closest('.tab-menu') : null;
+    if (menu) {
+      const box = menu.getBoundingClientRect();
       if (x >= box.left && x <= box.right && y >= box.top && y <= box.bottom) {
         let row = items.findIndex(function below(node) { const rect = node.getBoundingClientRect(); return y < rect.top + rect.height / 2; });
         if (row < 0) row = items.length;
-        return { index: visibleTabs().length + row, region: 'menu' };
+        return { index: row < items.length ? position(items[row]) : list.length, at: row, region: 'menu' };
       }
     }
     const bar = nav.getBoundingClientRect(), tabs = visibleTabs();
-    if (y < bar.top - 8 || y > bar.bottom + 8 || x < bar.left || x > bar.right) return { index: -1, region: '' };
-    let index = tabs.findIndex(function before(node) { const rect = node.getBoundingClientRect(); return x < rect.left + rect.width / 2; });
-    if (index < 0) index = tabs.length;
-    return { index: index, region: 'bar' };
+    if (y < bar.top - 8 || y > bar.bottom + 8 || x < bar.left || x > bar.right) return { index: -1, at: -1, region: '' };
+    let at = tabs.findIndex(function before(node) { const rect = node.getBoundingClientRect(); return x < rect.left + rect.width / 2; });
+    if (at < 0) at = tabs.length;
+    const front = tabs.filter(function inOrder(node) { return !node.classList.contains('is-swapped'); });
+    const index = at < tabs.length && !tabs[at].classList.contains('is-swapped') ? position(tabs[at]) : front.length ? position(front[front.length - 1]) + 1 : 0;
+    return { index: index, at: at, region: 'bar' };
   }
 
-  /** @brief 画出插入线：页签栏中是竖线，菜单中是横线（小圆点在左端）。 @param {number} index 位置。 @param {string} region 区域。 */
-  function paintDrop(index, region) {
-    if (index < 0) { if (dropLine) dropLine.remove(); return; }
+  /** @brief 画出插入线：页签栏中是竖线，菜单中是横线（小圆点在左端）。 @param {number} at 显示上的位置。 @param {string} region 区域。 */
+  function paintDrop(at, region) {
+    if (at < 0) { if (dropLine) dropLine.remove(); return; }
     if (!dropLine) { dropLine = el('span', 'sidebar-tab-drop'); dropLine.setAttribute('aria-hidden', 'true'); }
     if (!dropLine.isConnected) document.body.append(dropLine);
     dropLine.classList.toggle('is-horizontal', region === 'menu');
     if (region === 'menu') {
-      const items = menuTabs(), row = index - visibleTabs().length, box = items[Math.min(row, items.length - 1)].getBoundingClientRect();
+      const items = menuTabs(), box = items[Math.min(at, items.length - 1)].getBoundingClientRect();
       dropLine.style.left = box.left + 'px';
-      dropLine.style.top = (row < items.length ? box.top : box.bottom) + 'px';
+      dropLine.style.top = (at < items.length ? box.top : box.bottom) + 'px';
       dropLine.style.width = box.width + 'px';
       dropLine.style.height = '';
       return;
     }
-    const tabs = visibleTabs(), anchor = tabs.length ? tabs[Math.min(index, tabs.length - 1)].getBoundingClientRect() : more.getBoundingClientRect();
-    dropLine.style.left = (tabs.length && index >= tabs.length ? anchor.right : anchor.left) + 'px';
+    const tabs = visibleTabs(), anchor = tabs.length ? tabs[Math.min(at, tabs.length - 1)].getBoundingClientRect() : more.getBoundingClientRect();
+    dropLine.style.left = (tabs.length && at >= tabs.length ? anchor.right : anchor.left) + 'px';
     dropLine.style.top = anchor.top + 'px';
     dropLine.style.width = '';
     dropLine.style.height = anchor.height + 'px';
@@ -507,7 +590,7 @@ window.SidebarTabs = (function createSidebarTabs() {
     const at = dropAt(event.clientX, event.clientY), from = pinnedTags().findIndex(function same(item) { return tagKey(item) === tagKey(press.tag); });
     press.index = at.index < 0 || at.index === from || at.index === from + 1 ? -1 : at.index;
     press.region = at.region;
-    paintDrop(press.index, press.region);
+    paintDrop(press.index < 0 ? -1 : at.at, press.region);
   }
 
   /** @brief 松开：排到插入线处并保存，放进菜单时菜单留着显示新的顺序；没拖动就是单击。 @param {PointerEvent} event 松开或取消。 */
@@ -534,6 +617,8 @@ window.SidebarTabs = (function createSidebarTabs() {
     list.splice(to, 0, done.tag);
     if (menuTabs().length && window.NoteMenus) window.NoteMenus.close({ restoreFocus: false });
     if (!savePinned(list)) return;
+    // 拖进页签栏的页签排在落点上：末格换进来的页签（不是当前页签时）让出位置，按新的顺序排。
+    if (done.region === 'bar' && swapped && tagKey(swapped) !== tagKey(tagOf(ui.tab))) swapped = '';
     renderNotes();
     if (done.region === 'menu') openMenu({ dragging: true });
   }

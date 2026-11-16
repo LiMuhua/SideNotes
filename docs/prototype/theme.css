@@ -634,9 +634,32 @@ img.brand-mark.is-small {
   color: var(--sn-color-text-muted);
 }
 
-/* 当前页签不收起（第七次反馈）：别的页签都收起后仍放不下时（侧栏很窄、页签名很长），它的名字缩短。 */
+/* 末格（第八次反馈）：放不下时，最后一个显示的页签与「N ▾」合成一格，紧挨着，中间一条短竖线；从菜单选页签只换末格里的页签。 */
+.sidebar-tabs .tab-more.is-joined {
+  margin-left: calc(var(--sn-space-1) * -1);
+}
+
+.sidebar-tabs .tab-more.is-joined::before {
+  content: '';
+  position: absolute;
+  top: var(--sn-space-3);
+  bottom: var(--sn-space-3);
+  left: 0;
+  width: var(--sn-border-width);
+  background: var(--sn-color-border);
+}
+
+/* 末格页签的名字缩短（第八次反馈）：换进来的页签较宽或当前页签的条数放不下时，不挤掉前面的页签；名字最短留两个字，
+ * tabs.js 用看不见的 tab-name-probe（写着两个字，与页签同样的字体与字距）量出这个宽度。 */
 .sidebar-tabs .tab.is-squeezed {
   flex: 0 1 auto;
+}
+
+.sidebar-tabs .tab-name-probe {
+  position: absolute;
+  white-space: nowrap;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .sidebar-tabs .tab .tab-more-count {
@@ -813,6 +836,16 @@ body.is-dragging-tab * {
 
 .sidebar-navigation #header-search.is-open:focus-within {
   background-color: var(--sn-color-surface);
+}
+
+/* 磨砂玻璃（第八次反馈）：页签栏本身是一块玻璃，展开的搜索框不再在里面套一个框：去掉自己的边框、底色与底边的强调色线，
+ * 和页签在同一层，只留放大镜、输入框与清空按钮。 */
+[data-sn-dock='blocks'] .sidebar-navigation #header-search.is-open,
+[data-sn-dock='blocks'] .sidebar-navigation #header-search.is-open:focus-within,
+[data-sn-dock='blocks'] .sidebar-navigation #header-search.is-open.has-query {
+  border-color: transparent;
+  background-color: transparent;
+  background-image: none;
 }
 
 .sidebar-navigation.is-searching .sidebar-tabs {
@@ -1055,6 +1088,18 @@ body.is-dragging-tab * {
 
 .list-topline .list-summary-action:hover {
   background: var(--sn-color-accent-subtle);
+}
+
+/* 搜的词正好是已有标签的名称时，结果条数后面的「#开发 8 条」（第八次反馈）：点它改搜这个标签；条数用代码字体的弱化文字。 */
+.list-topline .word-tag-action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-2);
+}
+
+.list-topline .word-tag-count {
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-meta);
 }
 
 /* 搜索时筛选行左边的结果条数（与标签下拉里的条数相同的写法），标签下拉在搜索时不用。 */
@@ -1430,9 +1475,19 @@ body.is-dragging-tab * {
   scrollbar-color: var(--sn-color-border-strong) transparent;
 }
 
+/* 玻璃块的列表不留内边距，卡片与上面的玻璃块对齐。只纵向滚动（第八次反馈）：横向写成 visible 时与纵向的 auto 合算成 auto，
+ * 卡片受光描边外扩的一像素撑出了一条按默认高度画的横向滚动条。左右各留一像素给描边与外圈，再用负外边距抵消。 */
 [data-sn-dock='blocks'] .sidebar > .note-list {
-  padding: 0;
-  overflow: visible auto;
+  margin-left: calc(var(--sn-border-width) * -1);
+  padding: 0 var(--sn-border-width);
+  overflow: hidden auto;
+}
+
+/* 列表上下边缘的渐隐（第八次反馈）：卡片与组标题滚到列表的上边或下边时在 --sn-space-6 内逐渐变淡，不再被一刀截断；
+ * 只在那一侧还有内容时出现。app.js 的 fadeListEdges 按位置写入 --local-edge-fade。遮罩加在卡片自己身上而不是列表上：
+ * 列表带遮罩时，磨砂玻璃卡片的背景模糊只能取到列表里的内容，透出的壁纸不再模糊。 */
+.sidebar > .note-list > :is(.note-card, .search-group) {
+  mask-image: var(--local-edge-fade, none);
 }
 
 .note-list .empty-state {
@@ -4867,8 +4922,8 @@ body.is-dragging-attachment * {
 }
 
 [data-sn-dock='blocks'] .sidebar > .note-list {
-  margin-right: calc(var(--sn-space-3) * -1);
-  padding-right: 0;
+  margin-right: calc((var(--sn-space-3) + var(--sn-border-width)) * -1);
+  padding-right: var(--sn-border-width);
 }
 
 @supports selector(::-webkit-scrollbar) {
