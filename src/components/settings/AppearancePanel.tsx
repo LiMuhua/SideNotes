@@ -6,7 +6,7 @@
  * 「出入动画」为桌面端按需求新增的一行，复用宽度行的样式轨道。
  */
 
-import { useState } from 'react';
+import { useState, type KeyboardEvent } from 'react';
 import {
   ANIM_DURATION_RANGE,
   CARD_HEIGHT_RANGE,
@@ -15,8 +15,10 @@ import {
   HIDE_DELAYS,
   WIDTH_RANGE,
   parseDelay,
+  resolveTheme,
 } from '../../core/settings';
-import type { EdgeSide, Settings, ToastPosition } from '../../core/types';
+import { SURFACES, surfaceAttributes } from '../../core/surfaces';
+import type { EdgeSide, Settings, SurfaceMode, ToastPosition } from '../../core/types';
 import { useToast } from '../../hooks/useToast';
 import { Combobox } from './Combobox';
 import { ActionButton, Group, Help, RangeField, Row, SelectField, TextField, Toggle, classes, type SaveSettings } from './controls';
@@ -26,13 +28,6 @@ const THEMES: ReadonlyArray<readonly [Settings['theme'], string]> = [
   ['light', '浅色'],
   ['dark', '深色'],
   ['system', '跟随系统'],
-];
-
-const SURFACES: ReadonlyArray<readonly [Settings['surface'], string]> = [
-  ['standard', '经典'],
-  ['paper', '记录纸'],
-  ['glass', '磨砂玻璃'],
-  ['win11', 'Windows 11'],
 ];
 
 const EDGES: ReadonlyArray<readonly [EdgeSide, string]> = [
@@ -55,14 +50,63 @@ interface PanelProps {
   save: SaveSettings;
 }
 
-/** 明暗模式与界面材质：选择卡宽度由网格决定，不随文字撑开。 */
+/**
+ * 迷你侧栏：在元素上写入主题与明暗属性，里面用那一套令牌画出面板、标题、两张卡片（与原型 settings.js 的 miniSidebar 相同）。
+ */
+function MiniSidebar({ surface, theme }: { surface: SurfaceMode; theme: 'light' | 'dark' }) {
+  return (
+    <span className="mini-sidebar" {...surfaceAttributes(surface, theme)}>
+      <span className="mini-panel">
+        <span className="mini-line is-title" />
+        <span className="mini-card is-active">
+          <span className="mini-line" />
+          <span className="mini-line is-short" />
+        </span>
+        <span className="mini-card">
+          <span className="mini-line" />
+          <span className="mini-line is-accent" />
+        </span>
+      </span>
+    </span>
+  );
+}
+
+/**
+ * 单选组的键盘操作：方向键切换并立即生效，Home、End 到两端；焦点跟着移到新选中的一项。
+ */
+function moveRadio(event: KeyboardEvent<HTMLDivElement>): void {
+  const radios = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
+  const index = radios.indexOf(event.target as HTMLButtonElement);
+  if (index < 0) return;
+  const last = radios.length - 1;
+  const next =
+    event.key === 'ArrowRight' || event.key === 'ArrowDown'
+      ? (index + 1) % radios.length
+      : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+        ? (index - 1 + radios.length) % radios.length
+        : event.key === 'Home'
+          ? 0
+          : event.key === 'End'
+            ? last
+            : -1;
+  if (next < 0) return;
+  event.preventDefault();
+  radios[next].click();
+  radios[next].focus();
+}
+
+/**
+ * 明暗模式与主题：两行选项卡片，预览是用对应主题与明暗的令牌画出的迷你侧栏（components.md 第五节）。
+ * 「跟随系统」的预览左右各半，写出当前跟随到的明暗。
+ */
 function DisplayGroup({ settings, save }: PanelProps) {
+  const resolved = resolveTheme(settings.theme);
   return (
     <Group title="显示" className="settings-wide appearance-display">
       <div className="appearance-display-grid">
         <div className="settings-option-block">
           <Row title="明暗模式">
-            <div className="settings-choice-grid theme-grid" aria-label="明暗模式">
+            <div className="settings-choice-grid theme-grid" role="radiogroup" aria-label="明暗模式" onKeyDown={moveRadio}>
               {THEMES.map(([theme, label]) => {
                 const selected = settings.theme === theme;
                 return (
@@ -70,32 +114,49 @@ function DisplayGroup({ settings, save }: PanelProps) {
                     key={theme}
                     label={label}
                     className={classes('settings-choice theme-option', selected && 'selected active')}
-                    aria-pressed={selected}
-                    leading={
-                      <span className="theme-swatch theme-preview" data-choice={theme} data-theme={theme} aria-hidden="true" />
-                    }
+                    role="radio"
+                    aria-checked={selected}
+                    tabIndex={selected ? 0 : -1}
                     onClick={() => void save({ theme })}
-                  />
+                  >
+                    <span className="theme-preview" aria-hidden="true">
+                      {(theme === 'system' ? (['light', 'dark'] as const) : [theme]).map((tone) => (
+                        <MiniSidebar key={tone} surface={settings.surface} theme={tone} />
+                      ))}
+                    </span>
+                    <span className="choice-label">
+                      {label}
+                      {theme === 'system' ? (
+                        <span className="choice-hint">{`当前为${resolved === 'dark' ? '深色' : '浅色'}`}</span>
+                      ) : null}
+                    </span>
+                  </ActionButton>
                 );
               })}
             </div>
           </Row>
         </div>
         <div className="settings-option-block">
-          <Row title="界面材质">
-            <div className="surface-choice-grid" aria-label="界面材质">
-              {SURFACES.map(([surface, label]) => {
-                const selected = settings.surface === surface;
+          <Row title="主题">
+            <div className="surface-choice-grid" role="radiogroup" aria-label="主题" onKeyDown={moveRadio}>
+              {SURFACES.map((item) => {
+                const selected = settings.surface === item.id;
                 return (
                   <ActionButton
-                    key={surface}
-                    label={label}
+                    key={item.id}
+                    label={item.name}
                     className={classes('surface-choice theme-option', selected && 'selected active')}
-                    data-surface={surface}
-                    aria-pressed={selected}
-                    leading={<span className="theme-preview surface-preview" data-surface={surface} aria-hidden="true" />}
-                    onClick={() => void save({ surface })}
-                  />
+                    data-surface={item.id}
+                    role="radio"
+                    aria-checked={selected}
+                    tabIndex={selected ? 0 : -1}
+                    onClick={() => void save({ surface: item.id })}
+                  >
+                    <span className="theme-preview surface-preview" aria-hidden="true">
+                      <MiniSidebar surface={item.id} theme={resolved} />
+                    </span>
+                    <span className="choice-label">{item.name}</span>
+                  </ActionButton>
                 );
               })}
             </div>
@@ -246,10 +307,10 @@ export function AppearancePanel({ settings, save }: PanelProps) {
 
       <Group title="文字" className="settings-wide">
         <div className="settings-field-grid settings-typography">
-          <Row title="字体" description="用于全部界面文字，代码仍用等宽字体">
-            <FontPicker value={settings.fontFamily} onChoose={(fontFamily) => save({ fontFamily })} />
+          <Row title="字体" description="默认跟随主题；选了具体字体时替换界面与正文的字体，标题与代码的字体仍跟随主题">
+            <FontPicker value={settings.fontFamily} surface={settings.surface} onChoose={(fontFamily) => save({ fontFamily })} />
           </Row>
-          <Row title="字号" description="界面文字随之等比缩放，松开滑块后应用">
+          <Row title="字号">
             <RangeField
               label="字体大小"
               settingKey="fontSize"
@@ -263,7 +324,11 @@ export function AppearancePanel({ settings, save }: PanelProps) {
             />
           </Row>
         </div>
-        <div className="settings-font-preview">随手记录。 The quick brown fox · 0123456789</div>
+        <div className="settings-font-preview">
+          <p>随手记下一句话，不打断手头的工作；支持 Markdown 与 #标签。</p>
+          <p>The Quick Brown Fox Jumps Over the Lazy Dog.</p>
+          <p>{'0123456789 · ¥$€ @#%&*?! · 2026-11-08 · -> => != <= >= === //'}</p>
+        </div>
       </Group>
 
       <Group title="侧栏" className="settings-wide">
@@ -277,17 +342,14 @@ export function AppearancePanel({ settings, save }: PanelProps) {
                 onChange={(edge) => void save({ edge: edge === 'left' ? 'left' : 'right' })}
               />
             </Row>
-            <Row
-              title="移出后收起"
-              description="鼠标移出侧栏后多久收起，100–10000 毫秒"
-            >
+            <Row title="移出后收起">
               <HideDelayField value={settings.hideDelay} save={save} />
             </Row>
-            <Row title="编辑时保持展开" description="书写时鼠标移出也不收起">
+            <Row title="编辑时滚到顶部">
               <Toggle
-                label="编辑时保持展开"
-                checked={settings.protectEditing}
-                onChange={(protectEditing) => void save({ protectEditing })}
+                label="编辑时滚到顶部"
+                checked={settings.scrollOnEdit}
+                onChange={(scrollOnEdit) => void save({ scrollOnEdit })}
               />
             </Row>
           </div>
@@ -303,7 +365,7 @@ export function AppearancePanel({ settings, save }: PanelProps) {
               onSave={(width) => save({ width })}
             />
           </Row>
-          <Row title="出入动画" description="设为 0 关闭动画" className="sidebar-width-row">
+          <Row title="出入动画" className="sidebar-width-row">
             <RangeField
               label="出入动画时长"
               settingKey="animDuration"

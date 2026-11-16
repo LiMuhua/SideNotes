@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   boundedNumber,
   DEFAULT_SETTINGS,
+  normalizeFontFamily,
+  normalizePinnedTags,
   normalizeSettings,
   parseDelay,
   resolveFontFamily,
@@ -14,15 +16,19 @@ describe('设置校验', () => {
   it('空输入返回完整默认值', () => {
     const settings = normalizeSettings({});
     expect(settings.theme).toBe('light');
-    expect(settings.surface).toBe('standard');
+    expect(settings.surface).toBe('terminal');
     expect(settings.edge).toBe('right');
-    expect(settings.width).toBe(416);
-    expect(settings.fontFamily).toBe('Maple Mono NF CN');
-    expect(settings.fontSize).toBe(16);
-    expect(settings.settingsVersion).toBe(2);
+    expect(settings.width).toBe(400);
+    expect(settings.fontFamily).toBe('');
+    expect(settings.fontSize).toBe(12);
+    expect(settings.settingsVersion).toBe(3);
+    expect(settings.appIcon).toBe('door-smile-indigo');
+    expect(settings.pinnedTags).toEqual([]);
+    expect(settings.windowTabs).toBe('side');
+    expect(settings.scrollOnEdit).toBe(true);
     expect(settings.pageSize).toBe(10);
     expect(settings.trashDays).toBe(30);
-    expect(settings.protectEditing).toBe(true);
+    expect('protectEditing' in settings).toBe(false);
     expect(settings.cloud.enabled).toBe(false);
     expect(settings.cardMaxHeight).toBe(220);
     expect(settings.toastPosition).toBe('top-center');
@@ -31,21 +37,59 @@ describe('设置校验', () => {
     expect(settings.shortcuts).toEqual({});
   });
 
-  it('旧版本仍是默认的 Segoe UI 13px 时换成新的默认字体，改过的字体保留', () => {
-    const legacy = normalizeSettings({ fontFamily: 'Segoe UI', fontSize: 13 });
-    expect([legacy.fontFamily, legacy.fontSize]).toEqual(['Maple Mono NF CN', 16]);
-    expect(normalizeSettings({ fontFamily: 'Segoe UI', fontSize: 14 }).fontFamily).toBe('Segoe UI');
-    expect(normalizeSettings({ fontFamily: '', fontSize: 13 }).fontFamily).toBe('');
-    // 新版本中再选回 Segoe UI 13px 不会被改掉。
-    const chosen = normalizeSettings({ settingsVersion: 2, fontFamily: 'Segoe UI', fontSize: 13 });
+  it('版本 3 的迁移：standard 改为终端，旧默认字体改为跟随主题，用户的选择保留', () => {
+    // 0.7.3（版本 2）的默认设置：标准材质、Maple Mono NF CN 16px、宽 416；字号与宽度是用户可见的取值，原样保留。
+    const legacy = normalizeSettings({ settingsVersion: 2, surface: 'standard', fontFamily: 'Maple Mono NF CN', fontSize: 16, width: 416 });
+    expect([legacy.surface, legacy.fontFamily, legacy.fontSize, legacy.width]).toEqual(['terminal', '', 16, 416]);
+    for (const surface of ['paper', 'glass', 'win11', 'terminal', 'magazine'] as const) {
+      expect(normalizeSettings({ settingsVersion: 2, surface }).surface).toBe(surface);
+    }
+    // 版本 3 之前空值是「系统默认」，保留为「系统默认」；其它字体是用户选的，保留。
+    expect(normalizeSettings({ settingsVersion: 2, fontFamily: '' }).fontFamily).toBe('系统默认');
+    expect(normalizeSettings({ settingsVersion: 2, fontFamily: '微软雅黑' }).fontFamily).toBe('微软雅黑');
+    // 版本 1 的默认 Segoe UI 13px：字体跟随主题，字号换成默认值。
+    const first = normalizeSettings({ fontFamily: 'Segoe UI', fontSize: 13 });
+    expect([first.fontFamily, first.fontSize]).toEqual(['', 12]);
+    // 版本 3 起原样保存：再显式选择 Segoe UI 13px 不会被改掉。
+    const chosen = normalizeSettings({ settingsVersion: 3, fontFamily: 'Segoe UI', fontSize: 13 });
     expect([chosen.fontFamily, chosen.fontSize]).toEqual(['Segoe UI', 13]);
+    // 「编辑时保持展开」去掉，迁移后不再出现。
+    expect('protectEditing' in normalizeSettings({ settingsVersion: 2, protectEditing: false })).toBe(false);
+  });
+
+  it('字体：空值跟随主题，「跟随主题」写法同样记为空值', () => {
+    expect(normalizeFontFamily('跟随主题', 3)).toBe('');
+    expect(normalizeFontFamily('', 3)).toBe('');
+    expect(normalizeFontFamily('系统默认', 3)).toBe('系统默认');
+    expect(normalizeFontFamily('Maple Mono NF CN', 3)).toBe('Maple Mono NF CN');
+    expect(normalizeFontFamily('Maple Mono NF CN', 2)).toBe('');
+    expect(normalizeFontFamily(undefined, 2)).toBe('');
+    expect(normalizeFontFamily(42, 3)).toBe('');
+  });
+
+  it('固定的页签：去掉 #、空白、无效与重复的标签，保留顺序', () => {
+    expect(normalizePinnedTags(['#产品', ' 开发 ', '产品', 'Dev', 'dev', '带 空格', '', 7, 'a'.repeat(41)])).toEqual(['产品', '开发', 'Dev', '7']);
+    expect(normalizePinnedTags('产品')).toEqual([]);
+    expect(normalizePinnedTags(Array.from({ length: 60 }, (_, index) => `t${index}`))).toHaveLength(50);
+  });
+
+  it('应用图标与记录窗口的标签页：无法识别的取值回到默认', () => {
+    expect(normalizeSettings({ appIcon: 'stack-smile' }).appIcon).toBe('stack-smile');
+    expect(normalizeSettings({ appIcon: 'custom' }).appIcon).toBe('custom');
+    expect(normalizeSettings({ appIcon: 'removed-icon' }).appIcon).toBe('door-smile-indigo');
+    expect(normalizeSettings({ windowTabs: 'top' }).windowTabs).toBe('top');
+    expect(normalizeSettings({ windowTabs: 'left' }).windowTabs).toBe('side');
+    expect(normalizeSettings({ scrollOnEdit: false }).scrollOnEdit).toBe(false);
   });
 
   it('越界数值就近校正', () => {
     expect(normalizeSettings({ width: 100 }).width).toBe(360);
     expect(normalizeSettings({ width: 9999 }).width).toBe(720);
-    expect(normalizeSettings({ fontSize: 2 }).fontSize).toBe(12);
-    expect(normalizeSettings({ fontSize: 99 }).fontSize).toBe(20);
+    expect(normalizeSettings({ fontSize: 2 }).fontSize).toBe(8);
+    expect(normalizeSettings({ fontSize: 99 }).fontSize).toBe(24);
+    expect(normalizeSettings({ fontSize: 12.3 }).fontSize).toBe(12.5);
+    expect(normalizeSettings({ fontSize: 'abc' }).fontSize).toBe(12);
+    expect(normalizeSettings({ fontSize: null }).fontSize).toBe(12);
     expect(normalizeSettings({ pageSize: 1 }).pageSize).toBe(5);
     expect(normalizeSettings({ pageSize: 500 }).pageSize).toBe(100);
     expect(normalizeSettings({ trashDays: 0 }).trashDays).toBe(1);
@@ -71,7 +115,7 @@ describe('设置校验', () => {
 
   it('未知枚举值回落到默认', () => {
     expect(normalizeSettings({ theme: 'neon' }).theme).toBe('light');
-    expect(normalizeSettings({ surface: 'unknown' }).surface).toBe('standard');
+    expect(normalizeSettings({ surface: 'unknown' }).surface).toBe('terminal');
     expect(normalizeSettings({ storageLocation: 'cloud' }).storageLocation).toBe('appdata');
     expect(normalizeSettings({ cloud: { provider: 'dropbox' } }).cloud.provider).toBe('synology');
     expect(normalizeSettings({ toastPosition: 'left' }).toastPosition).toBe('top-center');
@@ -89,7 +133,7 @@ describe('设置校验', () => {
       edge: 'left',
       width: 500,
       hideDelay: 1000,
-      protectEditing: false,
+      pinnedTags: ['产品', '开发'],
       lazyLoading: false,
       cloud: { enabled: true, provider: 'onedrive', account: 'a@b.com' },
     });
@@ -98,7 +142,7 @@ describe('设置校验', () => {
     expect(settings.edge).toBe('left');
     expect(settings.width).toBe(500);
     expect(settings.hideDelay).toBe(1000);
-    expect(settings.protectEditing).toBe(false);
+    expect(settings.pinnedTags).toEqual(['产品', '开发']);
     expect(settings.lazyLoading).toBe(false);
     expect(settings.cloud.enabled).toBe(true);
     expect(settings.cloud.provider).toBe('onedrive');
@@ -131,8 +175,8 @@ describe('设置校验', () => {
     expect(sidebarWindowWidth(360, 12)).toBe(332);
   });
 
-  it('字体族过滤引号与反斜杠', () => {
-    expect(resolveFontFamily('')).toContain('Segoe UI');
+  it('字体族：跟随主题不覆盖主题字体，过滤引号与反斜杠', () => {
+    expect(resolveFontFamily('')).toBeNull();
     expect(resolveFontFamily('系统默认')).toContain('Segoe UI');
     expect(resolveFontFamily('Microsoft YaHei')).toBe('"Microsoft YaHei", "Microsoft YaHei UI", sans-serif');
     expect(resolveFontFamily('A"; color:red')).not.toContain('"A"');

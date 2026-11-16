@@ -24,23 +24,32 @@ export function classes(...names: Array<string | false | null | undefined>): str
 /** 原型 button() 中只放图标、不追加文字的样式。 */
 const ICON_ONLY_CLASSES = ['icon-button', 'tag-remove', 'tags-more', 'note-image-button'];
 
-export interface ActionButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'type' | 'children'> {
-  /** 可访问名称，同时作为悬停提示与按钮文字。 */
+export interface ActionButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'type'> {
+  /** 可访问名称，同时作为按钮文字。 */
   label: string;
   icon?: IconName;
   /** 放在图标与文字之前的内容，对应原型中 prepend 的预览块。 */
   leading?: ReactNode;
+  /** 给出时代替图标与文字作为按钮的内容（例如带预览的选项卡片），名称仍写在 aria-label 中。 */
+  children?: ReactNode;
   ref?: Ref<HTMLButtonElement>;
 }
 
-/** 与原型 button()/action() 等价：图标在前、文字在后；纯图标按钮不显示文字。 */
-export function ActionButton({ label, icon, leading, className = 'button secondary compact', ...rest }: ActionButtonProps) {
+/**
+ * 与原型 button()/action() 等价：图标在前、文字在后；纯图标按钮不显示文字。
+ * 按钮不加悬停提示，名称只写在 aria-label 中（DS-8）。
+ */
+export function ActionButton({ label, icon, leading, children, className = 'button secondary compact', ...rest }: ActionButtonProps) {
   const iconOnly = className.split(/\s+/).some((name) => ICON_ONLY_CLASSES.includes(name));
   return (
-    <button type="button" className={className} data-action="" aria-label={label} title={label} {...rest}>
-      {leading}
-      {icon ? <Icon name={icon} /> : null}
-      {iconOnly ? null : label}
+    <button type="button" className={className} data-action="" aria-label={label} {...rest}>
+      {children ?? (
+        <>
+          {leading}
+          {icon ? <Icon name={icon} /> : null}
+          {iconOnly ? null : label}
+        </>
+      )}
     </button>
   );
 }

@@ -9,25 +9,30 @@
 
 import { useEffect, useState } from 'react';
 import * as bridge from '../../core/bridge';
-import { matchFonts, resolveFont } from '../../core/fonts';
+import { FOLLOW_THEME_LABEL, SYSTEM_FONT_LABEL, matchFonts, resolveFont } from '../../core/fonts';
+import { THEME_FONTS, surfaceSpec } from '../../core/surfaces';
+import type { SurfaceMode } from '../../core/types';
 import { useToast } from '../../hooks/useToast';
 import { Combobox, type ComboOption } from './Combobox';
 
-/** 常见字体：随应用打包的默认字体在前，其余与原型列表一致。「系统默认」固定在列表末尾。 */
+/** 常见字体与五套主题用到的字体（与原型 settings.js 的 FONTS 相同）。「跟随主题」在最前，「系统默认」固定在列表末尾。 */
 const FONTS = [
   'Maple Mono NF CN',
   'Microsoft YaHei UI',
   'Microsoft YaHei',
+  'Segoe UI Variable Text',
   'Segoe UI',
   'SimSun',
   'KaiTi',
-  'Arial',
+  'Georgia',
+  'Inter',
+  'Archivo',
+  'Cascadia Mono',
   'Consolas',
   'Noto Sans CJK SC',
 ];
 
-const DEFAULT_LABEL = '系统默认';
-const DEFAULT_OPTION: ComboOption = { value: DEFAULT_LABEL, label: DEFAULT_LABEL, className: 'font-default-option' };
+const SYSTEM_OPTION: ComboOption = { value: SYSTEM_FONT_LABEL, label: SYSTEM_FONT_LABEL, className: 'font-default-option' };
 
 /* ==================== 系统字体 ==================== */
 
@@ -45,9 +50,20 @@ function loadSystemFonts(): Promise<string[]> {
 
 /* ==================== 组合框 ==================== */
 
-export function FontPicker({ value, onChoose }: { value: string; onChoose: (family: string) => Promise<boolean> }) {
+/**
+ * 字体组合框：空值显示为「跟随主题」，候选写出当前主题与它的界面字体；其余候选用各自的字体显示。
+ */
+export function FontPicker({
+  value,
+  surface,
+  onChoose,
+}: {
+  value: string;
+  surface: SurfaceMode;
+  onChoose: (family: string) => Promise<boolean>;
+}) {
   const toast = useToast();
-  const saved = value || DEFAULT_LABEL;
+  const saved = value || FOLLOW_THEME_LABEL;
   const [fonts, setFonts] = useState(installedFonts);
 
   useEffect(() => {
@@ -60,12 +76,24 @@ export function FontPicker({ value, onChoose }: { value: string; onChoose: (fami
     };
   }, []);
 
-  const families = [...new Set([...FONTS, ...fonts, value].filter((family) => family && family !== DEFAULT_LABEL))];
+  const families = [
+    ...new Set([...FONTS, ...fonts, value].filter((family) => family && family !== SYSTEM_FONT_LABEL && family !== FOLLOW_THEME_LABEL)),
+  ];
+  const follow: ComboOption = {
+    value: FOLLOW_THEME_LABEL,
+    label: FOLLOW_THEME_LABEL,
+    detail: `${surfaceSpec(surface).name} · ${THEME_FONTS[surface]}`,
+  };
 
-  /** 输入时只列出匹配的字体（见 matchFonts），末尾固定「系统默认」。 */
+  /** 输入时只列出匹配的字体（见 matchFonts）；最前是「跟随主题」，末尾固定「系统默认」。 */
   const options = (typed: string | null): ComboOption[] => [
-    ...matchFonts(families, typed ?? '').map((family) => ({ value: family, label: family })),
-    DEFAULT_OPTION,
+    ...(typed && !FOLLOW_THEME_LABEL.includes(typed.trim()) ? [] : [follow]),
+    ...matchFonts(families, typed ?? '').map((family) => ({
+      value: family,
+      label: family,
+      fontFamily: `"${family.replace(/["\\]/g, '')}"`,
+    })),
+    SYSTEM_OPTION,
   ];
 
   return (
@@ -77,7 +105,7 @@ export function FontPicker({ value, onChoose }: { value: string; onChoose: (fami
       placeholder="选择或输入字体"
       options={options}
       onCommit={(raw) => {
-        const family = resolveFont(families, raw, DEFAULT_LABEL);
+        const family = resolveFont(families, raw);
         if (family === null) {
           toast(`没有匹配“${raw.trim()}”的字体，字体未更改`, null, true);
           return false;

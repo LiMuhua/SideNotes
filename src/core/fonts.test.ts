@@ -12,14 +12,19 @@ describe('字体候选', () => {
   });
 
   it('回车选用第一个候选，没有候选时不允许设置', () => {
-    expect(resolveFont(FAMILIES, 'Maple', '系统默认')).toBe('Maple Mono NF CN');
-    expect(resolveFont(FAMILIES, 'arial', '系统默认')).toBe('Arial');
-    expect(resolveFont(FAMILIES, '不存在的字体', '系统默认')).toBeNull();
+    expect(resolveFont(FAMILIES, 'Maple')).toBe('Maple Mono NF CN');
+    expect(resolveFont(FAMILIES, 'arial')).toBe('Arial');
+    expect(resolveFont(FAMILIES, '不存在的字体')).toBeNull();
   });
 
-  it('空输入、「系统默认」或其中的文字选用系统默认', () => {
-    expect(resolveFont(FAMILIES, '', '系统默认')).toBe('');
-    expect(resolveFont(FAMILIES, '系统默认', '系统默认')).toBe('');
-    expect(resolveFont(FAMILIES, '系统', '系统默认')).toBe('');
+  it('空输入或「跟随主题」中的文字选用跟随主题（空串）', () => {
+    expect(resolveFont(FAMILIES, '')).toBe('');
+    expect(resolveFont(FAMILIES, '跟随主题')).toBe('');
+    expect(resolveFont(FAMILIES, '主题')).toBe('');
+  });
+
+  it('「系统默认」或其中的文字选用系统默认', () => {
+    expect(resolveFont(FAMILIES, '系统默认')).toBe('系统默认');
+    expect(resolveFont(FAMILIES, '系统')).toBe('系统默认');
   });
 });

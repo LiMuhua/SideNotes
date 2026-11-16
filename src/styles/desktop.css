@@ -1,12 +1,13 @@
-/* ==================== 桌面端窗口适配 ====================
+/* ==================== 桌面端窗口适配（旧样式层） ====================
  *
- * 原型 CSS 原样保留在 prototype.css 中以维持视觉一致；此处只覆盖
- * 「网页内模拟窗口」与「真实桌面窗口」之间的差异：
- * - 侧栏与速记浮窗各自占满所属窗口，不再使用页面内的平移动画；
- * - 原型用于演示的画布、介绍文案与边缘热区在桌面端不存在；
- * - 无边框窗口需要自定义拖动区域与窗口圆角。
+ * 0.7.3 为桌面窗口写的样式：侧栏与速记浮窗各自铺满所属窗口、无边框窗口的拖动区域、
+ * 桌面端独有的部件（附件弹窗、数据与同步、快照、拖入文件等）。
+ * 与 prototype.css 一样放在级联层 legacy 中：原型第二版的 theme.css 写了的属性一律以它为准；
+ * 只属于桌面窗口、又必须压过 theme.css 的少数规则写在不分层的 window.css。
+ * 颜色只引用设计令牌（docs/design-system/tokens/），由 src/styles/styles.test.ts 检查。
  */
 
+@layer legacy {
 html,
 body {
   width: 100%;
@@ -102,7 +103,7 @@ body[data-window='sidebar'] .sidebar-navigation input {
 
 /* 设置窗口打开期间侧栏随之保持展开：固定按钮显示为按下，再加一圈虚线，表示这是随设置窗口的临时固定。 */
 body[data-window='sidebar'] .window-actions .icon-button.is-linked {
-  outline: 1px dashed color-mix(in srgb, var(--accent) 60%, transparent);
+  outline: 1px dashed color-mix(in srgb, var(--sn-color-accent) 60%, transparent);
   outline-offset: -3px;
 }
 
@@ -127,7 +128,7 @@ body[data-window='sidebar'] .sidebar-resizer[data-edge='left'] {
 
 body[data-window='sidebar'] .sidebar-resizer:hover,
 body[data-window='sidebar'] .sidebar-resizer:focus-visible {
-  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  background: color-mix(in srgb, var(--sn-color-accent) 24%, transparent);
 }
 
 /* 修正原型的层级缺陷：列表顶栏（z-index 6）低于新建卡片（z-index 12），
@@ -151,14 +152,6 @@ body[data-window='sidebar'] .composer-dock > #quick-composer.sidebar-composer {
   margin: 3px 0 4px;
 }
 
-/* 列表顶部留出 6px 并渐隐：卡片滚到新建卡片下方的边界时淡出，而不是被一刀切断。
- * 未滚动时首张卡片从渐隐区之下开始，完整显示。 */
-body[data-window='sidebar'] .sidebar .note-list {
-  padding-top: 6px;
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 6px);
-  mask-image: linear-gradient(to bottom, transparent 0, #000 6px);
-}
-
 /* 卡片正文的最大高度由设置决定（按 13px 字号计），超出部分沿用原型的渐隐，悬停时提示双击查看全文。 */
 body[data-window='sidebar'] .note-card > .note-content {
   max-height: var(--note-content-max-height, 220px);
@@ -174,122 +167,8 @@ body[data-window='sidebar'] .note-card > .note-content {
 }
 
 /* ==================== 提示条 ====================
- * 原型的提示条贴着演示页面底部、按侧栏偏移居中，白底细边与卡片几乎一样，在窗口里分不出来。
- * 桌面端改用反色：浅色主题下深底浅字、深色主题下浅底深字（背景取 --ink，文字取 --paper），
- * 左侧一条强调色，图标放在强调色圆底中，投影加重；错误提示用深红底。
- * 弹出位置由设置决定（body 上的 data-toast-position）：顶部正中（默认）、右上角或底部正中。
- * 宽度按内容计算，上限为窗口宽度减 28px；固定定位元素在 left: 50% 时自适应宽度最多只有视口的一半，
- * 稍长的提示就会折行，所以用 max-content 再平移居中。 */
-
-body[data-window] .toast-region {
-  top: auto;
-  right: auto;
-  bottom: 18px;
-  left: 50%;
-  width: max-content;
-  max-width: calc(100% - 28px);
-  transform: translateX(-50%);
-  align-items: center;
-}
-
-body[data-window][data-toast-position='top-center'] .toast-region,
-body[data-window][data-toast-position='top-right'] .toast-region {
-  top: 14px;
-  bottom: auto;
-  /* 新的提示贴在顶部，旧的依次往下。 */
-  flex-direction: column-reverse;
-}
-
-body[data-window][data-toast-position='top-right'] .toast-region {
-  right: 14px;
-  left: auto;
-  transform: none;
-  align-items: flex-end;
-}
-
-body[data-window] .toast {
-  gap: 10px;
-  padding: 10px 10px 10px 12px;
-  border: 0;
-  border-left: 3px solid color-mix(in srgb, var(--accent) 55%, #fff);
-  border-radius: 10px;
-  background: var(--ink);
-  color: var(--paper);
-  box-shadow:
-    0 14px 36px rgb(16 24 16 / 0.32),
-    0 3px 8px rgb(16 24 16 / 0.18);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.5;
-}
-
-body[data-window] .toast > .icon {
-  box-sizing: content-box;
-  flex-shrink: 0;
-  width: 14px;
-  height: 14px;
-  padding: 4px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--accent) 45%, transparent);
-  color: color-mix(in srgb, var(--accent) 35%, #fff);
-}
-
-body[data-window] .toast .toast-action {
-  border-left-color: color-mix(in srgb, var(--paper) 28%, transparent);
-  color: color-mix(in srgb, var(--accent) 40%, var(--paper));
-}
-
-body[data-window] .toast .toast-action:hover {
-  text-decoration: underline;
-}
-
-body[data-window] .toast .icon-button {
-  color: color-mix(in srgb, var(--paper) 72%, transparent);
-}
-
-body[data-window] .toast .icon-button:hover {
-  background: color-mix(in srgb, var(--paper) 16%, transparent);
-  color: var(--paper);
-}
-
-/* 错误提示用深红底，两种主题下都与普通提示一眼分开。 */
-body[data-window] .toast.error {
-  border-left-color: #f0b4a9;
-  background: #9b3e39;
-  color: #fff;
-}
-
-body[data-window] .toast.error > .icon {
-  background: rgb(255 255 255 / 0.18);
-  color: #fff;
-}
-
-body[data-window] .toast.error .toast-action,
-body[data-window] .toast.error .icon-button {
-  border-left-color: rgb(255 255 255 / 0.3);
-  color: #fff;
-}
-
-body[data-window][data-toast-position^='top'] .toast {
-  animation: toast-drop-in 0.2s ease;
-}
-
-@keyframes toast-drop-in {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  body[data-window] .toast {
-    animation: none !important;
-  }
-}
+ * 外观与位置都按原型第二版写在 theme.css：反色，默认在标题区下方正中，
+ * 「通知位置」写在根节点的 data-sn-toast 上（App.tsx）。 */
 
 /* ==================== 速记浮窗 ==================== */
 
@@ -346,7 +225,7 @@ body[data-window='capture'] .capture-body {
 .live-markdown-editor.is-empty::before {
   content: attr(data-placeholder);
   display: block;
-  color: #97a38c;
+  color: var(--sn-color-text-muted);
   font-size: 12px;
   line-height: 1.8;
   white-space: pre-line;
@@ -386,7 +265,7 @@ body[data-window='capture'] .capture-body {
 
 .md-quote {
   padding-left: 10px;
-  border-left: 2px solid #b5c6a3;
+  border-left: 2px solid var(--sn-color-border-strong);
   color: var(--muted);
 }
 
@@ -487,7 +366,7 @@ body[data-window='capture'] .capture-body {
   height: 14px;
   margin-right: 6px;
   padding: 0;
-  border: 1px solid #b6c6a6;
+  border: 1px solid var(--sn-color-border-strong);
   border-radius: 3px;
   background: var(--card);
   color: var(--accent);
@@ -618,9 +497,9 @@ body[data-window='capture'] .capture-body {
   margin: 0 20px 10px;
   padding: 10px 11px;
   border-radius: 8px;
-  background: #f3f0e4;
-  border: 1px solid #e8dec1;
-  color: #8c7b47;
+  background: var(--sn-color-warning-subtle);
+  border: 1px solid color-mix(in srgb, var(--sn-color-warning) 30%, transparent);
+  color: var(--sn-color-warning);
   font-size: 10px;
   line-height: 1.7;
   flex-shrink: 0;
@@ -634,21 +513,9 @@ body[data-window='capture'] .capture-body {
 }
 
 .desktop-notice.is-error {
-  background: #f9ede7;
-  border-color: #ead4c8;
-  color: var(--danger);
-}
-
-body[data-theme='dark'] .desktop-notice {
-  background: #3b3925;
-  border-color: #555034;
-  color: #c6b578;
-}
-
-body[data-theme='dark'] .desktop-notice.is-error {
-  background: #432f28;
-  border-color: #614134;
-  color: #e3aa92;
+  background: var(--sn-color-danger-subtle);
+  border-color: color-mix(in srgb, var(--sn-color-danger) 30%, transparent);
+  color: var(--sn-color-danger);
 }
 
 /* 加载态：首次读取数据库期间保持窗口安静。 */
@@ -694,7 +561,7 @@ body[data-theme='dark'] .desktop-notice.is-error {
  * 可以调整大小，最小 720×560 网页像素，见 windows.rs 的 place_settings。 */
 
 body[data-window='settings'] {
-  background: var(--card);
+  background: var(--sn-color-surface);
 }
 
 body[data-window='settings'] #root {
@@ -723,76 +590,7 @@ body[data-window='settings'] .settings-modal > .modal-header {
   gap: 3px;
 }
 
-/* ==================== 编辑焦点与浮层层次 ====================
- *
- * 原型中新建卡片始终带外圈光晕，编辑中的卡片只把边框加深一档，两者同时出现时
- * 视觉重点落在新建卡片上。桌面端调整为「正在输入的地方才强调」：
- * - 新建卡片保持实线边框与工具栏，未聚焦时去掉光晕，与记录卡片同级；聚焦后才强调。
- * - 编辑中的卡片使用强调色边框、外圈与投影，其余卡片与新建卡片退后，悬停时恢复。
- * - 卡片菜单比卡片高一层：边框更深、投影更重，所属卡片同时高亮，便于区分。 */
-
-body[data-window='sidebar'] .composer-dock > #quick-composer.sidebar-composer {
-  border-color: color-mix(in srgb, var(--accent) 26%, var(--line));
-  background: var(--card);
-  box-shadow: 0 1px 3px #283e2108;
-  transition:
-    border-color 0.16s,
-    box-shadow 0.16s,
-    opacity 0.16s;
-}
-
-body[data-window='sidebar'] .composer-dock > #quick-composer.sidebar-composer:focus-within,
-body[data-window='sidebar'] #note-list .note-card.is-editing {
-  border-color: color-mix(in srgb, var(--accent) 62%, var(--card));
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent),
-    0 12px 28px -12px #293c2559;
-}
-
-body[data-window='sidebar'] #note-list .note-card {
-  transition:
-    border-color 0.16s,
-    box-shadow 0.16s,
-    transform 0.16s,
-    opacity 0.16s;
-}
-
-/* 选中的卡片：单击与指针悬停共用同一个选中状态（悬停即选中），只有一种高亮，统一用绿色，
- * 不随界面材质的强调色变化。高亮的卡片就是 Ctrl+C 复制、Enter 编辑的对象；指针离开卡片后，
- * 最后选中的一张保持高亮。原型给获得焦点的卡片另画一圈外框，与选中高亮叠在一起像两种状态，这里去掉。 */
-body[data-window='sidebar'] {
-  --note-selected: #4d714f;
-}
-
-body[data-window='sidebar'][data-theme='dark'] {
-  --note-selected: #9bbd85;
-}
-
-body[data-window='sidebar'] #note-list > .note-card.is-current:not(.is-editing) {
-  border-color: color-mix(in srgb, var(--note-selected) 72%, var(--card));
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--note-selected) 32%, transparent),
-    0 4px 16px #3d58250b;
-}
-
-body[data-window='sidebar'] #note-list > .note-card:focus-visible {
-  outline: none;
-}
-
-/* 拖动排序、框选期间悬停不改变选中，原型的悬停边框（win11 材质下为蓝色）改为浅绿。 */
-body[data-window='sidebar'] #note-list > .note-card:not(.is-current):not(.is-editing):hover {
-  border-color: color-mix(in srgb, var(--note-selected) 38%, var(--line));
-}
-
-body[data-window='sidebar'] .sidebar.has-editing #note-list > .note-card:not(.is-editing),
-body[data-window='sidebar'] .sidebar.has-editing .composer-dock > #quick-composer.sidebar-composer:not(:focus-within) {
-  opacity: 0.56;
-}
-
-body[data-window='sidebar'] .sidebar.has-editing #note-list > .note-card:not(.is-editing):hover,
-body[data-window='sidebar'] .sidebar.has-editing .composer-dock > #quick-composer.sidebar-composer:hover {
-  opacity: 0.92;
-}
+/* ==================== 拖动中的元素 ==================== */
 
 /* 拖动图片或文件引用：被拖的元素变淡，目标卡片使用原型的投放高亮（is-drop-target），全程显示抓取手势。 */
 body.is-dragging-item,
@@ -809,57 +607,6 @@ body.is-dragging-item * {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* 打开菜单的卡片：与菜单对应，提示当前操作的是哪一条记录。 */
-body[data-window='sidebar'] #note-list .note-card.is-menu-open {
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--card));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
-}
-
-.note-context-menu {
-  /* 比白色卡片略灰一档，配合更重的投影浮在卡片之上，接近系统菜单的观感。 */
-  background: color-mix(in srgb, var(--card) 97%, var(--ink));
-  border-color: color-mix(in srgb, var(--ink) 18%, var(--card));
-  box-shadow:
-    0 22px 48px -12px #1720195c,
-    0 8px 20px -8px #17201938,
-    0 0 0 1px #1720190f;
-  backdrop-filter: blur(18px) saturate(1.2);
-  transform-origin: top left;
-  animation: note-menu-pop 120ms cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-
-@keyframes note-menu-pop {
-  from {
-    opacity: 0;
-    transform: translateY(-3px) scale(0.97);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-body[data-theme='dark'] .note-context-menu {
-  background: color-mix(in srgb, var(--card) 86%, #fff);
-  border-color: #ffffff21;
-  box-shadow:
-    0 20px 44px -8px #000000a6,
-    0 6px 14px -4px #00000066;
-}
-
-body[data-theme='dark'] .composer-dock > #quick-composer.sidebar-composer:focus-within,
-body[data-theme='dark'] #note-list .note-card.is-editing {
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent),
-    0 14px 30px -12px #000000b3;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .note-context-menu {
-    animation: none;
-  }
 }
 
 /* 设置窗口可以调整大小：「侧栏」分组首行的三项按内容取宽度，标签与下拉框始终完整显示；
@@ -1161,7 +908,7 @@ body[data-window='settings'] .settings-delay-field > .settings-runtime-suffix {
 .attachment-dialog-source textarea:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-soft);
+  box-shadow: 0 0 0 2px var(--sn-color-accent-subtle);
 }
 
 .attachment-dialog-actions {
@@ -1272,7 +1019,7 @@ body[data-window='sidebar'] .filter-banner-clear:hover {
 
 body[data-window='sidebar'] .sidebar-navigation.has-search-query #header-search.is-open {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-soft);
+  box-shadow: 0 0 0 2px var(--sn-color-accent-subtle);
 }
 
 /* ==================== 数据与同步 ====================
@@ -1324,7 +1071,7 @@ body[data-window='settings'] .data-dashboard .data-value {
 }
 
 body[data-window='settings'] .data-dashboard .data-value.is-warning {
-  color: #9b8350;
+  color: var(--sn-color-warning);
 }
 
 body[data-window='settings'] .data-dashboard .data-row-control .button {
@@ -1424,7 +1171,7 @@ body[data-window='settings'] .snapshot-meta {
   width: 2px;
   border-radius: 1px;
   background: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-soft);
+  box-shadow: 0 0 0 2px var(--sn-color-accent-subtle);
   pointer-events: none;
 }
 
@@ -1435,13 +1182,13 @@ body[data-window='settings'] .snapshot-meta {
   padding: 4px 8px;
   overflow: hidden;
   border-radius: 6px;
-  background: var(--accent);
-  color: #fff;
+  background: var(--sn-color-accent);
+  color: var(--sn-color-on-accent);
   font-size: 11px;
   line-height: 1.5;
   white-space: nowrap;
   text-overflow: ellipsis;
-  box-shadow: 0 6px 18px color-mix(in srgb, #1d2a1d 22%, transparent);
+  box-shadow: var(--sn-shadow-md);
   pointer-events: none;
 }
 
@@ -1538,4 +1285,5 @@ body[data-window='settings'] .settings-modal .settings-runtime-value {
 
 body[data-window='settings'] .settings-modal .settings-runtime-value input[type='number'] {
   height: 28px !important;
+}
 }

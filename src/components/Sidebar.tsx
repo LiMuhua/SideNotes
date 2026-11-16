@@ -807,7 +807,10 @@ export function Sidebar() {
   );
   const holdWhileFocused = Boolean(
     interactions.hasSelection ||
-      (state.settings.protectEditing && (editing || tagsExpandedId || (composerActive && draftPending))),
+      // 编辑期间一律保持展开（原型第二版去掉了「编辑时保持展开」的开关）。
+      editing ||
+      tagsExpandedId ||
+      (composerActive && draftPending),
   );
   useEffect(() => {
     holdRef.current = hold;

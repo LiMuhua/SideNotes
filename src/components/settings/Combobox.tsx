@@ -16,6 +16,10 @@ export interface ComboOption {
   label: string;
   /** 附加类名，如「使用输入的字体」一项。 */
   className?: string;
+  /** 名称后面的说明，例如「跟随主题」写出当前主题的字体。 */
+  detail?: string;
+  /** 候选自己的字体（字体候选用各自的字体显示）。 */
+  fontFamily?: string;
 }
 
 export interface ComboboxProps {
@@ -164,9 +168,13 @@ export function Combobox({ text, options, selected, label, placeholder, commitOn
             tabIndex={-1}
             role="option"
             aria-selected={choice.value === selected}
+            style={choice.fontFamily ? { fontFamily: choice.fontFamily } : undefined}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => void commit(choice.value)}
-          />
+          >
+            {choice.label}
+            {choice.detail ? <span className="font-option-detail">{choice.detail}</span> : null}
+          </ActionButton>
         ))}
       </div>
     </div>

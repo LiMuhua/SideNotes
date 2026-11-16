@@ -351,6 +351,21 @@
 
 **代价**：备份的体积随附件增大；导入时按附件子文件夹合并，数据目录中已有的同名文件夹不会被备份中的内容替换。
 
+## 34. 桌面端的样式按原型第二版的层次组织
+
+**决定**：2026-11-16 实现原型第二版（T76）时，三个窗口的样式按原型的层次加载（`src/main.tsx`）：内置字体，直接引用的设计令牌（`docs/design-system/tokens/` 的 `base.css` 与五套主题），旧样式层，原型第二版的样式，最后是桌面窗口适配。
+
+- 旧样式层 `legacy`：`prototype.css` 换成原型令牌化后的旧样式（`styles.css` 与 v2–v8），`desktop.css` 是 0.7.3 为桌面窗口写的样式，写死的颜色换成令牌，被第二版取代的部分（绿色选中、编辑时其余卡片变淡、提示条的外观、列表顶部的渐隐）删掉。两份都整份放在 `@layer legacy` 中。
+- `theme.css`：移植自原型的 `docs/prototype/theme.css`，只去掉「模拟桌面」，不分层，写了的属性一律压过旧样式层。
+- `window.css`：不分层，排在最后，只写让面板铺满所属窗口、必须压过 `theme.css` 的少数规则。
+- 主题、明暗与 6 项结构差异写在根节点的 `data-sn-*` 上（`src/core/surfaces.ts`，测试与 Playground 的 `surfaces.ts` 逐项比对）；「通知位置」写在 `data-sn-toast` 上。
+- 按视口宽高生效的媒体查询（原型的窄屏与手机形态）由 `vite.config.ts` 的 `stripViewportMedia` 从 `prototype.css` 与 `theme.css` 中去掉。
+- `src/styles/styles.test.ts` 检查：引用的 `--sn-*` 都在令牌表中，不定义 `--sn-*`；`theme.css` 与 `window.css` 不写死颜色、像素、rem 与时长（行尾注明「固定」的除外）；旧样式层不写死颜色、不再用 `data-theme`、`data-surface`。
+
+**原因**：桌面端的 DOM 与原型同源（类名一致），原型第二版的外观就是在旧样式上用 `theme.css` 覆盖出来的；照搬同样的层次，桌面端的计算样式与原型一致（五套主题的浅色、深色逐项比对相同），以后同步原型的改动也只需对照同名文件。整体改写成 Playground 的组件与样式，要重写侧栏与设置的全部交互，风险大。
+
+**代价**：旧样式层与 `theme.css` 之间靠级联层决定结果，层内的 `!important` 反而压过 `theme.css`；`theme.css` 是原型文件的副本，原型改动后要手动同步；`prototype.css` 中仍有大量旧规则只是被覆盖，没有删掉。
+
 ## 设计系统（DS01）
 
 以下决策属于 `design-system` 分支的设计系统工作，用 `DS-` 编号，与应用的决策编号分开，合并时不会冲突。

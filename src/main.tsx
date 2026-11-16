@@ -11,9 +11,19 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 
 import { App } from './App';
 import { isDesktop } from './core/bridge';
+// 样式的层次：内置字体 → 设计令牌（直接引用 docs/design-system/tokens/，与原型、Playground 共用一份）
+// → 旧样式层 legacy（prototype.css、desktop.css）→ 原型第二版的 theme.css → 桌面窗口适配 window.css。
 import './styles/fonts.css';
+import '../docs/design-system/tokens/base.css';
+import '../docs/design-system/tokens/terminal.css';
+import '../docs/design-system/tokens/magazine.css';
+import '../docs/design-system/tokens/paper.css';
+import '../docs/design-system/tokens/win11.css';
+import '../docs/design-system/tokens/glass.css';
 import './styles/prototype.css';
 import './styles/desktop.css';
+import './styles/theme.css';
+import './styles/window.css';
 
 /** 当前窗口承担的角色。 */
 export type WindowRole = 'sidebar' | 'capture' | 'settings';

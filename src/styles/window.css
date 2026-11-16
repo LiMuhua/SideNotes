@@ -1,0 +1,34 @@
+/* ==================== 桌面窗口适配（不分层，排在 theme.css 之后） ====================
+ *
+ * 原型中侧栏、速记浮窗与设置都是页面里的面板，theme.css 按页面给出它们的位置与尺寸；
+ * 桌面端每个窗口就是一个面板，这里让面板铺满所属窗口，只写必须压过 theme.css 的少数规则。
+ * 其余桌面端的样式在旧样式层的 desktop.css 中。只引用设计令牌与运行时变量，确需固定的数值在行尾注明「固定：原因」。
+ */
+
+html,
+body {
+  background: transparent;
+}
+
+/* 速记浮窗铺满窗口：窗口大小由后端决定（560 × 420），原型按页面写的宽高与上下限不再适用。 */
+body[data-window='capture'] .capture,
+body[data-window='capture'] .capture.open {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  transform: none;
+}
+
+/* 设置窗口：设置对话框铺满无边框窗口，外圈圆角与投影由系统窗口提供。 */
+body[data-window='settings'] .settings-modal.modal {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  border-radius: 0;
+  box-shadow: none;
+  animation: none;
+}

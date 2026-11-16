@@ -4,10 +4,10 @@
  * 由 `main.tsx` 根据当前窗口标签决定渲染侧栏、速记浮窗还是设置窗口；
  * 三个窗口各自是独立的 WebView，共享同一套状态仓库代码，经跨窗口同步保持一致。
  * 根组件还负责把后端事件（边缘唤出、全局热键、托盘菜单）转成界面动作，
- * 并把主题、字体与材质应用到页面根节点，供 CSS 切换外观；字号按全局的界面缩放应用到各窗口。
+ * 并把主题、明暗、结构差异与字体写到页面根节点，供 CSS 取设计令牌；字号按全局的界面缩放应用到各窗口。
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Icon, IconSprite } from './components/Icon';
 import { Sidebar } from './components/Sidebar';
 import { Capture } from './components/Capture';
@@ -17,6 +17,7 @@ import { useStoreSlice } from './hooks/useStore';
 import * as store from './core/store';
 import * as bridge from './core/bridge';
 import { resolveTheme, resolveFontFamily, sidebarWindowWidth, uiZoom } from './core/settings';
+import { applySurface } from './core/surfaces';
 import type { WindowRole } from './main';
 
 export interface AppProps {
@@ -55,23 +56,36 @@ export function App({ role }: AppProps) {
     };
   }, []);
 
-  /* ==================== 主题、字体与材质 ==================== */
-  // 原型同时在 html 与 body 上标记主题和材质，部分样式按 :root 匹配。
-  // 字体应用到全部界面文字（desktop.css 中 :root 使用同一变量），正文保持 13px 的设计字号。
+  /* ==================== 主题、明暗与字体 ==================== */
+  // 主题、明暗与 6 项结构差异写在根节点的 data-sn-* 上（core/surfaces），三个窗口的样式都按它们取令牌。
+  // 「跟随系统」时监听系统的明暗变化，三个窗口立即切换（adaptation.md 第六节）。
+  const [systemDark, setSystemDark] = useState(() => resolveTheme('system') === 'dark');
   useEffect(() => {
-    const theme = resolveTheme(settings.theme);
+    if (typeof window.matchMedia !== 'function') return;
+    const query = window.matchMedia('(prefers-color-scheme: dark)');
+    const update = (): void => setSystemDark(query.matches);
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+
+  useEffect(() => {
+    const theme = settings.theme === 'system' ? (systemDark ? 'dark' : 'light') : settings.theme;
     const root = document.documentElement;
-    for (const node of [root, document.body]) {
-      node.dataset.theme = theme;
-      node.dataset.surface = settings.surface;
-    }
+    applySurface(root, settings.surface, theme);
+    root.style.colorScheme = theme;
+    // 提示条位置作用于三个窗口（theme.css 按 data-sn-toast 选择）。
+    root.dataset.snToast = settings.toastPosition;
     document.body.dataset.edge = settings.edge;
-    // 提示条位置作用于三个窗口，样式按 body 上的标记切换（见 desktop.css）。
-    document.body.dataset.toastPosition = settings.toastPosition;
-    root.style.setProperty('--note-font-family', resolveFontFamily(settings.fontFamily));
+    // 选了具体字体时只替换界面与正文的字体，标题与代码的字体仍跟随主题；跟随主题时用令牌中的字体。
+    const font = resolveFontFamily(settings.fontFamily);
+    for (const name of ['--sn-font-ui', '--sn-font-note']) {
+      if (font) root.style.setProperty(name, font);
+      else root.style.removeProperty(name);
+    }
     root.style.setProperty('--sidebar-width', `${settings.width}px`);
+    root.style.setProperty('--card-max-height', `${settings.cardMaxHeight}px`);
     root.style.setProperty('--note-content-max-height', `${settings.cardMaxHeight}px`);
-  }, [settings]);
+  }, [settings, systemDark]);
 
   /* ==================== 字号：全局的界面缩放 ==================== */
   // 字号不只改正文：各窗口的 WebView 整页缩放到「字号 ÷ 13」倍，正文显示为所选字号，

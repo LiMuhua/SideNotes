@@ -15,17 +15,19 @@ const { version } = JSON.parse(readFileSync(new URL('./package.json', import.met
 };
 
 /**
- * 移除原型样式中按视口宽高生效的媒体查询。
+ * 移除来自原型的样式中按视口宽高生效的媒体查询。
  *
- * 原型是在大屏浏览器中展示的页面，侧栏、速记与设置都只是其中的面板；这些查询面向小屏浏览器。
- * 桌面端每个窗口就是一个面板，视口即面板尺寸，保留它们会让 416 像素宽的侧栏错用原型的窄屏布局。
- * 只处理 prototype.css，减少动态效果等偏好类查询保留，原型文件本身不做改动。
+ * 原型是在大屏浏览器中展示的页面，侧栏、速记与设置都只是其中的面板；这些查询面向小屏浏览器与手机形态。
+ * 桌面端每个窗口就是一个面板，视口即面板尺寸，保留它们会让 400 像素宽的侧栏错用原型的窄屏与手机布局。
+ * 只处理从原型移植的 prototype.css（旧样式层）与 theme.css，减少动态效果等偏好类查询保留，原型文件本身不做改动。
  */
+const PROTOTYPE_STYLES = ['/styles/prototype.css', '/styles/theme.css'];
 const stripViewportMedia = {
   postcssPlugin: 'sidenotes-strip-viewport-media',
   AtRule: {
     media(rule: { params: string; source?: { input: { file?: string } }; remove: () => void }) {
-      if (!rule.source?.input.file?.replace(/\\/g, '/').endsWith('/styles/prototype.css')) return;
+      const file = rule.source?.input.file?.replace(/\\/g, '/') ?? '';
+      if (!PROTOTYPE_STYLES.some((suffix) => file.endsWith(suffix))) return;
       if (/\((?:max|min)-(?:width|height)\s*:/.test(rule.params)) rule.remove();
     },
   },

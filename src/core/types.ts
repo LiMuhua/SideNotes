@@ -59,8 +59,11 @@ export interface TagUsage {
 /** 明暗模式。 */
 export type ThemeMode = 'light' | 'dark' | 'system';
 
-/** 界面材质。 */
-export type SurfaceMode = 'standard' | 'paper' | 'glass' | 'win11';
+/** 主题（代码中沿用设置字段名 surface）：终端、杂志、记录纸、Windows 11、磨砂玻璃。 */
+export type SurfaceMode = 'terminal' | 'magazine' | 'paper' | 'win11' | 'glass';
+
+/** 记录窗口的标签页位置：左侧竖排或顶部横排。 */
+export type WindowTabsPosition = 'side' | 'top';
 
 /** 侧栏贴附边缘。 */
 export type EdgeSide = 'left' | 'right';
@@ -92,22 +95,30 @@ export interface Settings {
   settingsVersion: number;
   theme: ThemeMode;
   surface: SurfaceMode;
+  /** 字体；空字符串表示跟随主题，「系统默认」是 Segoe UI 与微软雅黑 UI。 */
   fontFamily: string;
+  /** 字号 8–24，步长 0.5；作用是整页缩放（界面按 13px 设计）。 */
   fontSize: number;
+  /** 应用图标：内置图标的 id，或 custom 表示上传的图片，见 core/appIcons。 */
+  appIcon: string;
   edge: EdgeSide;
   width: number;
   /** 鼠标移出后收起侧栏的延迟，毫秒。 */
   hideDelay: number;
   /** 侧栏出入动画时长，毫秒；0 表示关闭动画。 */
   animDuration: number;
-  /** 编辑期间保持侧栏展开。 */
-  protectEditing: boolean;
+  /** 进入编辑时把卡片滚到列表顶部。编辑期间侧栏一律保持展开，不再提供开关。 */
+  scrollOnEdit: boolean;
   /** 鼠标移到屏幕边缘时唤出侧栏。 */
   edgeTrigger: boolean;
   /** 卡片正文的最大高度（按 13px 字号计的网页像素），超出部分渐隐，双击卡片查看全文。 */
   cardMaxHeight: number;
   /** 提示条弹出的位置。 */
   toastPosition: ToastPosition;
+  /** 记录窗口的标签页在左侧还是顶部。 */
+  windowTabs: WindowTabsPosition;
+  /** 固定为页签的标签，按页签栏的顺序保存，不带 #。 */
+  pinnedTags: string[];
   /** 是否已看过使用指南；首次启动时显示一次，之后可从侧栏菜单再次打开。 */
   guideSeen: boolean;
   /** 滚动按需加载。 */
