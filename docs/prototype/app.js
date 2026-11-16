@@ -18,9 +18,73 @@ const LEGACY_EXAMPLES = {
   "sample-archive-2": "已经整理好的周报\n\n把工作记录归拢成文档，保留过程，继续向前。"
 };
 const elements = {};
-const ui = { tab: 'workspace', query: '', editing: null, composer: false, locked: false, composing: false, pendingImages: 0, modal: null, hideTimer: 0, draftTimer: 0, editTimer: 0, previousFocus: null, storageError: false, storageWriteError: false, editStorageError: false, draftDirty: false, selectedTag: '', expandedTags: new Set(), pendingFilePath: '', listItems: [], visibleCount: 0, listKey: '', lastListGroup: '', listObserver: null, loading: false, sentinel: null, clickTimer: 0, resizing: null, resizeFrame: 0, pinnedReturnPending: false };
+const ui = { tab: 'workspace', query: '', editing: null, composer: false, locked: false, composing: false, pendingImages: 0, modal: null, hideTimer: 0, draftTimer: 0, editTimer: 0, previousFocus: null, storageError: false, storageWriteError: false, editStorageError: false, draftDirty: false, selectedTag: '', expandedTags: new Set(), pendingFilePath: '', listItems: [], visibleCount: 0, listKey: '', listObserver: null, loading: false, sentinel: null, clickTimer: 0, resizing: null, resizeFrame: 0, pinnedReturnPending: false, toastHost: '' };
 let state;
 const noteParseCache = new WeakMap(); // 同一记录的标签解析供列表、筛选与卡片复用。
+
+/* ==================== 正文中的图片与缩略图（本次提出） ==================== */
+
+/**
+ * @brief 正文中的图片：与现有应用一样写在光标处（![名称](地址)），新建、编辑与拖入都一样；
+ * 浏览器不能把文件复制到数据目录，图片内容仍随记录保存在 images 中，正文里写 sidenotes-image:<标识>?name=<名称>。
+ * 旧记录里不在正文中的图片仍显示在缩略条中（stripImages）。
+ * @details 卡片、记录窗口与编辑面中的图片显示缩小的副本（最长边 THUMB_SIZE），点开附件弹窗才加载原图。
+ */
+window.SideNotesImages=(function createImageRegistry(){
+  const TOKEN=/^sidenotes-image:([a-z0-9-]+)(?:\?name=[^\s)]*)?$/i;
+  const THUMB_SIZE=480; // 缩略图最长边（像素），高分屏上显示 150 也够清楚。
+  const SMALL_IMAGE=160*1024; // 小于这个大小的图片直接显示原图。
+  const PLACEHOLDER='data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+  const known=new Map(); // 标识 → 图片。
+  const thumbnails=new Map(); // 原图地址 → 缩略图地址或生成中的 Promise。
+  /** @brief 按标识找图片：新读取的、编辑中的、草稿里的与各条记录中的。 @param {string} id 标识。 @return {object|null} 图片。 */
+  function find(id){
+    if(known.has(id))return known.get(id);
+    const lists=[ui.editing?ui.editing.images:[],state&&state.draft?state.draft.images:[]].concat(state?state.notes.map(function images(note){return note.images||[];}):[]);
+    for(const list of lists){const found=list.find(function same(image){return image&&image.id===id;});if(found){known.set(id,found);return found;}}
+    return null;
+  }
+  /** @brief 登记新读取的图片，正文中的引用马上能显示。 @param {object} image 图片。 @return {object} 同一张图片。 */
+  function register(image){if(image&&image.id)known.set(image.id,image);return image;}
+  /** @brief 图片的 Markdown：名称去掉扩展名并转义。 @param {object} image 图片。 @return {string} 引用。 */
+  function markdown(image){const name=String(image.name||'图片');return '!['+name.replace(/\.[^.]+$/,'').replace(/[\r\n]+/g,' ').replace(/([\\\[\]])/g,'\\$1')+'](sidenotes-image:'+image.id+'?name='+encodeURIComponent(name).replace(/[!'()*]/g,function encode(character){return '%'+character.charCodeAt(0).toString(16).toUpperCase();})+')';}
+  /** @brief 正文中的地址对应的图片。 @param {string} value 地址。 @return {object|null} 图片。 */
+  function imageOf(value){const match=TOKEN.exec(String(value||'').trim());return match?find(match[1]):null;}
+  /** @brief 正文中的地址换成可以显示的地址：sidenotes-image: 换成图片内容，其余原样返回。 @param {string} value 地址。 @return {string} 地址，找不到图片时为空串。 */
+  function resolve(value){if(!TOKEN.test(String(value||'').trim()))return String(value||'');const image=imageOf(value);return image?image.data:'';}
+  /** @brief 生成缩略图：画到最长边 THUMB_SIZE 的画布上；画不了（远程图片等）时用原图。 @param {string} src 原图。 @return {Promise<string>} 缩略图地址。 */
+  function make(src){
+    return new Promise(function thumbnailPromise(done){
+      const image=new Image();image.decoding='async';
+      image.onload=function loaded(){
+        const scale=Math.min(1,THUMB_SIZE/Math.max(image.naturalWidth||1,image.naturalHeight||1));if(scale>=1){done(src);return;}
+        try{const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));const context=canvas.getContext('2d');context.imageSmoothingQuality='high';context.drawImage(image,0,0,canvas.width,canvas.height);done(canvas.toDataURL('image/webp',0.86));}
+        catch(error){done(src);}
+      };
+      image.onerror=function failed(){done(src);};image.src=src;
+    });
+  }
+  /**
+   * @brief 让图片元素显示缩略图：已有缩略图时直接用；大图先显示占位，缩略图生成后换上；小图、矢量图与远程图片用原图。
+   * @param {HTMLImageElement} picture 图片元素。 @param {string} src 原图。
+   */
+  function show(picture,src){
+    picture.dataset.fullSrc=src;
+    if(!/^data:image\/(?!svg)/i.test(src)||src.length<SMALL_IMAGE*1.37){picture.src=src;return;}
+    const ready=thumbnails.get(src);
+    if(typeof ready==='string'){picture.src=ready;return;}
+    picture.src=PLACEHOLDER;picture.classList.add('is-thumbnail-pending');
+    const pending=ready||make(src);thumbnails.set(src,pending);
+    pending.then(function swap(thumb){thumbnails.set(src,thumb);if(picture.dataset.fullSrc===src){picture.src=thumb;picture.classList.remove('is-thumbnail-pending');}});
+  }
+  return Object.freeze({register:register,markdown:markdown,imageOf:imageOf,resolve:resolve,show:show});
+})();
+
+/**
+ * @brief 保存时丢掉正文中已经删掉引用的图片；旧记录的缩略条图片（不是 inline）保留。
+ * @param {string} text 正文。 @param {Array} images 图片。 @return {Array} 保留的图片。
+ */
+function keepReferencedImages(text,images){return (images||[]).filter(function referenced(image){return !image.inline||String(text).includes('sidenotes-image:'+image.id);});}
 
 /** @brief 创建 DOM 元素并安全设置文字。 @param {string} tag 标签。 @param {string} className 样式。 @param {string} text 文字。 @return {HTMLElement} 元素。 */
 function el(tag, className, text) {
@@ -41,13 +105,12 @@ function icon(name) {
   return svg;
 }
 
-/** @brief 创建动作按钮。 @param {string} label 可访问名称。 @param {string} action 动作。 @param {string} iconName 图标。 @param {string} className 样式。 @return {HTMLButtonElement} 按钮。 */
+/** @brief 创建动作按钮：名称写在 aria-label 中，不加悬停提示（悬停说明只跟问号绑定）。 @param {string} label 可访问名称。 @param {string} action 动作。 @param {string} iconName 图标。 @param {string} className 样式。 @return {HTMLButtonElement} 按钮。 */
 function button(label, action, iconName, className = 'icon-button') {
   const node = el('button', className);
   node.type = 'button';
   node.dataset.action = action;
   node.setAttribute('aria-label', label);
-  node.title = label;
   if (iconName) node.append(icon(iconName));
   if (!className.split(/\s+/).some(function iconOnly(name){return ['icon-button','tag-remove','tags-more','note-image-button'].includes(name);})) node.append(document.createTextNode(label));
   return node;
@@ -57,6 +120,61 @@ function button(label, action, iconName, className = 'icon-button') {
 function createId() {
   return window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
 }
+
+/**
+ * 第六次反馈补充的示例记录（id 以 sample6- 开头）：覆盖各个页签、跨页签的同一个词（「发布」「评审」）、相近的标签
+ * （#产品 与 #产品经理、#设计 与 #设计规范）、很长的标签名、长标题与长正文、只有一行、不带标签与带很多标签的记录、
+ * Markdown 的各种写法、多张图片与文件引用（含不存在的路径）、置顶与回收站，以及从今天到去年的日期。
+ * hours 是相对现在的小时数；回收站中的记录 deleted 是删除时间（同样相对现在）。
+ * @param {function(string):string} svg 把 SVG 源码转成 data URL。 @return {Array} 示例记录（未补全字段）。
+ */
+function createMoreExamples(svg) {
+  const fence='\x60\x60\x60',tick='\x60';
+  const iconA='<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><rect width="320" height="200" fill="#1f2433"/><rect x="40" y="40" width="120" height="120" rx="30" fill="#e9a23b"/><circle cx="100" cy="100" r="22" fill="#1f2433"/></svg>';
+  const iconB='<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><rect width="320" height="200" fill="#f4f1ea"/><path d="M110 30h100v140l-50-34-50 34z" fill="#3b6fd8"/><path d="M135 70h50M135 92h36" stroke="#f4f1ea" stroke-width="10" stroke-linecap="round"/></svg>';
+  const shot='<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300"><rect width="480" height="300" fill="#e8ecf2"/><rect x="20" y="24" width="250" height="16" rx="4" fill="#c5cdd9"/><rect x="20" y="52" width="210" height="12" rx="4" fill="#d5dbe4"/><rect x="300" width="180" height="300" fill="#22252e"/><rect x="314" y="18" width="70" height="12" rx="3" fill="#e9a23b"/><rect x="314" y="44" width="152" height="60" rx="8" fill="#2e323d"/><rect x="314" y="114" width="152" height="80" rx="8" fill="#2e323d"/><rect x="314" y="204" width="152" height="48" rx="8" fill="#2e323d"/></svg>';
+  return [
+    {id:'sample6-release-notes',text:'0.7.4 发布说明草稿\n\n## 新增\n- 页签栏放不下时才收起，最后一格固定只占一个位置\n- 筛选行右边加上多选与收起全部\n\n## 修复\n- Shift+单击从上一次单击的卡片选起\n\n#开发 #SideNotes #发布',hours:-3},
+    {id:'sample6-release-review',text:'发布前评审清单\n\n- [x] 确认验收清单都有人认领\n- [x] 截图与文案定稿\n- [ ] 回滚方案演练\n- [ ] 发布公告排期\n\n#产品 #发布 #待办',hours:-26},
+    {id:'sample6-release-copy',text:'应用商店的发布文案\n\n**一句话：**藏在屏幕边上的速记本。\n\n副标题候选：\n1. 随手记，随时找\n2. 先记录，再整理\n3. 不打断手上的事\n\n#设计 #发布 #文案',hours:-50},
+    {id:'sample6-pm-weekly',text:'产品经理周会\n\n- 本周目标：完成搜索与页签的验收\n- 风险：桌面端还没跟上原型\n- 下周：整理下一轮反馈\n\n#产品经理 #会议',hours:-8},
+    {id:'sample6-pm-interview',text:'用户访谈：三位产品经理\n\n> 我经常只记得一句话，想不起来记在哪个分类里。\n\n> 页签多了以后，希望常用的放前面。\n\n结论：搜索要搜全部记录，结果写出所在的页签，评审时再确认分组的写法。\n\n#产品经理 #产品 #访谈',hours:-75},
+    {id:'sample6-design-spec',text:'设计规范：间距与字号\n\n- 间距按 2、4、6、8、12、16 递增\n- 正文 13px，辅助文字 12px\n- 图标 14px 与 16px 两档\n\n不写死数值，一律引用令牌。\n\n#设计规范 #设计',hours:-30},
+    {id:'sample6-design-icons',text:'图标候选对比\n\n左边是圆角方块，右边是书签形。\n\n#设计 #图标',images:[{id:'sample6-icon-a',name:'图标候选-方块.svg',type:'image/svg+xml',data:svg(iconA)},{id:'sample6-icon-b',name:'图标候选-书签.svg',type:'image/svg+xml',data:svg(iconB)}],hours:-55},
+    {id:'sample6-dev-rust',text:'数据库迁移步骤\n\n'+fence+'rust\nlet tx = conn.transaction()?;\ntx.execute_batch(include_str!("migrations/0005.sql"))?;\ntx.commit()?;\n'+fence+'\n\n迁移前先备份 '+tick+'sidenotes.db'+tick+'。\n\n#开发 #Rust',hours:-6},
+    {id:'sample6-dev-ts',text:'TypeScript 类型小抄\n\n'+fence+'ts\ntype Tab = \'workspace\' | \'pinned\' | '+tick+'tag:${string}'+tick+';\nconst isTag = (tab: Tab) => tab.startsWith(\'tag:\');\n'+fence+'\n\n用 '+tick+'satisfies'+tick+' 检查对象字面量，同时保留字面量类型。\n\n#开发 #前端',hours:-98},
+    {id:'sample6-dev-bug',text:'已知问题：中文输入法下按 Enter\n\n- [x] 候选词上屏时不应提交\n- [ ] 记录窗口里复现一遍\n- [ ] 速记浮窗里复现一遍\n\n#开发 #缺陷 #待办',hours:-12},
+    {id:'sample6-ref-links',text:'常用文档\n\n- [Tauri 2 指南](https://v2.tauri.app/start/)\n- [React 文档](https://react.dev/learn)\n- [MDN：Pointer events](https://developer.mozilla.org/zh-CN/docs/Web/API/Pointer_events)\n- 很长的网址：https://example.com/a/very/long/path/that/keeps/going/to/test/wrapping/in/the/card/body?query=sidenotes&page=1\n\n#参考 #开发',hours:-140},
+    {id:'sample6-ref-shortcuts',text:'快捷键速查\n\n- '+tick+'Alt+Shift+S'+tick+' 收起或展开侧栏\n- '+tick+'Ctrl+Shift+Space'+tick+' 速记浮窗\n- '+tick+'Ctrl+F'+tick+' 搜索全部记录\n- '+tick+'Shift+单击'+tick+' 连续选择\n- '+tick+'Esc'+tick+' 逐级退出\n\n#参考 #SideNotes',pinned:true,hours:-200},
+    {id:'sample6-roadmap',text:'SideNotes 路线图\n\n## 近期\n- 搜索与页签\n  - 全局搜索按页签分组\n  - 页签栏放不下时收起\n- 设置窗口\n\n## 之后\n- 云端备份（可选）\n- 安卓端\n\n#SideNotes #规划',collapsed:true,hours:-170},
+    {id:'sample6-feedback',text:'第六次反馈整理\n\n- [x] 搜索回到页签栏\n- [x] 筛选行右边放列表操作\n- [ ] 用真实鼠标试一遍拖动\n\n#SideNotes #反馈 #待办',hours:-.5},
+    {id:'sample6-reading-notes',text:'《设计心理学》摘录\n\n> 好的设计让人一眼看出能做什么。\n\n> 用户犯错时，问题多半出在设计上。\n\n#阅读 #读书笔记',hours:-220},
+    {id:'sample6-reading-list',text:'2026 读书清单\n\n1. 《设计心理学》\n2. 《写给大家看的设计书》\n3. 《简约至上》\n4. 《Rust 程序设计语言》\n\n#阅读 #学习计划2026',hours:-480},
+    {id:'sample6-long-tag',text:'标签名很长的记录\n\n页签名超过 4 个字时截断，标签下拉里显示全名。\n\n#很长的标签名称用来测试截断 #阅读',hours:-336},
+    {id:'sample6-grocery',text:'周末采购\n\n- [ ] 牛奶\n- [ ] 鸡蛋\n- [x] 咖啡豆\n- [ ] 番茄\n\n#生活 #待办',hours:-4},
+    {id:'sample6-recipe',text:'番茄炒蛋的火候\n\n1. 蛋液加少许盐，大火炒到七成熟盛出\n2. 番茄切块，中火炒出汁\n3. 倒回鸡蛋，翻匀出锅\n\n#生活 #菜谱',hours:-216},
+    {id:'sample6-running',text:'跑步记录\n\n周一 5 公里，配速 6:10\n周三 3 公里，配速 5:50\n周六 10 公里，配速 6:30\n\n#健康 #运动',hours:-36},
+    {id:'sample6-travel',text:'京都行程（草稿）\n\n## 第一天\n- 清水寺，傍晚去二年坂\n- 晚饭：锦市场附近\n\n## 第二天\n- 伏见稻荷，早上七点前到\n- 下午东福寺\n\n## 第三天\n- 岚山竹林、天龙寺\n- 渡月桥看日落\n\n## 待定\n- 宇治一日游？\n- 是否换到大阪住一晚\n\n#旅行 #生活',pinned:true,hours:-288},
+    {id:'sample6-finance',text:'年度订阅费用\n\n- 域名：¥69 / 年\n- 云存储：¥180 / 年\n- 字体授权：¥0（OFL）\n\n合计约 ¥249。\n\n#财务',hours:-600},
+    {id:'sample6-one-line',text:'侧栏按住 Alt 时临时半透明，看得到下面的窗口？',hours:-.2},
+    {id:'sample6-no-tag',text:'没有标签的记录\n\n随手记下来，之后再整理。',hours:-48},
+    {id:'sample6-many-tags',text:'多标签示例\n\n一条记录带很多标签时，标签行放不下的部分收进「…」。\n\n#工作 #产品 #设计 #开发 #参考 #会议 #待办 #灵感 #SideNotes',hours:-60},
+    {id:'sample6-long-title',text:'第三季度产品路线图评审会议纪要（修订版，含遗留问题与下一步计划）\n\n- 会议时间：周四下午\n- 参会：产品、设计、开发\n- 遗留：页签栏的收起规则、关于页的链接样式\n\n#产品 #会议',hours:-27},
+    {id:'sample6-long-body',text:'长文示例：侧栏交互的设计原则\n\n侧栏藏在屏幕边上，唤出时不能打断手上的事。记录入口要直接，先记下来，分类和整理都可以以后再做。\n\n搜索要搜全部记录。很多时候只记得一句话，不记得它在哪个页签里；结果按页签分组，需要时可以转到它所在的位置。\n\n页签只放常用的标签，由用户手动固定。放不下时收进最后一格，最后一格只占一个位置，样子固定。\n\n卡片默认展开，内容长时限制高度；可以收起正文只看标题，也可以一次收起全部。\n\n多选用 Ctrl 或 Shift 单击，也可以点筛选行右边的多选按钮。选中之后可以合并、移到别的页签或移入回收站。\n\n#产品 #设计',hours:-100},
+    {id:'sample6-mixed',text:'Mixed 中英混排 and emoji 🚀\n\n**粗体**、*斜体*、~~删除线~~ 与 '+tick+'inline code'+tick+' 混在一起；English words between 中文 should wrap naturally.\n\n---\n\n分隔线下面还有一段。\n\n#灵感',hours:-15},
+    {id:'sample6-file-missing',text:'旧项目的文件\n\n[已删除的需求文档.docx](file:///C:/旧项目/已删除的需求文档.docx)\n\n这个路径已经不存在，打开时要重新定位。\n\n#文件',hours:-960},
+    {id:'sample6-file-images',text:'截图与附件\n\n侧栏的截图在下面，设计稿在文件里：\n\n[侧栏设计稿.fig](file:///D:/Design/SideNotes/侧栏设计稿.fig)\n\n#SideNotes #文件',images:[{id:'sample6-shot',name:'侧栏截图.svg',type:'image/svg+xml',data:svg(shot)}],hours:-9},
+    {id:'sample6-pinned-release',text:'发布命令\n\n'+fence+'bash\npnpm build\npnpm tauri build --bundles nsis\n'+fence+'\n\n#开发 #发布',pinned:true,hours:-150},
+    {id:'sample6-last-month',text:'上个月的会议纪要\n\n讨论了标签与页签的关系：页签是固定的标签，随记放没有固定标签的记录。\n\n#会议 #工作',hours:-840},
+    {id:'sample6-last-year',text:'2025 年终总结\n\n- 完成 SideNotes 0.5 到 0.7\n- 写了三百多条记录\n- 明年：安卓端\n\n#工作 #总结',hours:-9600},
+    {id:'sample6-trash-meeting',text:'过期的会议安排\n\n周二下午的评审已取消。\n\n#会议',status:'trash',deleted:-48,hours:-144},
+    {id:'sample6-trash-duplicate',text:'重复的草稿\n\n与「发布前评审清单」重复。',status:'trash',deleted:-600,hours:-720},
+    {id:'sample6-trash-icon',text:'旧版图标说明\n\n第一版图标的配色已经弃用。\n\n#设计 #图标',status:'trash',deleted:-1,hours:-72}
+  ];
+}
+
+/** 新建的存档默认固定这几个标签（第六次反馈：侧栏窄时页签栏放不下，可以直接看到最后一格「N ▾」）。已有的存档不改。 */
+const SAMPLE_PINNED_TAGS = ['开发', '设计', '产品', '参考', 'SideNotes', '阅读'];
 
 /** @brief 创建带有 Markdown、标签和文件引用的示例记录。 @return {Array} 示例记录。 */
 function createExamples() {
@@ -71,25 +189,39 @@ function createExamples() {
     {id:'sample-yesterday-1',text:'版本发布检查\n\n## 数据\n- 数据库迁移前创建备份\n- 图片附件随记录一起导出\n- 验证归档、撤销和回收站\n\n## 窗口\n- 唤出不打断原应用输入\n- 收起后不保留可见边缘条\n- 编辑期间保护未提交内容\n\n## 交付\n确认快捷键冲突、多屏缩放和安装目录权限。\n\n#开发 #发布 #测试 #Windows #SideNotes',hours:-24},
     {id:'sample-file-map',text:'文件引用示例\n\n'+FILE_EXAMPLE_REFERENCE+'\n\n#文件 #示例',hours:-.5},
     {id:'sample-yesterday-2',text:'设计文档位置\n\n[交互设计.pdf](file:///C:/Projects/SideNotes/交互设计.pdf)\n\n打开前检查文件状态；失效时重新定位。\n\n#文件 #设计',hours:-28},
-    {id:'sample-archive-1',text:'首轮方案评审\n\n已确认侧栏和快捷速记两个入口。\n\n#产品 #归档',status:'archived',hours:-48},
-    {id:'sample-archive-2',text:'上周工作记录\n\n已整理为周报。\n\n#工作 #归档',status:'archived',hours:-72}
-  ].map(function completeExample(item){const t=now+item.hours*3600000;return {id:item.id,text:item.text,images:item.images||[],pinned:Boolean(item.pinned),status:item.status||'active',createdAt:t,updatedAt:t};});
+    {id:'sample-archive-1',text:'首轮方案评审\n\n已确认侧栏和快捷速记两个入口。\n\n#产品 #归档',hours:-48},
+    {id:'sample-archive-2',text:'上周工作记录\n\n已整理为周报。\n\n#工作 #归档',hours:-72}
+  ].concat(createMoreExamples(function svg(source){return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(source);})).map(function completeExample(item){const t=now+item.hours*3600000,trashed=item.status==='trash';return {id:item.id,text:item.text,images:item.images||[],pinned:Boolean(item.pinned),collapsed:Boolean(item.collapsed),status:trashed?'trash':'active',previousStatus:'active',deletedAt:trashed?now+(item.deleted||0)*3600000:null,createdAt:t,updatedAt:trashed?now+(item.deleted||0)*3600000:t};});
 }
 
 /** @brief 校验图片数据，拒绝外部请求地址。 @param {object} value 输入。 @return {object|null} 图片。 */
 function normalizeImage(value) {
   if (!value || typeof value.data !== 'string' || value.data.length > MAX_IMAGE_BYTES * 1.5) return null;
   if (!/^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml)(;[^,]*)?,/i.test(value.data)) return null;
-  return { id: typeof value.id === 'string' ? value.id : createId(), name: String(value.name || '图片').slice(0, 160), type: String(value.type || 'image/png'), data: value.data };
+  const image = { id: typeof value.id === 'string' ? value.id : createId(), name: String(value.name || '图片').slice(0, 160), type: String(value.type || 'image/png'), data: value.data };
+  // 写在正文中的图片（inline）要保留这个标记，否则刷新后会在缩略条里再显示一份。
+  if (value.inline === true) image.inline = true;
+  return image;
+}
+
+/**
+ * @brief 正文中引用了的图片标为 inline：此前的版本保存时丢了这个标记，读取时按正文补上。
+ * @param {Array} images 图片。 @param {string} text 正文。 @return {Array} 图片。
+ */
+function markInlineImages(images, text) {
+  return images.map(function mark(image) { return !image.inline && String(text).includes('sidenotes-image:' + image.id) ? { ...image, inline: true } : image; });
 }
 
 /** @brief 校验导入记录。 @param {object} value 输入。 @return {object|null} 记录。 */
 function normalizeNote(value) {
   if (!value || typeof value.text !== 'string') return null;
-  const images = Array.isArray(value.images) ? value.images.slice(0, 12).map(normalizeImage).filter(Boolean) : [];
+  const images = markInlineImages(Array.isArray(value.images) ? value.images.slice(0, 12).map(normalizeImage).filter(Boolean) : [], value.text);
   if (!value.text.trim() && !images.length) return null;
-  const status = ['active', 'archived', 'trash'].includes(value.status) ? value.status : 'active';
-  return { id: typeof value.id === 'string' && value.id.length < 100 ? value.id : createId(), text: window.NoteContent.canonicalize(value.text), emoji:window.NoteEmoji.valid(value.emoji)?value.emoji:'', order:Number.isFinite(value.order)?value.order:null, images: images, pinned: Boolean(value.pinned), collapsed: Boolean(value.collapsed), status: status, previousStatus: value.previousStatus === 'archived' ? 'archived' : 'active', createdAt: Number.isFinite(value.createdAt) && Math.abs(value.createdAt) <= 8640000000000000 ? value.createdAt : Date.now(), updatedAt: Number.isFinite(value.updatedAt) && Math.abs(value.updatedAt) <= 8640000000000000 ? value.updatedAt : Date.now(), deletedAt: Number.isFinite(value.deletedAt) && Math.abs(value.deletedAt) <= 8640000000000000 ? value.deletedAt : null };
+  // 第四次反馈去掉了「归档」：旧的归档记录（包括从归档移进回收站的）回到随记，正文加上 #归档，可以用这个标签找回或固定成页签。
+  const archived = value.status === 'archived' || value.previousStatus === 'archived';
+  const status = value.status === 'trash' ? 'trash' : 'active';
+  const text = archived ? withTag(value.text, '归档') : value.text;
+  return { id: typeof value.id === 'string' && value.id.length < 100 ? value.id : createId(), text: window.NoteContent.canonicalize(text), emoji:window.NoteEmoji.valid(value.emoji)?value.emoji:'', order:Number.isFinite(value.order)?value.order:null, images: images, pinned: Boolean(value.pinned), collapsed: Boolean(value.collapsed), status: status, previousStatus: 'active', createdAt: Number.isFinite(value.createdAt) && Math.abs(value.createdAt) <= 8640000000000000 ? value.createdAt : Date.now(), updatedAt: Number.isFinite(value.updatedAt) && Math.abs(value.updatedAt) <= 8640000000000000 ? value.updatedAt : Date.now(), deletedAt: Number.isFinite(value.deletedAt) && Math.abs(value.deletedAt) <= 8640000000000000 ? value.deletedAt : null };
 }
 
 /** @brief 校验并补全原型设置。 @param {object} value 输入设置。 @return {object} 完整设置。 */
@@ -97,29 +229,69 @@ function normalizeSettings(value = {}) {
   if (!value || typeof value !== 'object') value = {};
   const cloud = value.cloud && typeof value.cloud === 'object' ? value.cloud : {};
   const shortcuts = value.shortcuts && typeof value.shortcuts === 'object' ? value.shortcuts : {};
+  const surfaces = window.SideNotesSurfaces;
   return {
+    // 设置结构版本 3：主题改为五套（旧的 standard 迁移为 terminal），字体默认跟随主题，见 surfaces.js。
+    version: surfaces.SETTINGS_VERSION,
     theme: ['light','dark','system'].includes(value.theme) ? value.theme : 'light',
-    surface: ['standard','paper','glass','win11'].includes(value.surface) ? value.surface : 'standard',
-    fontFamily: typeof value.fontFamily === 'string' ? value.fontFamily.slice(0,120) : 'Segoe UI',
-    fontSize: Math.max(12,Math.min(18,Number(value.fontSize)||13)),
-    edge: value.edge === 'left' ? 'left' : 'right', width: Math.min(720,Math.max(360,Number(value.width)||416)),
-    hideDelay: [300,600,1000].includes(Number(value.hideDelay)) ? Number(value.hideDelay) : 600,
-    protectEditing: value.protectEditing !== false,
+    surface: surfaces.normalizeSurface(value.surface),
+    fontFamily: surfaces.normalizeFontFamily(value.fontFamily, value.version),
+    // 应用图标：内置图标的 id，或 custom 表示上传的图片（图片单独保存，见 app-icons.js）。
+    appIcon: window.SideNotesAppIcons.normalize(value.appIcon),
+    // 字号 8–24，步长 0.5，默认 12（本次提出；现有应用为 12–20，步长 1，默认 16）。
+    fontSize: Number.isFinite(Number(value.fontSize)) && value.fontSize !== null && value.fontSize !== '' ? Math.max(8,Math.min(24,Math.round(Number(value.fontSize)*2)/2)) : 12,
+    // 侧栏宽度 360–720，按 4px 取整，默认 400（本次提出；现有应用默认 416）。
+    edge: value.edge === 'left' ? 'left' : 'right', width: Math.min(720,Math.max(360,Math.round((Number(value.width)||400)/4)*4)),
+    // 出入动画、卡片高度与通知位置：取值范围与默认值同现有应用（src/core/settings.ts）。
+    animDuration: Number.isFinite(Number(value.animDuration)) && value.animDuration !== null && value.animDuration !== '' ? Math.max(0,Math.min(600,Math.round(Number(value.animDuration)))) : 260,
+    cardMaxHeight: Number.isFinite(Number(value.cardMaxHeight)) && value.cardMaxHeight !== null && value.cardMaxHeight !== '' ? Math.max(120,Math.min(600,Math.round(Number(value.cardMaxHeight)))) : 220,
+    toastPosition: ['top-center','top-right','bottom-center'].includes(value.toastPosition) ? value.toastPosition : 'top-center',
+    // 记录窗口的标签页位置（第四次反馈）：顶部横排，或左侧竖排；窗口中的按钮与设置都可以切换。
+    windowTabs: value.windowTabs === 'top' ? 'top' : 'side', // 记录窗口的标签页默认在左侧（第五次反馈）
+    // 固定为页签的标签（第四次反馈）：按页签栏的顺序保存，不带 #；只由用户手动固定，不会自动加入。
+    pinnedTags: normalizePinnedTags(value.pinnedTags),
+    // 移出后收起：100–10000 毫秒，下拉框列出常用的 300、600、1000（与现有应用一致）。
+    hideDelay: Number.isFinite(Number(value.hideDelay)) && value.hideDelay !== null && value.hideDelay !== '' ? Math.max(100,Math.min(10000,Math.round(Number(value.hideDelay)))) : 600,
+    // 进入编辑时把卡片滚到列表顶部（本次提出，默认打开）。编辑期间侧栏一律保持展开，不再提供开关。
+    scrollOnEdit: value.scrollOnEdit !== false,
     lazyLoading: value.lazyLoading !== false,
     pageSize: Math.max(5,Math.min(100,Math.round(Number(value.pageSize)||10))),
     tidySnoozeUntil: Number(value.tidySnoozeUntil)||0,
     tidyLimit: Number.isFinite(Number(value.tidyLimit)) ? Math.max(0,Math.min(100000,Math.round(Number(value.tidyLimit)))) : 50,
     storageLocation: ['appdata','portable','custom'].includes(value.storageLocation) ? value.storageLocation : 'appdata',
     customDirectory: String(value.customDirectory||'').slice(0,500),
+    // 快照目录：空值表示数据目录下的 snapshots 文件夹（与现有应用一致）。
+    snapshotDirectory: String(value.snapshotDirectory||'').trim().slice(0,500),
     trashDays: Math.round(Math.max(1,Math.min(365,Number(value.trashDays)||30))),
     cloud: { enabled: cloud.enabled===true, provider: ['synology','google','onedrive'].includes(cloud.provider)?cloud.provider:'synology', endpoint:String(cloud.endpoint||'').slice(0,1000), account:String(cloud.account||'').slice(0,160), folder:String(cloud.folder||'SideNotes').slice(0,300), lastBackup:Number(cloud.lastBackup)||0, lastError:String(cloud.lastError||'').slice(0,500), simulationFailure:cloud.simulationFailure===true, notifications:cloud.notifications===true },
-    shortcuts: {capture:String(shortcuts.capture||'Ctrl+Shift+Space'),save:String(shortcuts.save||'Ctrl+Enter'),hide:String(shortcuts.hide||'Escape')}
+    // 快捷键只保存改过的命令，其余用默认按键（shortcuts.js，同现有应用）；旧存档的 capture、save、hide 是默认按键，整理后不再保存。
+    shortcuts: window.SideNotesShortcuts.normalizeBindings(shortcuts)
   };
+}
+
+/** @brief 正文加上一个标签（已有时不变），写在标签行。 @param {string} text 原文。 @param {string} tag 标签。 @return {string} 原文。 */
+function withTag(text, tag) {
+  const parts = window.NoteContent.parse(String(text || ''));
+  return parts.tags.some(function same(item) { return tagKey(item) === tagKey(tag); }) ? text : window.NoteContent.compose(parts.body, parts.tags.concat(tag));
+}
+
+/**
+ * @brief 整理固定为页签的标签：去掉 #、空白、无效与重复的（不分大小写），保留顺序，最多 50 个。
+ * @param {Array<string>} value 存档中的标签。 @return {Array<string>} 标签。
+ */
+function normalizePinnedTags(value) {
+  const seen = new Set();
+  return (Array.isArray(value) ? value : []).map(function clean(tag) { return String(tag || '').trim().replace(/^#/, ''); }).filter(function usable(tag) {
+    if (!/^[\p{L}\p{N}_-]{1,40}$/u.test(tag) || seen.has(tagKey(tag))) return false;
+    seen.add(tagKey(tag));
+    return true;
+  }).slice(0, 50);
 }
 
 /** @brief 读取本地数据并恢复草稿。 */
 function loadState() {
-  state = { version: 1, revision: 5, tagUsage: Object.create(null), notes: window.NoteEmoji.ensure(createExamples()), draft: { text: '', images: [], updatedAt: 0 }, settings: { ...DEFAULT_SETTINGS } };
+  state = { version: 1, revision: 6, tagUsage: Object.create(null), notes: window.NoteEmoji.ensure(createExamples()), draft: { text: '', images: [], updatedAt: 0 }, settings: normalizeSettings({ ...DEFAULT_SETTINGS, pinnedTags: SAMPLE_PINNED_TAGS }) };
+  let addedExamples=false;
   try {
     let sourceRevision=0;
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -131,16 +303,18 @@ function loadState() {
       state.tagUsage = Object.assign(Object.create(null), saved.tagUsage && typeof saved.tagUsage==='object' ? saved.tagUsage : {});
       if(Number(saved.revision||1)<2){const samples=createExamples();state.notes=state.notes.map(function upgradeSample(note){const sample=samples.find(function same(item){return item.id===note.id;});return sample&&LEGACY_EXAMPLES[note.id]===note.text?{...note,text:sample.text}:note;});}
       state.settings = normalizeSettings(saved.settings);
-      if (saved.draft && typeof saved.draft.text === 'string') state.draft = { text: saved.draft.text, images: (Array.isArray(saved.draft.images) ? saved.draft.images : []).map(normalizeImage).filter(Boolean), updatedAt: Number(saved.draft.updatedAt) || 0 };
+      // 存档版本 6（第六次反馈）：补上新增的示例记录（id 以 sample6- 开头），已经有的（包括在回收站里的）不动，固定的标签也不改。
+      if(sourceRevision<6){const known=new Set(state.notes.map(function id(note){return note.id;})),added=createExamples().filter(function fresh(note){return note.id.startsWith('sample6-')&&!known.has(note.id);});if(added.length){state.notes=state.notes.concat(added);addedExamples=true;}}
+      if (saved.draft && typeof saved.draft.text === 'string') state.draft = { text: saved.draft.text, images: markInlineImages((Array.isArray(saved.draft.images) ? saved.draft.images : []).map(normalizeImage).filter(Boolean), saved.draft.text), updatedAt: Number(saved.draft.updatedAt) || 0 };
     }
     const recovery = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
     if (recovery && typeof recovery.text === 'string' && recovery.updatedAt > state.draft.updatedAt) {
-      state.draft = { text: recovery.text, images: (Array.isArray(recovery.images) ? recovery.images : []).map(normalizeImage).filter(Boolean), updatedAt: recovery.updatedAt };
+      state.draft = { text: recovery.text, images: markInlineImages((Array.isArray(recovery.images) ? recovery.images : []).map(normalizeImage).filter(Boolean), recovery.text), updatedAt: recovery.updatedAt };
       window.setTimeout(function showRecovery() { toast('已恢复上次未提交的草稿'); }, 400);
     }
     const movedExample=sourceRevision<5&&moveFileExampleFromDraft();
     const assigned=window.NoteEmoji.ensure(state.notes);const changed=assigned.some(function changedEmoji(note,index){return note!==state.notes[index];});state.notes=assigned;
-    if(!raw||changed||sourceRevision<5||movedExample)persistSnapshot();
+    if(!raw||changed||sourceRevision<6||movedExample||addedExamples)persistSnapshot();
   } catch (error) {
     ui.storageWriteError = true;
     ui.storageError = true;
@@ -156,11 +330,12 @@ function setStorageStatus(failed) {
   const busy=ui.pendingImages>0||ui.draftDirty||(sync.enabled&&sync.busy);
   const error=ui.storageError||Boolean(cloudError);
   if(elements.storageStatus){const status=elements.storageStatus;status.replaceChildren();status.classList.toggle('is-cloud',Boolean(sync.enabled));status.classList.toggle('is-busy',busy);status.classList.toggle('is-error',error);
-    if(sync.enabled)status.append(icon(error?'cloud-off':'cloud'));else status.append(el('span','small-dot'));
-    const message=ui.storageError?'本地保存失败':cloudError?'备份失败':ui.pendingImages?'读取附件…':ui.draftDirty?'保存中…':sync.busy?'备份中…':'';
-    if(message)status.append(document.createTextNode(message));const label=message||(sync.enabled?'本地已保存 · 云端连接为模拟':'本地已保存');status.title=label;status.setAttribute('aria-label',label);
+    // 正常时底栏不显示状态（本次提出：去掉绿色圆点）；出错时版本号左边出现警告图标，处理中只写文字。
+    if(error)status.append(icon(ui.storageError?'alert':'cloud-off'));
+    // 只在出错时写出原因；读取附件与保存中不显示文字（与现有应用一致，读取期间禁用保存）。
+    const message=ui.storageError?'本地保存失败':cloudError?'备份失败':'';
+    if(message)status.append(document.createTextNode(message));status.setAttribute('aria-label',message||'本地已保存');status.hidden=!message;
   }
-  if(elements.draftStatus)elements.draftStatus.textContent=ui.pendingImages?'读取附件…':ui.editStorageError?'编辑未保存':ui.storageError?'保存失败，输入已保留':ui.draftDirty?'保存中…':'';
   if(elements.syncWarning){elements.syncWarning.hidden=!cloudError;elements.syncWarning.replaceChildren();if(cloudError){elements.syncWarning.append(icon('alert'),el('span','',cloudError),button('重试','retry-cloud','','button secondary compact'));}}
 }
 
@@ -168,7 +343,7 @@ function setStorageStatus(failed) {
 function persistSnapshot(notes = state.notes, draft = state.draft, settings = state.settings) {
   try {
     notes=window.NoteEmoji.ensure(notes);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, revision: 5, tagUsage: state.tagUsage, notes: notes, draft: draft, settings: settings }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, revision: 6, tagUsage: state.tagUsage, notes: notes, draft: draft, settings: settings }));
     state.notes = notes;
     state.draft = draft;
     state.settings = settings;
@@ -198,7 +373,7 @@ function persistDraft() {
 function updateNote(id, patch) {
   const next = state.notes.map(function patchRecord(note) { return note.id === id ? { ...note, ...patch, updatedAt: Date.now() } : note; });
   if (!persistSnapshot(next)) {
-    toast('保存失败，原记录未改动。请导出备份后重试。', null, true);
+    toast('操作未保存', null, true);
     return false;
   }
   renderNotes();
@@ -212,79 +387,342 @@ function formatTime(timestamp) {
   return d.toDateString()===now.toDateString() ? hm : d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+' '+hm;
 }
 
-/** @brief 图标、标题、数量及短渐隐线组成的分组标记。 @param {string} title 名称。 @param {number} count 数量。 @return {HTMLElement} 标记。 */
-function sectionHeading(title,count){const pinned=title==='置顶',heading=el('div','list-section-heading'+(pinned?' section-pinned':' section-normal')),symbol=el('span','section-symbol');symbol.append(icon(pinned?'pin':'note'));heading.append(symbol,el('span','section-label',title),el('span','section-count',String(count)));return heading;}
-
-/** @brief 渲染带可配置 Emoji 的记录卡片。 @param {object} note 记录。 @return {HTMLElement} 卡片。 */
+/**
+ * @brief 渲染记录卡片。
+ * @details 标题最多两行；右侧一格叠放「置顶标记与时间」和操作按钮，悬停、高亮或聚焦时换成按钮，
+ * 收起按钮在最右，落在时间原来的位置，标题宽度因此不变（components.md 2.1）。底部只在有标签时出现。
+ * 列表按 roving tabindex 只让高亮的一张进入 Tab 顺序，卡片内的按钮也只在这一张上可聚焦。
+ * @param {object} note 记录。 @return {HTMLElement} 卡片。
+ */
 function renderCard(note) {
   const parsed=noteParts(note), lines=parsed.body.split('\n');
   const first=lines.findIndex(function nonempty(line){return Boolean(line.trim());});
   const firstLine=first<0?'':lines[first];
   const fullBody=firstLine.length>120||/^\s*(?:`{3,}|~{3,}|!\[|>|(?:-\s*){3,}$|(?:_\s*){3,}$|(?:\*\s*){3,}$)|^(?: {4}|\t)|^\s*[-*+]\s|^\s*\d+[.)]\s/.test(firstLine)||Boolean(window.NoteContent.filePath(firstLine));
   const title=first<0 ? (note.images.length?'图片记录':'记录') : lines[first].replace(/^#{1,6}\s+|^[-*+]\s+|^\d+\.\s+/,'').replace(/[*\x60~]/g,'').slice(0,120)||'记录';
-  const editing=ui.editing&&ui.editing.id===note.id;
-  const card=el('article','note-card'+(note.pinned?' is-pinned':'')+(editing?' is-editing':'')+(note.collapsed?' is-collapsed':''));card.dataset.noteId=note.id;card.tabIndex=0;card.setAttribute('aria-label',title);
-  const header=el('header','note-header'),mark=el('button','note-emoji',note.emoji||'📝');mark.type='button';mark.dataset.action='choose-emoji';mark.setAttribute('aria-label','选择记录Emoji');mark.title='更换 Emoji';
-  const time=el('button','note-time',formatTime(note.createdAt));time.type='button';time.dataset.action='toggle-note-collapse';time.setAttribute('aria-expanded',String(!note.collapsed));time.setAttribute('aria-label',(note.collapsed?'展开':'折叠')+'记录正文');time.title='创建：'+new Date(note.createdAt).toLocaleString('zh-CN',{hour12:false})+'\n修改：'+new Date(note.updatedAt).toLocaleString('zh-CN',{hour12:false});
+  const editing=ui.editing&&ui.editing.id===note.id,current=ui.currentId===note.id;
+  const card=el('article','note-card'+(note.pinned?' is-pinned':'')+(editing?' is-editing':'')+(note.collapsed?' is-collapsed':'')+(current?' is-current':''));card.dataset.noteId=note.id;card.tabIndex=current||editing?0:-1;card.setAttribute('aria-label',title);if(current)card.setAttribute('aria-current','true');
+  const header=el('header','note-header'),mark=el('button','note-emoji',note.emoji||'📝');mark.type='button';mark.dataset.action='choose-emoji';mark.setAttribute('aria-label','更换 Emoji');
   const titleNode=el('h3','note-title',fullBody?(firstLine.length>120?title:'记录'):title);
   if(!fullBody){titleNode.replaceChildren();window.NoteContent.renderInline(firstLine.replace(/^#{1,6}\s+/,''),titleNode);}
-  header.append(mark,titleNode,time);card.append(header);
+  // 右侧一格：平时是置顶标记与创建时间；点时间收起或展开正文（时间不进入 Tab 顺序，键盘用收起按钮）。
+  const side=el('div','note-side'),meta=el('span','note-meta');
+  if(note.pinned){const pin=el('span','note-pin');pin.setAttribute('aria-label','已置顶');pin.append(icon('pin'));meta.append(pin);}
+  const time=el('button','note-time',formatTime(note.createdAt));time.type='button';time.dataset.action='toggle-note-collapse';time.tabIndex=-1;time.setAttribute('aria-label',(note.collapsed?'展开':'收起')+'正文');
+  meta.append(time);side.append(meta);
+  // 多选按钮按下时（第七次反馈），图标的位置换成勾选框（theme.css 的 .note-list.is-selecting）。
+  const check=el('span','note-select-mark');check.setAttribute('aria-hidden','true');check.append(icon('check'));
+  header.append(check,mark,titleNode,side);card.append(header);
   if(editing){
-    const input=el('textarea','note-edit-input');input.value=ui.editing.text;input.dataset.editId=note.id;input.setAttribute('aria-label','编辑 Markdown 与标签');input.rows=Math.min(12,Math.max(4,ui.editing.text.split('\n').length));
-    const actions=el('div','note-edit-actions'),tools=el('div','composer-tools'),confirm=el('div','composer-actions');tools.append(button('添加图片','attach-edit-image','image'),button('引用文件','attach-edit-file','file'));confirm.append(button('取消修改 · Esc','cancel-edit','x'),button('保存修改 · Ctrl+Enter','finish-edit','check','icon-button primary'));actions.append(tools,confirm);card.append(input,actions);renderEditAttachments(card);if(window.LiveMarkdown)window.LiveMarkdown.attach(input,{value:ui.editing.text,minHeight:100,maxHeight:300});const editingSession=ui.editing;input.addEventListener('blur',function editInputBlur(){scheduleEditBlur(editingSession);});return card;
+    const input=el('textarea','note-edit-input');input.value=ui.editing.text;input.dataset.editId=note.id;input.setAttribute('aria-label','编辑记录');input.rows=Math.min(12,Math.max(4,ui.editing.text.split('\n').length));
+    const actions=el('div','note-edit-actions'),tools=el('div','composer-tools'),confirm=el('div','composer-actions');tools.append(button('添加图片','attach-edit-image','image'),button('引用文件','attach-edit-file','file'));confirm.append(keyHint(['Ctrl','Enter']),button('取消修改 · Esc','cancel-edit','x'),button('保存修改 · Ctrl+Enter','finish-edit','check','icon-button primary'));actions.append(tools,confirm);card.append(input,actions);renderEditAttachments(card);if(window.LiveMarkdown)window.LiveMarkdown.attach(input,{value:ui.editing.text,minHeight:100,maxHeight:300});const editingSession=ui.editing;input.addEventListener('blur',function editInputBlur(){scheduleEditBlur(editingSession);});return card;
   }
+  // 操作按钮：置顶排在最前，然后是复制、更多，收起在最右（第四次反馈去掉了归档）。
+  const actions=el('div','note-actions');
+  if(note.status==='active'){const pin=button(note.pinned?'取消置顶':'置顶记录','pin-note',note.pinned?'pin-off':'pin','icon-button note-pin-toggle'+(note.pinned?' is-pinned':''));pin.setAttribute('aria-pressed',String(note.pinned));actions.append(pin);}
+  actions.append(button('复制记录与附件 · Ctrl+C','copy-note','copy'),button('更多操作 · Shift+F10','more-note','more'));
+  const collapse=button(note.collapsed?'展开正文':'收起正文','toggle-note-collapse','chevron-down','icon-button note-collapse'+(note.collapsed?' is-collapsed':''));collapse.setAttribute('aria-expanded',String(!note.collapsed));actions.append(collapse);
+  side.append(actions);
   const content=el('div','note-content markdown-body');
   const displayBody=first<0?'':fullBody?parsed.body:lines.slice(first+1).join('\n');
   window.NoteContent.renderMarkdown(displayBody,content,{onTaskToggle:function toggleCardTask(index,checked){const changed=displayBody.slice(0,index)+(checked?'x':' ')+displayBody.slice(index+1),prefix=fullBody||first<0?'':lines.slice(0,first+1).join('\n')+'\n';return updateNote(note.id,{text:window.NoteContent.compose(prefix+changed,parsed.tags)});}});
-  note.images.forEach(function renderAttachment(attachment){const preview=button('预览图片：'+attachment.name,'preview-image','', 'note-image-button');preview.dataset.imageId=attachment.id;const image=el('img','note-image');image.src=attachment.data;image.alt=attachment.name;image.loading='lazy';preview.append(image);content.append(preview);});
-  card.append(content);
+  stripImages(note).forEach(function renderAttachment(attachment){const preview=button('预览图片：'+attachment.name,'preview-image','', 'note-image-button');preview.dataset.imageId=attachment.id;const image=el('img','note-image');window.SideNotesImages.show(image,attachment.data);image.alt=attachment.name;image.loading='lazy';preview.append(image);content.append(preview);});
+  // 只有标题行的记录不留正文区，与收起的记录一样只剩标题行。
+  if(content.childNodes.length)card.append(content);else card.classList.add('is-single');
   const expanded=button('展开全文','open-note','chevron-down','note-expand');card.append(expanded);
   const likelyLong=parsed.body.length>360||parsed.body.split('\n').length>9||note.images.length>1;
   card.classList.toggle('is-truncated',likelyLong);expanded.hidden=!likelyLong;
   const measureOverflow=function measureOverflow(){if(!content.isConnected)return;const overflow=content.scrollHeight>content.clientHeight+2;card.classList.toggle('is-truncated',overflow);expanded.hidden=!overflow;};
   if(window.requestAnimationFrame)window.requestAnimationFrame(measureOverflow);
   content.querySelectorAll('img').forEach(function remeasureImage(image){image.addEventListener('load',measureOverflow);image.addEventListener('error',measureOverflow);});
-  const bottom=el('footer','note-bottom'),tags=el('div','note-tags');
-  const expandedTags=ui.expandedTags.has(note.id);tags.classList.toggle('tags-expanded',expandedTags);
-  parsed.tags.forEach(function renderTag(tag){const chip=button('#'+tag,'filter-tag','','tag-chip');chip.dataset.tag=tag;const remove=button('从此记录移除 #'+tag,'remove-note-tag','x','tag-remove');remove.dataset.tag=tag;const wrap=el('span','tag-chip-wrap');wrap.append(chip,remove);tags.append(wrap);});
-  if(parsed.tags.length){const more=button(expandedTags?'收起标签':'展开并管理标签','expand-tags','more','tags-more');more.dataset.noteId=note.id;tags.append(more);}
-  const actions=el('div','note-actions');actions.append(button('复制记录与附件','copy-note','copy'));if(note.status==='active'){const pin=button(note.pinned?'取消置顶':'置顶记录','pin-note',note.pinned?'pin-off':'pin');pin.setAttribute('aria-pressed',String(note.pinned));actions.append(pin);}actions.append(button(note.status==='archived'?'恢复记录':'归档记录','archive-note',note.status==='archived'?'restore':'archive'),button('更多操作','more-note','more'));bottom.append(tags,actions);card.append(bottom);card.title='单击编辑，双击复制，长按拖动排序';if(window.requestAnimationFrame)window.requestAnimationFrame(function fit(){fitCardTags(card);});return card;
+  // 底部只在有标签时出现，没有标签时不占位置。
+  if(parsed.tags.length){
+    const bottom=el('footer','note-bottom'),tags=el('div','note-tags');
+    const expandedTags=ui.expandedTags.has(note.id);tags.classList.toggle('tags-expanded',expandedTags);
+    parsed.tags.forEach(function renderTag(tag){const chip=button('#'+tag,'filter-tag','','tag-chip');chip.dataset.tag=tag;const remove=button('从此记录移除 #'+tag,'remove-note-tag','x','tag-remove');remove.dataset.tag=tag;const wrap=el('span','tag-chip-wrap');wrap.append(chip,remove);tags.append(wrap);});
+    const more=button(expandedTags?'收起标签':'展开并管理标签','expand-tags','more','tags-more');more.dataset.noteId=note.id;tags.append(more);
+    bottom.append(tags);card.append(bottom);
+  }
+  if(isSearching())markSearchHits(card);
+  if(!current)card.querySelectorAll('button').forEach(function outOfTabOrder(node){node.tabIndex=-1;});
+  if(window.requestAnimationFrame)window.requestAnimationFrame(function fit(){fitCardTags(card);});return card;
 }
+
+/**
+ * @brief 标出搜索命中的文字（第七次反馈）：搜索词在标题与正文中加上高亮底色（mark.search-hit，与正文里的 mark 同一种底色）；
+ * 「#标签」只标在标签上（写完整的已有标签只标这个标签，没写完的按前缀）。文字不再标在标签上（第八次反馈：文字与标签分开搜）。
+ * 命中跨过格式（如一半加粗）时不标，匹配本身不受影响。
+ * @param {HTMLElement} card 卡片。
+ */
+function markSearchHits(card){
+  const known=new Set(window.SidebarTabs.allTags().map(function key(item){return tagKey(item.tag);})),tags=[];
+  const words=searchTerms().replace(/(?:^|\s)#([\p{L}\p{N}_-]+)/gu,function collect(_,tag){tags.push(tagKey(tag));return ' ';}).toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  card.querySelectorAll('.note-title, .note-content').forEach(function markText(root){wrapHits(root,words);});
+  card.querySelectorAll('.tag-chip').forEach(function markTag(chip){
+    const key=tagKey(chip.dataset.tag||''),tag=tags.find(function hit(item){return known.has(item)?key===item:key.startsWith(item);});
+    if(tag)wrapHits(chip,['#'+tag]);
+  });
+}
+
+/**
+ * @brief 把文字节点中的命中包进 mark.search-hit：不分大小写，重叠的命中合成一段。
+ * @param {HTMLElement} root 范围。 @param {Array<string>} needles 小写的搜索词。
+ */
+function wrapHits(root,needles){
+  if(!needles.length)return;
+  const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT),nodes=[];
+  while(walker.nextNode())nodes.push(walker.currentNode);
+  nodes.forEach(function markNode(node){
+    const text=node.nodeValue,lower=text.toLocaleLowerCase(),ranges=[];
+    if(lower.length!==text.length)return;
+    needles.forEach(function find(needle){let from=0,at=lower.indexOf(needle);while(at>=0){ranges.push([at,at+needle.length]);from=at+needle.length;at=lower.indexOf(needle,from);}});
+    if(!ranges.length)return;
+    ranges.sort(function byStart(a,b){return a[0]-b[0]||b[1]-a[1];});
+    const merged=[];ranges.forEach(function merge(range){const last=merged[merged.length-1];if(last&&range[0]<=last[1])last[1]=Math.max(last[1],range[1]);else merged.push(range.slice());});
+    const fragment=document.createDocumentFragment();let last=0;
+    merged.forEach(function wrap(range){if(range[0]>last)fragment.append(text.slice(last,range[0]));fragment.append(el('mark','search-hit',text.slice(range[0],range[1])));last=range[1];});
+    if(last<text.length)fragment.append(text.slice(last));
+    node.replaceWith(fragment);
+  });
+}
+
+/**
+ * @brief 快捷键提示：每个键一个小框。
+ * @details 只在终端主题显示（根节点 data-sn-shortcuts="inline"），其余主题由样式隐藏，快捷键留在按钮的工具提示中。
+ * @param {string[]} keys 按键。 @return {HTMLElement} 提示。
+ */
+function keyHint(keys){const node=el('span','key-hint');node.setAttribute('aria-hidden','true');keys.forEach(function key(name){node.append(el('kbd','',name));});return node;}
 
 /** @brief 更新筛选快照并加载首批，保留同一视图已加载数量。 @param {object} options 重置选项。 */
 function renderNotes(options={}) {
   ui.tagRefreshPending=false;
   if(ui.listObserver){ui.listObserver.disconnect();ui.listObserver=null;}
-  const active=state.notes.filter(function activeNote(n){return n.status==='active';}),archive=state.notes.filter(function archivedNote(n){return n.status==='archived';});
-  const counts={workspace:active.length,pinned:active.filter(function pinnedNote(n){return n.pinned;}).length,archive:archive.length};
-  document.querySelectorAll('[data-count]').forEach(function count(node){node.textContent=String(counts[node.dataset.count]||0);});
-  document.querySelectorAll('[data-tab]').forEach(function tab(node){const selected=node.dataset.tab===ui.tab;node.classList.toggle('active',selected);if(selected)node.setAttribute('aria-current','page');else node.removeAttribute('aria-current');});
-  const notes=state.notes.filter(function visible(n){return inCurrentTab(n)&&(!ui.selectedTag||hasTag(n,ui.selectedTag))&&matchesQuery(n,ui.query);}).sort(compareNoteOrder);
+  // 页签栏（第四次反馈）：随记、置顶与固定的标签，放不下的收进最后一格；条数只写在随记与当前页签上（tabs.js）。
+  window.SidebarTabs.render();
+  // 全局搜索（第五次反馈）：有搜索词时列表是全部记录中的匹配结果，按页签分组，与当前页签和标签筛选无关；
+  // 搜索框盖住页签栏（第六次反馈），新建卡片收起。没有搜索词时是当前页签（及标签筛选），置顶在前。
+  const searching=isSearching();
+  const notes=searching?searchResults():state.notes.filter(function visible(n){return inCurrentTab(n)&&(!ui.selectedTag||hasTag(n,ui.selectedTag));}).sort(compareNoteOrder);
   const pinned=notes.filter(function pinned(n){return n.pinned;}),normal=notes.filter(function normal(n){return !n.pinned;});
-  const key=[ui.tab,ui.selectedTag,ui.query,state.settings.lazyLoading,state.settings.pageSize].join('|');const same=ui.listKey===key&&!options.reset;
-  const target=state.settings.lazyLoading?(same?Math.max(state.settings.pageSize,ui.visibleCount||0):state.settings.pageSize):notes.length;
+  const key=[searching?'search':ui.tab,searching?'':ui.selectedTag,searching?searchTerms():'',state.settings.lazyLoading,state.settings.pageSize].join('|');const same=ui.listKey===key&&!options.reset;
   const oldScroll=elements.noteList.scrollTop;
+  // 开始搜索时记下原来的列表与滚动位置，结束搜索回到原来的页签时还原。
+  if(searching&&ui.listKey&&!ui.listKey.startsWith('search|')&&!ui.searchReturn)ui.searchReturn={key:ui.listKey,scroll:oldScroll,count:ui.visibleCount};
+  const restore=!searching&&ui.searchReturn&&ui.searchReturn.key===key?ui.searchReturn:null;if(!searching)ui.searchReturn=null;
+  const target=state.settings.lazyLoading?(same?Math.max(state.settings.pageSize,ui.visibleCount||0):Math.max(state.settings.pageSize,restore?restore.count:0)):notes.length;
+  elements.sidebar.classList.toggle('is-search-results',searching);
   elements.noteList.querySelectorAll('.note-edit-input').forEach(function dispose(input){if(input.liveMarkdown)input.liveMarkdown.destroy();});
-  elements.noteList.replaceChildren();if(elements.composerSlot)elements.noteList.append(elements.composerSlot);else if(elements.sidebarComposer)elements.noteList.append(elements.sidebarComposer);
-  ui.listItems=pinned.concat(normal);ui.listKey=key;ui.visibleCount=0;ui.lastListGroup='';ui.groupCounts={pinned:pinned.length,normal:normal.length};ui.sentinel=null;ui.loading=false;
-  if(!notes.length){const empty=el('div','empty-state');empty.append(el('h3','',ui.query||ui.selectedTag?'没有匹配的记录':'暂无记录'),el('p','',ui.query||ui.selectedTag?'调整搜索或标签筛选。':'在上方直接输入。'));if(ui.query||ui.selectedTag)empty.append(button('清除筛选','clear-filters','','button secondary'));elements.noteList.append(empty);}
+  elements.noteList.replaceChildren();
+  ui.listGroups=searching?searchGroups(notes):null;
+  ui.listItems=searching?ui.listGroups.reduce(function flat(items,group){return items.concat(group.notes);},[]):pinned.concat(normal);ui.listKey=key;ui.visibleCount=0;ui.sentinel=null;ui.loading=false;
+  if(!notes.length){const empty=el('div','empty-state');empty.append(el('h3','',searching||ui.selectedTag?'没有匹配的记录':'暂无记录'),el('p','',searching?'搜索的是全部记录，换个词试试。':ui.selectedTag?'调整标签筛选。':'在上方直接输入。'));if(searching)empty.append(button('清除搜索','end-search','','button secondary'));else if(ui.selectedTag)empty.append(button('清除筛选','clear-filters','','button secondary'));elements.noteList.append(empty);}
   else appendNextPage(target);
-  elements.noteList.scrollTop=same?oldScroll:0;elements.listSummary.textContent=notes.length+' 条'+(ui.selectedTag?' · #'+ui.selectedTag:'');elements.clearSearch.hidden=!ui.query;
-  renderTagMenu();renderWorkspaceNudge();refreshSearchSummary();if(window.NoteInteractions)window.NoteInteractions.refresh();
+  elements.noteList.scrollTop=same?oldScroll:restore?restore.scroll:0;renderListSummary(notes);elements.noteList.setAttribute('aria-label',notes.length+' 条记录');syncCardTabStops();elements.clearSearch.hidden=!ui.query;
+  renderTagMenu();renderWorkspaceNudge();refreshSearchSummary();if(window.NoteInteractions)window.NoteInteractions.refresh();if(window.NoteWindows)window.NoteWindows.refresh();
+}
+
+/**
+ * @brief 筛选行（第五、六次反馈：侧栏顶部保持两行）。左边写列表里是什么：标签下拉同时写标签与条数，选了标签时是
+ * 「# 产品 · 2 条」，后面的 × 清除筛选；没选时是「# 全部标签」（条数已经写在当前页签上）。选了标签时后面是「固定为页签」
+ * （这个标签还没固定时）与「合并」（筛出两条以上时，见 merge.js）。搜索时标签下拉不用，换成结果的条数；只搜一个已有标签时，
+ * 后面同样是这两个按钮。右边是对整个列表的操作，见 syncListTools。
+ * @param {Array} notes 当前列表中的记录（搜索时是全部结果）。
+ */
+function renderListSummary(notes){
+  ui.summaryNotes=notes;
+  renderFilterRow();
+}
+
+/**
+ * @brief 写出筛选行左边（选择变化时 interactions.js 也会调用）：有选中的卡片时是「已选 N 条」「合并」「移入回收站」（第七次反馈），
+ * 搜索时是结果条数，其余是标签下拉；后面的按钮见 filterActions 与 selectionActions。
+ */
+function renderFilterRow(){
+  const notes=ui.summaryNotes||[],interactions=window.NoteInteractions,chosen=interactions?interactions.selectedCount():0;
+  const searching=isSearching(),filtered=Boolean(ui.selectedTag),trigger=elements.tagFilterButton;
+  trigger.parentElement.classList.toggle('is-filtered',filtered);trigger.classList.toggle('is-filtered',filtered);trigger.parentElement.hidden=searching||chosen>0;
+  trigger.querySelector('.tag-filter-label').textContent=filtered?ui.selectedTag:'全部标签';
+  if(!searching){const count=trigger.querySelector('.tag-filter-count');count.hidden=!filtered;count.textContent=filtered?'· '+notes.length+' 条':'';trigger.setAttribute('aria-label',filtered?'标签 #'+ui.selectedTag+'，'+notes.length+' 条，更换标签':'按标签筛选');}
+  elements.tagFilterClear.hidden=!filtered;
+  elements.searchSummary.hidden=!searching||chosen>0;elements.searchSummary.textContent=searching?notes.length+' 条':'';
+  elements.selectionSummary.hidden=!chosen;elements.selectionSummary.textContent=chosen?'已选 '+chosen+' 条':'';
+  elements.listSummary.replaceChildren(...(chosen?selectionActions(chosen):searching?wordTagActions().concat(filterActions(singleSearchTag(),notes)):filtered?filterActions(ui.selectedTag,notes):[]));
+  syncListTools();
+}
+
+/**
+ * @brief 有选中的卡片时筛选行左边的按钮（第七次反馈）：「合并」（两条以上时）与「移入回收站」，与右键菜单的同名操作相同；
+ * 「移到…」在右键菜单里。 @param {number} count 选中的条数。 @return {HTMLElement[]} 按钮。
+ */
+function selectionActions(count){
+  const actions=[];
+  if(count>1)actions.push(button('合并','merge-selection','','list-summary-action'));
+  actions.push(button('移入回收站','trash-selection','','list-summary-action'));
+  return actions;
+}
+
+/**
+ * 筛选行右边的列表操作（第六次反馈，0.7.3 侧栏右键菜单中已有的两项）：多选按钮按下时卡片出现勾选框，选中的条数写在
+ * 筛选行左边（第七次反馈，按钮上不再写数字）；收起/展开全部按当前列表决定：还有展开的卡片时收起全部，全部收起后展开全部，
+ * 列表为空时不可用。
+ */
+function syncListTools(){
+  const select=elements.selectMode,fold=elements.collapseAll;if(!select||!fold)return;
+  const interactions=window.NoteInteractions,active=Boolean(interactions&&interactions.isSelecting());
+  select.setAttribute('aria-pressed',String(active));select.setAttribute('aria-label',active?'退出多选':'多选');
+  const items=ui.listItems||[],collapse=items.some(function expanded(note){return !note.collapsed;});
+  fold.disabled=!items.length;fold.setAttribute('aria-label',collapse?'收起全部卡片':'展开全部卡片');
+  const use=fold.querySelector('use');if(use)use.setAttribute('href',collapse?'#i-fold':'#i-unfold');
+}
+
+/**
+ * @brief 收起或展开当前列表中的全部卡片（与 0.7.3 侧栏菜单「收起全部卡片」「展开全部卡片」相同）：还有展开的就全部收起，
+ * 否则全部展开；作用于整个列表（包括还没加载出来的），提示条可以撤销。
+ */
+function toggleCollapseAll(){
+  const items=ui.listItems||[],collapse=items.some(function expanded(note){return !note.collapsed;}),ids=new Set(items.filter(function differs(note){return Boolean(note.collapsed)!==collapse;}).map(function id(note){return note.id;}));
+  if(!ids.size||!finishEdit())return;
+  const previous=new Map(state.notes.filter(function changing(note){return ids.has(note.id);}).map(function remember(note){return [note.id,Boolean(note.collapsed)];}));
+  const notes=state.notes.map(function change(note){return ids.has(note.id)?{...note,collapsed:collapse}:note;});
+  if(!persistSnapshot(notes)){toast('操作未保存，请重试',null,true);return;}
+  renderNotes();
+  toast('已'+(collapse?'收起':'展开')+' '+ids.size+' 张卡片',{label:'撤销',run:function undoCollapse(){const restored=state.notes.map(function restore(note){return previous.has(note.id)?{...note,collapsed:previous.get(note.id)}:note;});if(persistSnapshot(restored))renderNotes();}},false,'collapse-all');
+}
+
+/**
+ * @brief 按一个标签筛选或搜索时的两个按钮：「固定为页签」（这个标签还没固定时）与「合并」（两条以上时）。
+ * @param {string} tag 标签，为空时没有按钮。 @param {Array} notes 筛出的记录。 @return {HTMLElement[]} 按钮。
+ */
+function filterActions(tag,notes){
+  if(!tag)return [];const actions=[];
+  if(!window.SidebarTabs.findPinned(tag)){const pin=button('固定为页签','pin-filter-tag','','list-summary-action');pin.dataset.tag=tag;actions.push(pin);}
+  if(notes.length>1){const merge=button('合并这 '+notes.length+' 条','merge-filtered','','list-summary-action');merge.textContent='合并';merge.dataset.tag=tag;actions.push(merge);}
+  return actions;
+}
+
+/**
+ * @brief 搜的词正好是一个已有标签的名称时（如「开发」），结果条数后面的「#开发 8 条」（第八次反馈）：文字与标签分开搜之后，
+ * 点它改搜这个标签。 @return {HTMLElement[]} 按钮，没有时为空。
+ */
+function wordTagActions(){
+  const match=/^[\p{L}\p{N}_-]+$/u.exec(searchTerms());if(!match)return [];
+  const key=tagKey(match[0]),found=window.SidebarTabs.allTags().find(function same(item){return tagKey(item.tag)===key;});if(!found)return [];
+  const action=button('改搜标签 #'+found.tag+'，'+found.count+' 条','search-word-tag','','list-summary-action word-tag-action');
+  action.textContent='';action.append(el('span','word-tag-name','#'+found.tag),el('span','word-tag-count',found.count+' 条'));action.dataset.tag=found.tag;
+  return [action];
+}
+
+/* ==================== 全局搜索（第五次反馈） ==================== */
+
+/** @return {string} 实际的搜索词：去掉只有 # 还没写标签名的部分（刚输入 # 时只弹出标签候选，列表不变）。 */
+function searchTerms(){return ui.query.replace(/(^|\s)#(?=\s|$)/gu,' ').trim();}
+/** @return {boolean} 是否在搜索：有搜索词时列表是全部记录中的结果。 */
+function isSearching(){return Boolean(searchTerms());}
+/** @return {Array} 全部未删除记录中与搜索词匹配的（不分页签）。写完整的已有标签（如 #产品）只匹配这个标签，没写完的按前缀匹配。 */
+function searchResults(){
+  const known=new Set(window.SidebarTabs.allTags().map(function key(item){return tagKey(item.tag);})),terms=searchTerms();
+  return state.notes.filter(function match(note){return note.status==='active'&&matchesQuery(note,terms,known);});
+}
+/**
+ * @brief 搜索结果按页签分组：每条记录放在它所在的页签（tabs.js 的 homeOf），置顶的组总在最上面（第七次反馈），其余与页签栏的顺序相同，
+ * 组内置顶在前。
+ * @param {Array} notes 结果。 @return {Array<{tab:string,notes:Array,start:number,count:number}>} 非空的组与它在列表中的起点。
+ */
+function searchGroups(notes){
+  const groups=window.SidebarTabs.resultOrder().map(function group(tab){return {tab:tab,notes:[]};}),byTab=new Map(groups.map(function index(group){return [group.tab,group];}));
+  notes.forEach(function place(note){(byTab.get(window.SidebarTabs.homeOf(note))||byTab.get('workspace')).notes.push(note);});
+  let start=0;
+  return groups.filter(function nonempty(group){return group.notes.length;}).map(function measure(group){
+    group.notes.sort(function order(a,b){return (a.pinned===b.pinned?0:a.pinned?-1:1)||compareNoteOrder(a,b);});
+    const result={tab:group.tab,notes:group.notes,start:start,count:group.notes.length};start+=group.notes.length;return result;
+  });
+}
+/**
+ * @brief 搜索结果的组标题：页签的图标、名称与条数，右侧「转到」切到这个页签（结束搜索）。
+ * @param {object} group 组。 @return {HTMLElement} 组标题。
+ */
+function renderSearchGroup(group){
+  const tabs=window.SidebarTabs,head=el('div','search-group');head.dataset.groupTab=group.tab;
+  const title=el('span','search-group-title');title.append(icon(group.tab==='pinned'?'pin':group.tab==='workspace'?'note':'hash'),el('span','search-group-name',tabs.name(group.tab)),el('span','search-group-count',String(group.count)));
+  const go=el('button','search-group-go');go.type='button';go.dataset.action='go-to-tab';go.dataset.goTab=group.tab;go.setAttribute('aria-label','转到'+tabs.label(group.tab));go.append(el('span','','转到'),icon('arrow-right'));
+  head.append(title,go);return head;
+}
+/** @return {string} 搜索词只是一个已有的标签（如「#产品」）时返回这个标签的写法，否则为空；这时筛选行里出现「固定为页签」「合并」。 */
+function singleSearchTag(){
+  const match=/^#([\p{L}\p{N}_-]+)$/u.exec(searchTerms());if(!match)return '';
+  const key=tagKey(match[1]),found=window.SidebarTabs.allTags().find(function same(item){return tagKey(item.tag)===key;});
+  return found?found.tag:'';
+}
+/** @brief 结束搜索：清空搜索词，收起搜索框，回到原来的页签与滚动位置。 @param {object} options focusButton：焦点回到放大镜。 */
+function endSearch(options={}){ui.query='';elements.searchInput.value='';closeTagMenu();if(ui.searchOpen)toggleSearch(false,options);renderNotes();}
+/** @brief 把搜索词换成这段文字（搜索时点卡片上的标签：搜这个标签）。 @param {string} text 搜索词。 */
+function setSearchQuery(text){
+  if(!ui.searchOpen)toggleSearch(true);
+  elements.searchInput.value=text;ui.query=text;closeTagMenu();renderNotes();
+  elements.searchInput.focus();elements.searchInput.setSelectionRange(text.length,text.length);
+}
+/** @return {string|null} 光标前正在输入的标签（# 之后的部分，可以为空）；不在标签上时为 null。 */
+function tagTokenAtCaret(){
+  const input=elements.searchInput,end=input.selectionStart==null?input.value.length:input.selectionStart;
+  const match=/(?:^|\s)#([\p{L}\p{N}_-]*)$/u.exec(input.value.slice(0,end));return match?match[1]:null;
+}
+/** 在搜索框里输入 # 时弹出全部记录中的标签候选（按输入的前缀），光标离开标签时收起。 */
+function refreshTagSuggestions(){
+  const token=ui.searchOpen&&document.activeElement===elements.searchInput?tagTokenAtCaret():null;
+  if(token===null){if(ui.tagMenuMode==='suggest')closeTagMenu();return;}
+  ui.tagMenuMode='suggest';ui.tagToken=token;renderTagMenu();elements.tagDropdown.hidden=false;
+}
+/** @brief 用候选补全搜索框里正在输入的标签，后面加一个空格接着输入。 @param {string} tag 标签。 */
+function completeTagToken(tag){
+  const input=elements.searchInput,end=input.selectionStart==null?input.value.length:input.selectionStart;
+  const head=input.value.slice(0,end);let before=head.replace(/(^|\s)#[\p{L}\p{N}_-]*$/u,function token(_,space){return space+'#'+tag+' ';});
+  if(before===head)before=(head&&!/\s$/.test(head)?head+' ':head)+'#'+tag+' ';
+  const after=input.value.slice(end).replace(/^[\p{L}\p{N}_-]*\s?/u,'');
+  if(!ui.searchOpen)toggleSearch(true);
+  input.value=before+after;ui.query=input.value;closeTagMenu();renderNotes();
+  input.focus();input.setSelectionRange(before.length,before.length);
+}
+/**
+ * @brief 切到一个页签（单击页签、搜索结果的「转到」）：结束搜索，清除标签筛选；给出记录时滚到它并高亮。
+ * @param {string} tab 页签。 @param {object} options noteId：转到这条记录；reset：回到列表顶部。 @return {boolean} 是否切换。
+ */
+function goToTab(tab,options={}){
+  if(!finishEdit())return false;
+  ui.tab=window.SidebarTabs.exists(tab)?tab:'workspace';ui.selectedTag='';ui.query='';elements.searchInput.value='';ui.searchReturn=null;closeTagMenu();
+  if(ui.searchOpen)toggleSearch(false);
+  renderNotes({reset:Boolean(options.reset||options.noteId)});
+  if(options.noteId)locateNote(options.noteId);
+  return true;
+}
+/** @brief 在列表中找到这条记录（按需加载到它），滚到中间、高亮并闪一下。 @param {string} id 记录。 */
+function locateNote(id){
+  const index=ui.listItems.findIndex(function same(note){return note.id===id;});if(index<0)return;
+  if(ui.visibleCount<=index)appendNextPage(index+1-ui.visibleCount);
+  const card=Array.from(elements.noteList.querySelectorAll('.note-card')).find(function same(node){return node.dataset.noteId===id;});if(!card)return;
+  setCurrentCard(id);card.focus({preventScroll:true});
+  card.scrollIntoView({block:'center',behavior:window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
+  card.classList.remove('is-located');void card.offsetWidth;card.classList.add('is-located');
+  window.setTimeout(function settle(){card.classList.remove('is-located');},1600);
 }
 
 /** 创建可直接输入的空白卡片，工具与提交操作分别排列。 */
 function createComposer() {
   const composer=el('section','sidebar-composer composer-placeholder is-active');composer.id='quick-composer';composer.setAttribute('aria-label','直接记录');
-  const input=el('textarea','sidebar-draft-input');input.id='sidebar-draft-input';input.rows=1;input.placeholder="记一条… 支持 Markdown、#标签\nCtrl+Enter 保存并收起侧栏";input.setAttribute('aria-label','直接输入新记录，Ctrl+Enter 保存并收起侧栏');
+  const input=el('textarea','sidebar-draft-input');input.id='sidebar-draft-input';input.rows=1;input.placeholder="记一条… 支持 Markdown、#标签\nCtrl+Enter 保存，侧栏保持展开";input.setAttribute('aria-label','直接输入新记录，Ctrl+Enter 保存，侧栏保持展开');
   const attachments=el('div','attachment-list');attachments.id='sidebar-attachment-list';
   const footer=el('div','composer-footer'),tools=el('div','composer-tools'),actions=el('div','composer-actions');
   tools.append(button('添加图片','attach-image','image'),button('引用文件','attach-file','file'));
-  actions.append(button('收起输入','close-composer','x'),button('保存记录，保持侧栏展开','save-sidebar-note','check','composer-submit icon-button primary'));
-  footer.append(tools,actions);composer.append(input,attachments,footer);
-  const slot=el('div','composer-sticky-slot');slot.append(composer);elements.noteList.append(slot);
-  elements.sidebarDraft=input;elements.sidebarComposer=composer;elements.composerSlot=slot;elements.sidebarAttachments=attachments;
+  // 字数紧跟附件工具；终端主题在同一位置写出 Ctrl+Enter（由样式按 data-sn-shortcuts 切换），见 components.md 1.6。
+  const count=el('span','composer-count','0 字');elements.composerCount=count;
+  // 工具栏一直显示，没有收起按钮（本次提出）；Esc 仍然离开输入。
+  actions.append(keyHint(['Ctrl','Enter']),button('保存记录，保持侧栏展开','save-sidebar-note','check','composer-submit icon-button primary'));
+  footer.append(tools,count,actions);composer.append(input,attachments,footer);
+  // 新建卡片独占列表上方的一块区域，不随列表滚动（与 Design Playground 相同），列表滚动时卡片从它下方移出。
+  elements.noteList.before(composer);
+  elements.sidebarDraft=input;elements.sidebarComposer=composer;elements.sidebarAttachments=attachments;
   input.addEventListener('focus',function activateInput(){ui.composer=true;composer.classList.add('is-active');cancelHide();resizeDraftInput();});
+  // 点工具栏的空白处或卡片边缘时焦点留在输入区，卡片不闪一下失焦的样子。
+  composer.addEventListener('mousedown',function keepComposerFocus(event){if(event.button!==0||event.target.closest('button,a,input,textarea,[contenteditable="true"]'))return;event.preventDefault();const editor=input.liveMarkdown;if(editor&&!editor.hasFocus())editor.focus();else if(!editor&&document.activeElement!==input)input.focus();});
   input.addEventListener('input',resizeDraftInput);
 }
 
@@ -292,10 +730,12 @@ function createComposer() {
 function renderDraft() {
   if (elements.draftInput.value !== state.draft.text) elements.draftInput.value = state.draft.text;
   if (elements.sidebarDraft.value !== state.draft.text) elements.sidebarDraft.value = state.draft.text;
-  elements.charCount.textContent = state.draft.text.length + ' 字';
+  const characters = Array.from(state.draft.text).length + ' 字';
+  elements.charCount.textContent = characters;
+  if (elements.composerCount) elements.composerCount.textContent = characters;
   [elements.attachmentList, elements.sidebarAttachments].forEach(function renderAttachmentList(list) {
     list.replaceChildren();
-    state.draft.images.forEach(function appendAttachment(attachment) {
+    stripImages(state.draft).forEach(function appendAttachment(attachment) {
       const item = el('div', 'attachment-item');
       const preview = el('button', 'attachment-preview');
       preview.type = 'button';
@@ -303,7 +743,7 @@ function renderDraft() {
       preview.dataset.imageId = attachment.id;
       preview.setAttribute('aria-label', '预览图片：' + attachment.name);
       const image = el('img');
-      image.src = attachment.data;
+      window.SideNotesImages.show(image, attachment.data);
       image.alt = attachment.name;
       preview.append(image);
       const remove = button('移除图片：' + attachment.name, 'remove-draft-image', 'x');
@@ -318,7 +758,6 @@ function renderDraft() {
   sidebarSave.disabled = elements.saveNote.disabled;
   elements.sidebarComposer.hidden = false;
   resizeDraftInput();
-  elements.captureSubtitle.textContent = 'Markdown · #标签';
   [elements.draftInput,elements.sidebarDraft].forEach(function syncEditor(input){if(input.liveMarkdown&&input.liveMarkdown.getValue()!==state.draft.text)input.liveMarkdown.setValue(state.draft.text);});
   setStorageStatus(ui.storageWriteError);
 }
@@ -335,16 +774,40 @@ function changeDraft(text) {
 
 /** @brief 在所属页签保存新增记录，按钮保留当前窗口，快捷键收起当前窗口。 @param {string} origin 来源。 @param {object} options 提交选项。 */
 function saveDraft(origin,options={}){
+  // 速记浮窗的提示留在浮窗里（第七次反馈）：Ctrl+Enter 保存后浮窗收起、焦点离开，仍按浮窗算。
+  const host=ui.toastHost;ui.toastHost=origin==='capture'?'capture':host;
+  try{saveDraftNow(origin,options);}finally{ui.toastHost=host;}
+}
+
+/** @brief 保存草稿为新记录（saveDraft 的正文）。 @param {string} origin capture 或 sidebar。 @param {object} options collapse：保存后收起。 */
+function saveDraftNow(origin,options={}){
   if(ui.pendingImages){toast('内容正在读取，请稍候');return;}
   if(!state.draft.text.trim()&&!state.draft.images.length)return;window.clearTimeout(ui.draftTimer);
   const now=Date.now(),targetTab=origin==='sidebar'?ui.tab:'workspace',collapse=Boolean(options.collapse);
-  const note={id:createId(),text:window.NoteContent.canonicalize(state.draft.text),images:state.draft.images.map(function clone(image){return {...image};}),pinned:targetTab==='pinned',status:targetTab==='archive'?'archived':'active',collapsed:false,emoji:window.NoteEmoji.pick(state.notes.map(function current(n){return n.emoji;})),createdAt:now,updatedAt:now};
+  // 在标签页签中新建（第四次反馈）：带上这个页签的标签（新建卡片上的「#标签」去掉了就不带）。
+  const tabTag=origin==='sidebar'?window.SidebarTabs.draftTag():'',text=window.NoteContent.canonicalize(tabTag?withTag(state.draft.text,tabTag):state.draft.text);
+  const note={id:createId(),text:text,images:keepReferencedImages(state.draft.text,state.draft.images).map(function clone(image){return {...image};}),pinned:targetTab==='pinned',status:'active',collapsed:false,emoji:window.NoteEmoji.pick(state.notes.map(function current(n){return n.emoji;})),createdAt:now,updatedAt:now};
   if(!persistSnapshot([note,...state.notes],{text:'',images:[],updatedAt:now})){persistDraft();toast('没有保存成功，草稿和图片仍在，可导出备份后重试',null,true);renderDraft();return;}
-  ui.tab=targetTab;ui.query='';ui.selectedTag='';elements.searchInput.value='';ui.composer=false;renderDraft();renderNotes();
+  // 去掉了新建卡片上的页签标签（第五次反馈）：保存前记下，提示里可以放回。
+  const skipped=origin==='sidebar'?window.SidebarTabs.skippedTag():'';
+  ui.composer=false;if(origin==='sidebar')window.SidebarTabs.resetDraftTag();renderDraft();renderNotes();
   if(origin==='capture'){
     if(collapse)hideCapture();else showCapture();
   }else if(collapse)hideSidebar(true);else{showSidebar({focus:false});focusNewComposer();}
-  toast(targetTab==='pinned'?'已保存并置顶':targetTab==='archive'?'已保存到归档':'已保存到工作区',{label:'查看',run:function reveal(){showSidebar({focus:false});window.setTimeout(function focusSaved(){const card=Array.from(elements.noteList.querySelectorAll('[data-note-id]')).find(function same(n){return n.dataset.noteId===note.id;});if(card){card.scrollIntoView({block:'nearest',behavior:'smooth'});card.focus({preventScroll:true});}},80);}});
+  announceSaved(note,origin==='sidebar'?ui.tab:'',skipped);
+}
+
+/**
+ * @brief 新记录的提示（第五次反馈）：在侧栏新建、而它不在当前页签里显示时，写明记在了哪里，「查看」切过去并高亮这一条；
+ * 是因为去掉了新建卡片上的页签标签时，还有「放回」：补上这个标签。其余情况照旧提示「记录已保存」。
+ * @param {object} note 新记录。 @param {string} tab 新建时的页签，速记浮窗为空。 @param {string} skipped 去掉了的页签标签。
+ */
+function announceSaved(note,tab,skipped){
+  const tabs=window.SidebarTabs;
+  if(!tab||tabs.belongs(note,tab)){toast('记录已保存');return;}
+  const home=tabs.homeOf(note),actions=[{label:'查看',run:function view(){goToTab(home,{noteId:note.id});}}];
+  if(skipped)actions.push({label:'放回「'+skipped+'」',run:function putBack(){const current=state.notes.find(function same(item){return item.id===note.id;});if(current&&updateNote(note.id,{text:withTag(current.text,skipped)}))toast('已放回「'+skipped+'」');}});
+  toast('已记在「'+tabs.name(home)+'」',actions);
 }
 
 /** @brief 开始事务式编辑，标签整理和拖动优先于正文。 @param {string} id 记录标识。 */
@@ -354,7 +817,10 @@ function beginEdit(id){
   if(ui.editing&&ui.editing.id===id)return;if(ui.editing&&!finishEdit())return;
   const note=state.notes.find(function same(n){return n.id===id;});if(!note)return;
   ui.editing={id:id,text:note.text,images:note.images.map(function clone(image){return {...image};}),originalText:note.text,originalImages:note.images};
-  cancelHide();renderNotes();const input=elements.noteList.querySelector('textarea[data-edit-id]');if(input){input.focus();const end=input.liveMarkdown?input.liveMarkdown.getValue().length:input.value.length;input.setSelectionRange(end,end);}
+  // 光标放在正文末尾（标签行之前），接着写正文，而不是落在标签行末尾（本次提出）。
+  cancelHide();renderNotes();const input=elements.noteList.querySelector('textarea[data-edit-id]');if(input){input.focus({preventScroll:true});const end=window.NoteContent.bodyEnd(input.liveMarkdown?input.liveMarkdown.getValue():input.value);input.setSelectionRange(end,end);}
+  // 进入编辑时把卡片滚到列表顶部（本次提出，「编辑时滚到顶部」默认打开）；关闭时列表不滚动（与现有应用一致）。
+  const editingCard=elements.noteList.querySelector('.note-card.is-editing');if(editingCard&&state.settings.scrollOnEdit)editingCard.scrollIntoView({block:'start',behavior:window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
 }
 
 /** @brief 仅显式提交时写入编辑事务，后台备份不提交当前修改。 @param {boolean} commit 是否提交。 @return {boolean} 是否成功。 */
@@ -362,8 +828,9 @@ function flushEdit(commit=false){
   window.clearTimeout(ui.editTimer);if(!ui.editing||!commit)return true;
   if(ui.pendingImages){toast('请等待读取完成后再保存');return false;}
   const editing=ui.editing,note=state.notes.find(function same(n){return n.id===editing.id;});if(!note)return false;
-  if(!editing.text.trim()&&!editing.images.length){toast('记录内容为空，可使用删除操作移入回收站',null,true);return false;}
-  const next=state.notes.map(function apply(n){return n.id===editing.id?{...n,text:window.NoteContent.canonicalize(editing.text),images:editing.images,updatedAt:Date.now()}:n;});
+  if(!editing.text.trim()&&!editing.images.length)return true;
+  if(editing.text===editing.originalText&&editing.images.length===editing.originalImages.length&&editing.images.every(function same(image,index){return image.id===editing.originalImages[index].id;}))return true;
+  const next=state.notes.map(function apply(n){return n.id===editing.id?{...n,text:window.NoteContent.canonicalize(editing.text),images:keepReferencedImages(editing.text,editing.images),updatedAt:Date.now()}:n;});
   const saved=persistSnapshot(next);ui.editStorageError=!saved;setStorageStatus(ui.storageWriteError);if(!saved)toast('编辑未保存，修改仍保留在输入区',null,true);return saved;
 }
 
@@ -385,7 +852,7 @@ function cancelHide() {
 function scheduleHide(){
   cancelHide();
   /** @brief 检查当前是否允许自动收起。 @return {boolean} 是否应保留侧栏。 */
-  function keepVisible(){return ui.locked||ui.modal||ui.resizing||ui.searchOpen||window.NoteMenus&&window.NoteMenus.isOpen()||window.NoteInteractions&&(window.NoteInteractions.isBusy()||window.NoteInteractions.hasSelection())||(state.settings.protectEditing&&(ui.editing||(ui.composer&&(state.draft.text.trim()||state.draft.images.length||ui.pendingImages))||ui.expandedTags.size));}
+  function keepVisible(){return ui.locked||ui.modal||window.matchMedia&&window.matchMedia('(max-width: 480px)').matches||ui.resizing||ui.searchOpen&&document.activeElement===elements.searchInput||window.NoteMenus&&window.NoteMenus.isOpen()||window.NoteInteractions&&(window.NoteInteractions.isBusy()||window.NoteInteractions.hasSelection())||ui.editing||(ui.composer&&(state.draft.text.trim()||state.draft.images.length||ui.pendingImages))||ui.expandedTags.size||window.NoteWindows&&window.NoteWindows.isDragging();}
   if(keepVisible())return;
   ui.hideTimer=window.setTimeout(function hideAfterDelay(){if(!elements.sidebar.matches(':hover')&&!keepVisible())hideSidebar();},state.settings.hideDelay);
 }
@@ -394,7 +861,8 @@ function scheduleHide(){
 function showSidebar(options={}){
   const wasOpen=elements.sidebar.classList.contains('open')&&!elements.sidebar.inert;
   cancelHide();elements.sidebar.inert=false;elements.sidebar.setAttribute('aria-hidden','false');elements.sidebar.classList.add('open');
-  if(!wasOpen&&options.focus!==false&&!ui.modal&&!ui.editing){
+  // 有搜索结果时重新滑出，保留结果与搜索框（新建卡片在搜索时收起）。
+  if(!wasOpen&&options.focus!==false&&!ui.modal&&!ui.editing&&!isSearching()){
     if(ui.searchOpen)toggleSearch(false);
     queueComposerFocus();
   }
@@ -404,7 +872,7 @@ function showSidebar(options={}){
 function hideSidebar(manual=false){
   if(ui.editing&&!finishEdit())return;
   cancelHide();ui.composerFocusToken=(ui.composerFocusToken||0)+1;persistDraft();
-  if(manual){ui.locked=false;const lock=document.getElementById('sidebar-lock');lock.setAttribute('aria-pressed','false');lock.setAttribute('aria-label','固定侧栏');lock.title='固定侧栏';lock.replaceChildren(icon('pin'));}
+  if(manual){ui.locked=false;const lock=document.getElementById('sidebar-lock');lock.setAttribute('aria-pressed','false');lock.setAttribute('aria-label','固定侧栏');lock.replaceChildren(icon('pin'));}
   if(elements.sidebar.contains(document.activeElement))document.activeElement.blur();
   elements.sidebar.classList.remove('open');elements.sidebar.setAttribute('aria-hidden','true');elements.sidebar.inert=true;closeTagMenu();
   if(window.NoteMenus)window.NoteMenus.close({restoreFocus:false});
@@ -438,7 +906,7 @@ function readImage(file) {
     if (!/^image\/(png|jpeg|gif|webp|svg\+xml)$/.test(file.type)) { reject(new Error('支持 PNG、JPG、GIF、WebP 和 SVG 图片')); return; }
     if (file.size > MAX_IMAGE_BYTES) { reject(new Error('单张图片需小于 2 MB，请压缩后再添加')); return; }
     const reader = new FileReader();
-    reader.onload = function imageLoaded() { resolve({ id: createId(), name: file.name || '粘贴的截图.png', type: file.type, data: String(reader.result) }); };
+    reader.onload = function imageLoaded() { resolve(window.SideNotesImages.register({ id: createId(), name: file.name || '粘贴的截图.png', type: file.type, data: String(reader.result), inline: true })); };
     reader.onerror = function imageFailed() { reject(new Error('图片读取失败，文字草稿已保留')); };
     reader.readAsDataURL(file);
   });
@@ -472,29 +940,70 @@ function removeDraftImage(id) {
 
 /* ==================== 对话框、通知与备份 ==================== */
 
-/** @brief 显示提示，可附带撤销操作。 @param {string} message 消息。 @param {object|null} action 操作。 @param {boolean} error 是否错误。 */
-function toast(message, action = null, error = false) {
+/**
+ * @brief 提示出现在哪个窗口：与桌面端一样，每个窗口有自己的提示区域，跟着窗口显示与收起（第七次反馈：此前侧栏的提示区域
+ * 浮在页面上，侧栏收起后提示还停在桌面上）。设置窗口打开时在设置窗口里（它是模态的，打开期间的提示都来自设置中的操作）；
+ * 速记浮窗里的操作（焦点在浮窗里，或保存浮窗的草稿）在浮窗里；其余在侧栏里。
+ * @return {HTMLElement} 提示区域。
+ */
+function toastRegion(){
+  const modal=ui.modal==='settings-modal'&&elements.modalRoot.querySelector('.settings-modal');
+  if(modal)return ownToastRegion(modal,'settings-toast-region');
+  const active=document.activeElement;
+  if(ui.toastHost==='capture'||(active&&elements.capture.contains(active)))return ownToastRegion(elements.capture,'capture-toast-region');
+  return elements.toastRegion;
+}
+
+/** @brief 窗口自己的提示区域，第一次用到时创建。 @param {HTMLElement} host 窗口。 @param {string} name 区域的类名。 @return {HTMLElement} 提示区域。 */
+function ownToastRegion(host,name){
+  let region=host.querySelector(':scope > .'+name);
+  if(!region){region=el('div','toast-region '+name);region.setAttribute('role','status');region.setAttribute('aria-live','polite');region.setAttribute('aria-atomic','true');host.append(region);}
+  return region;
+}
+
+/**
+ * @brief 显示提示，可附带操作（撤销、查看等）。
+ * @param {string} message 消息。 @param {object|Array<object>|null} action 一个或几个操作：label 与 run。 @param {boolean} error 是否错误。
+ * @param {string} key 同一种操作的提示（如收起/展开全部）：新的一条替换旧的，不叠在一起，旧提示的「撤销」也不会退回更早的状态（第七次反馈）。
+ */
+function toast(message, action = null, error = false, key = '') {
   if (!elements.toastRegion) return;
+  const region = toastRegion();
+  if (key) document.querySelectorAll('.toast[data-toast-key]').forEach(function replaced(node) { if (node.dataset.toastKey === key) node.remove(); });
   const item = el('div', 'toast' + (error ? ' error' : ''));
+  if (key) item.dataset.toastKey = key;
+  if (error) item.setAttribute('role', 'alert');
   item.append(icon(error ? 'alert' : 'check-circle'), el('span', '', message));
-  if (action) {
-    const control = el('button', 'toast-action', action.label);
+  const actions = Array.isArray(action) ? action : action ? [action] : [];
+  actions.forEach(function appendAction(entry) {
+    const control = el('button', 'toast-action', entry.label);
     control.type = 'button';
-    control.addEventListener('click', function runToastAction() { action.run(); item.remove(); });
+    control.addEventListener('click', function runToastAction() { entry.run(); item.remove(); });
     item.append(control);
-  }
+  });
   const close = button('关闭提示', '', 'x');
   close.addEventListener('click', function closeToast() { item.remove(); });
   item.append(close);
-  elements.toastRegion.append(item);
-  while (elements.toastRegion.children.length > 3) elements.toastRegion.firstElementChild.remove();
-  window.setTimeout(function dismissToast() { item.remove(); }, action ? 9000 : 6000);
+  region.append(item);
+  while (region.children.length > 3) region.firstElementChild.remove();
+  // 停留 6 秒，带撤销 9 秒；指针停在提示条上或焦点在提示条内时暂停计时（本次提出）。
+  let remaining = actions.length ? 9000 : 6000, started = 0, timer = 0;
+  const resume = function resumeToast() { window.clearTimeout(timer); started = Date.now(); timer = window.setTimeout(function dismissToast() { item.remove(); }, remaining); };
+  const pause = function pauseToast() { window.clearTimeout(timer); remaining = Math.max(1000, remaining - (Date.now() - started)); };
+  item.addEventListener('pointerenter', pause);
+  item.addEventListener('pointerleave', function leaveToast() { if (!item.contains(document.activeElement)) resume(); });
+  item.addEventListener('focusin', pause);
+  item.addEventListener('focusout', function blurToast(event) { if (!item.contains(event.relatedTarget) && !item.matches(':hover')) resume(); });
+  resume();
 }
 
 /** 关闭当前对话框并恢复焦点。 */
 function closeModal() {
+  // 设置窗口的浮层（问号说明、下拉列表、图标预览）挂在 body 下，随窗口一起关闭，也结束快捷键录入。
+  if (ui.modal === 'settings-modal' && window.SideNotesSettings) window.SideNotesSettings.closeFloating();
   elements.modalRoot.replaceChildren();
   ui.modal = null;
+  document.getElementById('sidebar-lock').classList.remove('is-linked');
   document.body.classList.remove('has-modal');
   if (ui.previousFocus && ui.previousFocus.isConnected && !ui.previousFocus.closest('[inert]')) ui.previousFocus.focus({ preventScroll: true });
   ui.previousFocus = null;
@@ -522,7 +1031,9 @@ function openModal(title, className = '') {
   elements.modalRoot.replaceChildren(backdrop);
   document.body.classList.add('has-modal');
   ui.modal = className || 'dialog';
-  window.setTimeout(function focusModal() { const focusable = modal.querySelector('[autofocus],input,textarea,select,button'); (focusable || modal).focus(); }, 30);
+  // 设置打开期间侧栏保持展开，固定按钮显示虚线圈，表示「临时固定」（T31）。
+  if (className === 'settings-modal') document.getElementById('sidebar-lock').classList.add('is-linked');
+  window.setTimeout(function focusModal() { const focusable = modal.querySelector('[autofocus]') || modal.querySelector('input,textarea,select,button'); (focusable || modal).focus(); }, 30);
   return { modal: modal, body: body, footer: footer };
 }
 
@@ -530,12 +1041,175 @@ function openModal(title, className = '') {
 function confirmAction(options) {
   const dialog = openModal(options.title, 'confirm-modal');
   dialog.body.append(el('p', 'confirm-description', options.description));
+  // 初始焦点在「取消」上（与 Playground 相同），误按 Enter 不会直接执行。
   const cancel = button('取消', 'close-modal', '', 'button secondary');
+  cancel.autofocus = true;
   const confirm = button(options.confirmLabel || '确认', '', '', 'button danger');
   confirm.addEventListener('click', function applyConfirmation() {
     if (options.run() !== false) closeModal();
   });
   dialog.footer.append(cancel, confirm);
+}
+
+/* ==================== 附件弹窗（与现有应用的 AttachmentDialog 一致） ==================== */
+
+/**
+ * @brief 正文中的图片或文件引用：在记录原文中找到这一段 Markdown，供弹窗改写或删除。
+ * @param {object|null} note 记录（卡片与记录窗口中）。 @param {string} kind image 或 file。 @param {string} target 地址或路径。 @param {string} label 显示的名称。
+ * @return {object} 附件上下文。
+ */
+function textAttachment(note,kind,target,label){
+  const context={kind:kind,source:'text',note:note,label:label,src:kind==='image'?target:'',path:kind==='file'?target:'',markdown:undefined,start:-1,end:-1};
+  if(!note)return context;
+  const text=note.text,pattern=kind==='image'?/!\[((?:\\.|[^\]\\])*)\]\(\s*<?([^)\s>]+)>?\s*\)/g:/(?<!!)\[((?:\\.|[^\]\\])*)\]\(\s*<?([^)>]+?)>?\s*\)/g;
+  // 文件按路径比较（第五次反馈）：卡片上的文件块记的是换算后的路径（file:///C:/… 写成 C:\…），与原文中的地址写法不同。
+  const content=window.NoteContent,samePath=function samePath(address){const path=content.filePath(address);return Boolean(path)&&path===(content.filePath(target)||target);};
+  let match;while((match=pattern.exec(text))){if(match[2]===target||kind==='image'&&target.startsWith(match[2])||kind==='file'&&samePath(match[2])){context.markdown=match[0];context.start=match.index;context.end=match.index+match[0].length;break;}}
+  return context;
+}
+
+/** @brief 编辑面中的附件被点击（editor.js 调用）：改动写回这个编辑器，Ctrl+Z 可以撤销。 @param {MouseEvent} event 点击。 @param {object} info 编辑器、原文范围、地址与名称。 */
+window.SideNotesOpenAttachment=function openEditorAttachment(event,info){attachmentClick(event,{kind:info.kind,source:'editor',editor:info.editor,markdown:info.markdown,start:info.start,end:info.end,src:info.src,path:info.path,label:info.label});};
+
+/** @brief 附件的单击：按住 Ctrl 直接打开，否则打开附件弹窗。 @param {MouseEvent} event 点击。 @param {object} context 附件上下文。 */
+function attachmentClick(event,context){if(event.ctrlKey||event.metaKey)openAttachmentDirect(context);else openAttachment(context);}
+
+/**
+ * @brief 直接打开附件：图片在新的标签页打开；本次会话中选过的文件打开它的副本，找不到时让用户重新定位（浏览器拿不到本机路径）。
+ * @param {object} context 附件上下文。
+ */
+function openAttachmentDirect(context){
+  const source=context.image?context.image.data:window.SideNotesImages.resolve(context.src);
+  if(context.kind==='image'&&source){if(/^data:/i.test(source)){fetch(source).then(function asBlob(response){return response.blob();}).then(function openBlob(blob){const url=URL.createObjectURL(blob);window.open(url,'_blank','noopener,noreferrer');window.setTimeout(function release(){URL.revokeObjectURL(url);},60000);}).catch(function failed(){toast('无法打开：图片读取失败',null,true);});}else window.open(source,'_blank','noopener,noreferrer');return;}
+  const entry=context.path&&window.NoteContent.files.get(window.NoteContent.fileKey(context.path));
+  if(entry){Promise.resolve(entry.handle?entry.handle.getFile():entry.file).then(function openFile(file){const url=URL.createObjectURL(file);window.open(url,'_blank','noopener,noreferrer');window.setTimeout(function release(){URL.revokeObjectURL(url);},60000);}).catch(function missing(){toast('文件不存在或已移动',null,true);});return;}
+  if(context.path)openFileReference(context.path);
+}
+
+/**
+ * @brief 更换正文中的图片时，新图片的内容放进对应的图片列表：编辑中的卡片、草稿或记录本身。
+ * @param {object} context 附件上下文。 @param {object} image 新图片。
+ */
+function adoptImage(context,image){
+  if(context.note&&!context.editor){const current=state.notes.find(function same(note){return note.id===context.note.id;});if(current)updateNote(current.id,{images:current.images.concat(image)});return;}
+  if(ui.editing){const input=elements.noteList.querySelector('textarea[data-edit-id]');if(input&&input.liveMarkdown===context.editor){ui.editing.images=ui.editing.images.concat(image);return;}}
+  state.draft={...state.draft,images:state.draft.images.concat(image)};persistDraft();
+}
+
+/** @brief 下载附件到本机（另存为）。 @param {object} context 附件上下文。 */
+function saveAttachmentAs(context){
+  const inline=window.SideNotesImages.imageOf(context.src),source=context.image?context.image.data:window.SideNotesImages.resolve(context.src),name=context.image?context.image.name:inline?inline.name:context.label||'附件';
+  if(context.kind==='image'&&source){const link=el('a');link.href=source;link.download=name;document.body.append(link);link.click();link.remove();toast('已另存');return;}
+  const entry=context.path&&window.NoteContent.files.get(window.NoteContent.fileKey(context.path));
+  if(!entry){toast('未能另存：找不到文件',null,true);return;}
+  Promise.resolve(entry.handle?entry.handle.getFile():entry.file).then(function download(file){const url=URL.createObjectURL(file),link=el('a');link.href=url;link.download=file.name;document.body.append(link);link.click();link.remove();window.setTimeout(function release(){URL.revokeObjectURL(url);},60000);toast('已另存');}).catch(function failed(){toast('未能另存：找不到文件',null,true);});
+}
+
+/**
+ * @brief 改写正文中的引用：卡片中立即保存并可撤销；编辑面中写回编辑器（Ctrl+Z 撤销）。删去后整行只剩空白或列表标记时，整行删掉。
+ * @param {object} context 附件上下文。 @param {string} replacement 新的 Markdown，空串表示删除。 @param {string} message 提示。 @return {boolean} 是否完成。
+ */
+function rewriteAttachment(context,replacement,message){
+  const editor=context.editor,source=editor?editor.getValue():context.note?(state.notes.find(function same(note){return note.id===context.note.id;})||{}).text:null;
+  if(typeof source!=='string'||context.start<0||source.slice(context.start,context.end)!==context.markdown){toast('内容已变化，未能修改附件',null,true);return false;}
+  let start=context.start,end=context.end;
+  if(!replacement){const lineStart=source.lastIndexOf('\n',start-1)+1,lineEnd=source.indexOf('\n',end)<0?source.length:source.indexOf('\n',end);const rest=source.slice(lineStart,start)+source.slice(end,lineEnd);if(/^\s*(?:[-*+]\s+|\d+[.)]\s+)?\s*$/.test(rest)){start=lineStart;end=lineEnd<source.length?lineEnd+1:lineEnd;if(end===source.length&&start>0&&source[start-1]==='\n')start-=1;}}
+  if(editor){editor.replace(replacement,{start:start,end:end,direction:'none'});return true;}
+  const next=source.slice(0,start)+replacement+source.slice(end);
+  if(!updateNote(context.note.id,{text:next}))return false;
+  toast(message,{label:'撤销',run:function undoAttachment(){updateNote(context.note.id,{text:source});}});return true;
+}
+
+/**
+ * @brief 改写缩略条中的图片：卡片中立即保存并可撤销，编辑中与草稿中写回对应的图片列表。
+ * @param {object} context 附件上下文。 @param {object|null} next 新图片，null 表示删除。 @param {string} message 提示。 @return {boolean} 是否完成。
+ */
+function rewriteImage(context,next,message){
+  const swap=function swap(images){return next?images.map(function replace(image){return image.id===context.image.id?next:image;}):images.filter(function keep(image){return image.id!==context.image.id;});};
+  if(context.source==='edit'){if(!ui.editing)return false;ui.editing.images=swap(ui.editing.images);const card=elements.noteList.querySelector('.note-card.is-editing');if(card)renderEditAttachments(card);return true;}
+  if(context.source==='draft'){state.draft={...state.draft,images:swap(state.draft.images),updatedAt:Date.now()};persistDraft();renderDraft();return true;}
+  const current=state.notes.find(function same(note){return note.id===context.note.id;});if(!current)return false;const before=current.images;
+  if(!updateNote(current.id,{images:swap(before)}))return false;
+  toast(message,{label:'撤销',run:function undoImage(){updateNote(current.id,{images:before});}});return true;
+}
+
+/**
+ * @brief 附件的 Markdown 原文拆成种类、名称与地址：图片 `![名称](地址)`，文件 `[名称](地址)`；不是单个附件引用时返回 null。
+ * @param {string} markdown 原文。 @return {{kind:string,label:string,target:string}|null} 附件。
+ */
+function parseAttachmentMarkdown(markdown){
+  const text=String(markdown||'').trim(),match=/^(!?)\[((?:\\.|[^\]\\])*)\]\(\s*<?([^)>]*?)>?\s*\)$/.exec(text);
+  if(!match||!match[3])return null;
+  const label=match[2].replace(/\\([\\[\]])/g,'$1'),target=match[3].trim();
+  if(match[1])return {kind:'image',label:label,target:target};
+  return window.NoteContent.isFileToken(target)||window.NoteContent.filePath(target)?{kind:'file',label:label,target:target}:null;
+}
+
+/**
+ * @brief 附件弹窗上方的预览：图片显示原图，文件显示文件块；原文改得不再是单个附件时，按卡片的排版显示这段 Markdown。
+ * @param {HTMLElement} area 预览区域。 @param {object} preview kind、src（图片地址）、path、label。
+ */
+function renderAttachmentPreview(area,preview){
+  const key=JSON.stringify(preview);if(area.dataset.previewKey===key)return;area.dataset.previewKey=key;
+  if(preview.kind==='image'&&preview.src){const image=el('img','attachment-preview-image');image.src=preview.src;image.alt=preview.label||'图片';area.replaceChildren(image);return;}
+  if(preview.kind==='image'||preview.kind==='file'){const block=el('div','attachment-file'+(preview.kind==='image'?' is-missing':''));block.append(icon(preview.kind==='image'?'image':'file'),el('span','',preview.label||(preview.path?window.NoteContent.fileLabel(preview.path):'附件')));area.replaceChildren(block);return;}
+  const body=el('div','attachment-preview-text markdown-body');if(preview.markdown.trim())window.NoteContent.renderMarkdown(preview.markdown,body);area.replaceChildren(body);
+}
+
+/**
+ * @brief 附件弹窗：标题是附件名，图片在上方显示原图；正文中的引用下面是 Markdown 原文，可以修改。
+ * 文件不显示预览（第四次反馈：文件块看不到内容，只重复了标题中的名称）。
+ * 原文完整显示在一个随内容加高的输入框里，不出现滚动条；修改时上方的预览跟着变，点「应用修改」（或 Ctrl+Enter）才写回（本次提出）。
+ * 底栏左侧是打开（正文中的引用）、更换、另存为与删除，右侧是「应用修改」，原文没有改动时不可用。缩略条中的图片没有原文，也没有「打开」，更换只接受 2 MB 以内的图片。
+ * @param {object} context 附件上下文：kind、source（strip、edit、draft、text、editor）、note、image、editor、markdown、start、end、src、path、label。
+ */
+function openAttachment(context){
+  const image=context.kind==='image',strip=Boolean(context.image),inline=window.SideNotesImages.imageOf(context.src),name=strip?context.image.name:inline?inline.name:context.label||(context.path?window.NoteContent.fileLabel(context.path):'')||(image?'图片':'附件');
+  const dialog=openModal(name,'attachment-modal');const heading=dialog.modal.querySelector('.modal-header h2');heading.prepend(icon(image?'image':'file'));
+  const area=image?el('div','attachment-preview-area'):null;if(area)dialog.body.append(area);
+  /** 原文对应的预览：地址按编辑器的规则解析（随记录保存的图片、data 图片与网络图片）。 */
+  const sourcePreview=function sourcePreview(markdown){
+    const parsed=parseAttachmentMarkdown(markdown);if(!parsed)return {kind:'text',markdown:String(markdown||'')};
+    if(parsed.kind==='file')return {kind:'file',path:parsed.target,label:parsed.label};
+    const resolved=window.SideNotesImages.resolve(parsed.target),src=/^(?:data:image\/|https?:)/i.test(resolved)?resolved:'';
+    return {kind:'image',src:src,label:parsed.label};
+  };
+  if(area&&!strip&&context.markdown!==undefined)renderAttachmentPreview(area,sourcePreview(context.markdown));
+  else if(area)renderAttachmentPreview(area,{kind:'image',src:strip?context.image.data:window.SideNotesImages.resolve(context.src),label:name});
+  let input=null,apply=null;
+  if(!strip&&context.markdown!==undefined){
+    const field=el('label','attachment-source');input=el('textarea','form-control attachment-source-input');input.value=context.markdown;input.rows=1;input.spellcheck=false;input.setAttribute('aria-label','Markdown 原文');
+    const fit=function fitSource(){if(!input.isConnected)return;const style=window.getComputedStyle(input);input.style.height='auto';input.style.height=input.scrollHeight+parseFloat(style.borderTopWidth)+parseFloat(style.borderBottomWidth)+'px';};
+    input.addEventListener('input',function previewSource(){fit();if(area)renderAttachmentPreview(area,sourcePreview(input.value));apply.disabled=input.value===context.markdown;});
+    input.addEventListener('keydown',function applyByKey(event){if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();event.stopPropagation();if(!apply.disabled)apply.click();}});
+    field.append(el('span','attachment-source-label','Markdown 原文'),input);dialog.body.append(field);
+    fit();window.requestAnimationFrame(fit);
+  }
+  const picker=el('input');picker.type='file';picker.hidden=true;picker.accept=strip?'image/png,image/jpeg,image/gif,image/webp,image/svg+xml':'';dialog.body.append(picker);
+  picker.addEventListener('change',async function replaceFile(){
+    const file=picker.files&&picker.files[0];picker.value='';if(!file)return;
+    try{
+      if(strip){const next=await readImage(file);if(rewriteImage(context,{...next,id:context.image.id},'已更换图片'))closeModal();return;}
+      let replacement;
+      if(/^image\//.test(file.type)){const next=await readImage(file);adoptImage(context,next);replacement=window.SideNotesImages.markdown(next);}
+      else replacement='['+file.name.replace(/[\r\n]+/g,' ').replace(/([\\\[\]])/g,'\\$1')+']('+window.NoteContent.createFileReference(file,null)+')';
+      if(rewriteAttachment(context,replacement,'已修改附件'))closeModal();
+    }catch(error){toast('未能更换：'+(error.message||'读取失败'),null,true);}
+  });
+  // 没有预览也没有原文时（例如原文中找不到这一段），不留下一块空白（第五次反馈）。
+  dialog.body.classList.toggle('is-empty',!area&&!input);
+  const footer=dialog.footer;
+  if(!strip){const open=button('打开','','external','button secondary');open.addEventListener('click',function openDirect(){openAttachmentDirect(context);});footer.append(open);}
+  const replace=button('更换','','upload','button secondary');replace.addEventListener('click',function chooseReplacement(){picker.click();});
+  const save=button('另存为','','download','button secondary');save.addEventListener('click',function saveAs(){saveAttachmentAs(context);});
+  const remove=button('删除这个附件','','trash','icon-button attachment-delete');remove.addEventListener('click',function deleteAttachment(){if(strip?rewriteImage(context,null,'已删除图片'):rewriteAttachment(context,'',image?'已删除图片':'已删除附件'))closeModal();});
+  footer.append(replace,save,remove);
+  if(input){
+    // 「应用修改」是这个弹窗的主要操作，放在底栏右侧、原文的下方（本次提出：此前挤在输入框右边）。
+    apply=button('应用修改','','check','button primary attachment-apply');apply.disabled=true;
+    apply.addEventListener('click',function applySource(){if(input.value===context.markdown){closeModal();return;}if(rewriteAttachment(context,input.value,'已修改附件'))closeModal();});
+    footer.append(apply);
+  }
 }
 
 /** @brief 显示图片原图。 @param {object} attachment 图片。 */
@@ -552,32 +1226,47 @@ function previewImage(attachment) {
   dialog.footer.append(el('span', 'modal-hint', 'Esc 关闭预览'), download);
 }
 
-/** @brief 同时复制Emoji、正文与图像表示；文件附件提供真实文件交接。 @param {object} note 记录。 */
-async function copyNote(note){
-  try{const result=await window.NoteClipboard.copy(note);toast(result.kind==='image'?'已复制文字、富文本和图片表示':result.kind==='rich'?'已复制文字与富文本':'已复制文字');if(result.refs.length||result.imageError)showCopiedAttachments(note,result);}
-  catch(error){const dialog=openModal('复制记录','copy-modal');dialog.body.append(el('p','modal-hint','剪贴板权限受限，可选中文字后按 Ctrl+C。'));const input=el('textarea','copy-fallback form-control');input.value=(note.emoji||'📝')+' '+note.text;input.readOnly=true;input.rows=8;dialog.body.append(input);window.setTimeout(function selectText(){input.focus();input.select();},30);}
+/**
+ * @brief 粘贴的截图改名为「截图-年月日-时分秒」（与现有应用一致）；浏览器给的名字通常是 image.png，资源管理器复制的文件保留原名。
+ * @param {File} file 文件。 @return {File} 改名后的文件。
+ */
+function screenshotFile(file){
+  if(!file||file.name&&!/^image\.(?:png|jpe?g|gif|webp|bmp)$/i.test(file.name))return file;
+  const date=new Date(),pad=function pad(value){return String(value).padStart(2,'0');},extension=(file.type.split('/')[1]||'png').replace('jpeg','jpg').replace('svg+xml','svg');
+  const name='截图-'+date.getFullYear()+pad(date.getMonth()+1)+pad(date.getDate())+'-'+pad(date.getHours())+pad(date.getMinutes())+pad(date.getSeconds())+'.'+extension;
+  try{return new File([file],name,{type:file.type,lastModified:file.lastModified});}catch(error){return file;}
 }
+
+/** @brief 同时复制Emoji、正文与图像表示；文件附件提供真实文件交接。 @param {object} note 记录。 */
+async function copyNote(note){return copyNotes([note]);}
+/** @brief 复制记录的纯文本：多条之间空一行；单条时提示带上标题（与现有应用一致）。 @param {Array} notes 记录。 */
+async function copyNotes(notes){
+  try{await navigator.clipboard.writeText(notes.map(function plain(note){return (note.emoji||'📝')+' '+note.text;}).join('\n\n'));if(notes.length>1)toast('已复制 '+notes.length+' 条记录');else{const title=noteTitle(notes[0]);toast('已复制-'+(title.length>24?title.slice(0,24)+'…':title));}}
+  catch(error){toast('剪贴板不可用',null,true);}
+}
+/** @brief 记录的标题：第一行非空文字去掉标记，只有图片时为「图片记录」。 @param {object} note 记录。 @return {string} 标题。 */
+function noteTitle(note){const line=noteParts(note).body.split('\n').find(function nonempty(text){return text.trim();});return line?line.replace(/^\s*(?:#{1,6}\s+|>\s*|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+)/,'').replace(/[*`~]/g,'').trim()||'记录':note.images.length?'图片记录':'记录';}
+/**
+ * @brief 缩略条中的图片：旧记录里不在正文中的图片。正文里引用的图片（inline）在原处显示，删掉引用后也不再出现在缩略条。
+ * @param {object} note 记录、草稿或编辑事务。 @return {Array} 图片。
+ */
+function stripImages(note){return (note&&note.images||[]).filter(function legacy(image){return !image.inline;});}
+/** @brief 卡片与记录窗口显示的正文：首行做了标题时不再重复，首行是代码、列表、引用等结构时整段显示（与 renderCard 相同）。 @param {object} note 记录。 @return {{body:string,prefix:string}} 显示的正文，以及勾选待办时补回的前缀。 */
+function noteDisplay(note){const parsed=noteParts(note),lines=parsed.body.split('\n'),first=lines.findIndex(function nonempty(line){return Boolean(line.trim());}),firstLine=first<0?'':lines[first];const fullBody=firstLine.length>120||/^\s*(?:`{3,}|~{3,}|!\[|>|(?:-\s*){3,}$|(?:_\s*){3,}$|(?:\*\s*){3,}$)|^(?: {4}|\t)|^\s*[-*+]\s|^\s*\d+[.)]\s/.test(firstLine)||Boolean(window.NoteContent.filePath(firstLine));return {body:first<0?'':fullBody?parsed.body:lines.slice(first+1).join('\n'),prefix:fullBody||first<0?'':lines.slice(0,first+1).join('\n')+'\n'};}
 /** @brief 展示浏览器不能写入原生文件剪贴板的真实附件交接入口。 @param {object} note 记录。 @param {object} result 复制结果。 */
 function showCopiedAttachments(note,result){const dialog=openModal('复制与附件','clipboard-attachments-modal');dialog.body.append(el('p','modal-hint',result.refs.length?'文字已复制。浏览器无法把任意文件写入微信等应用的文件剪贴板；可保存真实文件后拖入目标应用，或使用系统分享。':'图片复制受限，已保留文字与富文本。'));if(result.imageError)dialog.body.append(el('p','settings-notice',result.imageError));const list=el('div','clipboard-file-list');result.refs.forEach(function row(ref){const item=el('div','clipboard-file-row');item.append(icon('file'),el('span','',window.NoteContent.fileLabel(ref)));const save=button('保存文件','','download','button secondary compact');save.addEventListener('click',async function saveRealFile(){const file=await window.NoteClipboard.file(ref);if(!file){openFileReference(ref);return;}window.NoteClipboard.download(file);});const share=button('系统分享','','external','button secondary compact');share.addEventListener('click',async function shareRealFile(){try{const file=await window.NoteClipboard.file(ref);if(!file){openFileReference(ref);return;}if(!navigator.share||!navigator.canShare||!navigator.canShare({files:[file]})){toast('当前环境不支持文件系统分享，请保存后拖入目标应用');return;}await navigator.share({files:[file],title:(note.emoji||'📝')+' '+file.name});}catch(error){if(error.name!=='AbortError')toast('分享未完成，可保存文件后发送',null,true);}});item.append(save,share);list.append(item);});note.images.forEach(function imageRow(image){const item=el('div','clipboard-file-row');item.append(icon('image'),el('span','',image.name));const save=button('保存图片','','download','button secondary compact');save.addEventListener('click',async function saveImage(){try{const response=await fetch(image.data),blob=await response.blob();window.NoteClipboard.download(new File([blob],image.name,{type:blob.type}));}catch(error){toast('图片读取失败',null,true);}});item.append(save);list.append(item);});dialog.body.append(list);dialog.footer.remove();}
 
 
-/** @brief 归档或恢复记录，并提供撤销。 @param {object} note 记录。 */
-function archiveNote(note) {
-  if (ui.editing && !finishEdit()) return;
-  const previousStatus = note.status;
-  const archived = previousStatus !== 'archived';
-  if (!updateNote(note.id, { status: archived ? 'archived' : 'active' })) return;
-  toast(archived ? '已归档，需要时仍能找到' : '已移回工作区', { label: '撤销', run: function undoArchive() { updateNote(note.id, { status: previousStatus }); } });
-}
 
-/** @brief 删除前请求确认。 @param {object} note 记录。 */
+/**
+ * @brief 移入回收站（第五次反馈：不再弹确认框，提示条可以撤销）。这张卡片在多选之中时，移入全部选中的记录，一次撤销全部恢复。
+ * 永久删除与清空回收站仍要确认（settings.js）。
+ * @param {object} note 记录。
+ */
 function requestDelete(note) {
-  confirmAction({ title: '将这条记录移入回收站？', description: '“' + (note.text.split('\n')[0] || '图片记录').slice(0, 70) + '”会暂存于回收站，可在设置中恢复。', confirmLabel: '移入回收站', run: function moveToTrash() {
-    const prior = note.status;
-    if (!updateNote(note.id, { status: 'trash', previousStatus: prior, deletedAt: Date.now() })) return false;
-    toast('已移入回收站', { label: '撤销', run: function undoDelete() { updateNote(note.id, { status: prior, deletedAt: null }); } });
-    return true;
-  } });
+  const selection=window.NoteInteractions&&window.NoteInteractions.hasSelection()?window.NoteInteractions.selectedIds():[];
+  const ids=selection.length>1&&selection.includes(note.id)?selection:[note.id];
+  if(window.NoteInteractions)window.NoteInteractions.trash(ids);
 }
 
 /** @brief 在操作按钮旁显示卡片上下文菜单。 @param {object} note 记录。 @param {HTMLElement|Event} anchor 定位来源。 */
@@ -623,9 +1312,12 @@ async function inspectImport(file) {
         const current = merged.get(note.id);
         if (!current || note.updatedAt > current.updatedAt) merged.set(note.id, note);
       });
-      const importedDraft = parsed.draft && typeof parsed.draft.text === 'string' ? { text: parsed.draft.text, images: (Array.isArray(parsed.draft.images) ? parsed.draft.images : []).map(normalizeImage).filter(Boolean), updatedAt: Date.now() } : null;
+      const importedDraft = parsed.draft && typeof parsed.draft.text === 'string' ? { text: parsed.draft.text, images: markInlineImages((Array.isArray(parsed.draft.images) ? parsed.draft.images : []).map(normalizeImage).filter(Boolean), parsed.draft.text), updatedAt: Date.now() } : null;
       const draft = !state.draft.text.trim() && !state.draft.images.length && importedDraft ? importedDraft : state.draft;
-      if (!persistSnapshot(Array.from(merged.values()), draft)) { toast('导入未完成，浏览器存储空间不足；当前内容未改动。', null, true); return; }
+      // 导入前先创建一份快照（与现有应用一致），需要时可以在「数据与同步 › 快照」中恢复。
+      const snapshotFailed = window.SideNotesSettings ? window.SideNotesSettings.createSnapshot('import') : '';
+      if (snapshotFailed) toast('导入前的快照未创建：' + snapshotFailed, null, true);
+      if (!persistSnapshot(Array.from(merged.values()), draft)) { toast('导入未完成，本地写入失败；当前内容未改动。', null, true); return; }
       closeModal();
       renderNotes();
       renderDraft();
@@ -670,7 +1362,8 @@ function openSettings(section='appearance') { window.SideNotesSettings.open(type
 
 /** @brief 分发记录、标签与窗口操作。 @param {MouseEvent} event 点击事件。 */
 function handleAction(event) {
-  const tab=event.target.closest('[data-tab]');if(tab){if(!finishEdit())return;ui.tab=tab.dataset.tab;ui.query='';ui.selectedTag='';elements.searchInput.value='';closeTagMenu();renderNotes();return;}
+  // 单击页签：切到这个页签；搜索时结束搜索，再点一下当前页签清除标签筛选。
+  const tab=event.target.closest('[data-tab]');if(tab){goToTab(tab.dataset.tab);return;}
   const control=event.target.closest('[data-action]');if(!control||control.disabled)return;const action=control.dataset.action,card=control.closest('[data-note-id]'),note=card&&state.notes.find(function find(n){return n.id===card.dataset.noteId;});
   switch(action){
     case 'hide-sidebar':hideSidebar(true);break;
@@ -678,41 +1371,50 @@ function handleAction(event) {
     case 'show-changelog':showChangelog();break;
     case 'load-more':appendNextPage();break;
     case 'hide-capture':hideCapture();break;
-    case 'lock-sidebar':ui.locked=!ui.locked;control.setAttribute('aria-pressed',String(ui.locked));control.setAttribute('aria-label',ui.locked?'取消固定侧栏':'固定侧栏');control.title=ui.locked?'取消固定侧栏':'固定侧栏';control.replaceChildren(icon('pin'));if(ui.locked){cancelHide();queueComposerFocus();}break;
+    case 'lock-sidebar':ui.locked=!ui.locked;control.setAttribute('aria-pressed',String(ui.locked));control.setAttribute('aria-label',ui.locked?'取消固定侧栏':'固定侧栏');control.replaceChildren(icon('pin'));if(ui.locked){cancelHide();queueComposerFocus();}break;
     case 'new-note':if(finishEdit()){showSidebar();ui.composer=true;renderDraft();elements.sidebarDraft.focus();}break;
-    case 'close-composer':ui.composer=false;persistDraft();elements.sidebarDraft.blur();renderDraft();break;
     case 'capture-to-sidebar':hideCapture();showSidebar();ui.composer=true;renderDraft();elements.sidebarDraft.focus();break;
     case 'save-note':saveDraft('capture');break;case 'save-sidebar-note':saveDraft('sidebar');break;
     case 'attach-image':ui.attachmentTarget=control.closest('#capture')?'capture':'draft';elements.imagePicker.click();break;
-    case 'attach-file':{ui.attachmentTarget=control.closest('#capture')?'capture':'draft';const d=openModal('添加文件引用','file-reference-modal');const input=el('input','form-control tag-name-input');input.placeholder='C:\\项目\\设计稿.pdf 或 file:///…';input.setAttribute('aria-label','文件路径');const choose=button('选择本机文件','','folder','button secondary');choose.addEventListener('click',function chooseReference(){closeModal();elements.attachmentPicker.click();});d.body.append(choose,input,el('p','modal-hint','选择文件或输入完整路径；打开时校验或重新定位。'));const add=button('插入引用','','file','button primary');add.addEventListener('click',function insertFile(){const p=input.value.trim();if(!window.NoteContent.filePath(p)){toast('请输入有效的本地绝对路径',null,true);return;}const name=p.split(/[\\/]/).pop()||'文件';changeDraft(state.draft.text+(state.draft.text?'\n\n':'')+'['+name.replace(/[\[\]]/g,'')+']('+p+')');closeModal();});d.footer.append(add);break;}
+    case 'attach-file':ui.attachmentTarget=control.closest('#capture')?'capture':'draft';elements.attachmentPicker.click();break;
     case 'remove-draft-image':removeDraftImage(control.dataset.imageId);break;
-    case 'preview-draft-image':previewImage(state.draft.images.find(function find(i){return i.id===control.dataset.imageId;}));break;
-    case 'preview-image':if(note)previewImage(note.images.find(function find(i){return i.id===control.dataset.imageId;}));break;
-    case 'preview-markdown-image':previewImage({name:control.dataset.alt||'图片',data:control.dataset.src});break;
-    case 'open-file-reference':openFileReference(control.dataset.filePath);break;
-    case 'open-note':if(note)openNote(note);break;
+    case 'preview-draft-image':{const image=state.draft.images.find(function find(i){return i.id===control.dataset.imageId;});if(image)attachmentClick(event,{kind:'image',source:'draft',image:image});break;}
+    case 'preview-image':if(note){const image=note.images.find(function find(i){return i.id===control.dataset.imageId;});if(image)attachmentClick(event,{kind:'image',source:'strip',note:note,image:image});}break;
+    case 'preview-edit-image':if(ui.editing){const image=ui.editing.images.find(function find(i){return i.id===control.dataset.imageId;});if(image)attachmentClick(event,{kind:'image',source:'edit',image:image});}break;
+    case 'preview-markdown-image':attachmentClick(event,textAttachment(note,'image',control.dataset.src,control.dataset.alt||''));break;
+    case 'open-file-reference':attachmentClick(event,textAttachment(note,'file',control.dataset.filePath,control.textContent.trim()));break;
+    case 'open-note':if(note)openNote(note,card);break;
     case 'copy-note':if(note)copyNote(note);break;
     case 'pin-note':if(note)updateNote(note.id,{pinned:!note.pinned});break;
-    case 'archive-note':if(note)archiveNote(note);break;
+    case 'pin-filter-tag':window.SidebarTabs.pin(control.dataset.tag);break;
+    case 'merge-filtered':window.NoteMerge.open({ids:ui.listItems.map(function id(item){return item.id;}),tag:control.dataset.tag||ui.selectedTag});break;
+    case 'go-to-tab':goToTab(control.dataset.goTab,{reset:true});break;
+    case 'end-search':endSearch();break;
+    case 'search-word-tag':setSearchQuery('#'+control.dataset.tag);break;
     case 'more-note':if(note)openNoteOptions(note,control);break;
     case 'toggle-note-collapse':if(note&&window.NoteMenus)window.NoteMenus.toggleCollapsed(note);break;
     case 'finish-edit':finishEdit();break;
     case 'cancel-edit':cancelEdit();break;
     case 'toggle-search':toggleSearch(!ui.searchOpen);break;
+    case 'toggle-select-mode':if(window.NoteInteractions)window.NoteInteractions.toggleMode();break;
+    case 'merge-selection':if(window.NoteInteractions)window.NoteMerge.open({ids:window.NoteInteractions.selectedIds()});break;
+    case 'trash-selection':if(window.NoteInteractions)window.NoteInteractions.trash(window.NoteInteractions.selectedIds());break;
+    case 'toggle-collapse-all':toggleCollapseAll();break;
     case 'collapse-search':toggleSearch(false);break;
     case 'attach-edit-image':ui.editAttachmentHold=ui.editing;ui.attachmentTarget=note.id;elements.imagePicker.click();break;
     case 'attach-edit-file':ui.editAttachmentHold=ui.editing;ui.attachmentTarget=note.id;elements.attachmentPicker.click();break;
     case 'remove-edit-image':removeEditImage(control.dataset.imageId);break;
-    case 'filter-tag':if(card){window.clearTimeout(ui.tagClickTimer);if(!ui.expandedTags.has(note.id))ui.tagClickTimer=window.setTimeout(function filterAfterClick(){selectTag(control.dataset.tag);},550);}else selectTag(control.dataset.tag);break;
-    case 'clear-tag':ui.selectedTag='';closeTagMenu();renderNotes();break;
+    // 卡片上的标签：搜索时改为搜这个标签（全局），不搜索时按标签筛选当前页签；搜索框的标签候选补全正在输入的标签。
+    case 'filter-tag':if(card){window.clearTimeout(ui.tagClickTimer);if(!ui.expandedTags.has(note.id))ui.tagClickTimer=window.setTimeout(function filterAfterClick(){if(isSearching())setSearchQuery('#'+control.dataset.tag+' ');else selectTag(control.dataset.tag);},550);}else if(ui.tagMenuMode==='suggest')completeTagToken(control.dataset.tag);else selectTag(control.dataset.tag);break;
+    case 'clear-tag':{const focused=control===elements.tagFilterClear;ui.selectedTag='';closeTagMenu();renderNotes();if(focused)elements.tagFilterButton.focus();break;}
     case 'clear-filters':ui.selectedTag='';ui.query='';elements.searchInput.value='';renderNotes();break;
     case 'expand-tags':{const id=note?note.id:control.dataset.noteId;if(!finishTagRename(false))break;const expanded=ui.expandedTags.has(id);ui.expandedTags.clear();if(!expanded)ui.expandedTags.add(id);renderNotes();break;}
     case 'remove-note-tag':if(note)removeNoteTag(note,control.dataset.tag);break;
-    case 'toggle-tag-menu':{const show=elements.tagDropdown.hidden;renderTagMenu();elements.tagDropdown.hidden=!show;control.setAttribute('aria-expanded',String(show));break;}
+    case 'toggle-tag-menu':{const show=elements.tagDropdown.hidden||ui.tagMenuMode==='suggest';ui.tagMenuMode='filter';renderTagMenu();elements.tagDropdown.hidden=!show;control.setAttribute('aria-expanded',String(show));break;}
     case 'manage-tag':manageTag(control.dataset.tag);break;
-    case 'focus-tag-search':toggleSearch(true);closeTagMenu();elements.searchInput.value='#';ui.query='#';elements.searchInput.focus();elements.searchInput.setSelectionRange(1,1);renderNotes();break;
+    case 'focus-tag-search':toggleSearch(true);closeTagMenu();elements.searchInput.value='#';ui.query='#';elements.searchInput.focus();elements.searchInput.setSelectionRange(1,1);renderNotes();refreshTagSuggestions();break;
     case 'snooze-tidy':{const next={...state.settings,tidySnoozeUntil:Date.now()+7*86400000};if(persistSnapshot(state.notes,state.draft,next))renderWorkspaceNudge();break;}
-    case 'tidy-workspace':ui.tab='workspace';ui.selectedTag='';ui.query='';elements.searchInput.value='';renderNotes();toast('可将已处理记录归档。');break;
+    case 'tidy-workspace':goToTab('workspace');toast('可以把同一类的记录固定为页签，或合并成一条。');break;
     case 'tidy-settings':openSettings('appearance');break;
     case 'settings':openSettings();break;case 'close-modal':closeModal();break;
     case 'export-data':exportData();break;case 'import-data':elements.importPicker.click();break;case 'open-trash':openTrash();break;
@@ -723,36 +1425,151 @@ function handleAction(event) {
   }
 }
 
+/* ==================== 高亮、键盘与复制 ==================== */
+/**
+ * @brief 高亮一张卡片：悬停与单击共用这一种状态（T66），指针离开后保持。
+ * @details 高亮的卡片是 Ctrl+C 复制与键盘操作的对象，也是列表唯一的 Tab 停靠点；它的按钮进入 Tab 顺序，
+ * 其余卡片的按钮只响应指针（interactions.md 3.2）。
+ * @param {string} id 记录标识，空值清除高亮。 @param {object} options focus 为真时把焦点移到卡片并滚动到可见位置。
+ */
+function setCurrentCard(id,options={}){
+  ui.currentId=id||'';
+  elements.noteList.querySelectorAll('.note-card').forEach(function mark(card){
+    const current=card.dataset.noteId===ui.currentId;card.classList.toggle('is-current',current);
+    if(current)card.setAttribute('aria-current','true');else card.removeAttribute('aria-current');
+    card.querySelectorAll('.note-emoji,.note-actions button,.note-bottom button,.note-expand').forEach(function tabStop(node){node.tabIndex=current?0:-1;});
+  });
+  syncCardTabStops();
+  if(options.focus){const card=currentCardElement();if(card){card.focus({preventScroll:true});card.scrollIntoView({block:'nearest'});}}
+}
+/** @brief 当前高亮的卡片元素。 @return {HTMLElement|null} 卡片。 */
+function currentCardElement(){return Array.from(elements.noteList.querySelectorAll('.note-card')).find(function same(card){return card.dataset.noteId===ui.currentId;})||null;}
+/** 列表只占一个 Tab 停靠点：编辑中或高亮的卡片，没有时是第一张。 */
+function syncCardTabStops(){
+  const cards=Array.from(elements.noteList.querySelectorAll('.note-card'));
+  const stop=cards.find(function editing(card){return card.classList.contains('is-editing');})||cards.find(function current(card){return card.dataset.noteId===ui.currentId;})||cards[0];
+  cards.forEach(function tabStop(card){card.tabIndex=card===stop?0:-1;});
+}
+
+/**
+ * @brief 卡片列表的键盘操作（interactions.md 3.2）。
+ * @details ↑ ↓ 移动并高亮，Home、End 到两端，Enter 编辑，Delete 移入回收站（不确认，提示条可以撤销；在多选之中时是全部选中的），
+ * Shift+F10 或菜单键在卡片左上角附近打开卡片菜单。只处理焦点落在卡片本身的按键，卡片内的按钮与编辑区各自处理。
+ * @param {KeyboardEvent} event 按键。
+ */
+function handleCardKeyboard(event){
+  if(event.defaultPrevented||event.isComposing||!event.target.matches('.note-card')||event.target.classList.contains('is-editing'))return;
+  const card=event.target,cards=Array.from(elements.noteList.querySelectorAll('.note-card')),index=cards.indexOf(card);
+  const note=state.notes.find(function same(n){return n.id===card.dataset.noteId;});if(!note)return;
+  const next=event.key==='ArrowDown'?cards[Math.min(cards.length-1,index+1)]:event.key==='ArrowUp'?cards[Math.max(0,index-1)]:event.key==='Home'?cards[0]:event.key==='End'?cards[cards.length-1]:null;
+  if(next&&!event.altKey&&!event.ctrlKey){event.preventDefault();setCurrentCard(next.dataset.noteId,{focus:true});return;}
+  if(event.key==='Enter'&&!event.ctrlKey&&!event.altKey&&!event.shiftKey){event.preventDefault();ui.skipCardClick=false;beginEdit(note.id);return;}
+  if(event.key==='Delete'&&!event.ctrlKey&&!event.altKey){event.preventDefault();setCurrentCard(note.id);requestDelete(note);return;}
+  if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();setCurrentCard(note.id);const box=card.getBoundingClientRect();if(window.NoteMenus)window.NoteMenus.open(note,{clientX:box.left+24,clientY:box.top+32});}
+}
+
+/**
+ * @brief 焦点不在卡片上时，用方向键与 Enter 操作高亮的卡片（本次提出）。
+ * @details 只在侧栏展开、没有编辑、焦点不在输入框与按钮等自己处理按键的控件上时生效；
+ * 移动后焦点落到卡片上，接下来的按键由卡片自己处理（handleCardKeyboard）。
+ * @param {KeyboardEvent} event 按键。 @return {boolean} 是否处理。
+ */
+function handleCurrentCardKey(event){
+  if(event.altKey||event.ctrlKey||event.metaKey||event.shiftKey||!['ArrowUp','ArrowDown','Enter'].includes(event.key))return false;
+  if(!ui.currentId||ui.editing||!elements.sidebar.classList.contains('open')||elements.sidebar.inert)return false;
+  const target=event.target;if(target&&target.closest&&target.closest('input,textarea,select,button,a[href],[contenteditable="true"],[role="menu"],[role="listbox"],.note-window'))return false;
+  const card=currentCardElement();if(!card)return false;
+  event.preventDefault();
+  if(event.key==='Enter'){ui.skipCardClick=false;beginEdit(card.dataset.noteId);return true;}
+  const cards=Array.from(elements.noteList.querySelectorAll('.note-card')),index=cards.indexOf(card);
+  const next=cards[event.key==='ArrowDown'?Math.min(cards.length-1,index+1):Math.max(0,index-1)];
+  if(next)setCurrentCard(next.dataset.noteId,{focus:true});
+  return true;
+}
+
+/** @brief 页签按 WAI-ARIA 页签模式：← → 切换并立即显示，Home、End 到两端。 @param {KeyboardEvent} event 按键。 */
+function handleTabKeyboard(event){
+  const tabs=Array.from(document.querySelectorAll('.sidebar-tabs [role="tab"]')).filter(function visible(tab){return !tab.hidden;}),index=tabs.indexOf(event.target);
+  if(index<0||event.altKey||event.ctrlKey)return;
+  const next=event.key==='ArrowRight'?tabs[(index+1)%tabs.length]:event.key==='ArrowLeft'?tabs[(index-1+tabs.length)%tabs.length]:event.key==='Home'?tabs[0]:event.key==='End'?tabs[tabs.length-1]:null;
+  if(!next)return;event.preventDefault();if(next.classList.contains('tab-more')){next.focus();return;}
+  // 切换会重绘页签栏（tabs.js），按标识找到新的页签再聚焦。
+  const key=next.dataset.tab;next.click();const fresh=Array.from(document.querySelectorAll('.sidebar-tabs [data-tab]')).find(function same(tab){return tab.dataset.tab===key&&!tab.hidden;})||document.querySelector('.sidebar-tabs .tab-more');if(fresh)fresh.focus();
+}
+
+/**
+ * @brief 复制高亮或多选的记录：有多选时是全部选中的记录，否则是高亮的那一张（interactions.md 第二节）。
+ * @return {boolean} 是否有可复制的记录。
+ */
+function copyCurrentOrSelected(){
+  if(!elements.sidebar.classList.contains('open'))return false;
+  const ids=window.NoteInteractions&&window.NoteInteractions.hasSelection()?window.NoteInteractions.selectedIds():[];
+  if(ids.length>1){copyNotes(state.notes.filter(function picked(note){return ids.includes(note.id);}).sort(compareNoteOrder));return true;}
+  const id=ids[0]||ui.currentId,note=id&&state.notes.find(function same(item){return item.id===id&&item.status!=='trash';});
+  if(!note){toast('没有选中内容');return true;}copyNote(note);return true;
+}
+
+/**
+ * @brief 问号说明：悬停、获得焦点或点击时显示，Esc 关闭（components.md 第六节）。
+ * @param {HTMLElement|null} anchor 包含 .help-button 与 .help-text 的容器。
+ */
+function initializeHelp(anchor){
+  if(!anchor)return;const trigger=anchor.querySelector('.help-button'),message=anchor.querySelector('.help-text');
+  // 说明挂在 body 下的浮层中（layer.js），不被浮窗裁剪。
+  message.classList.add('floating-panel');message.remove();message.hidden=false;let close=null;
+  const show=function show(shown){trigger.setAttribute('aria-expanded',String(shown));if(shown&&!close)close=window.SideNotesLayer.open(message,trigger,{placement:'bottom-start'});else if(!shown&&close){close();close=null;}};
+  trigger.addEventListener('click',function toggleHelp(){show(!close);});trigger.addEventListener('focus',function focusHelp(){show(true);});trigger.addEventListener('blur',function blurHelp(){show(false);});
+  anchor.addEventListener('mouseenter',function hoverHelp(){show(true);});anchor.addEventListener('mouseleave',function leaveHelp(){if(document.activeElement!==trigger)show(false);});
+  trigger.addEventListener('keydown',function closeHelp(event){if(event.key==='Escape'&&close){event.preventDefault();event.stopPropagation();show(false);}});
+}
+
+/** @brief 按键是否就是命令当前的快捷键（设置中改过的按键优先，见 shortcuts.js）。 @param {KeyboardEvent} event 按键。 @param {string} id 命令。 @return {boolean} 是否匹配。 */
+function shortcut(event,id){return Boolean(window.SideNotesShortcuts)&&window.SideNotesShortcuts.matches(event,state.settings.shortcuts,id);}
+
 /** @brief 先退出当前操作，最后才收起窗口。 @param {KeyboardEvent} event 键盘事件。 */
 function handleKeyboard(event){
   if(event.defaultPrevented||event.isComposing||ui.composing||event.keyCode===229)return;
   const escape=event.key==='Escape';
   if(ui.modal){
     if(escape){event.preventDefault();closeModal();}
+    // 回收站页中按搜索快捷键聚焦回收站的搜索框（本次提出）。
+    if(ui.modal==='settings-modal'&&shortcut(event,'search')&&window.SideNotesSettings&&window.SideNotesSettings.focusSearch()){event.preventDefault();return;}
     if(event.key==='Tab'){
       const controls=Array.from(elements.modalRoot.querySelectorAll('button,a[href],input,textarea,select,[tabindex="0"]')).filter(function enabled(n){return !n.disabled&&!n.hidden;});
       if(!controls.length)return;const first=controls[0],last=controls[controls.length-1];
       if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
     }return;
   }
+  // 关闭全部记录窗口（本次提出），编辑中同样可用。
+  if(shortcut(event,'closeWindows')&&window.NoteWindows&&window.NoteWindows.count()){event.preventDefault();window.NoteWindows.closeAll();return;}
   if(escape&&window.NoteMenus&&window.NoteMenus.isOpen()){event.preventDefault();window.NoteMenus.close();return;}
   if(escape&&window.NoteInteractions&&window.NoteInteractions.isBusy()){event.preventDefault();window.NoteInteractions.cancelGesture();return;}
   if(escape&&ui.resizing){event.preventDefault();finishSidebarResize(false);return;}
   if(escape&&ui.expandedTags.size){event.preventDefault();cancelTagRename();closeExpandedTags();return;}
-  if(escape&&ui.searchOpen){event.preventDefault();toggleSearch(false,{focusButton:true});return;}
-  if(ui.editing&&(escape||event.ctrlKey&&event.key==='Enter')){event.preventDefault();if(escape)cancelEdit();else finishEdit();return;}
+  // Esc 逐级退出（interactions.md 3.4）：菜单与弹窗、拖动、编辑、新建卡片失焦（有草稿时，草稿保留）、多选、搜索，最后收起侧栏。
+  if(escape&&elements.tagDropdown&&!elements.tagDropdown.hidden){event.preventDefault();const suggesting=ui.tagMenuMode==='suggest';closeTagMenu();(suggesting?elements.searchInput:elements.tagFilterButton).focus();return;}
+  if(ui.editing&&(escape||shortcut(event,'save'))&&!(window.NoteWindows&&window.NoteWindows.owns(event.target))){event.preventDefault();if(escape)cancelEdit();else finishEdit();return;}
+  if(escape&&elements.sidebarComposer&&elements.sidebarComposer.contains(document.activeElement)&&(state.draft.text.trim()||state.draft.images.length)){event.preventDefault();document.activeElement.blur();ui.composer=false;return;}
   if(escape&&window.NoteInteractions&&window.NoteInteractions.hasSelection()){event.preventDefault();window.NoteInteractions.clearSelection();return;}
+  if(escape&&ui.searchOpen){event.preventDefault();endSearch({focusButton:true});return;}
+  // 标签筛选也逐级退出（第五次反馈：没有快速退出筛选的方式）：清除筛选之后再按 Esc 才收起侧栏。
+  if(escape&&ui.selectedTag&&elements.sidebar.classList.contains('open')&&!elements.capture.contains(document.activeElement)){event.preventDefault();ui.selectedTag='';closeTagMenu();renderNotes();return;}
+  // Ctrl+, 打开设置（本次提出），编辑中同样可用；Ctrl+C 复制高亮或多选的记录，有选中文字时保留浏览器的复制。
+  if(shortcut(event,'settings')){event.preventDefault();openSettings();return;}
+  if((event.ctrlKey||event.metaKey)&&!event.shiftKey&&!event.altKey&&event.code==='KeyC'&&!ui.editing){const typing=event.target&&event.target.closest&&event.target.closest('input,textarea,select,[contenteditable="true"]'),selection=window.getSelection&&window.getSelection();if(!typing&&!(selection&&String(selection).trim())&&copyCurrentOrSelected()){event.preventDefault();return;}}
+  // 高亮了卡片而焦点不在卡片上（悬停高亮、编辑或菜单结束后），↑ ↓ 同样移动高亮并把焦点移到卡片上，Enter 编辑（本次提出）。
+  if(handleCurrentCardKey(event))return;
   if(!ui.sortPress&&(event.key==='Enter'||event.key===' ')){ui.skipCardClick=false;ui.consumeClick=false;}
-  if(event.ctrlKey&&!event.shiftKey&&!event.altKey&&(event.code==='KeyF'||event.code==='KeyN')){
-    event.preventDefault();ui.skipCardClick=false;if(event.code==='KeyF')toggleSearch(true);else{if(!finishEdit())return;showSidebar({focus:false});focusNewComposer();}return;
+  if(shortcut(event,'search')||shortcut(event,'newNote')){
+    event.preventDefault();ui.skipCardClick=false;if(shortcut(event,'search'))toggleSearch(true);else{if(!finishEdit())return;if(isSearching())endSearch();showSidebar({focus:false});focusNewComposer();}return;
   }
-  if(event.ctrlKey&&event.shiftKey&&event.code==='Space'){event.preventDefault();showCapture();return;}
-  if(event.altKey&&event.shiftKey&&!event.ctrlKey&&event.code==='KeyS'){
+  if(shortcut(event,'capture')){event.preventDefault();showCapture();return;}
+  if(shortcut(event,'sidebar')){
     event.preventDefault();ui.skipCardClick=false;if(!finishEdit())return;
     if(elements.capture.classList.contains('open'))hideCapture();
-    if(ui.searchOpen)toggleSearch(false);showSidebar({focus:false});focusNewComposer();return;
+    if(isSearching())endSearch();else if(ui.searchOpen)toggleSearch(false);showSidebar({focus:false});focusNewComposer();return;
   }
-  if(event.ctrlKey&&event.key==='Enter'&&(elements.capture.contains(event.target)||elements.sidebarComposer.contains(event.target))){event.preventDefault();saveDraft(elements.capture.contains(event.target)?'capture':'sidebar',{collapse:true});return;}
+  if(shortcut(event,'save')&&(elements.capture.contains(event.target)||elements.sidebarComposer.contains(event.target))){event.preventDefault();const fromCapture=elements.capture.contains(event.target);saveDraft(fromCapture?'capture':'sidebar',{collapse:fromCapture});return;}
   if(escape){event.preventDefault();if(elements.capture.classList.contains('open')&&(elements.capture.contains(document.activeElement)||!elements.sidebar.classList.contains('open')))hideCapture();else if(elements.sidebar.classList.contains('open'))hideSidebar(true);else if(elements.capture.classList.contains('open'))hideCapture();}
 }
 
@@ -782,12 +1599,12 @@ function changeSetting(event) {
 
 /** 连接页面元素并注册交互。 */
 function initialize() {
-  const ids = { resizer:'sidebar-resizer', versionButton:'app-version', tagDropdown:'tag-dropdown', tagFilterButton:'tag-filter-button', syncWarning:'sync-warning', workspaceNudge:'workspace-nudge', sidebar: 'sidebar', edgeTrigger: 'edge-trigger', capture: 'capture', noteList: 'note-list', listSummary: 'list-summary', searchInput: 'search-input', clearSearch: 'clear-search', storageStatus: 'storage-status', draftInput: 'draft-input', attachmentList: 'attachment-list', imagePicker: 'image-picker', charCount: 'capture-char-count', draftStatus: 'draft-status', saveNote: 'save-note', captureSubtitle: 'capture-subtitle', modalRoot: 'modal-root', toastRegion: 'toast-region' };
+  const ids = { resizer:'sidebar-resizer', versionButton:'app-version', tagDropdown:'tag-dropdown', tagFilterButton:'tag-filter-button', syncWarning:'sync-warning', workspaceNudge:'workspace-nudge', sidebar: 'sidebar', edgeTrigger: 'edge-trigger', capture: 'capture', noteList: 'note-list', listSummary: 'list-summary', tagFilterClear: 'tag-filter-clear', searchSummary: 'search-summary', selectionSummary: 'selection-summary', selectMode: 'select-mode', collapseAll: 'collapse-all', searchInput: 'search-input', clearSearch: 'clear-search', storageStatus: 'storage-status', draftInput: 'draft-input', attachmentList: 'attachment-list', imagePicker: 'image-picker', charCount: 'capture-char-count', saveNote: 'save-note', modalRoot: 'modal-root', toastRegion: 'toast-region' };
   Object.entries(ids).forEach(function collectElement(entry) { elements[entry[0]] = document.getElementById(entry[1]); });
   elements.searchInput.type='text';elements.searchInput.setAttribute('role','searchbox');
   loadState();
   createComposer();
-  if(window.LiveMarkdown){window.LiveMarkdown.attach(elements.draftInput,{value:state.draft.text,minHeight:100,maxHeight:340});window.LiveMarkdown.attach(elements.sidebarDraft,{value:state.draft.text,minHeight:76,maxHeight:340});}
+  if(window.LiveMarkdown){window.LiveMarkdown.attach(elements.draftInput,{value:state.draft.text,minHeight:100,maxHeight:340});window.LiveMarkdown.attach(elements.sidebarDraft,{value:state.draft.text,minHeight:56,maxHeight:240});}
   initializeSidebarResize();
   initializeListLoading();
   initializeContentDrop();
@@ -802,13 +1619,15 @@ function initialize() {
   elements.importPicker = importPicker;
   const filePicker=el('input');filePicker.type='file';filePicker.hidden=true;filePicker.id='reference-file-picker';document.body.append(filePicker);elements.filePicker=filePicker;
   filePicker.addEventListener('change',function chosenFile(){const file=filePicker.files[0];if(!file)return;const p=ui.pendingFilePath;window.NoteContent.registerFile(p,file);filePicker.value='';openFileReference(p);});
-  document.addEventListener('click',function dismissTagMenu(event){if(!event.target.closest('.tag-filter-wrap'))closeTagMenu();});
+  document.addEventListener('click',function dismissTagMenu(event){if(!event.target.closest('.tag-filter-wrap, #tag-dropdown, #header-search'))closeTagMenu();});
   window.addEventListener('sidenotes:sync-status',function syncChanged(){setStorageStatus(ui.storageWriteError);});
   window.addEventListener('sidenotes:settings-changed',function settingsChanged(event){const patch=event.detail&&event.detail.patch||{};if(elements.resizer)elements.resizer.dataset.edge=state.settings.edge;if(Object.prototype.hasOwnProperty.call(patch,'lazyLoading')||Object.prototype.hasOwnProperty.call(patch,'pageSize'))renderNotes({reset:true});renderWorkspaceNudge();resizeDraftInput();scheduleTagLayout();setStorageStatus(ui.storageWriteError);});
   applySettings();
   renderNotes();
   renderDraft();
   document.addEventListener('pointerdown', protectTagFocus, true);
+  // 搜索展开时点到别处（包括卡片区域）即收起搜索：卡片按下时为长按排序阻止了浏览器默认的失焦，这里主动让搜索框失焦。
+  document.addEventListener('pointerdown',function blurSearchOutside(event){if(!ui.searchOpen)return;const wrap=document.getElementById('header-search');if(wrap.contains(event.target)||elements.tagDropdown.contains(event.target))return;if(wrap.contains(document.activeElement))document.activeElement.blur();},true);
   if(!window.PointerEvent)document.addEventListener('mousedown', protectTagFocus, true);
   document.addEventListener('click', dismissTagEditing, true);
   document.addEventListener('click', trackPinnedReturn, true);
@@ -830,20 +1649,48 @@ function initialize() {
     if (!finishEdit()) return;
     ui.query = elements.searchInput.value;
     renderNotes();
-    if(ui.query.includes('#')){elements.tagDropdown.hidden=false;elements.tagFilterButton.setAttribute('aria-expanded','true');}
+    refreshTagSuggestions();
+  });
+  // 标签候选：Enter 用第一个候选补全，↓ 移进候选；光标移出标签时收起。
+  elements.searchInput.addEventListener('keydown', function suggestKeys(event) {
+    if (event.isComposing || elements.tagDropdown.hidden || ui.tagMenuMode !== 'suggest') return;
+    const first = elements.tagDropdown.querySelector('[data-action="filter-tag"]');
+    if (event.key === 'Enter' && first) { event.preventDefault(); completeTagToken(first.dataset.tag); }
+    else if (event.key === 'ArrowDown' && first) { event.preventDefault(); first.focus(); }
+  });
+  elements.searchInput.addEventListener('keyup', function caretMoved(event) { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) refreshTagSuggestions(); });
+  elements.tagDropdown.addEventListener('keydown', function moveInMenu(event) {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    const options = Array.from(elements.tagDropdown.querySelectorAll('.tag-option')), index = options.indexOf(document.activeElement);
+    if (index < 0) return;
+    event.preventDefault();
+    if (event.key === 'ArrowUp' && index === 0 && ui.tagMenuMode === 'suggest') { elements.searchInput.focus(); return; }
+    options[Math.max(0, Math.min(options.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)))].focus();
   });
   elements.clearSearch.addEventListener('click', function clearSearch() { ui.query = ''; elements.searchInput.value = ''; renderNotes(); elements.searchInput.focus(); });
-  elements.noteList.addEventListener('click',function editCard(event){
-    if(event.defaultPrevented||window.NoteInteractions&&(window.NoteInteractions.isBusy()||window.NoteInteractions.hasSelection())||ui.skipCardClick||ui.expandedTags.size||ui.sortPress&&ui.sortPress.active||event.target.closest('button,a,input,textarea,select,[contenteditable="true"]'))return;const card=event.target.closest('.note-card');if(!card||card.classList.contains('is-editing'))return;window.clearTimeout(ui.clickTimer);const epoch=ui.clickEpoch||0;ui.clickTimer=window.setTimeout(function editAfterClick(){if(epoch===(ui.clickEpoch||0)&&!ui.skipCardClick&&!ui.expandedTags.size&&!ui.sortPress)beginEdit(card.dataset.noteId);},550);
+  // 单击与悬停共用一种高亮（T66）：高亮的卡片是 Ctrl+C 与键盘操作的对象；双击进入编辑（interactions.md 第二、四节）。
+  elements.noteList.addEventListener('pointerover',function highlightOnHover(event){
+    if(event.pointerType==='touch'||ui.sortPress||window.NoteInteractions&&window.NoteInteractions.isBusy())return;
+    const card=event.target.closest('.note-card');if(card&&card.dataset.noteId!==ui.currentId&&!card.classList.contains('is-editing'))setCurrentCard(card.dataset.noteId);
   });
-  elements.noteList.addEventListener('dblclick',function copyCard(event){
+  elements.noteList.addEventListener('click',function highlightCard(event){
+    if(event.defaultPrevented||window.NoteInteractions&&(window.NoteInteractions.isBusy()||window.NoteInteractions.hasSelection())||ui.skipCardClick||ui.expandedTags.size||ui.sortPress&&ui.sortPress.active)return;
+    const card=event.target.closest('.note-card'),control=event.target.closest('button,a,input,textarea,select,[contenteditable="true"]');
+    if(!card){if(!control&&!event.target.closest('.sidebar-composer,.composer-sticky-slot'))setCurrentCard('');return;}
+    if(card.classList.contains('is-editing'))return;setCurrentCard(card.dataset.noteId,{focus:!control});
+  });
+  elements.noteList.addEventListener('dblclick',function editCardOnDoubleClick(event){
     if(event.defaultPrevented||window.NoteInteractions&&(window.NoteInteractions.isBusy()||window.NoteInteractions.hasSelection())||ui.skipCardClick||ui.sortPress&&ui.sortPress.active)return;
     const tag=event.target.closest('.tag-chip');if(tag){event.preventDefault();window.clearTimeout(ui.tagClickTimer);startTagRename(tag);return;}
-    if(event.target.closest('button,a,input,textarea,select,[contenteditable="true"]'))return;const card=event.target.closest('.note-card');if(!card||card.classList.contains('is-editing'))return;window.clearTimeout(ui.clickTimer);event.preventDefault();const note=state.notes.find(function same(n){return n.id===card.dataset.noteId;});if(note)copyNote(note);
+    if(event.target.closest('button,a,input,textarea,select,[contenteditable="true"]'))return;const card=event.target.closest('.note-card');if(!card||card.classList.contains('is-editing'))return;event.preventDefault();const selection=window.getSelection();if(selection&&selection.removeAllRanges)selection.removeAllRanges();beginEdit(card.dataset.noteId);
   });
-  elements.noteList.addEventListener('keydown', function editCardWithKeyboard(event) {
-    if ((event.key === 'Enter' || event.key === ' ') && event.target.matches('.note-card')) { event.preventDefault();ui.skipCardClick=false;beginEdit(event.target.dataset.noteId); }
+  elements.noteList.addEventListener('keydown', handleCardKeyboard);
+  // 键盘把焦点移到卡片上时同样选中这张卡片，与现有应用一致。
+  elements.noteList.addEventListener('focusin',function highlightOnFocus(event){
+    const card=event.target;if(card.classList&&card.classList.contains('note-card')&&card.dataset.noteId!==ui.currentId&&!card.classList.contains('is-editing'))setCurrentCard(card.dataset.noteId);
   });
+  document.querySelector('.sidebar-tabs').addEventListener('keydown', handleTabKeyboard);
+  initializeHelp(document.querySelector('#capture .help-anchor'));
   elements.sidebar.addEventListener('mouseenter', cancelHide);
   elements.sidebar.addEventListener('mouseleave', scheduleHide);
   elements.edgeTrigger.addEventListener('mouseenter', showSidebar);
@@ -859,9 +1706,12 @@ function initialize() {
   const attachmentPicker=el('input');attachmentPicker.type='file';attachmentPicker.multiple=true;attachmentPicker.hidden=true;document.body.append(attachmentPicker);elements.attachmentPicker=attachmentPicker;attachmentPicker.addEventListener('change',function selectedFiles(){addPickedAttachments(attachmentPicker.files,ui.attachmentTarget||'draft');attachmentPicker.value='';});
   importPicker.addEventListener('change', function selectedImport() { inspectImport(importPicker.files[0]); importPicker.value = ''; });
   [elements.draftInput,elements.sidebarDraft].flatMap(function inputTargets(input){return input.liveMarkdown?[input,input.liveMarkdown.element]:[input];}).forEach(function attachPaste(input) {
-    input.addEventListener('paste', function pastedImages(event) {
-      const files = Array.from(event.clipboardData && event.clipboardData.items || []).filter(function imageItem(item) { return item.kind === 'file' && item.type.startsWith('image/'); }).map(function itemFile(item) { return item.getAsFile(); }).filter(Boolean);
-      if (files.length) { event.preventDefault(); addImages(files); }
+    input.addEventListener('paste', function pastedFiles(event) {
+      // 粘贴截图或文件（与现有应用一致）：截图改名后放进缩略条，其它文件在光标处插入引用。
+      const files = Array.from(event.clipboardData && event.clipboardData.files || []);
+      if (!files.length) return;
+      event.preventDefault();
+      addPickedAttachments(files.map(screenshotFile), elements.capture.contains(input) ? 'capture' : 'draft');
     });
   });
   window.addEventListener('beforeunload', function preserveOnExit(event) {
@@ -884,56 +1734,85 @@ function tagKey(tag) { return String(tag).normalize('NFKC').toLocaleLowerCase();
 /** @brief 检查记录的标签。 @param {object} note 记录。 @param {string} tag 标签。 @return {boolean} 是否包含。 */
 function hasTag(note,tag) { return noteParts(note).tags.some(function same(item){return tagKey(item)===tagKey(tag);}); }
 /** @brief 判断记录是否属于当前页签。 @param {object} note 记录。 @return {boolean} 是否属于。 */
-function inCurrentTab(note) { return ui.tab==='archive'?note.status==='archived':note.status==='active'&&(ui.tab!=='pinned'||note.pinned); }
-/** @brief 支持正文与多个标签组合搜索。 @param {object} note 记录。 @param {string} query 查询。 @return {boolean} 是否匹配。 */
-function matchesQuery(note,query) {
+function inCurrentTab(note) { return window.SidebarTabs.belongs(note,ui.tab); }
+/**
+ * @brief 文字与标签分开搜（第八次反馈）：不带 # 的词只搜标题、正文与附件名，不再命中标签；带 # 的词只搜标签，写完整的已有标签
+ * 只匹配这个标签，没写完的按前缀匹配。两种可以一起写，同时满足。此前不带 # 的词也搜标签，带这个标签的卡片挤在结果里。
+ * @param {object} note 记录。 @param {string} query 查询。 @param {Set<string>} known 已有标签（tagKey），省略时一律按前缀。 @return {boolean} 是否匹配。
+ */
+function matchesQuery(note,query,known) {
   if(!String(query).trim())return true;
   const parsed=noteParts(note), tags=[];
   const text=String(query).replace(/(?:^|\s)#([\p{L}\p{N}_-]+)/gu,function collect(_,tag){tags.push(tagKey(tag));return ' ';}).trim().toLocaleLowerCase();
-  return tags.every(function matchTag(tag){return parsed.tags.some(function prefix(item){return tagKey(item).startsWith(tag);});})&&text.split(/\s+/).filter(Boolean).every(function matchText(word){return (parsed.body+' '+parsed.tags.join(' ')+' '+note.images.map(function name(i){return i.name;}).join(' ')).toLocaleLowerCase().includes(word);});
+  const haystack=(parsed.body+' '+note.images.map(function name(i){return i.name;}).join(' ')).toLocaleLowerCase();
+  return tags.every(function matchTag(tag){return parsed.tags.some(function prefix(item){return known&&known.has(tag)?tagKey(item)===tag:tagKey(item).startsWith(tag);});})&&text.split(/\s+/).filter(Boolean).every(function matchText(word){return haystack.includes(word);});
 }
 /** @brief 汇总标签并计算固定权重分数。 @return {Array} 候选与分数。 */
 function rankedTags() {
-  const grouped=new Map();state.notes.filter(inCurrentTab).forEach(function collect(note){noteParts(note).tags.forEach(function tagCount(tag){const key=tagKey(tag);if(!grouped.has(key))grouped.set(key,{tag:tag,count:0,pinned:0,updated:0});const item=grouped.get(key);item.count++;item.pinned+=note.pinned?1:0;item.updated=Math.max(item.updated,note.updatedAt);});});
-  const tagQueries=Array.from(ui.query.matchAll(/(?:^|\s)#([\p{L}\p{N}_-]+)/gu));
-  const tagMode=tagQueries.length>0;const query=tagKey(tagMode?tagQueries[tagQueries.length-1][1]:ui.query.trim());
+  // 标签下拉是当前页签中的标签；搜索框里输入 # 时是全部记录中的标签（搜索是全局的，第五次反馈）。
+  const suggest=ui.tagMenuMode==='suggest',source=suggest?state.notes.filter(function active(note){return note.status==='active';}):state.notes.filter(inCurrentTab);
+  const grouped=new Map();source.forEach(function collect(note){noteParts(note).tags.forEach(function tagCount(tag){const key=tagKey(tag);if(!grouped.has(key))grouped.set(key,{tag:tag,count:0,pinned:0,updated:0});const item=grouped.get(key);item.count++;item.pinned+=note.pinned?1:0;item.updated=Math.max(item.updated,note.updatedAt);});});
+  // 搜索框里按正在输入的标签前缀排在前面；标签下拉没有输入，按使用、条数与置顶排序。
+  const tagMode=suggest;const query=tagKey(suggest?ui.tagToken||'':'');
   return Array.from(grouped.values()).map(function score(item){const usage=state.tagUsage[tagKey(item.tag)]||{count:0,last:0};const age=(Date.now()-(Number(usage.last)||0))/86400000;item.score=40*Math.log2(1+(Number(usage.count)||0))+30*Math.max(0,1-age/14)+4*Math.min(item.count,10)+3*Math.min(item.pinned,4);item.match=Boolean(query&&(tagMode?tagKey(item.tag).startsWith(query):tagKey(item.tag).includes(query)));item.exact=Boolean(query&&tagKey(item.tag)===query);item.selected=Boolean(ui.selectedTag&&tagKey(ui.selectedTag)===tagKey(item.tag));return item;}).sort(function compare(a,b){return Number(b.exact)-Number(a.exact)||Number(b.match)-Number(a.match)||Number(b.selected)-Number(a.selected)||b.score-a.score||b.updated-a.updated||a.tag.localeCompare(b.tag,'zh-CN');});
 }
-/** 刷新最多六个候选的标签菜单。 */
+/**
+ * 刷新标签菜单（最多六个候选）。点筛选行的标签下拉时，第一项「全部标签」清除筛选，候选是当前页签中的标签，选中后筛选这个页签；
+ * 在搜索框里输入 # 时只列出全部记录中按前缀匹配的标签（第五次反馈），选中后补全搜索框里的这个标签。
+ */
 function renderTagMenu() {
   if(!elements.tagDropdown)return;
-  const trigger=elements.tagFilterButton, label=trigger.querySelector('span');if(label)label.textContent=ui.selectedTag?'#'+ui.selectedTag:'全部标签';
-  const menu=elements.tagDropdown;menu.replaceChildren();
-  const all=button('全部标签','clear-tag','','tag-option');all.append(el('span','tag-option-count',String(state.notes.filter(inCurrentTab).length)));menu.append(all);
-  const candidates=rankedTags();candidates.slice(0,6).forEach(function row(item,index){const group=el('div','tag-option-row'+(index===0&&(item.match||item.selected)?' current-tag-row':''));
-    const choice=button('#'+item.tag,'filter-tag','','tag-option');choice.dataset.tag=item.tag;choice.setAttribute('role','menuitem');choice.title='访问频率 40 · 近期访问 30 · 条数 4 · 置顶 3';choice.append(el('span','tag-option-count',String(item.count)));group.append(choice);
-    if(index===0&&(item.match||item.selected)){const manage=button('管理 #'+item.tag,'manage-tag','more');manage.dataset.tag=item.tag;group.append(manage);}menu.append(group);});
+  const suggest=ui.tagMenuMode==='suggest',menu=elements.tagDropdown;menu.replaceChildren();
+  menu.classList.toggle('is-suggesting',suggest);menu.setAttribute('aria-label',suggest?'标签候选':'标签筛选');
+  if(!suggest){const all=button('全部标签','clear-tag','','tag-option');all.setAttribute('role','menuitem');all.append(el('span','tag-option-count',String(state.notes.filter(inCurrentTab).length)));menu.append(all);}
+  const ranked=rankedTags(),candidates=suggest&&ui.tagToken?ranked.filter(function matching(item){return item.match;}):ranked;
+  candidates.slice(0,6).forEach(function row(item,index){const current=!suggest&&index===0&&(item.match||item.selected),group=el('div','tag-option-row'+(current?' current-tag-row':''));
+    const choice=button('#'+item.tag,'filter-tag','','tag-option');choice.dataset.tag=item.tag;choice.setAttribute('role','menuitem');choice.append(el('span','tag-option-count',String(item.count)));group.append(choice);
+    if(current){const manage=button('管理 #'+item.tag,'manage-tag','more');manage.dataset.tag=item.tag;group.append(manage);}menu.append(group);});
   const priority=menu.querySelector('.current-tag-row');if(priority)menu.prepend(priority);
-  if(!candidates.length)menu.append(el('p','tag-menu-empty',ui.query?'没有匹配的标签':'输入 #标签 创建分组'));
-  const foot=el('div','tag-menu-footer');foot.append(el('span','',candidates.length>6?'另有 '+(candidates.length-6)+' 个标签，使用搜索查找':'搜索 #标签 可快速定位'),button('搜索','focus-tag-search','search','tag-search-button'));menu.append(foot);
+  if(!candidates.length)menu.append(el('p','tag-menu-empty',suggest?'没有匹配的标签':'输入 #标签 创建分组'));
+  if(suggest)return;
+  // 底部只有「搜索标签」一项（在全部记录中搜索）；候选之外还有标签时，右侧写「另有 N 个」。
+  const foot=el('div','tag-menu-footer'),search=button('搜索标签','focus-tag-search','search','tag-option tag-search-button');search.setAttribute('role','menuitem');if(candidates.length>6)search.append(el('span','tag-option-count','另有 '+(candidates.length-6)+' 个'));foot.append(search);menu.append(foot);
 }
 /** 关闭标签菜单。 */
-function closeTagMenu(){if(elements.tagDropdown){elements.tagDropdown.hidden=true;elements.tagFilterButton.setAttribute('aria-expanded','false');}}
+function closeTagMenu(){if(elements.tagDropdown){elements.tagDropdown.hidden=true;elements.tagFilterButton.setAttribute('aria-expanded','false');}ui.tagMenuMode='filter';}
 /** @brief 选择标签并记录最近访问。 @param {string} tag 标签。 */
-function selectTag(tag){if(!finishEdit())return;ui.selectedTag=tag;ui.query='';elements.searchInput.value='';const key=tagKey(tag),old=state.tagUsage[key]||{count:0,last:0};state.tagUsage[key]={count:Math.min(10000,(Number(old.count)||0)+1),last:Date.now()};persistSnapshot();closeTagMenu();renderNotes();}
+function selectTag(tag){if(!finishEdit())return;ui.selectedTag=tag;ui.query='';elements.searchInput.value='';if(ui.searchOpen)toggleSearch(false);const key=tagKey(tag),old=state.tagUsage[key]||{count:0,last:0};state.tagUsage[key]={count:Math.min(10000,(Number(old.count)||0)+1),last:Date.now()};persistSnapshot();closeTagMenu();renderNotes();}
 /** @brief 移除一条记录中的标签。 @param {object} note 记录。 @param {string} tag 标签。 */
 function removeNoteTag(note,tag){let text=window.NoteContent.removeTag(note.text,tag);if(!text.trim()&&!note.images.length)text=tag;if(updateNote(note.id,{text:text}))toast('已从此记录移除 #'+tag);}
+/**
+ * @brief 把所有记录上的标签改名，与已有标签同名时合并；筛选中的标签、使用记录与固定的页签一起改（第四次反馈：双击页签改名也用这里）。
+ * @param {string} tag 原标签。 @param {string} value 新名称。 @return {boolean} 是否完成（名称无效时提示）。
+ */
+function renameTagEverywhere(tag,value){
+  const next=String(value||'').trim().replace(/^#/,'');
+  if(!isValidTag(next)){toast('标签最多40字；使用文字、数字、下划线或短横线，避免十六进制色值',null,true);return false;}
+  if(next===tag)return true;
+  const notes=state.notes.map(function replaceTag(note){if(!hasTag(note,tag))return note;const parsed=noteParts(note);return {...note,text:window.NoteContent.compose(parsed.body,parsed.tags.map(function replace(t){return tagKey(t)===tagKey(tag)?next:t;})),updatedAt:Date.now()};});
+  const pinned=[];state.settings.pinnedTags.forEach(function follow(item){const name=tagKey(item)===tagKey(tag)?next:item;if(!pinned.some(function same(t){return tagKey(t)===tagKey(name);}))pinned.push(name);});
+  if(!persistSnapshot(notes,state.draft,normalizeSettings({...state.settings,pinnedTags:pinned})))return false;
+  const oldUsage=state.tagUsage[tagKey(tag)];if(oldUsage){state.tagUsage[tagKey(next)]=oldUsage;if(tagKey(next)!==tagKey(tag))delete state.tagUsage[tagKey(tag)];persistSnapshot();}
+  if(ui.selectedTag&&tagKey(ui.selectedTag)===tagKey(tag))ui.selectedTag=next;
+  if(tagKey(window.SidebarTabs.tagOf(ui.tab))===tagKey(tag))ui.tab=window.SidebarTabs.tabOf(pinned.find(function same(t){return tagKey(t)===tagKey(next);})||next);
+  return true;
+}
 /** @brief 对标签进行重命名、合并或全局移除。 @param {string} tag 标签。 */
 function manageTag(tag){closeTagMenu();const dialog=openModal('管理 #'+tag,'tag-manage-modal');dialog.body.append(el('p','modal-hint','只修改标签，保留记录内容。'));
   const input=el('input','form-control tag-name-input');input.value=tag;input.setAttribute('aria-label','标签名称');dialog.body.append(input);
-  const rename=button('重命名 / 合并','','edit','button primary');rename.addEventListener('click',function renameTag(){const next=input.value.trim().replace(/^#/,'');if(!isValidTag(next)){toast('标签最多40字；使用文字、数字、下划线或短横线，避免十六进制色值',null,true);return;}const notes=state.notes.map(function replaceTag(note){if(!hasTag(note,tag))return note;const parsed=noteParts(note);return {...note,text:window.NoteContent.compose(parsed.body,parsed.tags.map(function replace(t){return tagKey(t)===tagKey(tag)?next:t;})),updatedAt:Date.now()};});if(!persistSnapshot(notes))return;const oldUsage=state.tagUsage[tagKey(tag)];if(oldUsage){state.tagUsage[tagKey(next)]=oldUsage;if(tagKey(next)!==tagKey(tag))delete state.tagUsage[tagKey(tag)];persistSnapshot();}if(ui.selectedTag&&tagKey(ui.selectedTag)===tagKey(tag))ui.selectedTag=next;closeModal();renderNotes();toast('标签已更新，相同标签已合并');});
+  const rename=button('重命名 / 合并','','edit','button primary');rename.addEventListener('click',function renameTag(){if(!renameTagEverywhere(tag,input.value))return;closeModal();renderNotes();toast('标签已更新，相同标签已合并');});
   const remove=button('移除此标签','','trash','button danger');remove.addEventListener('click',function confirmRemove(){confirmAction({title:'移除 #'+tag+'？',description:'从所有记录中移除此标签；记录正文与附件保留。',confirmLabel:'移除标签',run:function removeGroup(){const notes=state.notes.map(function removeAssociation(note){if(!hasTag(note,tag))return note;let text=window.NoteContent.removeTag(note.text,tag);if(!text.trim()&&!note.images.length)text=tag;return {...note,text:text,updatedAt:Date.now()};});if(!persistSnapshot(notes))return false;if(ui.selectedTag&&tagKey(ui.selectedTag)===tagKey(tag))ui.selectedTag='';renderNotes();return true;}});});dialog.footer.append(remove,rename);
 }
 /** 刷新可忽略的工作区整理提醒。 */
-function renderWorkspaceNudge(){if(!elements.workspaceNudge||!state)return;const count=state.notes.filter(function active(n){return n.status==='active';}).length,limit=state.settings.tidyLimit||0;const visible=limit>0&&count>limit&&Date.now()>(state.settings.tidySnoozeUntil||0);const target=elements.workspaceNudge;target.hidden=!visible;target.replaceChildren();if(!visible)return;target.append(icon('info'),el('span','',count+' 条未归档记录，建议整理。'),button('查看','tidy-workspace','','nudge-link'),button('稍后','snooze-tidy','','nudge-link'),button('设置','tidy-settings','settings'));}
+function renderWorkspaceNudge(){if(!elements.workspaceNudge||!state)return;const count=state.notes.filter(function active(n){return n.status==='active';}).length,limit=state.settings.tidyLimit||0;const visible=limit>0&&count>limit&&Date.now()>(state.settings.tidySnoozeUntil||0);const target=elements.workspaceNudge;target.hidden=!visible;target.replaceChildren();if(!visible)return;target.append(icon('info'),el('span','',count+' 条记录，建议整理。'),button('查看','tidy-workspace','','nudge-link'),button('稍后','snooze-tidy','','nudge-link'),button('设置','tidy-settings','settings'));}
 
 /** 调整输入区域的高度边界，不重建正在书写的编辑器。 */
 function resizeDraftInput(){const input=elements.sidebarDraft;if(!input)return;const active=ui.composer||Boolean(state.draft.text||state.draft.images.length);elements.sidebarComposer.classList.add('is-active');if(input.liveMarkdown){input.liveMarkdown.element.style.maxHeight=Math.min(340,window.innerHeight*.42)+'px';return;}input.style.height='auto';input.style.height=Math.min(Math.min(300,window.innerHeight*.38),Math.max(active?100:76,input.scrollHeight||40))+'px';}
 /* ==================== 全文、文件与更多操作 ==================== */
 /** @brief 查看未裁切的 Markdown 全文。 @param {object} note 记录。 */
-function openNote(note){if(ui.editing&&!finishEdit())return;const dialog=openModal('记录详情','detail-modal');const body=el('div','detail-source markdown-body');window.NoteContent.renderMarkdown(noteParts(note).body,body);note.images.forEach(function image(a){const b=button('预览 '+a.name,'preview-markdown-image','','note-image-button');b.dataset.src=a.data;b.dataset.alt=a.name;const i=el('img','note-image');i.src=a.data;i.alt=a.name;b.append(i);body.append(b);});dialog.body.append(body);const tags=el('p','detail-tags',noteParts(note).tags.map(function tag(t){return '#'+t;}).join(' '));dialog.body.append(tags);const edit=button('编辑','','edit','button primary');edit.addEventListener('click',function editDetail(){closeModal();showSidebar();beginEdit(note.id);});dialog.footer.append(el('span','modal-hint',formatTime(note.createdAt)),edit);}
+function openNote(note,card){if(!window.NoteWindows)return;const rect=card&&card.getBoundingClientRect?card.getBoundingClientRect():null;window.NoteWindows.open(note.id,{kind:'expand',from:rect});}
 /** @brief 下载单条 Markdown。 @param {object} note 记录。 */
-function exportNote(note){const blob=new Blob([note.text],{type:'text/markdown;charset=utf-8'}),url=URL.createObjectURL(blob),a=el('a');a.href=url;a.download=(noteParts(note).body.split('\n')[0].replace(/[<>:"/\\|?*]/g,'_').slice(0,50)||'SideNotes')+'.md';document.body.append(a);a.click();a.remove();window.setTimeout(function release(){URL.revokeObjectURL(url);},1000);}
+function exportNote(note){const blob=new Blob([note.text],{type:'text/markdown;charset=utf-8'}),url=URL.createObjectURL(blob),a=el('a');a.href=url;a.download=((note.emoji||'')+noteParts(note).body.split('\n')[0].slice(0,40)).replace(/[<>:"/\\|?*]/g,'_')+'.md';document.body.append(a);a.click();a.remove();window.setTimeout(function release(){URL.revokeObjectURL(url);},60000);toast('已导出 Markdown');}
 /** @brief 校验并打开文件引用，未授权时要求用户定位文件。 @param {string} filePath 本地路径。 */
 async function openFileReference(filePath){const status=await window.NoteContent.checkFile(filePath);const entry=window.NoteContent.files.get(window.NoteContent.fileKey(filePath));const token=window.NoteContent.isFileToken&&window.NoteContent.isFileToken(filePath),label=token?window.NoteContent.fileLabel(filePath):filePath;const dialog=openModal('文件引用','file-reference-modal');dialog.body.append(el('code','file-path',label));const hint=el('p','file-check-status',status==='missing'?'文件已失效，请重新定位。':status==='valid'?(entry&&entry.handle?'已校验，文件可读取。':token?'本次会话所选文件可读取；刷新后需重新定位。':'所选文件副本可读取，原路径未验证。'):token?'引用已保留，请重新选择文件以校验并打开。':'尚未授权校验此文件。');dialog.body.append(hint);dialog.body.append(el('p','modal-hint',token?'浏览器未提供原始完整路径，仅保留文件名和引用标识。':'浏览器只能访问你选择的文件；原路径检查和系统默认应用跳转由桌面端接入。'));
   const locate=button(status==='valid'?'重新定位':'选择文件','','folder','button secondary');locate.addEventListener('click',async function chooseFile(){try{if(window.showOpenFilePicker){const handles=await window.showOpenFilePicker();const handle=handles[0],file=await handle.getFile();window.NoteContent.registerFile(filePath,file,handle);openFileReference(filePath);}else{ui.pendingFilePath=filePath;elements.filePicker.click();}}catch(error){if(error.name!=='AbortError')toast('无法读取所选文件',null,true);}});dialog.footer.append(locate);
@@ -949,7 +1828,7 @@ function appendNextPage(requested){
   if(ui.loading||!ui.listItems||ui.visibleCount>=ui.listItems.length)return;ui.loading=true;
   if(ui.sentinel)ui.sentinel.remove();const count=Number.isFinite(requested)?requested:state.settings.pageSize;
   const end=Math.min(ui.listItems.length,ui.visibleCount+count),nodes=[];
-  for(let index=ui.visibleCount;index<end;index++){const note=ui.listItems[index],group=note.pinned?'pinned':'normal';if(ui.lastListGroup!==group){nodes.push(sectionHeading(group==='pinned'?'置顶':'普通',ui.groupCounts[group]));ui.lastListGroup=group;}nodes.push(renderCard(note));}
+  for(let index=ui.visibleCount;index<end;index++){const group=ui.listGroups&&ui.listGroups.find(function starts(item){return item.start===index;});if(group)nodes.push(renderSearchGroup(group));nodes.push(renderCard(ui.listItems[index]));}
   elements.noteList.append(...nodes);ui.visibleCount=end;ui.loading=false;
   if(end<ui.listItems.length){
     if(!ui.sentinel){ui.sentinel=el('div','load-more-sentinel');ui.sentinel.setAttribute('role','status');}
@@ -967,7 +1846,7 @@ function fitCardTags(card){
   if(!more||tags.classList.contains('tags-expanded'))return;const width=tags.clientWidth;if(!width)return;
   const reserve=more.getBoundingClientRect().width||24,gap=4,widths=wraps.map(function measure(w){return w.getBoundingClientRect().width;});let used=0,visible=0;
   widths.forEach(function fit(value,index){const next=used+value+(visible?gap:0);if(next+reserve+gap<=width){used=next;visible++;}else wraps[index].hidden=true;});
-  const hidden=wraps.length-visible;more.title=hidden?'展开剩余 '+hidden+' 个标签':'管理标签';more.setAttribute('aria-label',more.title);more.dataset.hiddenCount=String(hidden);
+  const hidden=wraps.length-visible;more.setAttribute('aria-label',hidden?'展开剩余 '+hidden+' 个标签':'管理标签');more.dataset.hiddenCount=String(hidden);
 }
 /** 在同一帧统一检查标签与正文裁切。 */
 function scheduleTagLayout(){if(ui.tagFrame)return;const update=function updateCardGeometry(){ui.tagFrame=0;elements.noteList.querySelectorAll('.note-card').forEach(function geometry(card){fitCardTags(card);const content=card.querySelector('.note-content'),expand=card.querySelector('.note-expand');if(content&&expand&&content.clientHeight){const overflow=content.scrollHeight>content.clientHeight+2;card.classList.toggle('is-truncated',overflow);expand.hidden=!overflow;}});};if(window.requestAnimationFrame)ui.tagFrame=window.requestAnimationFrame(update);else update();}
@@ -975,24 +1854,34 @@ function scheduleTagLayout(){if(ui.tagFrame)return;const update=function updateC
 /** @brief 只更新拖动预览，释放后才写入设置。 @param {number} width 目标宽度。 */
 function previewSidebarWidth(width){document.documentElement.style.setProperty('--sidebar-width',width+'px');elements.sidebar.style.width='min('+width+'px,100vw)';elements.resizer.setAttribute('aria-valuenow',String(width));scheduleTagLayout();}
 /** @brief 结束拖动并保存或取消。 @param {boolean} commit 是否保存。 */
-function finishSidebarResize(commit=true){if(!ui.resizing)return;const drag=ui.resizing;ui.resizing=null;document.body.classList.remove('is-resizing-sidebar');try{if(elements.resizer.hasPointerCapture&&elements.resizer.hasPointerCapture(drag.pointerId))elements.resizer.releasePointerCapture(drag.pointerId);}catch(error){/* 系统可能已取消捕获。 */}if(commit&&drag.current!==drag.width){const settings={...state.settings,width:drag.current};if(!persistSnapshot(state.notes,state.draft,settings)){previewSidebarWidth(drag.width);toast('宽度未保存',null,true);return;}}else previewSidebarWidth(drag.width);elements.resizer.dataset.edge=state.settings.edge;}
+function finishSidebarResize(commit=true){if(!ui.resizing)return;const drag=ui.resizing;ui.resizing=null;document.body.classList.remove('is-resizing-sidebar');if(!elements.resizer.matches(':hover'))elements.resizer.classList.remove('is-armed');try{if(elements.resizer.hasPointerCapture&&elements.resizer.hasPointerCapture(drag.pointerId))elements.resizer.releasePointerCapture(drag.pointerId);}catch(error){/* 系统可能已取消捕获。 */}if(commit&&drag.current!==drag.width){const settings={...state.settings,width:drag.current};if(!persistSnapshot(state.notes,state.draft,settings)){previewSidebarWidth(drag.width);toast('宽度未保存',null,true);return;}}else previewSidebarWidth(drag.width);elements.resizer.dataset.edge=state.settings.edge;}
 /** 连接指针拖动、取消与键盘宽度调整。 */
 function initializeSidebarResize(){
   const handle=elements.resizer;handle.setAttribute('aria-valuenow',String(state.settings.width));
+  // 指针移上去立即是左右箭头，停留 400ms 后才高亮，只是划过不会闪一下强调色（本次提出）。
+  let armTimer=0;handle.addEventListener('pointerenter',function armLater(){window.clearTimeout(armTimer);armTimer=window.setTimeout(function arm(){handle.classList.add('is-armed');},400);});handle.addEventListener('pointerleave',function disarm(){window.clearTimeout(armTimer);if(!ui.resizing)handle.classList.remove('is-armed');});
   handle.addEventListener('pointerdown',function resizeStarted(event){if(event.button!==0||ui.modal)return;event.preventDefault();cancelHide();ui.resizing={x:event.clientX,width:state.settings.width,current:state.settings.width,edge:state.settings.edge,pointerId:event.pointerId};document.body.classList.add('is-resizing-sidebar');if(handle.setPointerCapture)handle.setPointerCapture(event.pointerId);});
-  window.addEventListener('pointermove',function resizing(event){if(!ui.resizing)return;const drag=ui.resizing;if(event.pointerId!==undefined&&event.pointerId!==drag.pointerId)return;const delta=(event.clientX-drag.x)*(drag.edge==='right'?-1:1);drag.current=Math.round(Math.max(360,Math.min(720,window.innerWidth,drag.width+delta)));previewSidebarWidth(drag.current);});
+  window.addEventListener('pointermove',function resizing(event){if(!ui.resizing)return;const drag=ui.resizing;if(event.pointerId!==undefined&&event.pointerId!==drag.pointerId)return;const zoom=parseFloat(window.getComputedStyle(elements.sidebar).zoom)||1,delta=(event.clientX-drag.x)*(drag.edge==='right'?-1:1)/zoom;drag.current=Math.round(Math.max(360,Math.min(720,window.innerWidth/zoom,drag.width+delta))/4)*4;previewSidebarWidth(drag.current);});
   window.addEventListener('pointerup',function resizeFinished(){finishSidebarResize(true);});window.addEventListener('pointercancel',function resizeCancelled(){finishSidebarResize(false);});window.addEventListener('blur',function resizeFocusLost(){finishSidebarResize(false);});window.addEventListener('resize',function resizeLayout(){scheduleTagLayout();refreshSearchSummary();});
-  handle.addEventListener('keydown',function keyboardResize(event){if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;event.preventDefault();const delta=(event.key==='ArrowLeft'?1:-1)*(state.settings.edge==='right'?1:-1)*16;const width=Math.max(360,Math.min(720,state.settings.width+delta));if(persistSnapshot(state.notes,state.draft,{...state.settings,width:width}))previewSidebarWidth(width);});
+  handle.addEventListener('keydown',function keyboardResize(event){if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;event.preventDefault();const delta=(event.key==='ArrowLeft'?1:-1)*(state.settings.edge==='right'?1:-1)*(event.shiftKey?40:8);const width=Math.max(360,Math.min(720,state.settings.width+delta));if(persistSnapshot(state.notes,state.draft,{...state.settings,width:width}))previewSidebarWidth(width);});
 }
 /* ==================== 版本与更新 ==================== */
+/** 原型这一版的要点：版本弹窗与「发现新版本」共用的写法。 */
+const VERSION_NOTES=['卡片可以拖出侧栏，成为可以移动、缩放与置顶的窗口；「展开全文」也在窗口中打开','快捷键可以重新绑定，编辑时可以用格式快捷键','「数据与同步」增加快照与附件','进入编辑时可以把卡片滚到列表顶部'];
 /** 刷新版号及可用更新标记。 */
-function refreshVersionBadge(){const flags=window.PrototypeFlags||{version:'0.5.0',availableVersion:''};if(ui.availableVersion===undefined)ui.availableVersion=flags.availableVersion;const label=elements.versionButton.querySelector('span');if(label)label.textContent=(ui.currentVersion||flags.version)+' PREVIEW';const dot=elements.versionButton.querySelector('.update-dot');if(dot)dot.hidden=!ui.availableVersion;elements.versionButton.title=ui.availableVersion?'可用更新 '+ui.availableVersion:'版本与更新日志';}
-/** 显示更新日志及更新服务入口。 */
+function refreshVersionBadge(){const flags=window.PrototypeFlags||{version:'',availableVersion:''};if(ui.availableVersion===undefined)ui.availableVersion=flags.availableVersion;const version=ui.currentVersion||flags.version;const label=elements.versionButton.querySelector('.version-label');if(label)label.textContent='v'+version;const badge=elements.versionButton.querySelector('.update-badge');if(badge)badge.hidden=!ui.availableVersion;elements.versionButton.classList.toggle('has-update',Boolean(ui.availableVersion));const name=ui.availableVersion?'发现新版本 '+ui.availableVersion+'，点击查看更新内容':'版本 '+version+'，查看更新日志';elements.versionButton.setAttribute('aria-label',name);}
+/** 发现新版本：列出即将更新的内容，可以「立即更新」或「稍后」，稍后之后角标保留（本次提出）。 */
+function showUpdate(){
+  const dialog=openModal('发现新版本','update-modal');dialog.body.append(el('p','update-summary','SideNotes '+ui.availableVersion+' · 当前 '+(ui.currentVersion||window.PrototypeFlags.version)));
+  const notes=el('ul','update-notes');VERSION_NOTES.forEach(function item(text){notes.append(el('li','',text));});dialog.body.append(notes);
+  const later=button('稍后','close-modal','','button secondary'),now=button('立即更新','','download','button primary');now.addEventListener('click',function updateNow(){const version=ui.availableVersion;ui.currentVersion=version;ui.availableVersion='';refreshVersionBadge();closeModal();toast('已更新到 '+version);});dialog.footer.append(later,now);
+}
+/** 版本弹窗：只列本版要点（与现有应用的 ChangelogDialog 一致）；演示模式下另有测试按钮。 */
 function showChangelog(){
-  const dialog=openModal('版本与更新','changelog-modal');dialog.body.append(el('p','version-summary','SideNotes '+(ui.currentVersion||'0.5.0')+' PREVIEW'));
-  const log=el('div','changelog-list');[['0.5.0','失焦保存、退出层级、开栏聚焦、长按与批量排序、卡片菜单及折叠、回收确认和新版速记浮窗。'],['0.4.1','修复 Markdown 完整复制、按页签新建、侧栏打开聚焦、搜索摘要与设置布局。'],['0.4.0','长按排序、编辑确认与取消、Ctrl+F紧凑搜索、富文本和图片复制、重新组织设置布局。'],['0.3.0','Emoji、实时 Markdown 编辑、每批10条增量列表、侧栏拖动、字体搜索与双击复制。'],['0.2.0','标签分组、Markdown预览、分类设置、材质主题和备份流程。'],['0.1.0','侧栏、快捷速记、共享草稿与本地存储。']].forEach(function entry(item){const row=el('section','changelog-entry');row.append(el('h3','',item[0]),el('p','',item[1]));log.append(row);});dialog.body.append(log);
-  const actions=el('div','update-actions');const check=button('检查更新','','restore','button secondary');check.addEventListener('click',function checkUpdate(){if(window.PrototypeFlags.demo){ui.availableVersion='0.5.1';refreshVersionBadge();toast('已显示更新提示示例');showChangelog();}else toast('更新服务待桌面端接入');});actions.append(check);
-  if(ui.availableVersion){dialog.body.append(el('p','settings-notice','可用版本 '+ui.availableVersion+'（更新演示）'));const update=button('模拟完成更新','','download','button primary');update.hidden=!window.PrototypeFlags.demo;update.addEventListener('click',function completeDemoUpdate(){ui.currentVersion=ui.availableVersion;ui.availableVersion='';refreshVersionBadge();closeModal();toast('更新演示完成');});actions.append(update);}
+  if(ui.availableVersion){showUpdate();return;}
+  const dialog=openModal('版本与更新','changelog-modal');dialog.body.append(el('p','version-summary','SideNotes '+(ui.currentVersion||window.PrototypeFlags.version)));
+  const notes=el('ul','update-notes');VERSION_NOTES.forEach(function item(text){notes.append(el('li','',text));});dialog.body.append(notes);
+  const actions=el('div','update-actions');const check=button('检查更新','','restore','button secondary');check.addEventListener('click',function checkUpdate(){checkForUpdates();});actions.append(check);
   dialog.body.append(actions);
   if(window.PrototypeFlags.demo){const test=el('div','demo-controls');const add=button('生成30条测试记录','','plus','button secondary');add.addEventListener('click',function sampleRows(){const time=Date.now();const notes=Array.from({length:30},function sample(_,index){return {id:'demo-'+createId(),text:'测试记录 '+(index+1)+'\n\n用于检查增量加载、Emoji与卡片交互。\n\n#测试',images:[],pinned:false,status:'active',createdAt:time-index*60000,updatedAt:time-index*60000};});if(persistSnapshot(notes.concat(state.notes))){ui.tab='workspace';ui.selectedTag='';ui.query='';elements.searchInput.value='';renderNotes({reset:true});closeModal();showSidebar();toast('已添加30条测试记录');}});test.append(add);dialog.body.append(test);}
   dialog.footer.remove();
@@ -1008,7 +1897,7 @@ function startTagRename(chip){
   const card=chip.closest('[data-note-id]'),note=card&&state.notes.find(function same(n){return n.id===card.dataset.noteId;});if(!note)return;
   ui.expandedTags.clear();ui.expandedTags.add(note.id);
   elements.noteList.querySelectorAll('.note-tags').forEach(function expand(tags){tags.classList.toggle('tags-expanded',tags.closest('[data-note-id]').dataset.noteId===note.id);});
-  const input=el('input','tag-rename-input');input.type='text';input.value=chip.dataset.tag;input.maxLength=40;input.setAttribute('aria-label','修改此记录的标签');input.title='Enter 确认，Esc 取消';
+  const input=el('input','tag-rename-input');input.type='text';input.value=chip.dataset.tag;input.maxLength=40;input.setAttribute('aria-label','修改此记录的标签');
   ui.tagRenaming={id:note.id,tag:chip.dataset.tag,input:input,chip:chip};chip.replaceWith(input);
   input.addEventListener('keydown',function renameKey(event){if(event.isComposing||ui.composing||event.keyCode===229)return;if(event.key==='Enter'){event.preventDefault();event.stopPropagation();finishTagRename();}else if(event.key==='Escape'){event.preventDefault();event.stopPropagation();cancelTagRename();}});
   fitCardTags(card);input.focus();input.select();
@@ -1021,7 +1910,7 @@ function finishTagRename(refresh=true){
   const note=state.notes.find(function same(n){return n.id===editing.id;});
   if(note&&next!==editing.tag){const parsed=noteParts(note),text=window.NoteContent.compose(parsed.body,parsed.tags.map(function rename(tag){return tagKey(tag)===tagKey(editing.tag)?next:tag;}));const notes=state.notes.map(function change(n){return n.id===note.id?{...n,text:text,updatedAt:Date.now()}:n;});if(!persistSnapshot(notes)){toast('标签未保存，输入仍在',null,true);return false;}ui.tagRefreshPending=true;}
   editing.chip.textContent='#'+next;editing.chip.dataset.tag=next;
-  const wrap=editing.input.parentElement,remove=wrap&&wrap.querySelector('.tag-remove');if(remove){remove.dataset.tag=next;remove.setAttribute('aria-label','从此记录移除 #'+next);remove.title='从此记录移除 #'+next;}
+  const wrap=editing.input.parentElement,remove=wrap&&wrap.querySelector('.tag-remove');if(remove){remove.dataset.tag=next;remove.setAttribute('aria-label','从此记录移除 #'+next);}
   editing.input.replaceWith(editing.chip);ui.tagRenaming=null;
   if(refresh)renderNotes();else renderTagMenu();return true;
 }
@@ -1049,18 +1938,59 @@ function dropRange(event,input){
   if(editor.element.contains(event.target))return editor.readSelection();
   return {start:editor.getValue().length,end:editor.getValue().length,direction:'none'};
 }
-/** @brief 在原文范围插入拖入文本，未定位时追加独立段落。 @param {string} source 原文。 @param {string} text 新文本。 @param {object|null} range 插入范围。 @return {object} 合并内容及光标位置。 */
-function insertDroppedText(source,text,range){
+/**
+ * @brief 在原文范围插入拖入或选择的附件与文本，未定位时追加独立段落。
+ * 标签固定在最后一行：插入位置落在标签行或它之后时，改为标签行之前的单独一段（本次提出）。
+ * 附件（options.attachment）不插进标题：光标或选区在卡片的标题行、Markdown 标题行上时，作为单独一行插在这一行之后，标题原样保留（本次提出）。
+ * @param {string} source 原文。 @param {string} text 新文本。 @param {object|null} range 插入范围。 @param {object} options attachment 插入的是图片或文件引用。
+ * @return {object} 合并内容及光标位置。
+ */
+function insertDroppedText(source,text,range,options={}){
   if(!text)return {text:source,caret:range?range.end:source.length};
+  const tags=window.NoteContent.tagLineStart(source);
+  if(tags>=0&&(!range||range.start>=tags)){
+    const before=source.slice(0,tags),prefix=!before||before.endsWith('\n\n')?'':'\n';
+    return {text:before+prefix+text+'\n\n'+source.slice(tags),caret:before.length+prefix.length+text.length};
+  }
+  if(range&&options.attachment){const heading=headingLineAt(source,range);if(heading){const eol=(source.match(/\r\n|\r|\n/)||['\n'])[0];return {text:source.slice(0,heading.end)+eol+text+source.slice(heading.end),caret:heading.end+eol.length+text.length};}}
   if(range){const start=Math.max(0,Math.min(source.length,range.start)),end=Math.max(start,Math.min(source.length,range.end));return {text:source.slice(0,start)+text+source.slice(end),caret:start+text.length};}
   const prefix=source?(source.endsWith('\n\n')?'':source.endsWith('\n')?'\n':'\n\n'):'';
   return {text:source+prefix+text,caret:source.length+prefix.length+text.length};
 }
+/**
+ * @brief 范围碰到的标题行：卡片的标题行（见 NoteContent.titleLine），或光标所在的 Markdown 标题行（# 开头）。
+ * @param {string} source 原文。 @param {object} range 原文范围。 @return {{start:number,end:number}|null} 标题行的起止，范围不在标题行上时为 null。
+ */
+function headingLineAt(source,range){
+  const title=window.NoteContent.titleLine(source);
+  if(title&&range.start<=title.end&&range.end>=title.start)return title;
+  const start=source.lastIndexOf('\n',Math.max(0,range.start-1))+1,breakAt=source.slice(start).search(/\r\n|\r|\n/),end=breakAt<0?source.length:start+breakAt;
+  return /^\s{0,3}#{1,6}[\t ]+\S/.test(source.slice(start,end))?{start:start,end:end}:null;
+}
+/**
+ * @brief 文本中引用了、目标列表里还没有的图片（从别的记录拖来的图片引用），一并放进目标列表，保存后仍能显示。
+ * @param {string} text 插入的文本。 @param {Array} images 目标已有的图片。 @return {Array} 要补进去的图片。
+ */
+function referencedImages(text,images){
+  const ids=new Set((images||[]).map(function id(image){return image.id;})),found=[];
+  for(const match of String(text||'').matchAll(/sidenotes-image:([a-z0-9-]+)/gi)){if(ids.has(match[1]))continue;const image=window.SideNotesImages.imageOf('sidenotes-image:'+match[1]);if(image){ids.add(match[1]);found.push({...image});}}
+  return found;
+}
+/**
+ * @brief 一条记录最多 12 张图片：超出的图片不插入，正文中的引用一并去掉。
+ * @param {object} payload 文本和图片。 @param {number} available 还能放几张。 @return {object} 处理后的内容。
+ */
+function limitPayloadImages(payload,available){
+  if(payload.images.length<=available)return payload;
+  const dropped=new Set(payload.images.slice(available).map(function id(image){return image.id;}));
+  toast('一条记录最多12张图片，超出的图片未插入',null,true);
+  return {...payload,images:payload.images.slice(0,available),text:payload.text.split('\n').filter(function keep(line){const match=/sidenotes-image:([a-z0-9-]+)/i.exec(line);return !(match&&dropped.has(match[1]));}).join('\n')};
+}
 /** @brief 将读取后的拖入结果加入共享草稿。 @param {object} payload 文本和图片。 @param {object|null} range 原文范围。 @param {HTMLTextAreaElement} input 输入源。 */
 function applyDraftDrop(payload,range,input){
-  const available=Math.max(0,12-state.draft.images.length),images=payload.images.slice(0,available);
-  if(images.length<payload.images.length)toast('一条记录最多添加12张图片，超出的图片未插入',null,true);
-  const inserted=insertDroppedText(state.draft.text,payload.text,range);
+  payload=limitPayloadImages({...payload,images:payload.images.concat(referencedImages(payload.text,state.draft.images.concat(payload.images)))},Math.max(0,12-state.draft.images.length));
+  const images=payload.images;
+  const inserted=insertDroppedText(state.draft.text,payload.text,range,{attachment:payload.attachment});
   if(inserted.text!==state.draft.text&&input&&input.liveMarkdown)input.liveMarkdown.remember(range||input.liveMarkdown.readSelection());
   ui.draftDirty=true;state.draft={text:inserted.text,images:state.draft.images.concat(images),updatedAt:Date.now()};
   ui.composer=true;persistDraft();renderDraft();
@@ -1070,6 +2000,9 @@ function applyDraftDrop(payload,range,input){
 async function receiveContentDrop(event){
   const target=dropTarget(event);if(!target||!window.NoteDrop||event.sideNotesDropHandled)return;
   if(ui.sortPress&&ui.sortPress.active)return;
+  // 编辑面中拖动附件或文字，落在同一个编辑面时移到落点（editor.js 的 moveText），不是复制一份（本次提出）。
+  const moving=window.LiveMarkdown&&window.LiveMarkdown.dragSource();
+  if(moving){const host=target.dataset.noteId?target.querySelector('textarea.note-edit-input'):target===elements.capture?elements.draftInput:elements.sidebarDraft,editor=host&&host.liveMarkdown;if(editor&&editor===moving.editor){event.preventDefault();event.stopPropagation();event.sideNotesDropHandled=true;target.classList.remove('is-drop-target');editor.moveText(moving.start,moving.end,editor.offsetAt(event.clientX,event.clientY));window.LiveMarkdown.endDrag();return;}}
   event.preventDefault();event.stopPropagation();event.sideNotesDropHandled=true;window.clearTimeout(ui.clickTimer);window.clearTimeout(ui.tagClickTimer);ui.clickTimer=0;target.classList.remove('is-drop-target');
   if(!finishTagRename(false))return;closeExpandedTags();
   const id=target.dataset.noteId,input=id?target.querySelector('textarea.note-edit-input'):target===elements.capture?elements.draftInput:elements.sidebarDraft;
@@ -1086,8 +2019,8 @@ async function receiveContentDrop(event){
     if(ui.editing&&ui.editing.id!==id&&!finishEdit()){applyDraftDrop(payload,null,elements.sidebarDraft);toast('当前编辑未保存，拖入内容已放入新增草稿',null,true);return;}
     const note=state.notes.find(function same(n){return n.id===id;});if(!note||note.status==='trash'){applyDraftDrop(payload,null,elements.sidebarDraft);toast('原记录不可用，拖入内容已放入新增草稿',null,true);return;}
     const editing=ui.editing&&ui.editing.id===id,source=editing?ui.editing.text:note.text;
-    const inserted=insertDroppedText(source,payload.text,source===before?range:null),available=Math.max(0,12-note.images.length),images=payload.images.slice(0,available);
-    if(images.length<payload.images.length)toast('一条记录最多添加12张图片，超出的图片未插入',null,true);
+    const limited=limitPayloadImages({...payload,images:payload.images.concat(referencedImages(payload.text,note.images.concat(payload.images)))},Math.max(0,12-note.images.length)),images=limited.images;
+    const inserted=insertDroppedText(source,limited.text,source===before?range:null,{attachment:payload.attachment});
     const next={...note,text:window.NoteContent.canonicalize(inserted.text),images:note.images.concat(images),updatedAt:Date.now()};
     if(!persistSnapshot(state.notes.map(function replace(n){return n.id===id?next:n;}))){applyDraftDrop(payload,null,elements.sidebarDraft);toast('原记录未修改，拖入内容保留在新增草稿中',null,true);return;}
     if(editing){ui.editing.text=inserted.text;ui.editStorageError=false;const current=elements.noteList.querySelector('textarea[data-edit-id]');if(current&&current.liveMarkdown){if(current.liveMarkdown.getValue()!==inserted.text)current.liveMarkdown.remember(current.liveMarkdown.readSelection());current.liveMarkdown.setValue(inserted.text);current.focus();current.setSelectionRange(inserted.caret,inserted.caret);}}
@@ -1101,7 +2034,7 @@ function initializeContentDrop(){
   document.addEventListener('dragleave',function leaveContentDrop(event){const target=dropTarget(event);if(target&&(!event.relatedTarget||!target.contains(event.relatedTarget)))target.classList.remove('is-drop-target');},true);
   document.addEventListener('dragend',function endContentDrop(){document.querySelectorAll('.is-drop-target').forEach(function clear(target){target.classList.remove('is-drop-target');});},true);
   document.addEventListener('drop',receiveContentDrop,true);
-  document.addEventListener('paste',function pasteEditAttachments(event){const card=event.target.closest('.note-card.is-editing');if(!card||!ui.editing||!event.clipboardData)return;const files=Array.from(event.clipboardData.files||[]);if(!files.length)return;event.preventDefault();event.stopPropagation();addPickedAttachments(files,ui.editing.id);},true);
+  document.addEventListener('paste',function pasteEditAttachments(event){const card=event.target.closest('.note-card.is-editing');if(!card||!ui.editing||!event.clipboardData)return;const files=Array.from(event.clipboardData.files||[]);if(!files.length)return;event.preventDefault();event.stopPropagation();addPickedAttachments(files.map(screenshotFile),ui.editing.id);},true);
 }
 
 /* ==================== 编辑事务与附件 ==================== */
@@ -1117,38 +2050,42 @@ function cancelEdit(){
 /** @brief 渲染编辑事务中的图片，不移动正文光标。 @param {HTMLElement} card 编辑卡片。 */
 function renderEditAttachments(card){
   if(!ui.editing)return;let list=card.querySelector('.note-edit-attachments');if(!list){list=el('div','attachment-list note-edit-attachments');card.insertBefore(list,card.querySelector('.note-edit-actions'));}list.replaceChildren();
-  ui.editing.images.forEach(function item(image){const wrap=el('div','attachment-item'),preview=button('预览 '+image.name,'preview-markdown-image','','attachment-preview note-image-button');preview.dataset.src=image.data;preview.dataset.alt=image.name;const picture=el('img');picture.src=image.data;picture.alt=image.name;preview.append(picture);const remove=button('移除 '+image.name,'remove-edit-image','x');remove.classList.add('attachment-remove');remove.dataset.imageId=image.id;wrap.append(preview,remove);list.append(wrap);});
+  stripImages(ui.editing).forEach(function item(image){const wrap=el('div','attachment-item'),preview=button('预览 '+image.name,'preview-edit-image','','attachment-preview note-image-button');preview.dataset.imageId=image.id;const picture=el('img');window.SideNotesImages.show(picture,image.data);picture.alt=image.name;preview.append(picture);const remove=button('移除 '+image.name,'remove-edit-image','x');remove.classList.add('attachment-remove');remove.dataset.imageId=image.id;wrap.append(preview,remove);list.append(wrap);});
 }
 /** @brief 移除尚未提交的图片。 @param {string} id 图片标识。 */
 function removeEditImage(id){if(!ui.editing)return;ui.editing.images=ui.editing.images.filter(function keep(image){return image.id!==id;});const card=elements.noteList.querySelector('.note-card.is-editing');if(card)renderEditAttachments(card);}
 /** @brief 把文件和文本加入编辑事务，确认前不写入记录。 @param {object} payload 拖入内容。 @param {object|null} range 原文范围。 */
 function applyEditPayload(payload,range=null){
   if(!ui.editing)return;const editing=ui.editing,input=elements.noteList.querySelector('textarea[data-edit-id]'),editor=input&&input.liveMarkdown;
-  const inserted=insertDroppedText(editing.text,payload.text,range),available=Math.max(0,12-editing.images.length);if(payload.images.length>available)toast('一条记录最多12张图片，超出的图片未插入',null,true);
-  if(editor&&inserted.text!==editing.text)editor.remember(editor.readSelection());editing.text=inserted.text;editing.images=editing.images.concat(payload.images.slice(0,available));
+  payload=limitPayloadImages({...payload,images:payload.images.concat(referencedImages(payload.text,editing.images.concat(payload.images)))},Math.max(0,12-editing.images.length));
+  const inserted=insertDroppedText(editing.text,payload.text,range,{attachment:payload.attachment});
+  if(editor&&inserted.text!==editing.text)editor.remember(editor.readSelection());editing.text=inserted.text;editing.images=editing.images.concat(payload.images);
   if(editor){editor.setValue(inserted.text);editor.focus();editor.setSelectionRange(inserted.caret,inserted.caret);}const card=elements.noteList.querySelector('.note-card.is-editing');if(card)renderEditAttachments(card);
 }
 
 /** @brief 将附件插入当前编辑面或共享草稿，保持原来的输入窗口。 @param {FileList|Array} files 文件。 @param {string} target 目标。 */
 async function addPickedAttachments(files,target='draft'){
   const editing=ui.editing&&ui.editing.id===target?ui.editing:null,input=target==='capture'?elements.draftInput:elements.sidebarDraft;
+  // 引用插在选择文件之前的光标处（与现有应用一致），没有光标时接在末尾。
+  const editInput=editing&&elements.noteList.querySelector('textarea[data-edit-id]'),source=editing?editInput:input,range=source&&source.liveMarkdown?source.liveMarkdown.readSelection():null;
   ui.pendingImages++;renderDraft();
   try{
     const payload=await window.NoteDrop.prepare({files:Array.from(files),getData:function noText(){return '';}});
     payload.errors.forEach(function warn(message){toast(message,null,true);});
-    if(editing){if(ui.editing!==editing){toast('编辑已退出，未插入附件');return;}applyEditPayload(payload);}
-    else applyDraftDrop(payload,null,input);
+    if(editing){if(ui.editing!==editing){toast('编辑已退出，未插入附件');return;}applyEditPayload(payload,range);}
+    else applyDraftDrop(payload,range,input);
   }catch(error){toast(error.message||'附件读取失败',null,true);}
   finally{ui.pendingImages--;ui.editAttachmentHold=null;renderDraft();resumeEditBlur();}
 }
 
 /** @brief 展开或收起搜索，收起时保留查询和筛选结果。 @param {boolean} open 是否展开。 @param {object} options 焦点选项。 */
 function toggleSearch(open=true,options={}){
-  ui.searchOpen=open;const wrap=document.getElementById('header-search'),row=document.getElementById('sidebar-navigation');wrap.classList.toggle('is-open',open);row.classList.toggle('is-searching',open);const tabs=row.querySelector('.sidebar-tabs');tabs.inert=open;tabs.setAttribute('aria-hidden',String(open));document.getElementById('search-toggle').setAttribute('aria-expanded',String(open));const panel=document.getElementById('search-panel');panel.inert=!open;panel.setAttribute('aria-hidden',String(!open));refreshSearchSummary();
+  // 搜索在页签栏的最右端（第六次反馈）：展开时从右向左铺满这一行，盖住页签。
+  ui.searchOpen=open;const wrap=document.getElementById('header-search'),row=document.getElementById('sidebar-navigation'),tabs=row.querySelector('.sidebar-tabs');wrap.classList.toggle('is-open',open);row.classList.toggle('is-searching',open);tabs.inert=open;tabs.setAttribute('aria-hidden',String(open));if(!open||ui.tagMenuMode!=='suggest')closeTagMenu();document.getElementById('search-toggle').setAttribute('aria-expanded',String(open));const panel=document.getElementById('search-panel');panel.inert=!open;panel.setAttribute('aria-hidden',String(!open));refreshSearchSummary();
   if(open){showSidebar({focus:false});elements.searchInput.value=ui.query;elements.searchInput.focus();elements.searchInput.select();}else if(options.focusButton)document.getElementById('search-toggle').focus();
 }
 /** 检查更新的原型入口，关于页与版本弹窗共用。 */
-function checkForUpdates(){if(window.PrototypeFlags.demo){ui.availableVersion='0.5.1';refreshVersionBadge();showChangelog();toast('可用更新演示');}else{toast('更新服务待桌面端接入');}}
+function checkForUpdates(){if(window.PrototypeFlags.demo&&!ui.currentVersion){ui.availableVersion=window.PrototypeFlags.nextVersion;refreshVersionBadge();showChangelog();}else toast('已是最新版本');}
 
 /* ==================== 手势优先级与长按排序 ==================== */
 /** @brief 默认按创建时间倒序，手动排序后使用持久顺序。 @param {object} a 记录。 @param {object} b 记录。 @return {number} 比较结果。 */
@@ -1196,37 +2133,17 @@ function focusPinnedComposer(){
 }
 /** 按需滚动至列表顶部，双击品牌不影响记录数据。 */
 function scrollNotesToTop(){if(elements.noteList.scrollTo)elements.noteList.scrollTo({top:0,behavior:window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});else elements.noteList.scrollTop=0;}
-/** 同步折叠搜索中的关键词胶囊与无障碍名称。 */
-/** @brief 折叠搜索时按关键词实际宽度收缩，并限制最长显示宽度。 */
+/** 搜索框有搜索词时保持展开（全局搜索的结果在列表中），底边是强调色线。 */
 function refreshSearchSummary(){
-  const wrap=document.getElementById('header-search'),row=document.getElementById('sidebar-navigation'),trigger=document.getElementById('search-toggle');
-  if(!wrap||!trigger||!row)return;
-  const query=ui.query.trim();
-  let label=trigger.querySelector('.search-query-label');
-  if(!label){label=el('span','search-query-label');label.setAttribute('aria-hidden','true');trigger.append(label);}
-  label.textContent=query;label.hidden=!query;label.title=query;
-  wrap.classList.toggle('has-query',Boolean(query));
-  row.classList.toggle('has-search-query',Boolean(query));
-  if(!query||ui.searchOpen){
-    wrap.style.removeProperty('width');trigger.style.removeProperty('width');row.style.removeProperty('--search-collapsed-width');
-  }else{
-    let textWidth=0;
-    try{
-      const canvas=document.createElement('canvas'),context=canvas.getContext&&canvas.getContext('2d');
-      if(context){context.font='500 10px "Microsoft YaHei UI","Microsoft YaHei",Segoe UI,sans-serif';textWidth=context.measureText(query).width;}
-    }catch(error){/* 无 Canvas 环境使用字符宽度估算。 */}
-    if(!textWidth)textWidth=Array.from(query).reduce(function width(total,character){return total+(/[\u0000-\u00ff]/.test(character)?6.2:10);},0);
-    const rowWidth=row.clientWidth||320,maxWidth=Math.max(92,Math.min(176,rowWidth*.46));
-    const width=Math.min(maxWidth,Math.max(64,Math.ceil(textWidth)+45));
-    wrap.style.width=width+'px';trigger.style.width=width+'px';row.style.setProperty('--search-collapsed-width',width+'px');
-  }
-  trigger.title=query||'搜索 · Ctrl+F';
-  trigger.setAttribute('aria-label',query?'搜索：'+query+'，点击修改':'搜索记录 · Ctrl+F');
+  const wrap=document.getElementById('header-search'),trigger=document.getElementById('search-toggle');if(!wrap||!trigger)return;
+  wrap.classList.toggle('has-query',isSearching());trigger.setAttribute('aria-label','搜索全部记录 · Ctrl+F');
 }
 /** 连接品牌双击回顶与搜索失焦收起，不抢走外部操作的焦点。 */
 function initializeHeaderInteractions(){
-  const brand=document.querySelector('.sidebar-brand');brand.title='双击回到列表顶部';brand.addEventListener('dblclick',function top(event){if(event.target.closest('button'))return;event.preventDefault();const selection=window.getSelection();if(selection&&selection.removeAllRanges)selection.removeAllRanges();scrollNotesToTop();});
-  const wrap=document.getElementById('header-search');wrap.addEventListener('focusout',function closeOnBlur(event){if(event.relatedTarget&&wrap.contains(event.relatedTarget))return;window.clearTimeout(ui.searchBlurTimer);ui.searchBlurTimer=window.setTimeout(function afterFocus(){if(ui.searchOpen&&!wrap.contains(document.activeElement))toggleSearch(false);},0);});
+  const brand=document.querySelector('.sidebar-brand');brand.addEventListener('dblclick',function top(event){if(event.target.closest('button'))return;event.preventDefault();const selection=window.getSelection();if(selection&&selection.removeAllRanges)selection.removeAllRanges();scrollNotesToTop();});
+  // 失焦时没有搜索词就收起；有搜索词时保持展开，结果留在列表中。移进标签候选不算失焦。
+  const wrap=document.getElementById('header-search'),inside=function inside(node){return Boolean(node&&(wrap.contains(node)||elements.tagDropdown.contains(node)));};
+  wrap.addEventListener('focusout',function closeOnBlur(event){if(inside(event.relatedTarget))return;window.clearTimeout(ui.searchBlurTimer);ui.searchBlurTimer=window.setTimeout(function afterFocus(){if(inside(document.activeElement))return;if(ui.tagMenuMode==='suggest')closeTagMenu();if(ui.searchOpen&&!isSearching())toggleSearch(false);},0);});
   window.requestAnimationFrame(function initialFocus(){if(elements.sidebar.classList.contains('open')&&!ui.searchOpen&&!ui.modal&&!ui.editing)queueComposerFocus();});
 }
 
@@ -1251,7 +2168,7 @@ function scheduleEditBlur(editing){
   window.clearTimeout(ui.editBlurTimer);
   ui.editBlurTimer=window.setTimeout(function commitBlur(){
     if(!editing||ui.editing!==editing){ui.pendingEditBlur=null;return;}
-    if(ui.composing||ui.pendingImages||ui.editAttachmentHold===editing){ui.pendingEditBlur=editing;return;}
+    if(ui.composing||ui.pendingImages||ui.editAttachmentHold===editing||ui.modal){ui.pendingEditBlur=editing;return;}
     const card=elements.noteList.querySelector('.note-card.is-editing');
     if(card&&card.contains(document.activeElement)){ui.pendingEditBlur=null;return;}
     ui.pendingEditBlur=null;

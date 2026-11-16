@@ -94,6 +94,9 @@
       "icons/128x128@2x.png",
       "icons/icon.ico"
     ],
+    "resources": {
+      "icons/builtin/": "app-icons/"
+    },
     "copyright": "© 2026 LiMuhua",
     "category": "Productivity",
     "shortDescription": "本地速记与侧栏取用",

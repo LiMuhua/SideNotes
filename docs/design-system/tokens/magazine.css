@@ -1,0 +1,214 @@
+/* ==================== 主题：杂志（Magazine） ====================
+ *
+ * 一本随手翻的杂志：暖白纸色、衬线标题、宽松留白；侧栏离开屏幕边缘 8 像素，圆角面板，
+ * 记录是带柔和投影的圆角卡片。莓红只用于选中、焦点与主要操作：悬停或选中的卡片换成莓红边框，
+ * 外面一圈淡淡的莓红，并略微浮起。按钮为胶囊形，动效稍长，使用强调型减速曲线。
+ */
+
+/* ---------- 与明暗无关的令牌 ---------- */
+[data-sn-surface='magazine'] {
+  --sn-font-ui: 'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans SC',
+    'Noto Sans CJK SC', system-ui, -apple-system, Roboto, 'Noto Sans', Ubuntu, Cantarell, sans-serif;
+  /* 衬线标题：西文用 Georgia 一类，中文回落到各平台的宋体或思源宋体。 */
+  --sn-font-title: Georgia, 'Iowan Old Style', 'Noto Serif SC', 'Source Han Serif SC', 'Noto Serif CJK SC',
+    'Songti SC', SimSun, serif;
+  --sn-font-note: var(--sn-font-ui);
+  --sn-font-meta: var(--sn-font-ui);
+  --sn-font-code: 'Maple Mono NF CN', 'Cascadia Code', 'Cascadia Mono', 'JetBrains Mono', Consolas, 'Noto Sans Mono',
+    'DejaVu Sans Mono', monospace;
+  --sn-font-size-xs: 11px;
+  --sn-font-size-sm: 12px;
+  --sn-font-size-md: 13px;
+  --sn-font-size-lg: 15px;
+  --sn-font-size-xl: 20px;
+  --sn-line-height-tight: 1.3;
+  --sn-line-height-normal: 1.55;
+  --sn-line-height-relaxed: 1.75;
+  --sn-note-size: 14px;
+  --sn-note-line-height: 1.75;
+  --sn-code-size: 12.5px;
+  --sn-body-weight: 400;
+  --sn-title-weight: 600;
+  --sn-title-tracking: -0.01em;
+
+  --sn-radius-xs: 5px;
+  --sn-radius-sm: 8px;
+  --sn-radius-md: 12px;
+  --sn-radius-lg: 18px;
+  --sn-radius-control: 999px;
+  --sn-radius-chip: 999px;
+  --sn-card-radius: 14px;
+
+  --sn-panel-blur: 0px;
+  --sn-panel-saturate: 1;
+  --sn-panel-inset: 8px;
+  --sn-panel-radius: 18px;
+  --sn-panel-radius-edge: 18px;
+  --sn-block-gap: 0px;
+
+  --sn-duration-fast: 150ms;
+  --sn-duration-normal: 240ms;
+  --sn-duration-slow: 340ms;
+  --sn-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --sn-ease-enter: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --sn-ease-exit: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --sn-motion-distance: 12px;
+
+  --sn-header-height: 52px;
+  --sn-tab-height: 32px;
+  --sn-footer-height: 42px;
+  --sn-panel-padding: 14px;
+  --sn-card-padding-x: 16px;
+  --sn-card-padding-y: 14px;
+  --sn-card-gap: 10px;
+  --sn-control-height-sm: 26px;
+  --sn-control-height: 32px;
+  --sn-control-height-lg: 40px;
+  --sn-icon-size: 17px;
+  --sn-icon-size-sm: 15px;
+  --sn-icon-stroke: 1.75;
+  --sn-menu-item-height: 34px;
+  --sn-dialog-width: 440px;
+}
+
+/* ---------- 浅色 ---------- */
+[data-sn-surface='magazine'] {
+  color-scheme: light;
+
+  --sn-color-panel: #f3ede3;
+  --sn-color-panel-band: rgb(70 45 20 / 0);
+  --sn-color-card: #fffcf7;
+  --sn-color-card-head: rgb(0 0 0 / 0);
+  --sn-color-card-active: rgb(164 34 79 / 0.035);
+  --sn-color-card-head-active: rgb(0 0 0 / 0);
+  --sn-color-editing: #ffffff;
+  --sn-color-sheen: rgb(255 255 255 / 0);
+  --sn-color-bg: #ece4d7;
+  --sn-color-surface: #f9f5ee;
+  --sn-color-surface-raised: #fffdf9;
+  --sn-color-surface-sunken: #ebe3d6;
+  --sn-color-hover: rgb(70 45 20 / 0.05);
+  --sn-color-pressed: rgb(70 45 20 / 0.09);
+  --sn-color-selected: rgb(164 34 79 / 0.08);
+  --sn-color-overlay: rgb(40 28 18 / 0.34);
+
+  --sn-color-border: #e0d6c6;
+  --sn-color-border-subtle: #ebe2d4;
+  --sn-color-border-strong: #887c6e;
+  --sn-color-edge-highlight: rgb(255 255 255 / 0);
+  --sn-color-rim-top: rgb(255 255 255 / 0);
+  --sn-color-rim-bottom: rgb(255 255 255 / 0);
+  --sn-color-rule: rgb(0 0 0 / 0);
+
+  --sn-color-text: #211b16;
+  --sn-color-text-secondary: #4b4038;
+  --sn-color-text-muted: #665b50;
+  --sn-color-text-disabled: #b0a594;
+  --sn-color-halo: rgb(255 255 255 / 0);
+  --sn-color-syntax: #74675a;
+
+  --sn-color-accent: #a4224f;
+  --sn-color-accent-hover: #8a1b42;
+  --sn-color-accent-text: #9a1f4a;
+  --sn-color-accent-subtle: rgb(164 34 79 / 0.1);
+  --sn-color-on-accent: #ffffff;
+  --sn-color-focus: #a4224f;
+  --sn-color-caret: #a4224f;
+  --sn-color-highlight: rgb(240 200 90 / 0.42);
+  --sn-color-selection: rgb(164 34 79 / 0.16);
+  --sn-color-inverse: #2a231d;
+  --sn-color-on-inverse: #f5efe6;
+  --sn-color-mark-workspace: #665b50;
+  --sn-color-mark-pinned: #9a1f4a;
+  --sn-color-mark-archive: #665b50;
+
+  --sn-color-success: #286b38;
+  --sn-color-success-subtle: rgb(46 119 64 / 0.1);
+  --sn-color-warning: #865800;
+  --sn-color-warning-subtle: rgb(200 150 40 / 0.14);
+  --sn-color-danger: #b23a1e;
+  --sn-color-danger-subtle: rgb(178 58 30 / 0.1);
+  --sn-color-info: #3a64a8;
+  --sn-color-info-subtle: rgb(58 100 168 / 0.1);
+
+  --sn-code-bg: #f2ece2;
+  --sn-code-text: #262019;
+
+  --sn-shadow-sm: 0 1px 2px rgb(70 45 20 / 0.06), 0 2px 8px -4px rgb(70 45 20 / 0.1);
+  --sn-shadow-md: 0 8px 24px rgb(70 45 20 / 0.1), 0 1px 3px rgb(70 45 20 / 0.05);
+  --sn-shadow-lg: 0 24px 60px -16px rgb(70 45 20 / 0.3), 0 4px 12px rgb(70 45 20 / 0.06);
+  --sn-shadow-panel: 0 24px 60px -18px rgb(70 45 20 / 0.34), 0 2px 8px rgb(70 45 20 / 0.08);
+  --sn-shadow-card-active: 0 0 0 3px rgb(164 34 79 / 0.14), 0 10px 24px -12px rgb(70 45 20 / 0.3);
+  --sn-shadow-editing: 0 16px 32px -14px rgb(70 45 20 / 0.34);
+}
+
+/* ---------- 深色 ---------- */
+[data-sn-surface='magazine'][data-sn-theme='dark'] {
+  color-scheme: dark;
+
+  --sn-color-panel: #1c1a17;
+  --sn-color-panel-band: rgb(0 0 0 / 0);
+  --sn-color-card: #26231f;
+  --sn-color-card-head: rgb(0 0 0 / 0);
+  --sn-color-card-active: rgb(242 138 168 / 0.05);
+  --sn-color-card-head-active: rgb(0 0 0 / 0);
+  --sn-color-editing: #2b2823;
+  --sn-color-sheen: rgb(255 255 255 / 0);
+  --sn-color-bg: #161513;
+  --sn-color-surface: #1f1d1a;
+  --sn-color-surface-raised: #2b2925;
+  --sn-color-surface-sunken: #181715;
+  --sn-color-hover: rgb(255 246 235 / 0.05);
+  --sn-color-pressed: rgb(255 246 235 / 0.09);
+  --sn-color-selected: rgb(242 138 168 / 0.12);
+  --sn-color-overlay: rgb(0 0 0 / 0.5);
+
+  --sn-color-border: #36322c;
+  --sn-color-border-subtle: #2c2925;
+  --sn-color-border-strong: #7d766a;
+  --sn-color-edge-highlight: rgb(255 255 255 / 0);
+  --sn-color-rim-top: rgb(255 255 255 / 0);
+  --sn-color-rim-bottom: rgb(255 255 255 / 0);
+  --sn-color-rule: rgb(0 0 0 / 0);
+
+  --sn-color-text: #efe9df;
+  --sn-color-text-secondary: #c6bfb3;
+  --sn-color-text-muted: #9e978b;
+  --sn-color-text-disabled: #625d54;
+  --sn-color-halo: rgb(0 0 0 / 0);
+  --sn-color-syntax: #a39b8f;
+
+  --sn-color-accent: #f28aa8;
+  --sn-color-accent-hover: #f6a3bb;
+  --sn-color-accent-text: #f59ab5;
+  --sn-color-accent-subtle: rgb(242 138 168 / 0.14);
+  --sn-color-on-accent: #2a0a15;
+  --sn-color-focus: #f59ab5;
+  --sn-color-caret: #f28aa8;
+  --sn-color-highlight: rgb(230 196 90 / 0.3);
+  --sn-color-selection: rgb(242 138 168 / 0.26);
+  --sn-color-inverse: #efe9df;
+  --sn-color-on-inverse: #1f1d1a;
+  --sn-color-mark-workspace: #9e978b;
+  --sn-color-mark-pinned: #f59ab5;
+  --sn-color-mark-archive: #9e978b;
+
+  --sn-color-success: #86c98f;
+  --sn-color-success-subtle: rgb(134 201 143 / 0.14);
+  --sn-color-warning: #e2b65c;
+  --sn-color-warning-subtle: rgb(226 182 92 / 0.14);
+  --sn-color-danger: #f08a6c;
+  --sn-color-danger-subtle: rgb(240 138 108 / 0.14);
+  --sn-color-info: #8cb0e8;
+  --sn-color-info-subtle: rgb(140 176 232 / 0.14);
+
+  --sn-code-bg: #191714;
+  --sn-code-text: #e6e0d5;
+
+  --sn-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.35);
+  --sn-shadow-md: 0 10px 28px rgb(0 0 0 / 0.4), 0 0 0 1px rgb(255 246 235 / 0.04);
+  --sn-shadow-lg: 0 28px 64px -16px rgb(0 0 0 / 0.65), 0 4px 12px rgb(0 0 0 / 0.3);
+  --sn-shadow-panel: 0 28px 64px -18px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 246 235 / 0.05);
+  --sn-shadow-card-active: 0 0 0 3px rgb(242 138 168 / 0.16), 0 10px 24px -12px rgb(0 0 0 / 0.6);
+  --sn-shadow-editing: 0 16px 32px -14px rgb(0 0 0 / 0.7);
+}

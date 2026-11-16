@@ -1,0 +1,505 @@
+/* ==================== 组件页与令牌页的版式 ====================
+ *
+ * 这两个页面是设计系统的展示台：示例本身使用产品样式，示例周围的版式（栅格、示例框、表格）写在这里。
+ * 颜色仍取自令牌，跟随主题与明暗变化；版式尺寸属于展示台，不纳入「只用令牌」的样式检查。
+ */
+
+.sn-page {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.sn-page-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.sn-page-content {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 32px 40px 96px;
+}
+
+.sn-page-intro {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.sn-page-title {
+  font-family: var(--sn-font-title);
+  font-size: var(--sn-font-size-xl);
+  font-weight: var(--sn-title-weight);
+  letter-spacing: var(--sn-title-tracking);
+}
+
+.sn-page-description {
+  max-width: 72ch;
+  color: var(--sn-color-text-secondary);
+  line-height: var(--sn-line-height-relaxed);
+}
+
+.sn-page-toc {
+  position: sticky;
+  top: 0;
+  z-index: var(--sn-z-sticky);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0 -8px 8px;
+  padding: 8px;
+  border-bottom: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  background: var(--sn-color-bg);
+}
+
+.sn-page-toc-link {
+  height: var(--sn-control-height-sm);
+  padding: 0 12px;
+  border-radius: var(--sn-radius-chip);
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+}
+
+.sn-page-toc-link:hover {
+  background: var(--sn-color-hover);
+  color: var(--sn-color-text);
+}
+
+.sn-page-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr));
+  gap: 16px;
+  margin-top: 40px;
+  scroll-margin-top: 56px;
+}
+
+.sn-page-section-title,
+.sn-page-section-description,
+.sn-page-section > .sn-token-table {
+  grid-column: 1 / -1;
+}
+
+.sn-page-section-title {
+  font-family: var(--sn-font-title);
+  font-size: var(--sn-font-size-xl);
+  font-weight: var(--sn-title-weight);
+  letter-spacing: var(--sn-title-tracking);
+}
+
+.sn-page-section-description {
+  margin-top: -8px;
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+}
+
+/* ---------- 示例框 ---------- */
+.sn-demo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-surface);
+}
+
+.sn-demo.is-wide {
+  grid-column: 1 / -1;
+}
+
+.sn-demo-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 16px;
+  border-bottom: var(--sn-border-width) solid var(--sn-color-border-subtle);
+}
+
+.sn-demo-title {
+  font-size: var(--sn-font-size-md);
+  font-weight: var(--sn-font-weight-semibold);
+}
+
+.sn-demo-note {
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-sm);
+}
+
+.sn-demo-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  padding: 20px;
+}
+
+.sn-demo-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+}
+
+.sn-state-cell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sn-state-cell-body {
+  display: flex;
+  max-width: 100%;
+}
+
+.sn-state-cell-body > * {
+  min-width: 0;
+}
+
+.sn-state-cell-label {
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-xs);
+}
+
+.sn-state-grid {
+  display: grid;
+  align-items: center;
+  gap: 12px 14px;
+  overflow-x: auto;
+}
+
+.sn-state-grid-row {
+  display: contents;
+}
+
+.sn-state-grid-head {
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-xs);
+  white-space: nowrap;
+}
+
+.sn-state-grid-cell {
+  display: flex;
+}
+
+.sn-demo-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 100%;
+}
+
+.sn-demo-column.is-wide {
+  width: 100%;
+}
+
+.sn-demo-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 20px;
+}
+
+.sn-demo-panel-text {
+  padding: 8px 0;
+}
+
+.sn-context-area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 260px;
+  height: 96px;
+  padding: 0 16px;
+  border: var(--sn-border-width) dashed var(--sn-color-border-strong);
+  border-radius: var(--sn-radius-md);
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-sm);
+}
+
+.sn-state-trio {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.sn-state-box {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+  min-height: 220px;
+  padding: 16px;
+  border: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  border-radius: var(--sn-radius-md);
+}
+
+.sn-state-box .sn-state {
+  padding: 8px;
+}
+
+.sn-loading-demo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---------- 令牌表 ---------- */
+.sn-token-table {
+  width: 100%;
+  border-collapse: collapse;
+  overflow: hidden;
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-surface);
+  font-size: var(--sn-font-size-sm);
+}
+
+.sn-token-table :is(th, td) {
+  padding: 8px 12px;
+  border-bottom: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.sn-token-table th {
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-xs);
+  font-weight: var(--sn-font-weight-semibold);
+}
+
+.sn-token-name,
+.sn-token-value,
+.sn-token-raw,
+.sn-token-ratio {
+  font-family: var(--sn-font-code);
+  font-size: var(--sn-font-size-xs);
+}
+
+.sn-token-value {
+  word-break: break-all;
+}
+
+.sn-token-raw {
+  display: block;
+  margin-top: 2px;
+  color: var(--sn-color-text-muted);
+}
+
+.sn-token-flag {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: var(--sn-radius-chip);
+  background: var(--sn-color-hover);
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-xs);
+}
+
+.sn-token-meaning {
+  color: var(--sn-color-text-secondary);
+}
+
+.sn-token-sample {
+  width: 180px;
+}
+
+.sn-token-swatch {
+  display: inline-block;
+  width: 48px;
+  height: 24px;
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-sm);
+}
+
+.sn-token-swatch.is-accent {
+  background: var(--sn-color-accent);
+}
+
+.sn-token-text {
+  font-weight: var(--sn-font-weight-medium);
+}
+
+.sn-token-shadow {
+  display: inline-block;
+  width: 64px;
+  height: 32px;
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-surface-raised);
+}
+
+.sn-token-bar {
+  display: inline-block;
+  min-width: 1px;
+  height: 8px;
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-accent);
+}
+
+.sn-token-radius {
+  display: inline-block;
+  width: 48px;
+  height: 32px;
+  border: var(--sn-border-width) solid var(--sn-color-border-strong);
+  background: var(--sn-color-accent-subtle);
+}
+
+.sn-token-line {
+  display: inline-block;
+  width: 64px;
+  border-top-style: solid;
+  border-top-color: var(--sn-color-text);
+}
+
+.sn-token-motion {
+  position: relative;
+  display: inline-block;
+  width: 72px;
+  height: 8px;
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-hover);
+}
+
+.sn-token-motion::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-accent);
+  transition-property: transform;
+  transition-duration: inherit;
+  transition-timing-function: var(--sn-ease-standard);
+}
+
+tr:hover .sn-token-motion::after {
+  transform: translateX(64px);
+}
+
+.sn-token-pair {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  overflow: hidden;
+  border: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  border-radius: var(--sn-radius-sm);
+}
+
+.sn-token-pair-overlay {
+  position: absolute;
+  inset: 0;
+}
+
+.sn-token-pair-text {
+  position: relative;
+  font-weight: var(--sn-font-weight-medium);
+}
+
+.sn-token-ratio {
+  font-variant-numeric: tabular-nums;
+}
+
+.sn-token-verdict {
+  padding: 2px 8px;
+  border-radius: var(--sn-radius-chip);
+  font-size: var(--sn-font-size-xs);
+  white-space: nowrap;
+}
+
+.sn-token-verdict.is-pass {
+  background: var(--sn-color-success-subtle);
+  color: var(--sn-color-success);
+}
+
+.sn-token-verdict.is-fail {
+  background: var(--sn-color-danger-subtle);
+  color: var(--sn-color-danger);
+}
+
+/* ---------- 侧栏组件的示例面板：宽度与侧栏一致，放在真实的面板底色上 ---------- */
+.sn-panel-sample {
+  flex: none;
+  width: 416px;
+  max-width: 100%;
+  padding-block: 8px;
+}
+
+.sn-panel-sample.sn-sidebar {
+  overflow: visible;
+}
+
+.sn-panel-sample.sn-sidebar.is-blocks {
+  gap: 8px;
+  padding: 10px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #7db4ff 0%, #a6e3d8 50%, #f3c9e7 100%);
+}
+
+.sn-scope[data-sn-theme='dark'] .sn-panel-sample.sn-sidebar.is-blocks {
+  background: linear-gradient(135deg, #23408a 0%, #0f4f52 50%, #4b1f55 100%);
+}
+
+.sn-panel-sample .sn-note-list {
+  flex: none;
+  padding-bottom: 0;
+  overflow: visible;
+}
+
+.sn-panel-sample .sn-note-list > .sn-button {
+  align-self: flex-start;
+}
+
+.sn-card-matrix {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  align-items: start;
+  gap: 20px;
+}
+
+.sn-card-matrix .sn-state-cell,
+.sn-card-matrix .sn-state-cell-body {
+  width: 100%;
+}
+
+.sn-card-matrix .sn-panel-sample {
+  width: 100%;
+}
+
+.sn-panel-sample.is-dragging-demo {
+  width: 416px;
+}
+
+/* 页签放不下时的示例：窄一些的侧栏。 */
+.sn-panel-sample.is-narrow {
+  width: 300px;
+}
+
+/* 记录窗口的示例：与交互原型中三个标签页的窗口差不多大（有标签页时按标签页定宽，最宽 720），放不下两个时上下排。 */
+.sn-window-matrix {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.sn-window-matrix .sn-state-cell {
+  max-width: 100%;
+}
+
+.sn-window-sample {
+  width: 720px;
+  max-width: 100%;
+  height: 300px;
+}
+
+/* 标签页在左侧时窗口窄一些，左栏中放不下的标题省略，悬停显示全名。 */
+.sn-window-sample.is-side {
+  width: 560px;
+}

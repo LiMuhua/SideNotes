@@ -1,0 +1,202 @@
+/* ==================== Playground：令牌作用域内的基础样式 ====================
+ *
+ * 只作用于 .sn-scope 之内（应用窗口、组件页与令牌页），不影响外壳。
+ * 本文件与 components.css、content.css、app.css 只引用令牌，不直接写颜色、长度与时长；
+ * 确需固定的数值在行尾注明「固定：原因」，由 docs/design-system/tests/styles.test.ts 检查。
+ */
+
+.sn-scope {
+  position: relative;
+  font-family: var(--sn-font-ui);
+  font-size: var(--sn-font-size-md);
+  line-height: var(--sn-line-height-normal);
+  color: var(--sn-color-text);
+  background: var(--sn-color-bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.sn-scope *,
+.sn-scope *::before,
+.sn-scope *::after {
+  box-sizing: border-box;
+}
+
+.sn-scope :where(button, input, textarea, select) {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+}
+
+.sn-scope :where(button) {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.sn-scope :where(button:disabled) {
+  cursor: not-allowed;
+}
+
+.sn-scope :where(h1, h2, h3, h4, p, dl, dd, figure, ul, ol) {
+  margin: 0;
+}
+
+.sn-scope :where(ul, ol) {
+  padding: 0;
+}
+
+.sn-scope a {
+  color: var(--sn-color-accent-text);
+  text-decoration: none;
+}
+
+.sn-scope a:hover {
+  text-decoration: underline;
+}
+
+/* 键盘焦点：统一的焦点环，鼠标点击不显示。 */
+.sn-scope :focus-visible,
+.sn-scope [data-force='focus'] {
+  outline: var(--sn-focus-ring-width) solid var(--sn-color-focus);
+  outline-offset: var(--sn-focus-ring-offset);
+}
+
+.sn-scope ::selection {
+  background: var(--sn-color-selection);
+}
+
+.sn-scope [hidden] {
+  display: none !important; /* 固定：hidden 属性必须压过组件自身的 display */
+}
+
+/* 滚动条：细而低调，颜色跟随明暗。 */
+.sn-scope * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sn-color-border-strong) transparent;
+}
+
+/* ---------- 图标 ---------- */
+.sn-icon,
+.sn-scope svg.icon {
+  width: var(--sn-icon-size);
+  height: var(--sn-icon-size);
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: var(--sn-icon-stroke);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: middle;
+}
+
+.sn-icon.is-filled {
+  fill: currentColor;
+}
+
+.svg-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* ---------- 辅助 ---------- */
+.sn-sr-only {
+  position: absolute;
+  width: 1px; /* 固定：视觉隐藏的标准写法 */
+  height: 1px; /* 固定：视觉隐藏的标准写法 */
+  margin: -1px; /* 固定：视觉隐藏的标准写法 */
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.sn-spacer {
+  flex: 1;
+}
+
+.sn-muted {
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-sm);
+}
+
+.sn-mark {
+  background: var(--sn-color-highlight);
+  color: inherit;
+  border-radius: var(--sn-radius-xs);
+}
+
+/* 搜索命中（第七次反馈）：用 CSS 自定义高亮标出（ui/searchHighlight.ts），不改动文字节点；只能设颜色，没有圆角。 */
+::highlight(sn-search-hit) {
+  background-color: var(--sn-color-highlight);
+  color: inherit;
+}
+
+/* ---------- 浮层根节点：覆盖整个作用域，本身不拦截指针 ---------- */
+.sn-layer-root {
+  position: absolute;
+  inset: 0;
+  z-index: var(--sn-z-dropdown);
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.sn-layer-root > * {
+  pointer-events: auto;
+}
+
+/* ---------- 动效 ---------- */
+@keyframes sn-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes sn-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--sn-motion-distance));
+  }
+}
+
+@keyframes sn-drop-in {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--sn-motion-distance) * -0.5)) scale(0.98);
+  }
+}
+
+@keyframes sn-slide-in {
+  from {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes sn-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@keyframes sn-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* 减少动态效果：保留状态变化，去掉位移与旋转。 */
+@media (prefers-reduced-motion: reduce) {
+  .sn-scope *,
+  .sn-scope *::before,
+  .sn-scope *::after {
+    animation-duration: 0.01ms !important; /* 固定：减少动态效果时近似关闭动画 */
+    animation-iteration-count: 1 !important; /* 固定：减少动态效果时不循环 */
+    transition-duration: 0.01ms !important; /* 固定：减少动态效果时近似关闭过渡 */
+    scroll-behavior: auto !important; /* 固定：减少动态效果时不平滑滚动 */
+  }
+}

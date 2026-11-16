@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>SideNotes Design Playground</title>
+    <link rel="icon" type="image/svg+xml" href="/docs/design-system/assets/app-icon.svg" />
+  </head>
+  <body>
+    <!-- 设计系统的交互式预览，只在开发服务器中访问（/design-system/playground/），不进入正式构建。 -->
+    <!-- 开发服务器把地址中的 docs 一层去掉（见 vite.config.ts），脚本与图标用以仓库根为基准的路径，不受地址末尾有没有斜杠影响。 -->
+    <div id="playground-root"></div>
+    <script type="module" src="/docs/design-system/playground/src/main.tsx"></script>
+  </body>
+</html>

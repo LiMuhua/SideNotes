@@ -11,7 +11,7 @@
   color: var(--ink);
   border: 1px solid var(--line);
   border-radius: 10px;
-  box-shadow: 0 8px 28px #17201924, 0 2px 5px #17201912;
+  box-shadow: var(--sn-shadow-lg);
   animation: note-menu-appear 90ms ease-out;
   scrollbar-width: thin;
 }

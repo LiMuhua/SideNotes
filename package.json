@@ -6,6 +6,8 @@
   "description": "面向 Windows 的本地快速记录工具：侧栏取用与快捷速记",
   "scripts": {
     "dev": "vite",
+    "playground": "vite --port 1430 --strictPort --open /prototype/",
+    "icons": "node scripts/app-icons.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",

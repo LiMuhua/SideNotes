@@ -1,0 +1,13 @@
+{
+  "default": "door-smile-indigo",
+  "pngSizes": [16, 20, 22, 24, 32, 40, 48, 64, 96, 128, 256, 512],
+  "icoSizes": [16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 256],
+  "icons": [
+    { "id": "door-smile-indigo", "number": "211", "name": "门缝浅笑 · 靛蓝" },
+    { "id": "door-plain-indigo", "number": "212", "name": "门缝平视 · 靛蓝" },
+    { "id": "door-smile-warm", "number": "213", "name": "门缝浅笑 · 暖" },
+    { "id": "door-plain-warm", "number": "214", "name": "门缝平视 · 暖" },
+    { "id": "stack-smile", "number": "210", "name": "一叠 · 浅笑" },
+    { "id": "fan-swish", "number": "172", "name": "叠纸 · 一掠" }
+  ]
+}

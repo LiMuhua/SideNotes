@@ -1,0 +1,591 @@
+/* ==================== 桌面场景：壁纸、工作窗口、任务栏与窗口位置 ====================
+ *
+ * 场景模拟用户的桌面，不属于 SideNotes 的设计：壁纸、工作窗口与任务栏使用固定的颜色，
+ * 不使用设计令牌，也不纳入「只用令牌」的样式检查。SideNotes 的窗口只在这里定位，外观在 sidebar.css 等文件中。
+ */
+
+.sn-desktop {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: 'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', system-ui, sans-serif;
+  isolation: isolate;
+}
+
+/* ---------- 壁纸 ---------- */
+.sn-desk-wallpaper {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(60% 70% at 78% 30%, #7db4ff 0%, transparent 60%),
+    radial-gradient(50% 60% at 20% 80%, #a6e3d8 0%, transparent 65%),
+    radial-gradient(40% 50% at 55% 60%, #f3c9e7 0%, transparent 70%),
+    #dfe8f4;
+}
+
+.sn-desktop[data-wallpaper='dark'] .sn-desk-wallpaper {
+  background:
+    radial-gradient(60% 70% at 78% 30%, #23408a 0%, transparent 60%),
+    radial-gradient(50% 60% at 20% 80%, #0f4f52 0%, transparent 65%),
+    radial-gradient(40% 50% at 55% 60%, #4b1f55 0%, transparent 70%),
+    #0d1220;
+}
+
+/* 繁杂：高对比的色块与条纹，检验半透明表面的可读性。 */
+.sn-desktop[data-wallpaper='busy'] .sn-desk-wallpaper {
+  background:
+    repeating-linear-gradient(115deg, #ff6a3d 0 40px, #ffd23f 40px 80px, #3bceac 80px 120px, #0e1428 120px 160px, #ffffff 160px 200px);
+}
+
+.sn-desk-area {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ---------- 工作窗口 ---------- */
+.sn-work {
+  position: absolute;
+  inset: 20px 24px 20px 24px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgb(0 0 0 / 0.12);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 50px rgb(0 0 0 / 0.22);
+  color: #1f2328;
+  font-size: 13px;
+}
+
+.sn-desktop[data-wallpaper='dark'] .sn-work {
+  border-color: rgb(255 255 255 / 0.08);
+  background: #1e1f22;
+  color: #d4d7dc;
+}
+
+.sn-work-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 34px;
+  padding: 0 14px;
+  border-bottom: 1px solid rgb(0 0 0 / 0.08);
+  background: #f3f4f6;
+  color: #555;
+  font-size: 12px;
+}
+
+.sn-desktop[data-wallpaper='dark'] .sn-work-titlebar {
+  border-color: rgb(255 255 255 / 0.06);
+  background: #2b2d31;
+  color: #aaa;
+}
+
+.sn-work-dots {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.sn-work-dots i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #c9ccd1;
+}
+
+.sn-work-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.sn-work-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 170px;
+  padding: 12px 8px;
+  border-right: 1px solid rgb(0 0 0 / 0.06);
+  background: #f8f9fa;
+  color: #666;
+  font-size: 12px;
+}
+
+.sn-desktop[data-wallpaper='dark'] .sn-work-tree {
+  border-color: rgb(255 255 255 / 0.06);
+  background: #232428;
+  color: #999;
+}
+
+.sn-work-editor {
+  flex: 1;
+  min-width: 0;
+  padding: 14px 18px;
+  overflow: hidden;
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.sn-work-line {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.sn-work-ln {
+  display: inline-block;
+  width: 34px;
+  color: #a0a4aa;
+}
+
+.sn-work-line.is-heading {
+  color: #0b5cad;
+  font-weight: 700;
+}
+
+.sn-work-line.is-code {
+  color: #8a3ab9;
+}
+
+.sn-work-line.is-comment {
+  color: #6a737d;
+}
+
+.sn-desktop[data-wallpaper='dark'] .sn-work-line.is-heading {
+  color: #6cb6ff;
+}
+
+.sn-desktop[data-wallpaper='dark'] .sn-work-line.is-code {
+  color: #d2a8ff;
+}
+
+.sn-work-preview {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  width: 260px;
+  padding: 14px;
+  border-left: 1px solid rgb(0 0 0 / 0.06);
+}
+
+.sn-work-swatch {
+  border-radius: 6px;
+}
+
+.sn-work-swatch.is-a {
+  background: linear-gradient(135deg, #ff7a59, #ffc15e);
+}
+
+.sn-work-swatch.is-b {
+  background: linear-gradient(135deg, #3b82f6, #22d3ee);
+}
+
+.sn-work-swatch.is-c {
+  background: linear-gradient(135deg, #10b981, #a3e635);
+}
+
+.sn-work-swatch.is-d {
+  background: linear-gradient(135deg, #8b5cf6, #ec4899);
+}
+
+/* ---------- SideNotes 的窗口位置 ---------- */
+.sn-sidebar-frame {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  transition: transform var(--desk-anim, 260ms) cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+
+.sn-sidebar-frame[data-edge='right'] {
+  right: 0;
+}
+
+.sn-sidebar-frame[data-edge='left'] {
+  left: 0;
+}
+
+.sn-sidebar-frame.is-hidden[data-edge='right'] {
+  transform: translateX(105%);
+}
+
+.sn-sidebar-frame.is-hidden[data-edge='left'] {
+  transform: translateX(-105%);
+}
+
+.sn-sidebar-frame.is-static {
+  position: relative;
+  transition: none;
+}
+
+.sn-sidebar-frame > .sn-window {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 屏幕边缘的唤出区：侧栏收起后，指针移到这里就滑出。 */
+.sn-edge-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 11;
+  width: 6px;
+}
+
+.sn-edge-zone[data-edge='right'] {
+  right: 0;
+}
+
+.sn-edge-zone[data-edge='left'] {
+  left: 0;
+}
+
+.sn-edge-hint {
+  position: absolute;
+  top: 50%;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 0.66);
+  color: #fff;
+  font-size: 12px;
+  white-space: nowrap;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.sn-edge-zone[data-edge='right'] .sn-edge-hint {
+  right: 14px;
+}
+
+.sn-edge-zone[data-edge='left'] .sn-edge-hint {
+  left: 14px;
+}
+
+.sn-floating-frame {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.sn-floating-frame > * {
+  pointer-events: auto;
+}
+
+.sn-floating-frame.is-capture .sn-window-box {
+  width: 560px;
+  height: 420px;
+}
+
+/* 设置窗口高度固定为 560（第四次反馈：不随内容跳动，也不像 720 那样内容少的分类留下大片空白）。 */
+.sn-floating-frame.is-settings .sn-window-box {
+  width: 880px;
+  height: 560px;
+}
+
+.sn-window-box {
+  max-width: calc(100% - 32px);
+  max-height: calc(100% - 24px);
+}
+
+/* ---------- 任务栏与系统栏 ---------- */
+.sn-taskbar {
+  position: relative;
+  z-index: 30;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  height: 48px;
+  border-top: 1px solid rgb(0 0 0 / 0.08);
+  background: rgb(243 243 243 / 0.86);
+  backdrop-filter: blur(30px) saturate(1.3);
+}
+
+.sn-desktop[data-wallpaper='dark'] .sn-taskbar {
+  border-color: rgb(255 255 255 / 0.06);
+  background: rgb(32 32 32 / 0.86);
+}
+
+.sn-taskbar-apps {
+  display: flex;
+  gap: 8px;
+}
+
+.sn-taskbar-start,
+.sn-taskbar-app {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+}
+
+.sn-taskbar-start {
+  background:
+    linear-gradient(#0078d4, #0078d4) 6px 6px / 9px 9px no-repeat,
+    linear-gradient(#0078d4, #0078d4) 17px 6px / 9px 9px no-repeat,
+    linear-gradient(#0078d4, #0078d4) 6px 17px / 9px 9px no-repeat,
+    linear-gradient(#0078d4, #0078d4) 17px 17px / 9px 9px no-repeat;
+}
+
+.sn-taskbar-app.is-a {
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+}
+
+.sn-taskbar-app.is-b {
+  background: linear-gradient(135deg, #2563eb, #06b6d4);
+}
+
+.sn-taskbar-app.is-c {
+  background: linear-gradient(135deg, #16a34a, #84cc16);
+}
+
+/* 设置窗口打开时任务栏里的 SideNotes：按钮底色与底部的运行指示与 Windows 11 一致，图标 24px。 */
+.sn-taskbar-app.is-sidenotes {
+  position: relative;
+  display: grid;
+  place-items: center;
+  background: rgb(128 128 128 / 0.16);
+}
+
+.sn-taskbar-app.is-sidenotes .sn-app-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.sn-taskbar-app.is-sidenotes::after {
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  width: 16px;
+  height: 3px;
+  margin-left: -8px;
+  border-radius: 2px;
+  background: #0078d4;
+  content: '';
+}
+
+.sn-taskbar-tray {
+  position: absolute;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #1f2328;
+  font-size: 11px;
+  text-align: right;
+}
+
+.sn-desktop[data-wallpaper='dark'] .sn-taskbar-tray {
+  color: #e6e6e6;
+}
+
+.sn-tray-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.sn-tray-button:hover,
+.sn-tray-button.is-active {
+  background: rgb(128 128 128 / 0.16);
+}
+
+.sn-tray-button .sn-app-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.sn-tray-clock {
+  margin-left: 4px;
+  line-height: 1.3;
+}
+
+.sn-desk-topbar {
+  position: relative;
+  z-index: 30;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  height: 30px;
+  padding: 0 14px;
+  background: #111;
+  color: #eee;
+  font-size: 12px;
+}
+
+/* 程序坞占用屏幕底部，窗口不与它重叠：工作区让出这部分高度，侧栏也只铺满工作区。 */
+.sn-desktop[data-platform='linux']:not(.is-phone) .sn-desk-area {
+  margin-bottom: 64px;
+}
+
+.sn-desk-dock {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  z-index: 30;
+  display: flex;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 14px;
+  background: rgb(30 30 30 / 0.55);
+  transform: translateX(-50%);
+  backdrop-filter: blur(20px);
+}
+
+.sn-dock-app {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 10px;
+  background: #555;
+  color: #fff;
+  cursor: pointer;
+}
+
+.sn-dock-app.is-a {
+  background: linear-gradient(135deg, #f97316, #eab308);
+}
+
+.sn-dock-app.is-b {
+  background: linear-gradient(135deg, #6366f1, #0ea5e9);
+}
+
+/* SideNotes 在程序坞里直接显示应用图标，图标自带圆角与底色。 */
+.sn-dock-app.is-sidenotes {
+  background: transparent;
+}
+
+.sn-dock-app.is-sidenotes .sn-app-icon {
+  width: 100%;
+  height: 100%;
+}
+
+/* ---------- Android：侧栏铺满屏幕，速记浮窗从底部弹出 ---------- */
+.sn-desktop.is-phone .sn-sidebar-frame {
+  inset: 0;
+  width: auto;
+  transform: none;
+}
+
+.sn-desktop.is-phone .sn-sidebar-window {
+  padding: 0;
+}
+
+.sn-desktop.is-phone .sn-sidebar {
+  border: 0;
+  border-radius: 0;
+}
+
+.sn-desktop.is-phone .sn-resizer {
+  display: none;
+}
+
+.sn-desktop.is-phone .sn-floating-frame.is-capture {
+  align-items: flex-end;
+}
+
+.sn-desktop.is-phone .sn-floating-frame .sn-window-box {
+  width: 100%;
+  max-width: 100%;
+}
+
+.sn-desktop.is-phone .sn-floating-frame.is-capture .sn-window-box {
+  height: 62%;
+}
+
+.sn-desktop.is-phone .sn-floating-frame.is-settings .sn-window-box {
+  height: 100%;
+  max-height: 100%;
+}
+
+.sn-phone-status,
+.sn-phone-bar {
+  position: relative;
+  z-index: 30;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  height: 26px;
+  padding: 0 16px;
+  color: #1f2328;
+  font-size: 12px;
+}
+
+.sn-desktop[data-wallpaper='dark'] :is(.sn-phone-status, .sn-phone-bar) {
+  color: #e6e6e6;
+}
+
+.sn-phone-bar {
+  justify-content: center;
+  height: 22px;
+}
+
+.sn-phone-bar span {
+  width: 120px;
+  height: 4px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.5;
+}
+
+/* ---------- 五套对比的画布 ---------- */
+.sn-desktop.is-compare {
+  display: block;
+}
+
+.sn-compare-backdrop {
+  position: absolute;
+  inset: 0;
+}
+
+.sn-compare-backdrop .sn-work {
+  inset: 40px 60px;
+}
+
+.sn-compare-row {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  gap: 28px;
+  padding: 18px 28px 24px;
+}
+
+.sn-compare-slot {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sn-compare-label {
+  align-self: flex-start;
+  margin: 0;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.62);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+}

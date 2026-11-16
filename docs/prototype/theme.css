@@ -1,0 +1,6611 @@
+/* ==================== 交互原型：五套主题的组件样式与结构差异 ====================
+ *
+ * 只引用设计令牌（../design-system/tokens，与 Design Playground 共用），不另写一套颜色与尺寸。
+ * 五套主题共用这一份样式，差异来自两处：
+ * - 令牌：根节点的 data-sn-surface（主题）与 data-sn-theme（浅色、深色）决定全部 --sn-* 取值；
+ * - 结构差异：settings.js 按 surfaces.js 写在根节点上的数据属性——
+ *   data-sn-dock（flush 贴边整块、floating 浮动面板、blocks 分开的玻璃块）、
+ *   data-sn-entries（panes 窗格、cards 卡片、tiles 玻璃块）、data-sn-tabs（underline、segmented）、
+ *   data-sn-translucent、data-sn-shortcuts（inline 时把快捷键写在界面上）、data-sn-tab-marks（页签色点）。
+ * 这一层放在旧样式层（styles.css 与 v2–v8）之后，覆盖与规范不同的部分，旧层保留布局与交互用的结构。
+ * 运行时变量 --app-zoom（字号 ÷ 13 的整页缩放）与 --sidebar-width 由 settings.js 写在根节点上。
+ * 确需固定的数值在行尾注明「固定：原因」，由 docs/design-system/tests/prototype.test.ts 检查。
+ */
+
+/* ---------- 基础 ---------- */
+:root {
+  background: var(--sn-color-bg);
+  color: var(--sn-color-text);
+  font-family: var(--sn-font-ui);
+}
+
+:root ::selection {
+  background: var(--sn-color-selection);
+}
+
+.sidebar,
+.capture,
+.modal,
+.settings-confirm-dialog,
+.toast-region,
+.note-context-menu,
+.floating-panel,
+.note-window {
+  color: var(--sn-color-text);
+  font-family: var(--sn-font-ui);
+  font-size: var(--sn-font-size-md);
+  font-weight: var(--sn-body-weight);
+  line-height: var(--sn-line-height-normal);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* 字号是整页缩放：界面按 13px 设计，缩放到「字号 ÷ 13」倍（layout.md 第一节）。 */
+  zoom: var(--app-zoom, 1);
+}
+
+/* 控件沿用所在区域的字体（Playground base.css 的 .sn-scope 规则），优先级为零，组件自己的规则仍能覆盖。 */
+:where(.sidebar, .capture, .modal, .settings-confirm-dialog, .toast-region, .note-context-menu, .floating-panel, .note-window) :where(button, input, textarea, select) {
+  font: inherit;
+  letter-spacing: inherit;
+}
+
+svg.icon {
+  width: var(--sn-icon-size);
+  height: var(--sn-icon-size);
+  stroke-width: var(--sn-icon-stroke);
+}
+
+/* 焦点环统一：2px 实线、离开 2px，只在键盘操作时显示（accessibility.md 第二节）。
+ * 编辑器的 contenteditable 也带 tabindex，但输入区聚焦不加框（编辑状态由背景表示），这里排除。 */
+:root :is(button, a, select, [tabindex]):where(:not([contenteditable])):focus-visible {
+  outline: var(--sn-focus-ring-width) solid var(--sn-color-focus);
+  outline-offset: var(--sn-focus-ring-offset);
+}
+
+a {
+  color: var(--sn-color-accent-text);
+}
+
+kbd,
+.key-hint kbd {
+  display: inline-flex;
+  align-items: center;
+  min-width: calc(var(--sn-font-size-xs) + var(--sn-space-3));
+  height: calc(var(--sn-font-size-xs) + var(--sn-space-3));
+  padding: 0 var(--sn-space-2);
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-xs);
+  background: var(--sn-color-surface-sunken);
+  color: var(--sn-color-text-secondary);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+  line-height: 1;
+}
+
+/* 快捷键提示只在终端主题显示，其余主题的快捷键留在工具提示里（surfaces.ts 的 inlineShortcuts）。 */
+.key-hint {
+  display: none;
+  align-items: center;
+  gap: var(--sn-space-1);
+  margin-right: var(--sn-space-3);
+}
+
+[data-sn-shortcuts='inline'] .key-hint {
+  display: inline-flex;
+}
+
+/* ---------- 按钮 ---------- */
+.icon-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--sn-control-height);
+  height: var(--sn-control-height);
+  border-radius: var(--sn-radius-control);
+  background-color: transparent;
+  color: var(--sn-color-text-secondary);
+  transition:
+    background-color var(--sn-duration-fast) var(--sn-ease-standard),
+    color var(--sn-duration-fast) var(--sn-ease-standard);
+}
+
+.icon-button .icon {
+  width: var(--sn-icon-size);
+  height: var(--sn-icon-size);
+}
+
+.icon-button:hover:not(:disabled) {
+  background: var(--sn-color-hover);
+  color: var(--sn-color-text);
+}
+
+.icon-button:active:not(:disabled) {
+  background: var(--sn-color-pressed);
+}
+
+.icon-button[aria-pressed='true'] {
+  background: var(--sn-color-accent-subtle);
+  color: var(--sn-color-accent-text);
+}
+
+.icon-button.primary,
+.button.primary {
+  background: var(--sn-color-accent);
+  color: var(--sn-color-on-accent);
+}
+
+.icon-button.primary:hover:not(:disabled),
+.button.primary:hover:not(:disabled) {
+  background: var(--sn-color-accent-hover);
+  color: var(--sn-color-on-accent);
+}
+
+.icon-button:disabled,
+.button:disabled {
+  opacity: var(--sn-opacity-disabled);
+}
+
+/* 文字按钮（Playground 的 sn-button）：常规尺寸是正文字号、中等字重；compact 对应小号按钮（is-sm）。 */
+.button {
+  gap: var(--sn-space-3);
+  min-height: var(--sn-control-height);
+  padding: 0 var(--sn-space-5);
+  border-radius: var(--sn-radius-control);
+  font-size: var(--sn-font-size-md);
+  font-weight: var(--sn-font-weight-medium);
+  line-height: var(--sn-line-height-tight);
+  transition: background-color var(--sn-duration-fast) var(--sn-ease-standard);
+}
+
+.button.compact {
+  gap: var(--sn-space-2);
+  min-height: var(--sn-control-height-sm);
+  padding: 0 var(--sn-space-4);
+  font-size: var(--sn-font-size-sm);
+}
+
+.button.secondary {
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  background: var(--sn-color-surface-raised);
+  color: var(--sn-color-text);
+}
+
+.button.secondary:hover:not(:disabled) {
+  background-color: var(--sn-color-surface-raised);
+  background-image: linear-gradient(var(--sn-color-hover), var(--sn-color-hover));
+}
+
+.button.danger {
+  background: var(--sn-color-danger-subtle);
+  color: var(--sn-color-danger);
+}
+
+/* 设置窗口打开期间，固定按钮显示虚线圈，表示「临时固定」（T31）。 */
+.icon-button.is-linked {
+  outline: var(--sn-border-width) dashed var(--sn-color-accent-text);
+  outline-offset: calc(var(--sn-space-2) * -1);
+}
+
+/* ---------- 模拟桌面 ----------
+ * 原型页面本身是用户的桌面，不属于 SideNotes 的设计：壁纸使用固定的颜色，跟随明暗变化，
+ * 让两套半透明主题的磨砂效果有东西可透（浏览器中只是模拟，真实窗口需要透明窗口与 Acrylic）。 */
+/* 与 Playground 模拟桌面的壁纸相同（desktop.css 的 .sn-desk-wallpaper，跟随明暗），半透明主题透出的颜色一致。 */
+.demo-canvas {
+  background:
+    radial-gradient(60% 70% at 78% 30%, #7db4ff 0%, transparent 60%), /* 固定：模拟桌面壁纸 */
+    radial-gradient(50% 60% at 20% 80%, #a6e3d8 0%, transparent 65%), /* 固定：模拟桌面壁纸 */
+    radial-gradient(40% 50% at 55% 60%, #f3c9e7 0%, transparent 70%), /* 固定：模拟桌面壁纸 */
+    #dfe8f4; /* 固定：模拟桌面壁纸 */
+}
+
+[data-sn-theme='dark'] .demo-canvas {
+  background:
+    radial-gradient(60% 70% at 78% 30%, #23408a 0%, transparent 60%), /* 固定：模拟桌面壁纸 */
+    radial-gradient(50% 60% at 20% 80%, #0f4f52 0%, transparent 65%), /* 固定：模拟桌面壁纸 */
+    radial-gradient(40% 50% at 55% 60%, #4b1f55 0%, transparent 70%), /* 固定：模拟桌面壁纸 */
+    #0d1220; /* 固定：模拟桌面壁纸 */
+}
+
+.demo-canvas :is(.demo-brand, .intro, .demo-help, .eyebrow) {
+  color: #1f2633; /* 固定：模拟桌面上的文字 */
+}
+
+[data-sn-theme='dark'] .demo-canvas :is(.demo-brand, .intro, .demo-help, .eyebrow) {
+  color: #e6e9ef; /* 固定：模拟桌面上的文字 */
+}
+
+/* 跳到 Design Playground（第四次反馈）：品牌区「交互原型」之后一个小号链接，颜色随模拟桌面上的文字。 */
+.demo-canvas .demo-brand .demo-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-1);
+  margin-left: var(--sn-space-5);
+  padding: var(--sn-space-1) var(--sn-space-3);
+  border: var(--sn-border-width) solid currentColor;
+  border-radius: var(--sn-radius-control);
+  color: inherit;
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+  opacity: 0.72;
+  text-decoration: none;
+}
+
+.demo-canvas .demo-brand .demo-link:hover {
+  opacity: 1;
+}
+
+.demo-canvas .demo-brand .demo-link svg.icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.demo-canvas .ambient-orbit {
+  display: none;
+}
+
+/* ---------- 品牌标记：应用图标，配色固定，不随主题变化（components.md 第七节） ---------- */
+img.brand-mark {
+  display: block;
+  flex: none;
+  width: calc(var(--sn-icon-size) * 1.25);
+  height: calc(var(--sn-icon-size) * 1.25);
+  transform: none;
+}
+
+img.brand-mark.is-small {
+  width: var(--sn-icon-size);
+  height: var(--sn-icon-size);
+  margin: 0;
+}
+
+/* ---------- 侧栏面板与屏幕边缘 ----------
+ * .sidebar 相当于侧栏窗口，面板画在 ::before 上：贴边整块铺满窗口；浮动面板离开屏幕边缘 --sn-panel-inset，
+ * 朝屏幕内侧的一边不留缝；磨砂玻璃没有整块面板，标题区、列表顶栏、新建卡片、每条记录与底栏各是一块。 */
+.sidebar {
+  /* 侧栏在缩放后的坐标中排版，屏幕宽度要除以缩放，宽度设置大于屏幕时才不会伸出屏幕。
+   * 宽度已由设置限定在 360–720，旧样式按未缩放屏幕宽度算的下限会撑出屏幕，这里去掉。 */
+  min-width: 0;
+  max-width: calc(100vw / var(--app-zoom, 1));
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  text-shadow: 0 0 var(--sn-space-3) var(--sn-color-halo);
+  isolation: isolate;
+  /* 滑出与收起的时长是设置中的「出入动画」（settings.js 写在根节点上的 --sidebar-motion）。 */
+  transition-duration: var(--sidebar-motion, var(--sn-duration-slow));
+}
+
+.sidebar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--sn-color-panel);
+  backdrop-filter: blur(var(--sn-panel-blur)) saturate(var(--sn-panel-saturate));
+  box-shadow: var(--sn-shadow-panel);
+  pointer-events: none;
+}
+
+[data-sn-dock='flush'] .sidebar[data-edge='right']::before {
+  border-left: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-panel-radius) var(--sn-panel-radius-edge) var(--sn-panel-radius-edge) var(--sn-panel-radius);
+}
+
+[data-sn-dock='flush'] .sidebar[data-edge='left']::before {
+  border-right: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-panel-radius-edge) var(--sn-panel-radius) var(--sn-panel-radius) var(--sn-panel-radius-edge);
+}
+
+[data-sn-dock='floating'] .sidebar,
+[data-sn-dock='blocks'] .sidebar {
+  padding: var(--sn-panel-inset);
+}
+
+[data-sn-dock='floating'] .sidebar[data-edge='right'],
+[data-sn-dock='blocks'] .sidebar[data-edge='right'] {
+  padding-left: 0;
+}
+
+[data-sn-dock='floating'] .sidebar[data-edge='left'],
+[data-sn-dock='blocks'] .sidebar[data-edge='left'] {
+  padding-right: 0;
+}
+
+[data-sn-dock='floating'] .sidebar::before {
+  inset: var(--sn-panel-inset);
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-panel-radius);
+}
+
+[data-sn-dock='floating'] .sidebar[data-edge='right']::before {
+  left: 0;
+}
+
+[data-sn-dock='floating'] .sidebar[data-edge='left']::before {
+  right: 0;
+}
+
+[data-sn-dock='blocks'] .sidebar::before {
+  display: none;
+}
+
+[data-sn-dock='blocks'] .sidebar {
+  gap: var(--sn-block-gap);
+}
+
+/* 玻璃块：各自磨砂，边缘受光（上亮下暗的渐变描边），顶部一层光泽。 */
+[data-sn-dock='blocks'] .sidebar > :is(.sidebar-header, .sidebar-navigation, .list-topline, .workspace-nudge, .sync-warning, .sidebar-footer),
+[data-sn-entries='tiles'] .note-card,
+[data-sn-dock='blocks'] #quick-composer.sidebar-composer {
+  position: relative;
+  border: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  border-radius: var(--sn-panel-radius);
+  background-color: var(--sn-color-card);
+  background-image: linear-gradient(to bottom, var(--sn-color-sheen), transparent var(--sn-space-9));
+  backdrop-filter: blur(var(--sn-panel-blur)) saturate(var(--sn-panel-saturate));
+  box-shadow: var(--sn-shadow-panel), inset 0 var(--sn-border-width) 0 var(--sn-color-edge-highlight);
+}
+
+[data-sn-dock='blocks'] .sidebar > :is(.sidebar-header, .sidebar-navigation, .list-topline, .workspace-nudge, .sync-warning, .sidebar-footer)::after,
+[data-sn-entries='tiles'] .note-card::after,
+[data-sn-dock='blocks'] #quick-composer.sidebar-composer::after {
+  content: '';
+  position: absolute;
+  inset: calc(var(--sn-border-width) * -1);
+  padding: var(--sn-border-width);
+  border-radius: inherit;
+  background: linear-gradient(to bottom, var(--sn-color-rim-top), var(--sn-color-rim-bottom));
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); /* 固定：遮罩只取透明度 */
+  pointer-events: none;
+}
+
+/* 标题区与页签行在玻璃主题中是同一块：上半圆角在标题区，下半在页签行，中间不留缝。 */
+[data-sn-dock='blocks'] .sidebar > .sidebar-header {
+  border-bottom: 0;
+  border-bottom-right-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+[data-sn-dock='blocks'] .sidebar > .sidebar-navigation {
+  margin-top: calc(var(--sn-block-gap) * -1);
+  border-top: 0;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+[data-sn-dock='blocks'] .sidebar > :is(.list-topline, .workspace-nudge, .sync-warning) {
+  margin: 0;
+  border-radius: var(--sn-card-radius);
+}
+
+/* ---------- 调整宽度的手柄 ----------
+ * 指针一移上去就是左右箭头；停留 400ms 后脚本加上 is-armed 才高亮，只是划过不会闪一下（本次提出）。 */
+.sidebar-resizer {
+  width: var(--sn-space-3);
+  cursor: ew-resize;
+  background: transparent;
+}
+
+.sidebar-resizer::after,
+.sidebar-resizer::before {
+  background: transparent;
+  transition: background-color var(--sn-duration-fast) var(--sn-ease-standard);
+}
+
+.sidebar-resizer:hover::after,
+.sidebar-resizer:hover::before {
+  background: transparent;
+}
+
+.sidebar-resizer.is-armed::after,
+.is-resizing-sidebar .sidebar-resizer::after,
+.sidebar-resizer:focus-visible::after {
+  background: var(--sn-color-accent);
+}
+
+/* ---------- 标题区 ---------- */
+.sidebar > .sidebar-header {
+  height: var(--sn-header-height);
+  min-height: var(--sn-header-height);
+  padding: 0 var(--sn-space-3) 0 var(--sn-panel-padding);
+}
+
+.sidebar-brand {
+  gap: var(--sn-space-4);
+}
+
+.sidebar-brand h2 {
+  display: block;
+  color: var(--sn-color-text);
+  font-family: var(--sn-font-title);
+  font-size: var(--sn-font-size-md);
+  font-weight: var(--sn-title-weight);
+  letter-spacing: var(--sn-title-tracking);
+  line-height: var(--sn-line-height-normal);
+  white-space: nowrap;
+}
+
+.sidebar .window-actions {
+  gap: var(--sn-space-1);
+}
+
+/* ---------- 页签与搜索 ----------
+ * 搜索回到页签栏的最右边（第六次反馈：放在筛选行像是只搜当前页签）。放大镜叠在页签行之上，右侧内边距给它留出位置，
+ * 页签不会钻到它下面；放不下的页签才收进最后一格。 */
+.sidebar > .sidebar-navigation {
+  --local-search-size: calc(var(--sn-control-height) + var(--sn-border-width) * 2);
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: var(--sn-space-3);
+  height: calc(var(--sn-tab-height) + var(--sn-space-4));
+  margin: 0;
+  /* 右侧只给放大镜留位置（它离右边 --sn-space-3）：页签一直排到放大镜前，放大镜按钮自身的留白就是两者的间距（第七次反馈）。 */
+  padding: 0 calc(var(--sn-space-3) + var(--local-search-size)) var(--sn-space-2) var(--sn-panel-padding);
+  border-bottom: var(--sn-border-width) solid var(--sn-color-border-subtle);
+}
+
+[data-sn-dock='blocks'] .sidebar > .sidebar-navigation {
+  border-bottom: 0;
+}
+
+.sidebar-navigation .sidebar-tabs {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sn-space-1);
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  transition: opacity var(--sn-duration-normal) var(--sn-ease-standard);
+}
+
+.sidebar-tabs .tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
+  height: var(--sn-tab-height);
+  gap: var(--sn-space-2);
+  padding: 0 var(--sn-space-4);
+  border-radius: var(--sn-radius-control);
+  color: var(--sn-color-text-secondary);
+  font-size: inherit;
+  font-weight: var(--sn-body-weight);
+  white-space: nowrap;
+  transition:
+    background-color var(--sn-duration-fast) var(--sn-ease-standard),
+    color var(--sn-duration-fast) var(--sn-ease-standard);
+}
+
+.sidebar-tabs .tab .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.sidebar-tabs .tab:hover {
+  background: var(--sn-color-hover);
+  color: var(--sn-color-text);
+}
+
+.sidebar-tabs .tab.active {
+  color: var(--sn-color-text);
+  font-weight: var(--sn-font-weight-semibold);
+}
+
+.sidebar-tabs .tab:focus-visible {
+  outline-offset: calc(var(--sn-focus-ring-width) * -1);
+}
+
+.sidebar-tabs .tab span[data-count],
+.sidebar-tabs .tab.active span[data-count] {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+  font-weight: inherit;
+  line-height: var(--sn-line-height-normal);
+  font-variant-numeric: tabular-nums;
+}
+
+.sidebar-tabs .tab.active span[data-count] {
+  color: var(--sn-color-text-secondary);
+}
+
+/* 下划线页签：当前页签下方一条强调色短线，落在分隔线上。 */
+.sidebar-tabs .tab.active::after {
+  content: '';
+  position: absolute;
+  right: var(--sn-space-4);
+  bottom: calc(var(--sn-space-2) * -1 - var(--sn-border-width));
+  left: var(--sn-space-4);
+  height: var(--sn-focus-ring-width);
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-accent);
+}
+
+/* 分段页签：凹陷的底，当前页签浮起。 */
+[data-sn-tabs='segmented'] .sidebar-navigation .sidebar-tabs {
+  align-self: center;
+  height: calc(var(--sn-tab-height) + var(--sn-space-2));
+  padding: var(--sn-space-1);
+  border-radius: var(--sn-radius-control);
+  background: var(--sn-color-surface-sunken);
+}
+
+[data-sn-tabs='segmented'] .sidebar-tabs .tab {
+  height: 100%;
+}
+
+[data-sn-tabs='segmented'] .sidebar-tabs .tab.active {
+  background: var(--sn-color-surface-raised);
+  box-shadow: var(--sn-shadow-sm);
+}
+
+[data-sn-tabs='segmented'] .sidebar-tabs .tab.active::after {
+  display: none;
+}
+
+/* 页签前的分区色点：只有磨砂玻璃使用。旧样式给页签里的 span 加了计数徽标的底色与内边距，这里还原。 */
+.sidebar-tabs .tab .tab-mark,
+.tab-mark {
+  display: none;
+  flex: none;
+  min-width: 0;
+  width: var(--sn-space-3);
+  height: var(--sn-space-3);
+  margin: 0;
+  padding: 0;
+  line-height: 0;
+  border-radius: var(--sn-radius-full);
+}
+
+[data-sn-tab-marks='true'] .sidebar-tabs .tab .tab-mark {
+  display: inline-block;
+}
+
+.tab[data-tab='workspace'] .tab-mark {
+  background: var(--sn-color-mark-workspace);
+}
+
+.tab[data-tab='pinned'] .tab-mark {
+  background: var(--sn-color-mark-pinned);
+}
+
+/* 固定的标签页签（第四次反馈）用原来归档页签的颜色点。 */
+.tab.is-tag-tab .tab-mark {
+  background: var(--sn-color-mark-archive);
+}
+
+/* 页签栏（第四次反馈）：随记、置顶之后是固定的标签页签，最后一格是菜单。页签不压缩，横向放不下时由 tabs.js 从右往左收进最后一格；
+ * 只裁切横向，当前页签的下划线照常落在分隔线上。页签名最多显示 4 个字，条数只写在随记与当前页签上。 */
+.sidebar-navigation .sidebar-tabs {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-x: clip;
+  overflow-y: visible;
+}
+
+.sidebar-tabs .tab {
+  position: relative;
+  flex: none;
+}
+
+.sidebar-tabs .tab[hidden],
+.sidebar-tabs .tab [data-count][hidden] {
+  display: none;
+}
+
+.sidebar-tabs .tab .tab-name {
+  min-width: 0;
+  max-width: calc(var(--sn-font-size-md) * 4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 旧样式给页签里的 span 都加了计数徽标的底色、内边距与最小宽度（styles.css 的 .tab span），名称与收起的个数还原成普通文字。
+ * 最小宽度此前没有还原：「N ▾」里一位数也占 19px，最后一格比需要的宽 12px（第七次反馈）。 */
+.sidebar-tabs .tab :is(.tab-name, .tab-more-count),
+.sidebar-tabs .tab.active :is(.tab-name, .tab-more-count) {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+}
+
+/* 最后一格（第六次反馈）：只占一个位置，样子固定。页签都放得下、后面还有位置时是「+」（新建页签），真放不下时是「N ▾」；
+ * 页签都放得下、只是放不下「+」时整格不显示（第七次反馈）。当前页签不会收进这里。 */
+.sidebar-tabs .tab-more {
+  gap: var(--sn-space-1);
+  padding: 0 var(--sn-space-3);
+  color: var(--sn-color-text-muted);
+}
+
+/* 末格（第八次反馈）：放不下时，最后一个显示的页签与「N ▾」合成一格，紧挨着，中间一条短竖线；从菜单选页签只换末格里的页签。 */
+.sidebar-tabs .tab-more.is-joined {
+  margin-left: calc(var(--sn-space-1) * -1);
+}
+
+.sidebar-tabs .tab-more.is-joined::before {
+  content: '';
+  position: absolute;
+  top: var(--sn-space-3);
+  bottom: var(--sn-space-3);
+  left: 0;
+  width: var(--sn-border-width);
+  background: var(--sn-color-border);
+}
+
+/* 末格页签的名字缩短（第八次反馈）：换进来的页签较宽或当前页签的条数放不下时，不挤掉前面的页签；名字最短留两个字，
+ * tabs.js 用看不见的 tab-name-probe（写着两个字，与页签同样的字体与字距）量出这个宽度。 */
+.sidebar-tabs .tab.is-squeezed {
+  flex: 0 1 auto;
+}
+
+.sidebar-tabs .tab-name-probe {
+  position: absolute;
+  white-space: nowrap;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.sidebar-tabs .tab .tab-more-count {
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.sidebar-tabs .tab-more[aria-expanded='true'] {
+  background: var(--sn-color-hover);
+  color: var(--sn-color-text);
+}
+
+/* 卡片拖到页签上（停留后切换）与拖到菜单中收起的页签上：浅强调色。 */
+.sidebar-tabs .tab.is-drag-target,
+.tab-menu .note-context-item.is-drag-target {
+  background: var(--sn-color-accent-subtle);
+  color: var(--sn-color-accent-text);
+}
+
+/* 拖动页签排序：原处变淡，插入线与记录窗口标签栏的相同（.sidebar-tab-drop）。 */
+.sidebar-tabs .tab.is-drag-source,
+.tab-menu .note-context-item.is-drag-source {
+  opacity: var(--sn-opacity-disabled);
+}
+
+body.is-dragging-tab,
+body.is-dragging-tab * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+/* 双击页签原地改名的输入框。 */
+.sidebar-tabs .tab-rename-input {
+  flex: none;
+  align-self: center;
+  height: calc(var(--sn-tab-height) - var(--sn-space-2));
+  min-width: 0;
+  padding: 0 var(--sn-space-2);
+  border: var(--sn-border-width) solid var(--sn-color-accent);
+  border-radius: var(--sn-radius-control);
+  background: var(--sn-color-surface-raised);
+  color: var(--sn-color-text);
+  font: inherit;
+  outline: none;
+}
+
+/* 页签菜单中的当前项右侧一个对勾。 */
+.note-context-menu .note-context-item.is-checked > svg.icon:last-child {
+  margin-left: auto;
+  color: var(--sn-color-accent-text);
+}
+
+/* 新建页签：最后一格下方的输入框与已有标签的候选。 */
+.tab-create-panel {
+  z-index: var(--sn-z-popover);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sn-space-1);
+  width: calc(var(--sn-dialog-width) * 0.6);
+  padding: var(--sn-space-2);
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-surface-raised);
+  box-shadow: var(--sn-shadow-md);
+  color: var(--sn-color-text);
+}
+
+/* 输入框铺满面板（第五次反馈：此前被旧样式 .form-control 限制在 140px 宽），文字与下面候选的 # 左边对齐。 */
+.tab-create-panel .tab-create-input {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  height: var(--sn-control-height);
+  padding: 0 calc(var(--sn-space-3) - var(--sn-border-width));
+}
+
+.tab-create-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.tab-create-list:empty {
+  display: none;
+}
+
+.tab-create-option {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  min-height: var(--sn-menu-item-height);
+  padding: 0 var(--sn-space-3);
+  border: 0;
+  border-radius: var(--sn-radius-sm);
+  background: transparent;
+  color: var(--sn-color-text);
+  text-align: left;
+}
+
+.tab-create-option svg.icon {
+  flex: none;
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  color: var(--sn-color-text-secondary);
+}
+
+.tab-create-option-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-create-option-count {
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+}
+
+.tab-create-option:hover,
+.tab-create-option.is-active {
+  background: var(--sn-color-selected);
+}
+
+/* 搜索框（第六次反馈：回到页签栏的最右端，搜索全部记录）：收起时只是最右边的放大镜，边框与底色透明；展开时宽度从右向左
+ * 铺满这一行，盖住页签，页签淡出；输入框在宽度展开一段之后淡入，收起是展开的倒放。有搜索词时保持展开。
+ * 框里只有输入框与清空按钮，结果的条数与「固定为页签」「合并」写在下面的筛选行。
+ * 盒子比控件高度多出两条边框，放大镜正好放在边框之内。 */
+.sidebar-navigation #header-search {
+  position: absolute;
+  top: 0;
+  right: var(--sn-space-3);
+  bottom: var(--sn-space-2);
+  left: auto;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-2);
+  width: var(--local-search-size);
+  max-width: none;
+  height: var(--local-search-size);
+  margin: auto 0;
+  padding: 0;
+  overflow: hidden;
+  border: var(--sn-border-width) solid transparent;
+  border-radius: var(--sn-radius-control);
+  background-color: transparent;
+  color: var(--sn-color-text-muted);
+  /* 展开与收起比其它状态变化慢一些：用慢速的 1.25 倍（终端 200ms，与现有应用的 220ms 相近）。 */
+  transition:
+    width calc(var(--sn-duration-slow) * 1.25) var(--sn-ease-standard),
+    background-color var(--sn-duration-normal) var(--sn-ease-standard),
+    border-color var(--sn-duration-normal) var(--sn-ease-standard);
+}
+
+.sidebar-navigation #header-search.is-open {
+  width: calc(100% - var(--sn-panel-padding) - var(--sn-space-3));
+  padding-right: var(--sn-space-1);
+  border-color: var(--sn-color-border);
+  background-color: var(--sn-color-surface-sunken);
+}
+
+/* 获得焦点或有搜索词时，底边换成两倍边框宽的强调色线（与 Playground 的输入类控件相同），不加外圈。 */
+.sidebar-navigation #header-search.is-open:focus-within,
+.sidebar-navigation #header-search.is-open.has-query {
+  border-bottom-color: transparent;
+  background-image: linear-gradient(var(--sn-color-accent), var(--sn-color-accent));
+  background-position: bottom;
+  background-repeat: no-repeat;
+  background-size: 100% calc(var(--sn-border-width) * 2);
+  background-origin: border-box;
+}
+
+.sidebar-navigation #header-search.is-open:focus-within {
+  background-color: var(--sn-color-surface);
+}
+
+/* 磨砂玻璃（第八次反馈）：页签栏本身是一块玻璃，展开的搜索框不再在里面套一个框：去掉自己的边框、底色与底边的强调色线，
+ * 和页签在同一层，只留放大镜、输入框与清空按钮。 */
+[data-sn-dock='blocks'] .sidebar-navigation #header-search.is-open,
+[data-sn-dock='blocks'] .sidebar-navigation #header-search.is-open:focus-within,
+[data-sn-dock='blocks'] .sidebar-navigation #header-search.is-open.has-query {
+  border-color: transparent;
+  background-color: transparent;
+  background-image: none;
+}
+
+.sidebar-navigation.is-searching .sidebar-tabs {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#header-search .search-toggle {
+  position: static;
+  flex: none;
+  width: var(--sn-control-height);
+  height: var(--sn-control-height);
+  transform: none;
+}
+
+#header-search .header-search-field {
+  position: relative;
+  top: auto;
+  right: auto;
+  left: auto;
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  height: 100%;
+  gap: var(--sn-space-1);
+  opacity: 0;
+  /* 淡出结束时才隐藏（step-end），展开时立即可见（step-start）。 */
+  transition: opacity var(--sn-duration-fast) var(--sn-ease-standard), visibility var(--sn-duration-fast) step-end;
+}
+
+#header-search.is-open .header-search-field {
+  opacity: 1;
+  transition: opacity var(--sn-duration-fast) var(--sn-ease-standard) var(--sn-duration-normal), visibility var(--sn-duration-fast) step-start;
+}
+
+.header-search input,
+.header-search input:focus-visible {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--sn-color-text);
+  font-size: inherit;
+  line-height: inherit;
+  outline: none;
+}
+
+.header-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.header-search input::placeholder {
+  color: var(--sn-color-text-muted);
+}
+
+#header-search .header-search-field .icon-button {
+  width: var(--sn-control-height-sm);
+  height: var(--sn-control-height-sm);
+}
+
+#header-search .header-search-field .icon-button .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+/* 全局搜索的结果：按页签分组，组标题是页签的图标、名称与条数，右侧「转到」。 */
+.note-list .search-group {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sn-space-4);
+  min-height: var(--sn-control-height-sm);
+  margin: var(--sn-space-2) 0 calc(var(--sn-space-2) * -1);
+  padding: 0 var(--sn-space-1);
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+  user-select: none;
+}
+
+.note-list .search-group:first-child {
+  margin-top: 0;
+}
+
+.search-group .search-group-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-2);
+  min-width: 0;
+  font-weight: var(--sn-font-weight-medium);
+}
+
+.search-group .search-group-title .icon {
+  flex: none;
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  color: var(--sn-color-text-muted);
+}
+
+.search-group .search-group-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-group .search-group-count {
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+  font-weight: var(--sn-body-weight);
+  font-variant-numeric: tabular-nums;
+}
+
+.search-group .search-group-go {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sn-space-1);
+  height: var(--sn-control-height-sm);
+  min-height: 0;
+  padding: 0 var(--sn-space-2) 0 var(--sn-space-3);
+  border: 0;
+  border-radius: var(--sn-radius-control);
+  background: transparent;
+  color: var(--sn-color-accent-text);
+  font-size: var(--sn-font-size-xs);
+}
+
+.search-group .search-group-go .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.search-group .search-group-go:hover {
+  background: var(--sn-color-accent-subtle);
+}
+
+/* 搜索时新建卡片收起：结果从列表顶部开始，结束搜索后回来。 */
+.sidebar.is-search-results > #quick-composer.sidebar-composer {
+  display: none;
+}
+
+/* 「转到」一条记录：滚到它，强调色外圈闪一下后淡去（与高亮的强调色相同）。 */
+@keyframes note-located {
+  0%,
+  45% {
+    box-shadow: 0 0 0 var(--sn-focus-ring-width) var(--sn-color-accent);
+  }
+  100% {
+    box-shadow: var(--local-shadow);
+  }
+}
+
+.note-list .note-card.is-located {
+  animation: note-located calc(var(--sn-duration-slow) * 8) var(--sn-ease-standard);
+}
+
+/* ---------- 整理提醒、列表顶栏与标签菜单 ---------- */
+.sidebar > .workspace-nudge {
+  margin: var(--sn-space-4) var(--sn-panel-padding) 0;
+  border: 0;
+  border-radius: var(--sn-radius-md);
+  background-color: var(--sn-color-warning-subtle);
+  color: var(--sn-color-text);
+  font-size: var(--sn-font-size-sm);
+}
+
+.workspace-nudge .icon {
+  color: var(--sn-color-warning);
+}
+
+.sidebar > .sync-warning {
+  margin: var(--sn-space-4) var(--sn-panel-padding) 0;
+  border: 0;
+  border-radius: var(--sn-radius-md);
+  background-color: var(--sn-color-danger-subtle);
+  color: var(--sn-color-danger);
+  font-size: var(--sn-font-size-sm);
+}
+
+[data-sn-dock='blocks'] .sidebar > .workspace-nudge {
+  background-image: linear-gradient(var(--sn-color-warning-subtle), var(--sn-color-warning-subtle));
+}
+
+[data-sn-dock='blocks'] .sidebar > .sync-warning {
+  background-image: linear-gradient(var(--sn-color-danger-subtle), var(--sn-color-danger-subtle));
+}
+
+/* 筛选行（第五、六次反馈）：左边写列表里是什么，右边是对整个列表的操作。左边平常是标签下拉，选了标签时同时写条数，
+ * 后面是「固定为页签」「合并」；搜索时换成结果的条数（只搜一个标签时同样跟着这两个按钮）。右边是多选与收起/展开全部，
+ * 最右一个正好在页签栏放大镜的正下方。 */
+.sidebar > .list-topline {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sn-space-4);
+  min-height: 0;
+  padding: var(--sn-space-3) calc(var(--sn-space-3) + var(--sn-border-width) + (var(--sn-control-height) - var(--sn-control-height-sm)) / 2) var(--sn-space-3) var(--sn-panel-padding);
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-sm);
+  user-select: none;
+}
+
+.list-topline .list-filter {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--sn-space-3);
+  min-width: 0;
+}
+
+/* 筛选行上的「固定为页签」「合并」：强调色的小号文字按钮，跟在标签下拉之后。 */
+.list-topline #list-summary {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sn-space-1);
+  margin: 0;
+}
+
+.list-topline #list-summary:empty {
+  display: none;
+}
+
+.list-topline .list-summary-action {
+  height: var(--sn-control-height-sm);
+  min-height: 0;
+  padding: 0 var(--sn-space-3);
+  border: 0;
+  border-radius: var(--sn-radius-control);
+  background: transparent;
+  color: var(--sn-color-accent-text);
+  font-family: var(--sn-font-ui);
+  font-size: var(--sn-font-size-xs);
+  white-space: nowrap;
+}
+
+.list-topline .list-summary-action:hover {
+  background: var(--sn-color-accent-subtle);
+}
+
+/* 搜的词正好是已有标签的名称时，结果条数后面的「#开发 8 条」（第八次反馈）：点它改搜这个标签；条数用代码字体的弱化文字。 */
+.list-topline .word-tag-action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-2);
+}
+
+.list-topline .word-tag-count {
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-meta);
+}
+
+/* 搜索时筛选行左边的结果条数（与标签下拉里的条数相同的写法），标签下拉在搜索时不用。 */
+.list-topline .search-summary {
+  flex: none;
+  padding: 0 var(--sn-space-3);
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.list-topline .tag-filter-wrap[hidden],
+.list-topline .search-summary[hidden] {
+  display: none;
+}
+
+/* 筛选行右边的列表操作：小号图标按钮；多选中用强调色浅底，图标后面写选中的条数。 */
+.list-topline .list-tools {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sn-space-1);
+  margin-left: auto;
+}
+
+.list-topline .list-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sn-space-1);
+  width: auto;
+  min-width: var(--sn-control-height-sm);
+  height: var(--sn-control-height-sm);
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--sn-radius-control);
+  background: transparent;
+  color: var(--sn-color-text-muted);
+}
+
+.list-topline .list-tool .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.list-topline .list-tool:hover {
+  background: var(--sn-color-hover);
+  color: var(--sn-color-text);
+}
+
+/* 多选按钮按下：强调色的浅底。选中的条数写在筛选行左边（第七次反馈），按钮上不再写数字。 */
+.list-topline .list-tool[aria-pressed='true'] {
+  background: var(--sn-color-accent-subtle);
+  color: var(--sn-color-accent-text);
+}
+
+.list-topline .list-tool:disabled {
+  opacity: var(--sn-opacity-disabled);
+  pointer-events: none;
+}
+
+/* 在标签页签中新建：工具栏上一个可以去掉的「#标签」，保存时写进标签行（第四次反馈）。 */
+.composer-tools .composer-tab-tag {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sn-space-1);
+  height: var(--sn-control-height-sm);
+  padding: 0 0 0 var(--sn-space-3);
+  border-radius: var(--sn-radius-chip);
+  background: var(--sn-color-accent-subtle);
+  color: var(--sn-color-accent-text);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+}
+
+.composer-tools .composer-tab-tag .icon-button {
+  width: var(--sn-control-height-sm);
+  height: var(--sn-control-height-sm);
+  color: inherit;
+}
+
+/* 标签下拉：没选标签时是「# 全部标签 ▾」；选了标签时是「# 产品 · 2 条」加一个清除的 ×，两者合成一个强调色的浅底胶囊。 */
+.list-topline .tag-filter-wrap {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  border-radius: var(--sn-radius-control);
+}
+
+.list-topline .tag-filter-wrap.is-filtered {
+  background: var(--sn-color-accent-subtle);
+  color: var(--sn-color-accent-text);
+}
+
+.tag-filter-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-1);
+  min-width: 0;
+  height: var(--sn-control-height-sm);
+  min-height: 0;
+  padding: 0 var(--sn-space-3);
+  border: 0;
+  border-radius: var(--sn-radius-control);
+  background: transparent;
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+  white-space: nowrap;
+}
+
+.tag-filter-button .tag-filter-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tag-filter-button .tag-filter-count {
+  flex: none;
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.tag-filter-button.is-filtered .tag-filter-chevron {
+  display: none;
+}
+
+.tag-filter-wrap.is-filtered .tag-filter-button {
+  padding-right: var(--sn-space-1);
+}
+
+.list-topline .tag-filter-clear {
+  flex: none;
+  width: var(--sn-control-height-sm);
+  height: var(--sn-control-height-sm);
+  color: inherit;
+}
+
+.list-topline .tag-filter-clear .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.list-topline .tag-filter-clear:hover {
+  background: var(--sn-color-accent-subtle);
+}
+
+.tag-filter-button .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  color: inherit;
+}
+
+.tag-filter-button:hover,
+.tag-filter-button[aria-expanded='true'] {
+  background: var(--sn-color-hover);
+  color: var(--sn-color-text);
+}
+
+.tag-filter-button.active-tag-filter,
+.tag-filter-button.is-filtered {
+  background: transparent;
+  color: var(--sn-color-accent-text);
+}
+
+.tag-filter-button.is-filtered:hover,
+.tag-filter-button.is-filtered[aria-expanded='true'] {
+  background: var(--sn-color-accent-subtle);
+}
+
+/* 标签菜单：宽度跟着内容走（本次提出），浮起的表面，候选右侧是条数，底部只有「搜索标签」。
+ * 从筛选行左边的标签下拉向下打开；在搜索框里输入 # 时同一个菜单列出标签候选（第五次反馈），
+ * 搜索框回到页签栏后（第六次反馈）候选紧贴在搜索框下面，盖住筛选行。 */
+.tag-dropdown {
+  top: 100%;
+  right: auto;
+  left: var(--sn-panel-padding);
+  width: max-content;
+  min-width: 0;
+  max-width: none;
+  white-space: nowrap;
+  padding: var(--sn-space-1);
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-surface-raised);
+  box-shadow: var(--sn-shadow-md);
+  color: var(--sn-color-text);
+  text-shadow: none;
+}
+
+.tag-dropdown.is-suggesting {
+  top: 0;
+}
+
+.tag-dropdown .tag-option {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-2);
+  width: 100%;
+  min-height: var(--sn-menu-item-height);
+  padding: 0 var(--sn-space-4);
+  border: 0;
+  border-radius: var(--sn-radius-sm);
+  background: transparent;
+  color: var(--sn-color-text);
+  font-size: var(--sn-font-size-md);
+  text-align: left;
+}
+
+.tag-dropdown .tag-option:hover {
+  background: var(--sn-color-hover);
+}
+
+.tag-dropdown .tag-option:focus-visible {
+  outline: none;
+  background: var(--sn-color-selected);
+}
+
+.tag-dropdown .tag-option-count {
+  margin-left: auto;
+  padding-left: var(--sn-space-4);
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.tag-dropdown .tag-option-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-1);
+}
+
+.tag-dropdown .tag-option-row .icon-button {
+  width: var(--sn-menu-item-height);
+  height: var(--sn-menu-item-height);
+}
+
+.tag-dropdown .tag-menu-empty {
+  padding: var(--sn-space-4);
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-sm);
+}
+
+.tag-dropdown .tag-menu-footer {
+  display: block;
+  margin-top: var(--sn-space-2);
+  padding: var(--sn-space-2) 0 0;
+  border-top: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  background: transparent;
+}
+
+.tag-dropdown .tag-search-button {
+  color: var(--sn-color-accent-text);
+}
+
+.tag-dropdown .tag-search-button .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+/* ---------- 新建卡片 ----------
+ * 固定在记录列表之上，独占顶部的一块区域，列表滚动时卡片从它下方移出（app.js 把它放在列表之前）。
+ * 底部的工具栏一直显示，不随焦点收起展开（2026-11-11 第二次反馈：点工具栏一行时卡片会收起）；
+ * 获得焦点时与编辑中的卡片一样换成编辑底色并浮起，边框不变、不用强调色，也不加外圈（editing.md 第二节）。 */
+.sidebar > #quick-composer.sidebar-composer {
+  position: relative;
+  flex: none;
+  min-height: 0;
+  margin: 0 var(--sn-panel-padding) var(--sn-space-4);
+  padding: var(--sn-space-3) var(--sn-space-4) var(--sn-space-3) var(--sn-card-padding-x);
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: max(var(--sn-card-radius), var(--sn-radius-md));
+  background-color: var(--sn-color-card);
+  box-shadow: none;
+  transition:
+    background-color var(--sn-duration-fast) var(--sn-ease-standard),
+    box-shadow var(--sn-duration-fast) var(--sn-ease-standard);
+}
+
+/* 磨砂玻璃：新建卡片是单独的一块玻璃，圆角与标题区相同。 */
+[data-sn-dock='blocks'] .sidebar > #quick-composer.sidebar-composer {
+  margin: 0;
+  border-color: var(--sn-color-border-subtle);
+  border-radius: var(--sn-panel-radius);
+  background-image: linear-gradient(to bottom, var(--sn-color-sheen), transparent var(--sn-space-9));
+  backdrop-filter: blur(var(--sn-panel-blur)) saturate(var(--sn-panel-saturate));
+  box-shadow: var(--sn-shadow-panel), inset 0 var(--sn-border-width) 0 var(--sn-color-edge-highlight);
+}
+
+/* 获得焦点：压过磨砂玻璃块的底色与投影，玻璃块的边缘受光（::after）保留。 */
+.sidebar > #quick-composer.sidebar-composer:focus-within,
+[data-sn-dock='blocks'] .sidebar > #quick-composer.sidebar-composer:focus-within {
+  z-index: 1;
+  background-color: var(--sn-color-editing);
+  box-shadow: var(--sn-shadow-editing);
+}
+
+#quick-composer .composer-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-1);
+  min-height: 0;
+  margin: var(--sn-space-3) 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.composer-tools,
+.composer-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-1);
+}
+
+#quick-composer .composer-tools {
+  margin-right: auto;
+}
+
+/* 字数紧挨着收起与保存（Playground 的 sn-composer-bar），操作组不再自己撑开。 */
+#quick-composer .composer-actions {
+  flex: none;
+  margin-left: 0;
+}
+
+/* 新建卡片与卡片编辑的工具栏都是小号图标按钮（Playground 的 size="sm"）；速记浮窗只有附件工具是小号。 */
+:is(#quick-composer, .note-edit-actions) :is(.composer-tools, .composer-actions) .icon-button,
+.capture-footer .composer-tools .icon-button {
+  width: var(--sn-control-height-sm);
+  height: var(--sn-control-height-sm);
+}
+
+:is(#quick-composer, .note-edit-actions) :is(.composer-tools, .composer-actions) .icon-button .icon,
+.capture-footer .composer-tools .icon-button .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.composer-count {
+  margin-right: var(--sn-space-3);
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 终端主题在字数的位置写出 Ctrl+Enter（components.md 1.6）。 */
+[data-sn-shortcuts='inline'] #quick-composer .composer-count {
+  display: none;
+}
+
+/* ---------- 记录列表 ---------- */
+.sidebar > .note-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--sn-card-gap);
+  min-height: 0;
+  padding: 0 var(--sn-panel-padding) var(--sn-space-6);
+  overflow-y: auto;
+  scrollbar-gutter: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sn-color-border-strong) transparent;
+}
+
+/* 玻璃块的列表不留内边距，卡片与上面的玻璃块对齐。只纵向滚动（第八次反馈）：横向写成 visible 时与纵向的 auto 合算成 auto，
+ * 卡片受光描边外扩的一像素撑出了一条按默认高度画的横向滚动条。左右各留一像素给描边与外圈，再用负外边距抵消。 */
+[data-sn-dock='blocks'] .sidebar > .note-list {
+  margin-left: calc(var(--sn-border-width) * -1);
+  padding: 0 var(--sn-border-width);
+  overflow: hidden auto;
+}
+
+.note-list .empty-state {
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-sm);
+}
+
+.note-list .empty-state h3 {
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-md);
+}
+
+/* ---------- 记录卡片 ----------
+ * 每条记录有自己的底面与边框，彼此留出间隙；投影与叠加色写在 --local-shadow、--local-overlay 中，各状态只改这两项。 */
+.note-list .note-card {
+  --local-overlay: transparent;
+  --local-shadow: var(--sn-shadow-sm);
+  position: relative;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--sn-space-2);
+  margin: 0;
+  padding: var(--sn-card-padding-y) var(--sn-card-padding-x);
+  overflow: visible;
+  border: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  border-radius: var(--sn-card-radius);
+  background-color: var(--sn-color-card);
+  background-image:
+    linear-gradient(var(--local-overlay), var(--local-overlay)),
+    linear-gradient(to bottom, var(--sn-color-sheen), transparent var(--sn-space-9));
+  box-shadow: var(--local-shadow);
+  color: var(--sn-color-text);
+  cursor: default;
+  transition:
+    background-color var(--sn-duration-fast) var(--sn-ease-standard),
+    border-color var(--sn-duration-fast) var(--sn-ease-standard),
+    box-shadow var(--sn-duration-fast) var(--sn-ease-standard),
+    opacity var(--sn-duration-normal) var(--sn-ease-standard);
+}
+
+[data-sn-entries='tiles'] .note-list .note-card {
+  --local-shadow: var(--sn-shadow-panel);
+  backdrop-filter: blur(var(--sn-panel-blur)) saturate(var(--sn-panel-saturate));
+}
+
+/* 窗格（终端）：标题行是带底色的标题栏，与正文之间一条分隔线。 */
+[data-sn-entries='panes'] .note-list .note-card {
+  gap: var(--sn-space-3);
+  border-color: var(--sn-color-border);
+}
+
+/* 置顶（第五次反馈：默认要看得出来）：一圈淡的强调色边框，比悬停暗，也没有悬停的叠加色、外圈与标题栏变色；
+ * 悬停、单击与多选时照常按高亮显示（这些规则在后面，优先级相同）。:where() 让窗格主题的边框规则不抬高优先级。 */
+.note-list .note-card.is-pinned,
+:where([data-sn-entries='panes']) .note-list .note-card.is-pinned {
+  border-color: color-mix(in srgb, var(--sn-color-accent) 45%, var(--sn-color-border-subtle));
+  background-color: var(--sn-color-card);
+}
+
+[data-sn-entries='panes'] .note-card > .note-header {
+  margin: calc(var(--sn-card-padding-y) * -1) calc(var(--sn-card-padding-x) * -1) 0;
+  padding: var(--sn-space-2) var(--sn-space-3) var(--sn-space-2) var(--sn-card-padding-x);
+  border-bottom: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  border-radius: calc(var(--sn-card-radius) - var(--sn-border-width)) calc(var(--sn-card-radius) - var(--sn-border-width)) 0 0;
+  background: var(--sn-color-card-head);
+}
+
+/* 只有标题行（单行记录或已收起）时，标题栏就是整个窗格。 */
+[data-sn-entries='panes'] .note-card:is(.is-collapsed, .is-single):not(:has(.note-bottom)) > .note-header,
+[data-sn-entries='panes'] .note-card.is-collapsed > .note-header {
+  margin-bottom: calc(var(--sn-card-padding-y) * -1);
+  border-bottom: 0;
+  border-radius: calc(var(--sn-card-radius) - var(--sn-border-width));
+}
+
+/* 高亮：悬停与单击共用一种状态（T66）。强调色边框加一像素外圈，叠一层选中色；
+ * 窗格的标题栏换成选中色，顶部一条强调色线（画在背景层里，两侧不留细缝）；玻璃块去掉边缘受光。
+ * 编辑中的卡片不用这些高亮，排除写在 :where() 里不增加优先级，多选的叠加色仍能压过悬停。 */
+.note-list .note-card:is(:hover, .is-current):where(:not(.is-editing)) {
+  --local-overlay: var(--sn-color-card-active);
+  --local-shadow: var(--sn-shadow-card-active);
+  border-color: var(--sn-color-accent);
+}
+
+[data-sn-entries='panes'] .note-card:is(:hover, .is-current, .is-selected):where(:not(.is-editing)) > .note-header {
+  background:
+    linear-gradient(var(--sn-color-accent), var(--sn-color-accent)) top / 100% var(--sn-focus-ring-width) no-repeat,
+    var(--sn-color-card-head-active);
+}
+
+[data-sn-entries='tiles'] .note-card:is(:hover, .is-current, .is-selected):where(:not(.is-editing))::after {
+  opacity: 0;
+}
+
+.note-list .note-card.is-selected {
+  --local-overlay: var(--sn-color-accent-subtle);
+  border-color: var(--sn-color-accent);
+  outline: none;
+}
+
+/* 选中卡片中的弱化文字改用次要文字色：弱化文字在选中底色上达不到 4.5:1。 */
+.note-card:is(:hover, .is-current, .is-selected) :is(.note-time, .tag-chip) {
+  color: var(--sn-color-text-secondary);
+}
+
+.note-list .note-card:focus-visible {
+  outline: var(--sn-focus-ring-width) solid var(--sn-color-focus);
+  outline-offset: calc(var(--sn-focus-ring-width) * -1);
+}
+
+/* 编辑中：编辑底色并浮起，层级提到其余卡片之上；边框与窗格的标题栏保持平时的样子，不用强调色。 */
+.note-list .note-card.is-editing {
+  --local-overlay: transparent;
+  --local-shadow: var(--sn-shadow-editing);
+  z-index: 1;
+  border-color: var(--sn-color-border-subtle);
+  background-color: var(--sn-color-editing);
+}
+
+[data-sn-entries='panes'] .note-list .note-card.is-editing {
+  border-color: var(--sn-color-border);
+}
+
+/* 其余卡片变淡，悬停时恢复，方便对照着写。 */
+.note-list:has(.note-card.is-editing) .note-card:not(.is-editing) {
+  opacity: var(--sn-opacity-disabled);
+}
+
+.note-list:has(.note-card.is-editing) .note-card:not(.is-editing):hover {
+  opacity: 1;
+}
+
+/* ---------- 标题行 ----------
+ * 标题最多两行。右侧的时间与操作按钮叠放在同一格，格宽取两者中较宽的一个：平时显示置顶标记与时间，
+ * 悬停、高亮或聚焦时换成操作按钮，收起按钮在最右，落在时间原来的位置；标题的宽度因此不变。 */
+.note-card > .note-header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sn-space-3);
+  min-width: 0;
+  margin: 0;
+}
+
+.note-card .note-emoji {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--sn-icon-size) + var(--sn-space-3));
+  height: var(--sn-control-height-sm);
+  margin: 0 0 0 calc(var(--sn-space-2) * -1);
+  padding: 0;
+  border-radius: var(--sn-radius-sm);
+  background: transparent;
+  font-family: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif; /* 固定：Emoji 使用系统彩色字体 */
+  font-size: var(--sn-font-size-lg);
+  line-height: 1;
+  text-shadow: none;
+}
+
+.note-card .note-emoji:hover {
+  background: var(--sn-color-hover);
+}
+
+/* 多选按钮按下时（第七次反馈）：标题左边的图标换成勾选框，占同样的宽度，标题不移动；右上角的快捷按钮隐藏，只留时间，
+ * 单击卡片的任何地方都是勾选或取消（interactions.js）。 */
+.note-card .note-select-mark {
+  display: none;
+}
+
+.note-list.is-selecting .note-card .note-emoji {
+  display: none;
+}
+
+.note-list.is-selecting .note-card .note-select-mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--sn-icon-size);
+  height: var(--sn-icon-size);
+  margin: 0 calc(var(--sn-space-3) / 2) 0 calc(var(--sn-space-3) / 2 - var(--sn-space-2));
+  border: calc(var(--sn-border-width) * 1.5) solid var(--sn-color-border-strong);
+  border-radius: var(--sn-radius-xs);
+  background: var(--sn-color-surface);
+  color: transparent;
+}
+
+.note-list.is-selecting .note-card .note-select-mark .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  stroke-width: calc(var(--sn-icon-stroke) * 1.6);
+}
+
+.note-list.is-selecting .note-card.is-selected .note-select-mark {
+  border-color: var(--sn-color-accent);
+  background: var(--sn-color-accent);
+  color: var(--sn-color-on-accent);
+}
+
+.note-list.is-selecting .note-card .note-side .note-actions {
+  display: none;
+}
+
+.note-list.is-selecting .note-card .note-side .note-meta {
+  visibility: visible;
+  opacity: 1;
+}
+
+.note-card .note-title {
+  display: -webkit-box;
+  flex: 1;
+  min-width: 0;
+  margin: calc((var(--sn-control-height-sm) - var(--sn-font-size-lg) * var(--sn-line-height-tight)) / 2) 0;
+  overflow: hidden;
+  color: var(--sn-color-text);
+  font-family: var(--sn-font-title);
+  font-size: var(--sn-font-size-lg);
+  font-weight: var(--sn-title-weight);
+  letter-spacing: var(--sn-title-tracking);
+  line-height: var(--sn-line-height-tight);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.note-card .note-title * {
+  font-size: inherit;
+}
+
+.note-side {
+  display: grid;
+  flex: none;
+  align-items: center;
+  justify-items: end;
+}
+
+.note-side > * {
+  grid-area: 1 / 1;
+}
+
+.note-side .note-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-2);
+  height: var(--sn-control-height-sm);
+  min-height: 0;
+  margin: 0;
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  transition: opacity var(--sn-duration-fast) var(--sn-ease-standard);
+}
+
+.note-side .note-pin {
+  display: inline-flex;
+  color: var(--sn-color-accent-text);
+}
+
+.note-side .note-pin .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.note-side .note-time {
+  display: inline-flex;
+  align-items: center;
+  height: var(--sn-control-height-sm);
+  margin: 0;
+  padding: 0 var(--sn-space-2);
+  border-radius: var(--sn-radius-sm);
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.note-side .note-actions {
+  display: flex;
+  gap: var(--sn-space-1);
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  visibility: hidden;
+  opacity: 0;
+  transition:
+    opacity var(--sn-duration-fast) var(--sn-ease-standard),
+    visibility var(--sn-duration-fast) var(--sn-ease-standard);
+}
+
+/* 触屏没有悬停：点一下卡片即高亮，按钮随之出现。编辑中只显示时间。 */
+.note-card:is(:hover, .is-current, :focus-within):not(.is-editing) .note-side .note-actions {
+  visibility: visible;
+  opacity: 1;
+}
+
+.note-card:is(:hover, .is-current, :focus-within):not(.is-editing) .note-side .note-meta {
+  visibility: hidden;
+  opacity: 0;
+}
+
+.note-card .note-side .note-actions .icon-button,
+.note-card:hover .note-side .note-actions .icon-button {
+  width: var(--sn-control-height-sm);
+  height: var(--sn-control-height-sm);
+  border-radius: var(--sn-radius-control);
+  background-color: transparent;
+  color: var(--sn-color-text-secondary);
+}
+
+.note-card .note-side .note-actions .icon-button .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.note-card .note-side .note-actions .icon-button:hover {
+  background: var(--sn-color-hover);
+  color: var(--sn-color-text);
+}
+
+/* 已置顶记录的置顶按钮：图标保持强调色，悬停也不变，与平时的置顶标记同色。 */
+.note-card .note-side .note-actions .note-pin-toggle.is-pinned,
+.note-card .note-side .note-actions .note-pin-toggle.is-pinned:hover {
+  color: var(--sn-color-accent-text);
+}
+
+.note-collapse .icon {
+  transition: transform var(--sn-duration-normal) var(--sn-ease-standard);
+}
+
+.note-collapse.is-collapsed .icon {
+  transform: rotate(-90deg);
+}
+
+/* 收起：只剩标题行。 */
+.note-card.is-collapsed:not(.is-editing) > :is(.note-content, .note-bottom, .note-expand) {
+  display: none;
+}
+
+/* ---------- 正文 ---------- */
+.note-card .note-content.markdown-body {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+  color: var(--sn-color-text);
+  font-family: var(--sn-font-note);
+  font-size: var(--sn-note-size);
+  font-weight: var(--sn-body-weight);
+  line-height: var(--sn-note-line-height);
+}
+
+/* 正文的最大高度是设置中的「卡片高度」（按 13px 字号计，随整页缩放）。 */
+.note-list .note-card .note-content.markdown-body {
+  max-height: var(--card-max-height);
+}
+
+/* 正文超过最大高度时底部渐隐；遮罩只用透明度，颜色本身不显示。 */
+.note-card.is-truncated .note-content.markdown-body {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 2.6em), transparent); /* 固定：遮罩只取透明度 */
+}
+
+.note-card .note-expand {
+  align-self: flex-start;
+  height: var(--sn-control-height-sm);
+  padding: 0 var(--sn-space-2);
+  border-radius: var(--sn-radius-sm);
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-xs);
+}
+
+.note-card .note-expand:hover {
+  background: var(--sn-color-hover);
+  color: var(--sn-color-text);
+}
+
+/* ---------- 正文：Markdown 预览（与 Playground content.css 相同） ----------
+ * 预览由 content.js 渲染，结构与类名沿用现有应用的 Markdown 组件；正文字体、字号与行高来自记录正文令牌，代码用代码令牌。 */
+.markdown-body {
+  color: var(--sn-color-text);
+  font-family: var(--sn-font-note);
+  font-size: var(--sn-note-size);
+  font-weight: var(--sn-body-weight);
+  line-height: var(--sn-note-line-height);
+  overflow-wrap: anywhere;
+}
+
+.markdown-body > * {
+  margin: 0;
+}
+
+.markdown-body > * + * {
+  margin-top: 0.35em;
+}
+
+.markdown-body :is(h1, h2, h3, h4, h5, h6) {
+  margin-top: 0.6em;
+  margin-bottom: 0;
+  font-family: var(--sn-font-title);
+  font-size: 1em;
+  font-weight: var(--sn-title-weight);
+  letter-spacing: var(--sn-title-tracking);
+  line-height: var(--sn-line-height-tight);
+}
+
+.markdown-body :is(h1, h2) {
+  font-size: 1.08em;
+}
+
+.markdown-body > :first-child {
+  margin-top: 0;
+}
+
+.markdown-body :is(ul, ol) {
+  margin: 0.2em 0;
+  padding-left: 1.4em;
+}
+
+.markdown-body ol {
+  padding-left: calc(var(--md-ol-digits, 1) * 0.6em + 1.1em);
+}
+
+.markdown-body li {
+  margin: 0;
+  padding: 0;
+}
+
+.markdown-body li + li {
+  margin-top: 0.15em;
+}
+
+.markdown-body li.markdown-task {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+  margin-left: -1.4em;
+  list-style: none;
+}
+
+.markdown-body .md-task-toggle {
+  flex: none;
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  margin: 0;
+  accent-color: var(--sn-color-accent);
+  translate: 0 0.15em;
+}
+
+.markdown-body blockquote {
+  margin: 0;
+  padding-left: var(--sn-space-5);
+  border-left: var(--sn-focus-ring-width) solid var(--sn-color-border-strong);
+  color: var(--sn-color-text-secondary);
+}
+
+.markdown-body code {
+  padding: 0.08em 0.35em;
+  border: 0;
+  border-radius: var(--sn-radius-xs);
+  background: var(--sn-code-bg);
+  color: var(--sn-code-text);
+  font-family: var(--sn-font-code);
+  font-size: 0.9em;
+}
+
+.markdown-body pre.markdown-code,
+.markdown-body pre {
+  margin: 0.3em 0;
+  padding: var(--sn-space-4) var(--sn-space-5);
+  overflow: auto;
+  border: 0;
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-code-bg);
+  color: var(--sn-code-text);
+  font-family: var(--sn-font-code);
+  font-size: var(--sn-code-size);
+  line-height: var(--sn-line-height-normal);
+}
+
+.markdown-body > pre:first-child {
+  margin-top: 0;
+}
+
+.markdown-body pre code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
+}
+
+.markdown-body hr {
+  margin: 0.6em 0;
+  border: 0;
+  border-top: var(--sn-border-width) solid var(--sn-color-border);
+}
+
+.markdown-body a,
+.markdown-body .markdown-link {
+  color: var(--sn-color-accent-text);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.markdown-body strong {
+  font-weight: var(--sn-font-weight-bold);
+}
+
+.markdown-body mark,
+mark {
+  border-radius: var(--sn-radius-xs);
+  background: var(--sn-color-highlight);
+  color: inherit;
+}
+
+/* 搜索命中（第七次反馈，app.js 的 markSearchHits）：高亮底色；与 Playground 的 CSS 自定义高亮一样不带圆角。 */
+.note-card mark.search-hit {
+  border-radius: 0;
+}
+
+.markdown-body .file-reference,
+.md-editor-file {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-2);
+  max-width: 100%;
+  padding: 0 var(--sn-space-3);
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-sm);
+  background: var(--sn-color-surface-sunken);
+  color: var(--sn-color-text-secondary);
+  font-size: 0.92em;
+}
+
+.markdown-body .file-reference svg.icon,
+.md-editor-file svg.icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+/* 图片缩略图：不超过卡片宽度，点击打开附件弹窗；高度上限与现有应用一致。 */
+.markdown-body .markdown-image-button {
+  display: inline-flex;
+  max-width: 100%;
+  margin: var(--sn-space-2) 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--sn-radius-sm);
+  background: var(--sn-color-surface-sunken);
+  cursor: zoom-in;
+}
+
+.markdown-body .markdown-image-button:hover {
+  box-shadow: 0 0 0 var(--sn-focus-ring-width) var(--sn-color-accent-subtle);
+}
+
+/* 缩略图：整张图都看得见（按比例缩小，不裁切），高度上限与现有应用一致；显示的是缩小的副本，点开附件弹窗才加载原图（本次提出）。 */
+:is(.markdown-image-button, .md-editor-image) .markdown-image,
+.markdown-body .note-image-button .note-image,
+.note-window-content .note-image-button .note-image {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 150px; /* 固定：缩略图高度与现有应用一致 */
+  margin: 0;
+  border: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  border-radius: var(--sn-radius-sm);
+  object-fit: contain;
+}
+
+/* 大图的缩略图还在生成：先占一块缩略图大小的底色。 */
+img.is-thumbnail-pending {
+  min-width: calc(var(--sn-control-height) * 4);
+  min-height: calc(var(--sn-control-height) * 3);
+  background: var(--sn-color-surface-sunken);
+}
+
+.markdown-body .note-image-button {
+  display: inline-flex;
+  width: auto;
+  max-width: 100%;
+  margin: var(--sn-space-2) var(--sn-space-2) 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.markdown-body .note-image,
+.markdown-body img {
+  border-radius: var(--sn-radius-sm);
+}
+
+.file-ref {
+  border-color: var(--sn-color-border-subtle);
+  border-radius: var(--sn-radius-sm);
+  background: var(--sn-color-surface-sunken);
+  color: var(--sn-color-text);
+}
+
+/* ---------- 标签：只在有标签时占一行 ---------- */
+.note-card > .note-bottom {
+  display: flex;
+  align-items: normal;
+  justify-content: normal;
+  gap: var(--sn-space-2);
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.note-card .note-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sn-space-2);
+  min-width: 0;
+}
+
+.note-card .tag-chip {
+  display: block;
+  height: calc(var(--sn-control-height-sm) - var(--sn-space-2));
+  min-height: 0;
+  max-width: none;
+  padding: 0 var(--sn-space-3);
+  border: 0;
+  border-radius: var(--sn-radius-chip);
+  background: var(--sn-color-hover);
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+  line-height: inherit;
+}
+
+.note-card .tag-chip:hover,
+.note-card .tag-chip.is-selected {
+  background: var(--sn-color-accent-subtle);
+  color: var(--sn-color-accent-text);
+}
+
+/* 「展开并管理标签」是原型保留的现有功能（Playground 的卡片上没有）：平时隐藏，悬停、高亮或聚焦时出现；
+ * 有标签因为放不下被收起时常驻，提示还有更多标签。 */
+.note-card .tags-more {
+  width: var(--sn-control-height-sm);
+  height: calc(var(--sn-control-height-sm) - var(--sn-space-2));
+  min-width: 0;
+  padding: 0;
+  border-radius: var(--sn-radius-chip);
+  color: var(--sn-color-text-muted);
+}
+
+.note-card .tags-more:hover {
+  background: var(--sn-color-hover);
+  color: var(--sn-color-text);
+}
+
+.note-card:not(:hover, .is-current, :focus-within) .tags-more[data-hidden-count='0'] {
+  visibility: hidden;
+}
+
+/* ---------- 编辑区（卡片编辑、新建卡片与速记浮窗；与 Playground 的 content.css「实时编辑器」相同） ----------
+ * 编辑区里不画边框、强调线与行号（第七、八次反馈）；记录纸的卡片编辑与速记浮窗每行下方有横线（--sn-color-rule），新建卡片没有。
+ * 编辑器的结构与类名沿用现有应用（editor.js），光标、Markdown 标记与代码块的颜色来自令牌。 */
+.live-markdown-editor,
+.note-card .note-edit-input,
+.sidebar-draft-input,
+.capture-body textarea {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background-color: transparent;
+  box-shadow: none;
+  color: var(--sn-color-text);
+  caret-color: var(--sn-color-caret);
+  font-family: var(--sn-font-note);
+  font-size: var(--sn-note-size);
+  line-height: var(--sn-note-line-height);
+  cursor: text;
+}
+
+.live-markdown-editor:focus,
+.live-markdown-editor:focus-visible,
+.note-card .note-edit-input:focus-visible,
+.capture-body textarea:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.live-markdown-editor.is-empty::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  inset-inline: 0;
+  color: var(--sn-color-text-muted);
+  white-space: pre-wrap;
+  pointer-events: none;
+}
+
+.live-markdown-editor .md-editor-line {
+  display: block;
+  min-height: calc(var(--sn-note-line-height) * 1em);
+  margin: 0;
+  padding-block: 0;
+  border: 0;
+  line-height: inherit;
+  white-space: pre-wrap;
+}
+
+:is(.note-card, .capture-body) .live-markdown-editor .md-editor-line {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0 calc(1lh - var(--sn-border-width)),
+    var(--sn-color-rule) calc(1lh - var(--sn-border-width)) 1lh
+  );
+}
+
+/* Markdown 标记（#、**、- 等）：终端用强调色，像代码的语法着色；其余主题用弱化文字色。 */
+.live-markdown-editor .md-syntax {
+  color: var(--sn-color-syntax);
+  font-weight: var(--sn-font-weight-regular);
+  font-style: normal;
+  text-decoration: none;
+}
+
+.live-markdown-editor .md-syntax.is-hidden {
+  display: none;
+}
+
+.live-markdown-editor .md-heading {
+  font-family: var(--sn-font-title);
+  font-weight: var(--sn-title-weight);
+}
+
+.live-markdown-editor .md-quote {
+  padding-left: var(--sn-space-5);
+  border-left: var(--sn-focus-ring-width) solid var(--sn-color-border-strong);
+  color: var(--sn-color-text-secondary);
+}
+
+.live-markdown-editor .md-list-item {
+  --md-list-hang: max(1.6em, 3ch);
+  padding-left: calc(var(--md-list-hang) + var(--md-list-indent, 0) * 0.5em);
+  text-indent: calc(var(--md-list-hang) * -1);
+}
+
+.live-markdown-editor :is(.md-list-bullet, .md-list-marker.is-revealed) {
+  display: inline-block;
+  min-width: var(--md-list-hang);
+  color: var(--sn-color-syntax);
+  text-indent: 0;
+  white-space: pre;
+}
+
+/* 代码块：围栏与代码行连成一块代码底色；收起的围栏只剩一条细边，代码块上下各留一点空。 */
+.live-markdown-editor :is(.md-fenced-code, .md-fence-marker) {
+  padding: 0 var(--sn-space-4);
+  border: 0;
+  background: var(--sn-code-bg);
+  color: var(--sn-code-text);
+  font-family: var(--sn-font-code);
+  font-size: var(--sn-code-size);
+}
+
+.live-markdown-editor .md-fenced-code code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
+}
+
+.live-markdown-editor .md-fence-marker.is-collapsed {
+  min-height: var(--sn-space-2);
+  line-height: var(--sn-space-2);
+  border-radius: var(--sn-radius-xs);
+}
+
+.live-markdown-editor .md-inline-code {
+  padding: 0.08em 0.35em;
+  border: 0;
+  border-radius: var(--sn-radius-xs);
+  background: var(--sn-code-bg);
+  color: var(--sn-code-text);
+  font-family: var(--sn-font-code);
+  font-size: 0.9em;
+}
+
+.live-markdown-editor .md-rule {
+  display: flex;
+  align-items: center;
+  border: 0;
+}
+
+.live-markdown-editor .md-rule-line {
+  flex: 1;
+  height: var(--sn-border-width);
+  background: var(--sn-color-border);
+}
+
+/* 编辑区里的待办方框（编辑区的根元素同时带 markdown-body，选择器写到编辑区之内，才能盖过正文中待办按钮的样式）。 */
+.live-markdown-editor .md-task-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  margin-right: var(--sn-space-3);
+  padding: 0;
+  border: var(--sn-border-width) solid var(--sn-color-border-strong);
+  border-radius: var(--sn-radius-xs);
+  background: transparent;
+  color: var(--sn-color-accent-text);
+  font-size: 0.8em;
+  line-height: 1;
+  text-indent: 0;
+  /* 居中对齐（middle）与方框里有没有勾无关，勾选前后不上下跳；字体的 x 高度偏小，再上移一点，
+   * 与卡片中的待办方框一样对齐文字的中线，不比文字低。 */
+  position: relative;
+  top: -0.3em;
+  vertical-align: middle;
+}
+
+.live-markdown-editor .md-task-checkbox[aria-checked='true'] {
+  border-color: var(--sn-color-accent);
+  background: var(--sn-color-accent-subtle);
+}
+
+.live-markdown-editor .md-tag-ghost {
+  color: var(--sn-color-text-muted);
+  pointer-events: none;
+  user-select: none;
+}
+
+:is(.live-markdown-editor, .md-drag-ghost) .md-editor-image {
+  display: inline-flex;
+  margin: var(--sn-space-2) 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--sn-radius-sm);
+  background: var(--sn-color-surface-sunken);
+}
+
+/* 拖动编辑面中的附件调整位置（本次提出）：原处变淡，拖影是附件的副本，与卡片拖影同样倾斜、浮起；
+ * 落点精确到字符（第四次反馈），插入光标是一条强调色的竖线，上端一个小圆点（与标签页的插入线同一种样子），
+ * 挂在 body 上、叠在拖影之上，位置与高度由脚本按屏幕坐标写入。 */
+.live-markdown-editor .is-drag-source {
+  opacity: var(--sn-opacity-disabled);
+}
+
+.md-drop-caret {
+  position: fixed;
+  z-index: calc(var(--sn-z-tooltip) + 1);
+  width: var(--sn-focus-ring-width);
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-accent);
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.md-drop-caret::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  box-sizing: border-box;
+  width: var(--sn-space-4);
+  height: var(--sn-space-4);
+  border: var(--sn-focus-ring-width) solid var(--sn-color-accent);
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-panel);
+  transform: translate(-50%, -50%);
+}
+
+.md-drag-ghost {
+  position: fixed;
+  z-index: var(--sn-z-tooltip);
+  color: var(--sn-color-text);
+  font-family: var(--sn-font-ui);
+  font-size: var(--sn-font-size-md);
+  line-height: var(--sn-line-height-normal);
+  pointer-events: none;
+  opacity: 0.9;
+  transform: rotate(-2.5deg);
+  transform-origin: 0 0;
+  zoom: var(--app-zoom, 1);
+}
+
+.md-drag-ghost > * {
+  box-shadow: var(--sn-shadow-lg);
+}
+
+/* 拖动正文中的附件（第五次反馈）：拖影放在编辑区前面，层级低于编辑区，文字与插入光标叠在它上面；拖影半透明，
+ * 先停在拿起的位置，再平滑移到指针的右下方，左上角跟着指针。它在侧栏或记录窗口里，缩放已经由外层算过。 */
+.md-drag-ghost.is-under-text {
+  z-index: 0;
+  opacity: 0.6;
+  transform: translate(var(--local-ghost-x, 0), var(--local-ghost-y, 0)) rotate(-2.5deg);
+  transition: transform var(--sn-duration-slow) var(--sn-ease-standard);
+  zoom: 1;
+}
+
+.live-markdown-editor.is-attachment-drop {
+  position: relative;
+  z-index: 1;
+}
+
+.md-drag-probe {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+}
+
+.md-drag-ghost .md-editor-image {
+  margin: 0;
+}
+
+body.is-dragging-attachment,
+body.is-dragging-attachment * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+/* 卡片编辑：编辑区与底部的工具栏之间留一点空。 */
+.note-card .note-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-1);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.note-card .note-edit-actions .composer-tools {
+  margin-right: auto;
+}
+
+/* ---------- 底栏 ----------
+ * 左下角是缩小的版本号，检查到新版本时右上角带更新角标；右边是设置；其余留白（本次提出）。
+ * 正常时不显示存储状态；读取或保存失败时版本号左边出现警告图标。 */
+.sidebar > .sidebar-footer {
+  height: var(--sn-footer-height);
+  min-height: var(--sn-footer-height);
+  justify-content: flex-start;
+  gap: var(--sn-space-2);
+  padding: 0 var(--sn-space-3) 0 var(--sn-panel-padding);
+  border-top: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  background-color: transparent;
+  background-image: linear-gradient(var(--sn-color-panel-band), var(--sn-color-panel-band));
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-sm);
+}
+
+[data-sn-dock='blocks'] .sidebar > .sidebar-footer {
+  background-color: var(--sn-color-card);
+}
+
+.sidebar-footer .footer-right {
+  margin-left: auto;
+}
+
+.sidebar-footer .footer-right .icon-button {
+  width: var(--sn-control-height-sm);
+  height: var(--sn-control-height-sm);
+}
+
+.sidebar-footer .footer-right .icon-button .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.sidebar-footer .storage-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-1);
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-xs);
+}
+
+.sidebar-footer .storage-status::before {
+  display: none;
+}
+
+.sidebar-footer .storage-status.is-error {
+  color: var(--sn-color-danger);
+}
+
+.sidebar-footer .storage-status .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.sidebar-footer .version-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: var(--sn-control-height-sm);
+  margin: 0 0 0 calc(var(--sn-space-2) * -1);
+  padding: 0 var(--sn-space-2);
+  border: 0;
+  border-radius: var(--sn-radius-xs);
+  background: transparent;
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.sidebar-footer .version-button:hover {
+  background: var(--sn-color-hover);
+  color: var(--sn-color-text);
+}
+
+.sidebar-footer .version-button.has-update {
+  padding-right: calc(var(--sn-space-2) + var(--sn-space-5));
+}
+
+.version-button .update-badge {
+  position: absolute;
+  top: calc(var(--sn-space-1) * -1);
+  right: var(--sn-space-1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--sn-space-5);
+  height: var(--sn-space-5);
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-accent);
+  box-shadow: 0 0 0 var(--sn-border-width) var(--sn-color-panel);
+  color: var(--sn-color-on-accent);
+}
+
+.version-button .update-badge[hidden] {
+  display: none;
+}
+
+.version-button .update-badge .icon {
+  width: var(--sn-space-4);
+  height: var(--sn-space-4);
+  stroke-width: calc(var(--sn-icon-stroke) * 1.6);
+}
+
+/* ---------- 速记浮窗 ----------
+ * 窗口 560 × 420，不随字号变化，内容按字号缩放；卡片色叠在面板色上：实心主题就是卡片色，半透明主题保留磨砂。 */
+.capture {
+  width: calc(560px / var(--app-zoom, 1)); /* 固定：速记浮窗的窗口尺寸 */
+  height: calc(420px / var(--app-zoom, 1)); /* 固定：速记浮窗的窗口尺寸 */
+  max-height: calc((100dvh - var(--sn-space-9)) / var(--app-zoom, 1));
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-lg);
+  background: linear-gradient(var(--sn-color-card), var(--sn-color-card)), var(--sn-color-panel);
+  backdrop-filter: blur(var(--sn-panel-blur)) saturate(var(--sn-panel-saturate));
+  box-shadow: var(--sn-shadow-lg), inset 0 var(--sn-border-width) 0 var(--sn-color-edge-highlight);
+  text-shadow: 0 0 var(--sn-space-3) var(--sn-color-halo);
+  transition:
+    opacity var(--sn-duration-slow) var(--sn-ease-enter),
+    transform var(--sn-duration-slow) var(--sn-ease-enter),
+    visibility var(--sn-duration-slow) var(--sn-ease-enter);
+}
+
+.capture:focus-within {
+  border-color: var(--sn-color-border);
+  box-shadow: var(--sn-shadow-lg), inset 0 var(--sn-border-width) 0 var(--sn-color-edge-highlight);
+}
+
+.capture .capture-header {
+  height: var(--sn-header-height);
+  min-height: var(--sn-header-height);
+  padding: 0 var(--sn-space-3) 0 var(--sn-panel-padding);
+}
+
+.capture .capture-heading {
+  gap: var(--sn-space-4);
+}
+
+.capture .capture-heading h2 {
+  color: var(--sn-color-text);
+  font-family: var(--sn-font-title);
+  font-size: var(--sn-font-size-md);
+  font-weight: var(--sn-title-weight);
+  letter-spacing: var(--sn-title-tracking);
+}
+
+.capture .window-actions {
+  gap: var(--sn-space-1);
+}
+
+/* 编辑区填满标题区与底栏之间的空间；内容超出时只在编辑器里滚动，浮窗内只有这一条滚动条。 */
+.capture .capture-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  max-height: none;
+  padding: var(--sn-space-2) var(--sn-panel-padding);
+  overflow: hidden;
+}
+
+.capture .capture-body .live-markdown-editor {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  padding: 0;
+  overflow-y: auto;
+}
+
+.capture .capture-footer {
+  height: var(--sn-footer-height);
+  min-height: var(--sn-footer-height);
+  justify-content: flex-start;
+  gap: var(--sn-space-1);
+  padding: 0 var(--sn-space-3);
+  border-top: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  background-color: transparent;
+  background-image: linear-gradient(var(--sn-color-panel-band), var(--sn-color-panel-band));
+}
+
+.capture .capture-footer .composer-count {
+  margin-left: var(--sn-space-3);
+}
+
+.capture .capture-footer .composer-actions {
+  margin-left: auto;
+}
+
+.capture .capture-footer .composer-tools {
+  margin-right: 0;
+}
+
+.capture .capture-footer .composer-actions .icon-button {
+  width: var(--sn-control-height);
+  height: var(--sn-control-height);
+}
+
+/* 磨砂玻璃的浮窗是一整块玻璃：背后模糊、边缘受光，不用顶部光泽；标题区、编辑区与底栏直接放在玻璃上，不加分隔线。 */
+/* 受光描边画在边框的位置（::before 向外伸出一条边框宽），外层不能裁切。 */
+[data-sn-dock='blocks'] .capture {
+  overflow: visible;
+  border-color: transparent;
+  border-radius: var(--sn-panel-radius);
+  background: var(--sn-color-card);
+}
+
+[data-sn-dock='blocks'] .capture::before {
+  content: '';
+  position: absolute;
+  inset: calc(var(--sn-border-width) * -1);
+  padding: var(--sn-border-width);
+  border-radius: inherit;
+  background: linear-gradient(to bottom, var(--sn-color-rim-top), var(--sn-color-rim-bottom));
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); /* 固定：遮罩只取透明度 */
+  pointer-events: none;
+}
+
+[data-sn-dock='blocks'] .capture .capture-footer {
+  border-top: 0;
+  background-image: none;
+}
+
+/* ---------- 问号说明（速记浮窗的标题旁、设置页） ----------
+ * 浮起的表面，比工具提示多一点强调：叠一层很淡的强调色，投影用 --sn-shadow-lg（本次提出）。 */
+.help-anchor,
+.settings-help {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 小问号：一圈细边框里的「?」，悬停或展开时边框与问号换成强调色。 */
+.help-button,
+.settings-help-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-full);
+  background: transparent;
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-ui);
+  font-size: var(--sn-font-size-xs);
+  font-weight: var(--sn-font-weight-semibold);
+  line-height: 1;
+  cursor: help;
+}
+
+.help-button:hover,
+.help-button[aria-expanded='true'],
+.settings-help-button:hover,
+.settings-help-button[aria-expanded='true'] {
+  border-color: var(--sn-color-accent);
+  background: transparent;
+  color: var(--sn-color-accent-text);
+}
+
+.help-text,
+.settings-help-text {
+  position: absolute;
+  top: calc(100% + var(--sn-space-2));
+  left: 0;
+  z-index: var(--sn-z-tooltip);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sn-space-2);
+  width: max-content;
+  max-width: calc(var(--sn-dialog-width) * 0.7);
+  padding: var(--sn-space-3) var(--sn-space-4);
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-sm);
+  background:
+    linear-gradient(var(--sn-color-accent-subtle), var(--sn-color-accent-subtle)),
+    var(--sn-color-surface-raised);
+  box-shadow: var(--sn-shadow-lg);
+  color: var(--sn-color-text);
+  font-size: var(--sn-font-size-sm);
+  font-weight: var(--sn-body-weight);
+  line-height: var(--sn-line-height-normal);
+  text-shadow: none;
+  white-space: normal;
+}
+
+.help-text[hidden],
+.settings-help-text[hidden] {
+  display: none;
+}
+
+.help-text .help-line {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+}
+
+/* ---------- 菜单 ----------
+ * 宽度跟内容（第六次反馈）：菜单项不折行；卡片菜单不比原来窄（旧样式固定 216px），最宽到弹窗宽度的 0.9 倍，
+ * 再长的项省略。页签栏最后一格的菜单只按最长的页签名再留一点空白。 */
+.note-context-menu {
+  width: max-content;
+  min-width: 216px; /* 固定：旧样式的菜单宽度，卡片菜单不比原来窄 */
+  max-width: min(calc(var(--sn-dialog-width) * 0.9), calc((100vw - var(--sn-space-6)) / var(--app-zoom, 1)));
+  padding: var(--sn-space-1);
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-surface-raised);
+  box-shadow: var(--sn-shadow-md);
+  color: var(--sn-color-text);
+}
+
+.note-context-menu .note-context-item {
+  min-height: var(--sn-menu-item-height);
+  padding: 0 var(--sn-space-4);
+  border-radius: var(--sn-radius-sm);
+  background: transparent;
+  color: var(--sn-color-text);
+  font-size: var(--sn-font-size-md);
+}
+
+.note-context-menu .note-context-item > .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  color: var(--sn-color-text-secondary);
+}
+
+.note-context-menu .note-context-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-context-menu.tab-menu {
+  min-width: 0;
+}
+
+.note-context-menu.tab-menu .note-context-item {
+  padding-right: var(--sn-space-6);
+}
+
+.note-context-menu .note-context-item:hover {
+  background: var(--sn-color-hover);
+}
+
+/* 菜单项用键盘移到时换成选中色，不加焦点环。 */
+.note-context-menu .note-context-item:focus-visible {
+  outline: none;
+  background: var(--sn-color-selected);
+  box-shadow: none;
+}
+
+.note-context-menu .note-context-hint {
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+}
+
+.note-context-menu .note-context-item.is-danger,
+.note-context-menu .note-context-item.is-danger > .icon {
+  color: var(--sn-color-danger);
+}
+
+.note-context-menu .note-context-separator {
+  margin: var(--sn-space-1) 0;
+  border-top: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  background: transparent;
+}
+
+/* ---------- 弹窗 ---------- */
+.modal-backdrop {
+  background: var(--sn-color-overlay);
+  backdrop-filter: none;
+  animation-duration: var(--sn-duration-normal);
+}
+
+/* 弹窗（与 Playground 的 sn-dialog 相同）：一整块浮起的表面，标题、说明与按钮之间不画分隔线；
+ * 标题行右侧是小号的关闭按钮，说明用次要文字色，按钮靠右。确认类弹窗用窄一些的宽度。 */
+.modal {
+  display: flex;
+  flex-direction: column;
+  width: var(--sn-dialog-width);
+  max-width: calc((100vw - var(--sn-space-6)) / var(--app-zoom, 1));
+  padding: 0;
+  overflow: hidden;
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-lg);
+  background: var(--sn-color-surface-raised);
+  box-shadow: var(--sn-shadow-lg);
+  color: var(--sn-color-text);
+  animation-duration: var(--sn-duration-slow);
+}
+
+.modal.confirm-modal {
+  width: calc(var(--sn-dialog-width) * 0.82);
+}
+
+.modal .modal-header {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-4);
+  min-height: 0;
+  margin: 0;
+  padding: var(--sn-space-6) var(--sn-space-5) var(--sn-space-2) var(--sn-space-8);
+  border: 0;
+  background: transparent;
+}
+
+.modal .modal-header h2 {
+  flex: 1;
+  margin: 0;
+  font-family: var(--sn-font-title);
+  font-size: var(--sn-font-size-lg);
+  font-weight: var(--sn-title-weight);
+  letter-spacing: var(--sn-title-tracking);
+  line-height: inherit;
+}
+
+.modal:not(.settings-modal) .modal-header .icon-button {
+  width: var(--sn-control-height-sm);
+  height: var(--sn-control-height-sm);
+}
+
+.modal:not(.settings-modal) .modal-header .icon-button .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.modal .modal-body {
+  min-height: 0;
+  margin: 0;
+  padding: var(--sn-space-2) var(--sn-space-8) var(--sn-space-2);
+  overflow: auto;
+  border: 0;
+  background: transparent;
+  color: var(--sn-color-text);
+  font-size: var(--sn-font-size-md);
+}
+
+.modal .modal-body > p {
+  margin: 0;
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+  line-height: var(--sn-line-height-relaxed);
+}
+
+.modal .modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sn-space-4);
+  margin: 0;
+  padding: var(--sn-space-8) var(--sn-space-8) var(--sn-space-6);
+  border: 0;
+  background: transparent;
+}
+
+.modal .modal-footer:empty {
+  display: none;
+}
+
+/* 弹窗底部的按钮是常规尺寸：正文字号、中等字重。 */
+.modal:not(.settings-modal) .modal-footer .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sn-space-3);
+  height: var(--sn-control-height);
+  min-height: 0;
+  padding: 0 var(--sn-space-5);
+  border: var(--sn-border-width) solid transparent;
+  border-radius: var(--sn-radius-control);
+  font-size: var(--sn-font-size-md);
+  font-weight: var(--sn-font-weight-medium);
+  line-height: var(--sn-line-height-tight);
+  white-space: nowrap;
+}
+
+.modal:not(.settings-modal) .modal-footer .button.secondary {
+  border-color: var(--sn-color-border);
+  background-color: var(--sn-color-surface-raised);
+  box-shadow: var(--sn-shadow-sm);
+  color: var(--sn-color-text);
+}
+
+.modal:not(.settings-modal) .modal-footer .button.danger {
+  background-color: var(--sn-color-danger-subtle);
+  color: var(--sn-color-danger);
+}
+
+.modal .form-control,
+.modal input[type='text'],
+.modal input[type='search'],
+.modal input[type='number'],
+.modal select,
+.modal textarea {
+  border: var(--sn-border-width) solid var(--sn-color-border-strong);
+  border-radius: var(--sn-radius-control);
+  background-color: var(--sn-color-surface);
+  color: var(--sn-color-text);
+}
+
+/* 输入类控件的焦点：边框颜色不变，底边换成一条两倍边框宽的强调色线，不加外圈（本次提出）。
+ * 线画在背景层里，随控件的圆角弯曲；底边框改为透明，让线落在边框的位置上。 */
+.modal :is(.form-control, input[type='text'], input[type='search'], input[type='number'], textarea):focus,
+.modal select:focus-visible,
+.modal .font-combobox-field:focus-within {
+  border-bottom-color: transparent;
+  background-image: linear-gradient(var(--sn-color-accent), var(--sn-color-accent));
+  background-position: bottom;
+  background-repeat: no-repeat;
+  background-size: 100% calc(var(--sn-border-width) * 2);
+  background-origin: border-box;
+  outline: none;
+}
+
+.modal .font-combobox-field:focus-within .form-control {
+  background-image: none;
+}
+
+.update-modal .update-summary {
+  color: var(--sn-color-text);
+  font-weight: var(--sn-font-weight-semibold);
+}
+
+.update-modal .update-notes {
+  margin: var(--sn-space-4) 0 0;
+  padding-left: var(--sn-space-6);
+  color: var(--sn-color-text-secondary);
+  line-height: var(--sn-line-height-relaxed);
+}
+
+/* ---------- 设置窗口 ----------
+ * 与 Playground 的设置窗口相同（windows.css 与 controls.css），布局沿用现有应用 0.7.3：
+ * 窗口宽 880（与现有应用相同），不随字号变化，内容按字号缩放；窄的分类栏，当前项浮起、图标用强调色；
+ * 页面由分组卡片组成，相关的设置放在同一张卡片里，一行可以放几项，项与项之间一条很淡的竖线，说明收在名称后的问号里。
+ * 高度固定（第四次反馈：不随内容跳动）：560，内容多的分类在页面里滚动；回收站的列表伸到底部，内容少的页不显空。
+ * 左右两栏（第四次反馈：页面外面不再套一层边框）：左栏是「设置」与分类栏，用窗口底色；右栏是页面，用表面色，两栏只靠底色区分，
+ * 不画分隔线；页面中的分组卡片居中排成一栏。 */
+.modal.settings-modal {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(calc(880px / var(--app-zoom, 1)), calc((100vw - var(--sn-space-6)) / var(--app-zoom, 1))); /* 固定：设置窗口的窗口尺寸 */
+  height: min(calc(560px / var(--app-zoom, 1)), calc((100dvh - 40px) / var(--app-zoom, 1))); /* 固定：设置窗口的窗口尺寸；遮罩上下各留 20 */
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-lg);
+  background: var(--sn-color-surface);
+  box-shadow: var(--sn-shadow-lg);
+  color: var(--sn-color-text);
+}
+
+/* 左栏的底色从标题栏一直铺到底部，与分类栏同宽。 */
+.modal.settings-modal::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--sn-dialog-width) * 0.32);
+  background: var(--sn-color-bg);
+  content: '';
+  pointer-events: none;
+}
+
+.settings-modal > :is(.modal-header, .modal-body) {
+  position: relative;
+}
+
+/* 标题栏：「设置」与最小化、关闭两个小号图标按钮。 */
+.settings-modal .modal-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--sn-space-2);
+  height: var(--sn-header-height);
+  min-height: 0;
+  margin: 0;
+  padding: 0 var(--sn-space-3) 0 var(--sn-space-6);
+  border: 0;
+  background: transparent;
+  user-select: none;
+}
+
+.settings-modal .modal-header h2 {
+  margin: 0 auto 0 0;
+  color: var(--sn-color-text);
+  font-family: var(--sn-font-title);
+  font-size: var(--sn-font-size-md);
+  font-weight: var(--sn-title-weight);
+  letter-spacing: normal;
+  line-height: inherit;
+}
+
+.settings-modal .modal-header .icon-button {
+  width: var(--sn-control-height-sm);
+  height: var(--sn-control-height-sm);
+}
+
+.settings-modal .modal-header .icon-button .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.settings-modal .modal-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  background: transparent;
+  font-size: inherit;
+}
+
+.settings-modal .settings-layout {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: auto;
+  gap: 0;
+}
+
+/* 分类栏 */
+.settings-modal .settings-nav {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--sn-space-1);
+  width: calc(var(--sn-dialog-width) * 0.32);
+  min-width: 0;
+  padding: var(--sn-space-3);
+  overflow: visible;
+  border: 0;
+  background: transparent;
+}
+
+.settings-modal .settings-nav-button {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--sn-space-4);
+  width: 100%;
+  height: var(--sn-control-height);
+  min-height: 0;
+  margin: 0;
+  padding: 0 var(--sn-space-4);
+  border: 0;
+  border-radius: var(--sn-radius-control);
+  background: transparent;
+  box-shadow: none;
+  color: var(--sn-color-text-secondary);
+  font-size: inherit;
+  font-weight: var(--sn-body-weight);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.settings-modal .settings-nav-button .icon {
+  flex: none;
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  color: inherit;
+}
+
+.settings-modal .settings-nav-button:hover {
+  background: var(--sn-color-hover);
+  color: var(--sn-color-text);
+}
+
+.settings-modal .settings-nav-button.active {
+  background: var(--sn-color-surface-raised);
+  box-shadow: var(--sn-shadow-sm);
+  color: var(--sn-color-text);
+  font-weight: var(--sn-font-weight-medium);
+}
+
+.settings-modal .settings-nav-button.active .icon {
+  color: var(--sn-color-accent-text);
+}
+
+.settings-modal .settings-nav-button:focus-visible {
+  outline-offset: calc(var(--sn-focus-ring-width) * -1);
+}
+
+/* 页面：右栏的表面色上直接排分组卡片，不再有外框、圆角与另一层底色（第四次反馈）。 */
+.settings-modal .settings-panel {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: var(--sn-space-5) var(--sn-space-5) var(--sn-space-8);
+  overflow: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  scrollbar-color: var(--sn-color-border-strong) transparent;
+}
+
+.settings-modal .settings-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sn-space-5);
+  min-height: var(--sn-control-height);
+  margin: 0 0 var(--sn-space-5);
+  padding: 0;
+  border: 0;
+}
+
+.settings-modal .settings-panel-heading h3 {
+  margin: 0;
+  color: var(--sn-color-text);
+  font-family: var(--sn-font-title);
+  font-size: var(--sn-font-size-xl);
+  font-weight: var(--sn-title-weight);
+  letter-spacing: var(--sn-title-tracking);
+  line-height: var(--sn-line-height-tight);
+}
+
+/* 页面的最大宽度与 Playground 的 sn-set-page 相同：弹窗宽度的 1.6 倍（含页面内边距），居中（本次提出：此前原型没有这条，
+ * 小字号下页面铺满整个面板，主题示例下面的字体、滑块与分组都被拉得很宽；现在各组与示例在同一栏宽内）。 */
+.modal.settings-modal .settings-panel > * {
+  max-width: calc(var(--sn-dialog-width) * 1.6 - var(--sn-space-5) * 2);
+  margin-right: auto;
+  margin-left: auto;
+}
+
+/* 设置窗口自己的提示条（本次提出）：设置中的操作（复制路径、恢复记录等）提示在设置窗口里，不再出现在侧栏；
+ * 位置按「通知位置」：顶部正中在标题栏下方，右上角，或底部正中。 */
+.modal.settings-modal > .toast-region.settings-toast-region {
+  position: absolute;
+  z-index: 5;
+  top: calc(var(--sn-header-height) + var(--sn-space-4));
+  right: auto;
+  bottom: auto;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sn-space-3);
+  width: max-content;
+  max-width: calc(100% - var(--sn-space-8) * 2);
+  pointer-events: none;
+  transform: translateX(-50%);
+  /* 设置窗口已按字号缩放，提示条不能再按 .toast-region 的规则缩放一次，否则字号与侧栏提示条不一致。 */
+  zoom: 1;
+}
+
+[data-sn-toast='top-right'] .modal.settings-modal > .toast-region.settings-toast-region {
+  right: var(--sn-space-6);
+  left: auto;
+  align-items: flex-end;
+  transform: none;
+}
+
+[data-sn-toast='bottom-center'] .modal.settings-modal > .toast-region.settings-toast-region {
+  top: auto;
+  bottom: var(--sn-space-6);
+}
+
+/* 卡片网格：默认占满一行，快捷键页的两张卡片并排。 */
+.settings-modal .settings-dashboard {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sn-space-5);
+  margin: 0;
+  padding: 0;
+}
+
+.settings-modal .settings-dashboard > * {
+  grid-column: 1 / -1;
+}
+
+.settings-modal .settings-dashboard > .shortcut-section {
+  grid-column: auto;
+}
+
+.settings-modal :is(.settings-group, .settings-card) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sn-space-4);
+  min-width: 0;
+  margin: 0;
+  padding: var(--sn-space-5);
+  border: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-surface-raised);
+  box-shadow: none;
+}
+
+.settings-modal .settings-group-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  margin: 0;
+  padding: 0;
+  color: var(--sn-color-text);
+  font-size: var(--sn-font-size-md);
+  font-weight: var(--sn-font-weight-semibold);
+  letter-spacing: normal;
+  line-height: inherit;
+  text-transform: none;
+}
+
+/* 设置项：名称（可带问号）与控件；名称是小号字，不折行。 */
+.settings-modal .settings-row {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--sn-space-3);
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.settings-modal .settings-row-info {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sn-space-2);
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.settings-modal :is(.settings-row-label, .setting-label, .settings-runtime-name) {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-2);
+  margin: 0;
+  color: var(--sn-color-text);
+  font: inherit;
+  font-size: var(--sn-font-size-sm);
+  font-weight: var(--sn-body-weight);
+  letter-spacing: normal;
+  white-space: nowrap;
+}
+
+.settings-modal .settings-control {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+}
+
+.settings-modal :is(.setting-description, .settings-range-unit, .settings-runtime-suffix) {
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-sm);
+}
+
+/* 一行放几项：放不下时折行；项与项之间一条很淡的竖线，折行后行首那一项的竖线落在左边界之外，被裁掉。 */
+.settings-modal :is(.settings-field-grid, .sidebar-settings-primary, .settings-runtime-row) {
+  --local-gap: var(--sn-space-7);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sn-space-4) var(--local-gap);
+  margin: 0;
+  clip-path: inset(calc(var(--sn-space-6) * -1) calc(var(--sn-space-6) * -1) calc(var(--sn-space-6) * -1) 0);
+}
+
+.settings-modal :is(.settings-field-grid, .sidebar-settings-primary, .settings-runtime-row) > * {
+  position: relative;
+}
+
+.settings-modal :is(.settings-field-grid, .sidebar-settings-primary, .settings-runtime-row) > * + *::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: calc(var(--local-gap) / -2);
+  width: var(--sn-border-width);
+  height: 1.1em;
+  background: var(--sn-color-border);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+/* 显示：名称一列，选项卡片一列（两层容器用 display: contents 让名称与控件进入同一个网格）。 */
+.settings-modal .appearance-display-grid {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sn-space-5) var(--sn-space-6);
+}
+
+.settings-modal .appearance-display-grid > .settings-option-block,
+.settings-modal .appearance-display-grid .settings-row {
+  display: contents;
+}
+
+.settings-modal .appearance-display-grid .settings-control {
+  display: block;
+}
+
+/* 选项卡片：明暗模式三列，主题五列；预览用所示主题与明暗模式的令牌绘制。 */
+.settings-modal .theme-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sn-space-4);
+}
+
+.settings-modal .surface-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--sn-space-4);
+}
+
+.settings-modal :is(.theme-option, .surface-choice, .settings-choice) {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: var(--sn-space-2);
+  width: auto;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: var(--sn-space-2);
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-md);
+  background: transparent;
+  box-shadow: none;
+  color: var(--sn-color-text);
+  cursor: pointer;
+}
+
+.settings-modal :is(.theme-option, .surface-choice, .settings-choice)::before,
+.settings-modal :is(.theme-option, .surface-choice, .settings-choice)::after {
+  content: none;
+}
+
+.settings-modal :is(.theme-option, .surface-choice, .settings-choice):hover {
+  border-color: var(--sn-color-border-strong);
+  background: transparent;
+}
+
+.settings-modal :is(.theme-option, .surface-choice, .settings-choice):is(.selected, .active) {
+  border-color: var(--sn-color-accent);
+  background: transparent;
+  box-shadow: 0 0 0 var(--sn-border-width) var(--sn-color-accent);
+}
+
+.settings-modal .theme-preview {
+  display: flex;
+  gap: var(--sn-space-2);
+  width: auto;
+  height: calc(var(--sn-control-height) * 1.75);
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.settings-modal .choice-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sn-space-1);
+  font-size: var(--sn-font-size-sm);
+  font-weight: var(--sn-font-weight-medium);
+  text-align: center;
+}
+
+.settings-modal .choice-hint {
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-xs);
+  font-weight: var(--sn-font-weight-regular);
+}
+
+/* 迷你侧栏：颜色全部来自所示主题与明暗模式的令牌（settings.js 在元素上写入 data-sn-*）。 */
+.mini-sidebar {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  padding: var(--sn-space-2);
+  border: 0;
+  border-radius: var(--sn-radius-sm);
+  background: var(--sn-color-bg);
+}
+
+.mini-sidebar .mini-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--sn-space-2);
+  padding: var(--sn-space-2);
+  border-radius: min(var(--sn-panel-radius), var(--sn-radius-sm));
+  background: linear-gradient(var(--sn-color-card), var(--sn-color-card)), var(--sn-color-panel);
+}
+
+.mini-sidebar .mini-card {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--sn-space-1);
+  padding: var(--sn-space-2);
+  border: 0;
+  border-radius: min(var(--sn-card-radius), var(--sn-radius-xs));
+  background: var(--sn-color-surface-raised);
+}
+
+.mini-sidebar .mini-card.is-active {
+  box-shadow: inset var(--sn-focus-ring-width) 0 0 var(--sn-color-accent);
+}
+
+.mini-sidebar .mini-line {
+  display: block;
+  height: var(--sn-space-2);
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-text-disabled);
+}
+
+.mini-sidebar .mini-line.is-title {
+  width: 60%;
+  background: var(--sn-color-text);
+}
+
+.mini-sidebar .mini-line.is-short {
+  width: 55%;
+}
+
+.mini-sidebar .mini-line.is-accent {
+  width: 35%;
+  background: var(--sn-color-accent);
+}
+
+/* 文字：字体是可输入的组合框；字号是占满剩余宽度的滑块与可以直接输入的数值。 */
+.settings-modal .font-combobox {
+  position: relative;
+  width: calc(var(--sn-dialog-width) * 0.42);
+  min-width: 0;
+}
+
+.settings-modal .font-combobox-field {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: var(--sn-control-height-sm);
+  min-height: 0;
+  padding: 0;
+  border: var(--sn-border-width) solid var(--sn-color-border-strong);
+  border-radius: var(--sn-radius-control);
+  background-color: var(--sn-color-surface);
+  box-shadow: none;
+  color: var(--sn-color-text);
+  font-size: var(--sn-font-size-sm);
+  transition: border-color var(--sn-duration-fast) var(--sn-ease-standard);
+}
+
+.settings-modal .font-combobox-field:hover:not(:focus-within) {
+  border-color: var(--sn-color-text-muted);
+}
+
+.settings-modal .font-combobox-field > .form-control,
+.settings-modal .font-combobox-field > .form-control:focus {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  padding: 0 var(--sn-space-1) 0 var(--sn-space-4);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  outline: none;
+}
+
+.settings-modal .font-combobox-field > .form-control::placeholder {
+  color: var(--sn-color-text-secondary);
+}
+
+.settings-modal .font-combobox-toggle.icon-button {
+  position: static;
+  flex: none;
+  width: var(--sn-control-height-sm);
+  height: 100%;
+  border-radius: 0 var(--sn-radius-control) var(--sn-radius-control) 0;
+  background: transparent;
+  color: var(--sn-color-text-muted);
+}
+
+.settings-modal .font-combobox-toggle .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.settings-modal .font-combobox-list {
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-surface-raised);
+  box-shadow: var(--sn-shadow-md);
+}
+
+.settings-modal .font-combobox-option {
+  border-radius: var(--sn-radius-sm);
+  color: var(--sn-color-text);
+}
+
+.settings-modal .font-combobox-option:hover {
+  background: var(--sn-color-hover);
+}
+
+.settings-modal .font-combobox-option.is-active {
+  background: var(--sn-color-selected);
+}
+
+.settings-modal .font-combobox-option.is-selected {
+  color: var(--sn-color-accent-text);
+}
+
+.settings-modal .font-option-detail {
+  margin-left: var(--sn-space-4);
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-ui);
+  font-size: var(--sn-font-size-xs);
+}
+
+.settings-modal .font-combobox-status:empty {
+  display: none;
+}
+
+/* 滑块行：滑块占满剩余宽度，右边是数值框与单位；名称、滑块与数值之间留得宽一些。 */
+.settings-modal .settings-row:has(.settings-range) {
+  flex: 1;
+  gap: var(--sn-space-5);
+  min-width: calc(var(--sn-dialog-width) * 0.45);
+}
+
+.settings-modal .settings-row:has(.settings-range) > .settings-control {
+  flex: 1;
+}
+
+.settings-modal .settings-range {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sn-space-5);
+  width: auto;
+  min-width: 0;
+}
+
+.settings-modal .settings-range input[type='range'] {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  margin: 0;
+  accent-color: var(--sn-color-accent);
+}
+
+.settings-modal .settings-range-number {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-2);
+  width: auto;
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+/* 数值框：数值居中（框窄，数字居中比靠右更容易看清）。 */
+.settings-modal :is(.settings-range-value, .settings-runtime-value input, .trash-retention-days) {
+  width: 7ch;
+  min-width: 0;
+  height: var(--sn-control-height-sm);
+  min-height: 0;
+  margin: 0;
+  padding: 0 var(--sn-space-3);
+  border: var(--sn-border-width) solid var(--sn-color-border-strong);
+  border-radius: var(--sn-radius-control);
+  background-color: var(--sn-color-surface);
+  box-shadow: none;
+  color: var(--sn-color-text);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.settings-modal :is(.settings-range-value, .settings-runtime-value input):disabled {
+  background-color: var(--sn-color-surface-sunken);
+  color: var(--sn-color-text-disabled);
+}
+
+.settings-modal .settings-runtime-value {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  height: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.settings-modal .settings-runtime-suffix {
+  width: auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.settings-modal .settings-runtime-field,
+.settings-modal .settings-runtime-controls {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sn-space-3);
+  width: auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* 数值框去掉浏览器自带的增减箭头，数字在框里居中（滚轮与键盘仍可调整）。 */
+.settings-modal input[type='number'] {
+  appearance: textfield;
+}
+
+.settings-modal input[type='number']::-webkit-inner-spin-button,
+.settings-modal input[type='number']::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.settings-modal .settings-runtime-card {
+  margin: 0;
+  padding: var(--sn-space-5);
+}
+
+/* 「其它」固定两行（第七次反馈）：窗口标签页、通知位置；列表加载、整理提醒。行距与行内折行的行距相同。 */
+.settings-modal .settings-runtime-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sn-space-4);
+}
+
+/* 侧栏卡片：第一行是三项设置，下面是宽度、出入动画与卡片高度三个滑块，共用三列：名称、滑块、数值，滑块起点对齐。 */
+.settings-modal .sidebar-settings-layout {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sn-space-4) var(--sn-space-5);
+}
+
+.settings-modal .sidebar-settings-layout > .sidebar-settings-primary {
+  grid-column: 1 / -1;
+}
+
+.settings-modal .sidebar-settings-layout > .sidebar-width-row,
+.settings-modal .sidebar-width-row > .settings-control,
+.settings-modal .sidebar-width-row .settings-range {
+  display: contents;
+}
+
+/* 字体预览：占满一行，保留底色，文字居中；三行分别是中文与标点、英文大小写、数字与符号。 */
+.settings-modal .settings-font-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sn-space-2);
+  min-height: 0;
+  margin: 0;
+  padding: var(--sn-space-5) var(--sn-space-6);
+  border: 0;
+  border-radius: var(--sn-radius-sm);
+  background: var(--sn-color-surface-sunken);
+  color: var(--sn-color-text);
+  font-family: var(--sn-font-note);
+  font-size: var(--sn-note-size);
+  line-height: var(--sn-line-height-normal);
+  text-align: center;
+  white-space: normal;
+}
+
+.settings-modal .settings-font-preview > p {
+  margin: 0;
+}
+
+/* 下拉框与输入框：小号控件，边框用强调边框色；输入类控件获得焦点时底边换成强调色线（见「弹窗」）。 */
+.settings-modal select.form-control,
+.settings-modal select {
+  width: auto;
+  min-width: 0;
+  height: var(--sn-control-height-sm);
+  min-height: 0;
+  padding: 0 var(--sn-space-2) 0 var(--sn-space-4);
+  font-size: var(--sn-font-size-sm);
+}
+
+.settings-modal input.form-control:not([type='number']):not(.font-combobox-field > *) {
+  width: calc(var(--sn-dialog-width) * 0.65);
+  max-width: 100%;
+  height: var(--sn-control-height-sm);
+  min-height: 0;
+  padding: 0 var(--sn-space-4);
+  font-size: var(--sn-font-size-sm);
+}
+
+/* 开关：轨道是图标尺寸加一点，宽 1.8 倍；关闭时表面色底、灰色圆点，打开时强调色底、圆点移到右边。 */
+:is(.settings-modal, .settings-confirm-dialog) input:is(.toggle, .settings-toggle) {
+  --local-track: calc(var(--sn-icon-size) + var(--sn-space-1));
+  position: relative;
+  flex: none;
+  width: calc(var(--local-track) * 1.8);
+  min-width: 0;
+  height: var(--local-track);
+  margin: 0;
+  border: var(--sn-border-width) solid var(--sn-color-border-strong);
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-surface);
+  box-shadow: none;
+  appearance: none;
+  cursor: pointer;
+  transition:
+    background-color var(--sn-duration-fast) var(--sn-ease-standard),
+    border-color var(--sn-duration-fast) var(--sn-ease-standard);
+}
+
+:is(.settings-modal, .settings-confirm-dialog) input:is(.toggle, .settings-toggle)::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: auto;
+  bottom: auto;
+  left: var(--sn-space-1);
+  width: calc(var(--local-track) - var(--sn-space-3) - var(--sn-border-width) * 2);
+  height: calc(var(--local-track) - var(--sn-space-3) - var(--sn-border-width) * 2);
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-text-secondary);
+  box-shadow: none;
+  transform: translateY(-50%);
+  transition:
+    transform var(--sn-duration-normal) var(--sn-ease-enter),
+    background-color var(--sn-duration-fast) var(--sn-ease-standard);
+}
+
+:is(.settings-modal, .settings-confirm-dialog) input:is(.toggle, .settings-toggle):checked {
+  border-color: var(--sn-color-accent);
+  background: var(--sn-color-accent);
+}
+
+:is(.settings-modal, .settings-confirm-dialog) input:is(.toggle, .settings-toggle):checked::after {
+  background: var(--sn-color-on-accent);
+  transform: translate(calc(var(--local-track) * 0.8), -50%);
+}
+
+/* 设置页里是小号次要按钮（Playground 的 sn-button is-secondary is-sm）：浮起的表面、一圈边框与小投影；
+ * 叠在设置窗口上的确认与裁切弹窗用常规尺寸。 */
+.settings-confirm-backdrop .settings-confirm-dialog .button {
+  height: var(--sn-control-height);
+  padding: 0 var(--sn-space-5);
+  font-size: var(--sn-font-size-md);
+}
+
+.settings-modal .button,
+.settings-confirm-dialog .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sn-space-2);
+  height: var(--sn-control-height-sm);
+  min-height: 0;
+  padding: 0 var(--sn-space-4);
+  border: var(--sn-border-width) solid transparent;
+  border-radius: var(--sn-radius-control);
+  font-size: var(--sn-font-size-sm);
+  white-space: nowrap;
+}
+
+.settings-modal .button .icon,
+.settings-confirm-dialog .button .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.settings-modal .button.secondary,
+.settings-confirm-dialog .button.secondary {
+  border-color: var(--sn-color-border);
+  background-color: var(--sn-color-surface-raised);
+  box-shadow: var(--sn-shadow-sm);
+  color: var(--sn-color-text);
+}
+
+.settings-modal .settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sn-space-3);
+  margin: 0;
+}
+
+/* 说明条：网页原型中模拟的能力写在这里（数据页顶部、快捷键页底部）。 */
+.settings-modal .settings-notice {
+  margin: 0 0 var(--sn-space-5);
+  padding: var(--sn-space-4) var(--sn-space-5);
+  border: 0;
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-info-subtle);
+  color: var(--sn-color-text);
+  font-size: var(--sn-font-size-sm);
+  line-height: var(--sn-line-height-normal);
+}
+
+.settings-modal .settings-dashboard + .settings-notice {
+  margin: var(--sn-space-5) 0 0;
+}
+
+.settings-modal .settings-notice.is-error {
+  background: var(--sn-color-danger-subtle);
+}
+
+/* 快捷键：一行是名称与按键；按键是凹陷底上的一小块。 */
+.settings-modal .shortcut-grid {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sn-space-3);
+  margin: 0;
+}
+
+.settings-modal .shortcut-grid > .settings-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sn-space-4);
+  width: 100%;
+  min-height: var(--sn-control-height-sm);
+}
+
+.settings-modal .shortcut-grid .settings-control {
+  min-height: 0;
+}
+
+.settings-modal .shortcut-grid kbd {
+  display: inline-flex;
+  align-items: center;
+  height: var(--sn-control-height-sm);
+  min-width: 0;
+  padding: 0 var(--sn-space-3);
+  border: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  border-radius: var(--sn-radius-sm);
+  background: var(--sn-color-surface-sunken);
+  color: var(--sn-color-text);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-sm);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* 数据目录：当前目录是一行代码字体的路径，后面一个打开目录的小按钮。 */
+.settings-modal .settings-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sn-space-3);
+  min-width: 0;
+  margin: 0;
+}
+
+.settings-modal .current-directory {
+  flex-wrap: nowrap;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.settings-modal .settings-path {
+  display: block;
+  flex: 0 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: var(--sn-color-text-secondary);
+  font-family: var(--sn-font-code);
+  font-size: var(--sn-font-size-xs);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-modal .current-directory .icon-button {
+  width: var(--sn-control-height-sm);
+  height: var(--sn-control-height-sm);
+}
+
+.settings-modal .current-directory .icon-button .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+/* 云端备份的服务：三张选项卡片。 */
+.settings-modal .sync-provider-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sn-space-4);
+}
+
+.settings-modal .sync-provider {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sn-space-1);
+  height: auto;
+  min-height: 0;
+  padding: var(--sn-space-4);
+  border: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-surface);
+  box-shadow: none;
+  color: var(--sn-color-text);
+}
+
+.settings-modal .sync-provider:hover {
+  border-color: var(--sn-color-border-strong);
+}
+
+.settings-modal .sync-provider:is(.selected, .active) {
+  border-color: var(--sn-color-accent);
+  background: var(--sn-color-accent-subtle);
+  box-shadow: 0 0 0 var(--sn-border-width) var(--sn-color-accent);
+}
+
+.settings-modal .sync-provider-mark {
+  width: var(--sn-icon-size);
+  height: var(--sn-icon-size);
+}
+
+.settings-modal .sync-provider-name {
+  font-size: var(--sn-font-size-sm);
+  font-weight: var(--sn-font-weight-medium);
+}
+
+.settings-modal .sync-provider small {
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-xs);
+}
+
+.settings-modal .sync-status {
+  margin: 0;
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+}
+
+/* 回收站：搜索框与两个下拉框一行；下面是条数、保留天数与两个批量操作；记录是浮起的小卡片。 */
+.settings-modal .settings-trash-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  margin: 0 0 var(--sn-space-4);
+}
+
+.settings-modal .settings-search {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--sn-space-3);
+  min-width: 0;
+  height: var(--sn-control-height);
+  padding: 0 var(--sn-space-3) 0 var(--sn-space-4);
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-control);
+  background-color: var(--sn-color-surface-sunken);
+  color: var(--sn-color-text-muted);
+  transition:
+    border-color var(--sn-duration-fast) var(--sn-ease-standard),
+    background-color var(--sn-duration-fast) var(--sn-ease-standard);
+}
+
+.settings-modal .settings-search .icon {
+  flex: none;
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.settings-modal .settings-search input,
+.settings-modal .settings-search input:focus {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--sn-color-text);
+  font: inherit;
+  outline: none;
+}
+
+.settings-modal .settings-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.settings-modal .settings-search:focus-within {
+  border-bottom-color: transparent;
+  background-color: var(--sn-color-surface);
+  background-image: linear-gradient(var(--sn-color-accent), var(--sn-color-accent));
+  background-position: bottom;
+  background-repeat: no-repeat;
+  background-size: 100% calc(var(--sn-border-width) * 2);
+  background-origin: border-box;
+}
+
+.settings-modal .settings-trash-toolbar select {
+  height: var(--sn-control-height);
+  padding: 0 var(--sn-space-3) 0 var(--sn-space-5);
+  font-size: inherit;
+}
+
+.settings-modal select {
+  text-align: left;
+}
+
+.settings-modal .trash-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  margin: 0 0 var(--sn-space-4);
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-sm);
+}
+
+.settings-modal .trash-toolbar > .button:first-of-type {
+  margin-left: auto;
+}
+
+.settings-modal .trash-retention-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  margin-left: var(--sn-space-3);
+  color: var(--sn-color-text-secondary);
+}
+
+/* 保留天数：数值与展开箭头合成一个组合框，单位写在框外（与 Playground 的数字组合框相同）。 */
+.settings-modal .trash-retention-control {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+}
+
+.settings-modal .trash-retention-control .trash-retention-days {
+  order: 1;
+  width: 6ch;
+  padding: 0 var(--sn-space-2);
+  border-right: 0;
+  border-radius: var(--sn-radius-control) 0 0 var(--sn-radius-control);
+}
+
+.settings-modal .trash-retention-toggle.icon-button {
+  order: 2;
+  width: var(--sn-control-height-sm);
+  height: var(--sn-control-height-sm);
+  border: var(--sn-border-width) solid var(--sn-color-border-strong);
+  border-left: 0;
+  border-radius: 0 var(--sn-radius-control) var(--sn-radius-control) 0;
+  background-color: var(--sn-color-surface);
+  color: var(--sn-color-text-muted);
+}
+
+.settings-modal .trash-retention-toggle.icon-button .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.settings-modal .trash-retention-unit {
+  order: 3;
+  margin-left: var(--sn-space-3);
+  color: var(--sn-color-text-secondary);
+}
+
+.settings-modal .settings-trash-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sn-space-3);
+}
+
+/* 窗口高度固定后（第四次反馈），回收站的列表伸到页面底部，「回收站为空」在空出的地方居中，不在顶部留一行字、下面一片空白。 */
+.settings-modal .settings-panel[data-section='trash'] {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-modal .settings-panel[data-section='trash'] > * {
+  width: 100%;
+}
+
+.settings-modal .settings-panel[data-section='trash'] > .settings-trash-list {
+  flex: 1 0 auto;
+}
+
+.settings-modal .settings-trash-list > .settings-empty {
+  margin: auto;
+}
+
+/* 关于页内容不多，整页在固定高度的页面里上下居中（第四次反馈：内容少的页不显空）；字号大、放不下时从顶部排起，不裁掉上面。 */
+/* 关于（第五次反馈）：与其他页一样从上往下排，标题在最上面，不再垂直居中。 */
+.settings-modal .settings-panel[data-section='about'] {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.settings-modal .settings-panel[data-section='about'] > * {
+  width: 100%;
+}
+
+.settings-modal .settings-trash-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sn-space-4);
+  margin: 0;
+  padding: var(--sn-space-4) var(--sn-space-5);
+  border: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-surface-raised);
+  box-shadow: none;
+}
+
+.settings-modal .trash-item-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--sn-space-1);
+  min-width: 0;
+}
+
+.settings-modal .trash-title {
+  margin: 0;
+  overflow: hidden;
+  color: var(--sn-color-text);
+  font-size: var(--sn-font-size-md);
+  font-weight: var(--sn-font-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-modal .trash-item-meta {
+  margin: 0;
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-xs);
+}
+
+.settings-modal .trash-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sn-space-2);
+  margin-top: var(--sn-space-1);
+}
+
+.settings-modal .trash-tags:empty {
+  display: none;
+}
+
+.settings-modal .trash-tag {
+  padding: 0 var(--sn-space-3);
+  border-radius: var(--sn-radius-chip);
+  background: var(--sn-color-surface-sunken);
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-xs);
+}
+
+.settings-modal .trash-item-actions {
+  display: flex;
+  flex: none;
+  gap: var(--sn-space-1);
+}
+
+.settings-modal .trash-item-actions .icon-button {
+  width: var(--sn-control-height-sm);
+  height: var(--sn-control-height-sm);
+}
+
+.settings-modal .trash-item-actions .icon-button .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.settings-modal .settings-trash-list > .empty-state {
+  padding: var(--sn-space-9) 0;
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-sm);
+  text-align: center;
+}
+
+/* 关于：应用图标、名称与口号，版本号在右上；下面三组小块按钮，不再套卡片。 */
+.settings-modal .about-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: var(--sn-space-5);
+  row-gap: var(--sn-space-1);
+  margin: 0 0 var(--sn-space-5);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.settings-modal .about-hero img {
+  grid-row: 1 / 3;
+  width: calc(var(--sn-control-height-lg) * 1.5);
+  height: calc(var(--sn-control-height-lg) * 1.5);
+  margin: 0;
+}
+
+.settings-modal .about-hero h3 {
+  grid-column: 2;
+  align-self: end;
+  margin: 0;
+  color: var(--sn-color-text);
+  font-family: var(--sn-font-title);
+  font-size: var(--sn-font-size-xl);
+  font-weight: var(--sn-title-weight);
+  letter-spacing: normal;
+  line-height: var(--sn-line-height-tight);
+}
+
+.settings-modal .about-hero .about-release {
+  display: flex;
+  grid-row: 1 / 3;
+  grid-column: 3;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--sn-space-3);
+}
+
+.settings-modal .about-hero .settings-version {
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+}
+
+.settings-modal .about-hero p {
+  grid-column: 2;
+  align-self: start;
+  margin: 0;
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-sm);
+}
+
+.settings-modal .about-hero ~ :is(.settings-group, .settings-card) {
+  gap: var(--sn-space-4);
+  margin-top: 0;
+  margin-bottom: var(--sn-space-5);
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.settings-modal .resource-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sn-space-3);
+  margin: 0;
+}
+
+.settings-modal .about-hero ~ :is(.settings-group, .settings-card) > .button {
+  align-self: flex-start;
+}
+
+.settings-modal :is(.about-hero ~ .settings-group, .about-hero ~ .settings-card, .about-release) :is(.resource-link, .button) {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  height: var(--sn-control-height);
+  min-height: 0;
+  padding: 0 var(--sn-space-5);
+  border: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  border-radius: var(--sn-radius-control);
+  background-color: var(--sn-color-surface-raised);
+  box-shadow: none;
+  color: var(--sn-color-text);
+  font-size: var(--sn-font-size-sm);
+  text-decoration: none;
+}
+
+.settings-modal :is(.about-hero ~ .settings-group, .about-hero ~ .settings-card, .about-release) :is(.resource-link, .button):hover {
+  border-color: var(--sn-color-border-strong);
+  background-image: linear-gradient(var(--sn-color-hover), var(--sn-color-hover));
+  text-decoration: none;
+}
+
+.settings-modal :is(.resource-link, .button) :is(.icon, .resource-icon) {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  color: var(--sn-color-text-muted);
+}
+
+/* 项目与开源致谢（第七次反馈）：带边框的按钮，与「检查更新」「打开开发者工具」同样的样子（第六次改成的文字链接太扁平）；
+ * 按内容宽度排开，放不下自然换行，不为填满一行而拉伸（第六次反馈）。致谢的名称后面是许可证（灰色小字），最后是外链箭头。 */
+.settings-modal .about-link-buttons .settings-external-link {
+  white-space: nowrap;
+}
+
+.settings-modal .about-link-buttons .settings-external-link > svg.icon:last-child {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.settings-modal .resource-note {
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+}
+
+.settings-modal .resource-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: auto;
+  margin: 0;
+  background: transparent;
+  color: var(--sn-color-text-muted);
+}
+
+.settings-modal .sponsor-note {
+  margin: 0;
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+}
+
+/* 选项卡片里的单选在键盘操作时显示焦点环。 */
+.settings-modal :is(.theme-option, .surface-choice):focus-visible {
+  outline: var(--sn-focus-ring-width) solid var(--sn-color-focus);
+  outline-offset: var(--sn-focus-ring-offset);
+}
+
+/* ---------- 设置窗口上叠的一层：回收站确认、调整应用图标 ----------
+ * 叠层在设置窗口之外（同一个背景层里），随字号整页缩放；宽度与高度按缩放换算，不超出屏幕。
+ * 背景层两边的留白合计 --sn-space-6，与宽度换算中减去的留白一致。 */
+.settings-confirm-backdrop {
+  padding: var(--sn-space-4);
+}
+
+.settings-confirm-dialog {
+  width: min(calc(var(--sn-dialog-width) * 0.82), calc((100vw - var(--sn-space-6)) / var(--app-zoom, 1)));
+  max-height: calc((100dvh - var(--sn-space-6)) / var(--app-zoom, 1));
+  padding: var(--sn-space-6);
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-lg);
+  background: var(--sn-color-surface-raised);
+  box-shadow: var(--sn-shadow-lg);
+}
+
+/* ---------- 应用图标（本次提出）：内置图标与自定义格排成一行，单击即换（components.md 7.2） ---------- */
+.icon-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sn-space-3);
+}
+
+.icon-choice {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: calc(var(--sn-control-height) * 1.5);
+  height: calc(var(--sn-control-height) * 1.5);
+  padding: var(--sn-space-1);
+  border: var(--sn-border-width) solid transparent;
+  border-radius: var(--sn-radius-md);
+  background: transparent;
+  color: var(--sn-color-text-muted);
+  cursor: pointer;
+}
+
+.icon-choice:hover {
+  border-color: var(--sn-color-border-strong);
+}
+
+/* 选中与明暗模式、主题的选项卡片相同：强调色边框加一像素外圈。 */
+.icon-choice[aria-checked='true'] {
+  border-color: var(--sn-color-accent);
+  box-shadow: 0 0 0 var(--sn-border-width) var(--sn-color-accent);
+}
+
+.icon-choice > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* 还没有上传自定义图标时是一个虚线加号格，与头像上传的空位一样。 */
+.icon-choice.is-add {
+  border-style: dashed;
+  border-color: var(--sn-color-border-strong);
+}
+
+.icon-choice.is-add:hover {
+  border-color: var(--sn-color-accent);
+  color: var(--sn-color-accent-text);
+}
+
+/* 名称用工具提示显示：悬停或键盘聚焦时出现在格子上方，格子本身不写字。 */
+.icon-choice[data-tooltip]:is(:hover, :focus-visible)::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + var(--sn-space-2));
+  left: 50%;
+  z-index: var(--sn-z-tooltip);
+  padding: var(--sn-space-2) var(--sn-space-4);
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-sm);
+  background: var(--sn-color-surface-raised);
+  box-shadow: var(--sn-shadow-md);
+  color: var(--sn-color-text);
+  font-size: var(--sn-font-size-sm);
+  line-height: var(--sn-line-height-normal);
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+/* 自定义图标：编辑按钮压在右下角，打开「更换图片…」「移除」菜单。 */
+.icon-custom {
+  position: relative;
+  display: inline-flex;
+}
+
+.icon-edit {
+  position: absolute;
+  right: calc(var(--sn-space-2) * -1);
+  bottom: calc(var(--sn-space-2) * -1);
+  display: grid;
+  place-items: center;
+  width: calc(var(--sn-icon-size) * 1.25);
+  height: calc(var(--sn-icon-size) * 1.25);
+  padding: 0;
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-surface-raised);
+  box-shadow: var(--sn-shadow-sm);
+  color: var(--sn-color-text-secondary);
+}
+
+.icon-edit:hover,
+.icon-edit[aria-expanded='true'] {
+  color: var(--sn-color-accent-text);
+}
+
+.icon-edit svg.icon {
+  width: calc(var(--sn-icon-size) * 0.75);
+  height: calc(var(--sn-icon-size) * 0.75);
+}
+
+.icon-edit-menu {
+  position: absolute;
+  top: calc(100% + var(--sn-space-2));
+  left: 0;
+  z-index: var(--sn-z-dropdown);
+  display: flex;
+  flex-direction: column;
+  min-width: calc(var(--sn-dialog-width) * 0.36);
+  padding: var(--sn-space-1);
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-surface-raised);
+  box-shadow: var(--sn-shadow-md);
+  color: var(--sn-color-text);
+}
+
+.icon-edit-menu[hidden] {
+  display: none;
+}
+
+.icon-edit-menu .icon-edit-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-4);
+  min-height: var(--sn-menu-item-height);
+  padding: 0 var(--sn-space-4);
+  border: 0;
+  border-radius: var(--sn-radius-sm);
+  background: transparent;
+  color: var(--sn-color-text);
+  font-size: var(--sn-font-size-md);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.icon-edit-menu .icon-edit-item > svg.icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  color: var(--sn-color-text-secondary);
+}
+
+.icon-edit-menu .icon-edit-item:hover {
+  background: var(--sn-color-hover);
+}
+
+/* 菜单项用键盘移到时换成选中色，不加焦点环，与卡片菜单相同。 */
+.icon-edit-menu .icon-edit-item:focus-visible {
+  outline: none;
+  background: var(--sn-color-selected);
+}
+
+.icon-edit-menu .icon-edit-item.is-danger,
+.icon-edit-menu .icon-edit-item.is-danger > svg.icon {
+  color: var(--sn-color-danger);
+}
+
+.icon-edit-separator {
+  margin: var(--sn-space-1) 0;
+  border-top: var(--sn-border-width) solid var(--sn-color-border-subtle);
+}
+
+/* 调整应用图标：左边是裁切框与缩放，右边是实际尺寸的预览与圆角开关。 */
+.settings-confirm-dialog.icon-crop-dialog {
+  width: min(calc(var(--sn-dialog-width) * 1.1), calc((100vw - var(--sn-space-6)) / var(--app-zoom, 1)));
+}
+
+.icon-crop {
+  display: flex;
+  gap: var(--sn-space-6);
+}
+
+.icon-crop-main {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--sn-space-3);
+  width: calc(var(--sn-dialog-width) * 0.5);
+}
+
+/* 棋盘格表示透明：缩小到完整显示时，空出的部分在图标里是透明的。 */
+.icon-crop-stage {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: var(--sn-radius-sm);
+  background: repeating-conic-gradient(var(--sn-color-surface-sunken) 0 25%, var(--sn-color-surface) 0 50%) 0 0 / var(--sn-space-6) var(--sn-space-6);
+  cursor: grab;
+  touch-action: none;
+}
+
+.icon-crop-stage:active {
+  cursor: grabbing;
+}
+
+.icon-crop-stage > img,
+.icon-crop-preview > img {
+  position: absolute;
+  max-width: none;
+  pointer-events: none;
+  user-select: none;
+}
+
+.icon-crop-stage.is-rounded,
+.icon-crop-preview.is-rounded {
+  border-radius: 21.875%; /* 固定：与内置图标的圆角一致（64 视图框中的 14） */
+}
+
+.icon-crop-zoom {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-2);
+}
+
+.icon-crop-range {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--sn-color-accent);
+}
+
+.icon-crop-side {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sn-space-4);
+  min-width: 0;
+}
+
+.icon-crop-caption {
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+}
+
+/* 预览放在模拟的任务栏颜色上：同一个图标在浅色与深色任务栏上都要分得开。 */
+.icon-crop-previews {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-5);
+  padding: var(--sn-space-4) var(--sn-space-5);
+  border-radius: var(--sn-radius-sm);
+}
+
+.icon-crop-previews.is-light {
+  background: #f3f3f3; /* 固定：Windows 浅色任务栏 */
+}
+
+.icon-crop-previews.is-dark {
+  background: #202020; /* 固定：Windows 深色任务栏 */
+}
+
+/* 预览按实际像素显示：整页缩放会把它们放大，这里除以缩放倍数。 */
+.icon-crop-preview {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+}
+
+.icon-crop-preview.is-16 {
+  width: calc(16px / var(--app-zoom, 1)); /* 固定：托盘图标的实际尺寸 */
+  height: calc(16px / var(--app-zoom, 1)); /* 固定：托盘图标的实际尺寸 */
+}
+
+.icon-crop-preview.is-24 {
+  width: calc(24px / var(--app-zoom, 1)); /* 固定：任务栏图标的实际尺寸 */
+  height: calc(24px / var(--app-zoom, 1)); /* 固定：任务栏图标的实际尺寸 */
+}
+
+.icon-crop-preview.is-48 {
+  width: calc(48px / var(--app-zoom, 1)); /* 固定：桌面图标的实际尺寸 */
+  height: calc(48px / var(--app-zoom, 1)); /* 固定：桌面图标的实际尺寸 */
+}
+
+.icon-crop-round {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-4);
+  color: var(--sn-color-text);
+  font-size: var(--sn-font-size-md);
+}
+
+.icon-crop-warning {
+  margin-top: var(--sn-space-5);
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+}
+
+@media (max-width: 480px) {
+  .icon-crop {
+    flex-direction: column;
+  }
+
+  .icon-crop-main {
+    width: 100%;
+  }
+}
+
+/* ---------- 提示条：反色，可带「撤销」 ----------
+ * 每个窗口有自己的提示区域，跟着窗口显示与收起（第七次反馈：此前侧栏的提示区域按屏幕坐标浮在页面上，侧栏收起后提示还停在桌面上）。
+ * 侧栏的在侧栏里，设置窗口与速记浮窗的在各自窗口里（app.js 的 toastRegion）；默认在标题区下方正中，
+ * 设置中的「通知位置」可以换成右上角或底部（侧栏在底栏上方）。窗口已按字号整页缩放，区域里不再缩放一次。 */
+.sidebar > .toast-region,
+.capture > .toast-region.capture-toast-region {
+  position: absolute;
+  z-index: var(--sn-z-popover);
+  top: calc(var(--sn-header-height) + var(--sn-space-4));
+  right: auto;
+  bottom: auto;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sn-space-3);
+  width: max-content;
+  max-width: calc(100% - var(--sn-space-8) * 2);
+  pointer-events: none;
+  text-shadow: none;
+  transform: translateX(-50%);
+  zoom: 1;
+}
+
+:is([data-sn-toast='top-right'] .sidebar > .toast-region, [data-sn-toast='top-right'] .capture > .toast-region.capture-toast-region) {
+  right: var(--sn-space-6);
+  left: auto;
+  align-items: flex-end;
+  transform: none;
+}
+
+[data-sn-toast='bottom-center'] .sidebar > .toast-region {
+  top: auto;
+  bottom: calc(var(--sn-footer-height) + var(--sn-space-4));
+}
+
+[data-sn-toast='bottom-center'] .capture > .toast-region.capture-toast-region {
+  top: auto;
+  bottom: var(--sn-space-6);
+}
+
+.toast-region .toast {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-4);
+  max-width: 100%;
+  min-height: var(--sn-control-height-lg);
+  padding: var(--sn-space-2) var(--sn-space-3) var(--sn-space-2) var(--sn-space-5);
+  border: 0;
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-inverse);
+  box-shadow: var(--sn-shadow-lg);
+  color: var(--sn-color-on-inverse);
+  font-size: var(--sn-font-size-sm);
+  animation-duration: var(--sn-duration-normal);
+}
+
+.toast-region .toast > .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  color: var(--sn-color-on-inverse);
+}
+
+.toast-region .toast.error > .icon {
+  color: var(--sn-color-on-inverse);
+}
+
+.toast-region .toast-action {
+  border-left-color: var(--sn-color-on-inverse);
+  color: var(--sn-color-on-inverse);
+  font-weight: var(--sn-font-weight-semibold);
+  text-decoration: underline;
+}
+
+.toast-region .toast .icon-button {
+  color: var(--sn-color-on-inverse);
+}
+
+.toast-region .toast .icon-button:hover {
+  background: transparent;
+  color: var(--sn-color-on-inverse);
+}
+
+/* ---------- 拖动排序 ---------- */
+.card-drop-guide-line {
+  background: var(--sn-color-accent);
+}
+
+.card-drop-guide-label {
+  background: var(--sn-color-surface-raised);
+  color: var(--sn-color-accent-text);
+}
+
+.drag-trash-zone {
+  border-color: var(--sn-color-danger);
+  background: var(--sn-color-danger-subtle);
+  color: var(--sn-color-danger);
+}
+
+/* ---------- 手机形态（Android 412 × 892，layout.md 第七节） ----------
+ * 侧栏铺满屏幕，没有离屏幕边缘的留白、圆角与朝屏幕内侧的边框，不显示调整宽度的手柄、固定与收起按钮；
+ * 界面上不写快捷键；速记浮窗从底部弹出，宽度铺满，高度为屏幕的 62%。 */
+@media (max-width: 480px) {
+  .sidebar,
+  [data-sn-dock='floating'] .sidebar,
+  [data-sn-dock='blocks'] .sidebar {
+    padding: 0;
+  }
+
+  /* 侧栏宽度设置只对桌面有效，手机上按屏幕宽度铺满。 */
+  .sidebar {
+    width: calc(100vw / var(--app-zoom, 1));
+  }
+
+  .sidebar::before,
+  [data-sn-dock='floating'] .sidebar::before,
+  [data-sn-dock='flush'] .sidebar[data-edge]::before {
+    inset: 0;
+    border: 0;
+    border-radius: 0;
+  }
+
+  [data-sn-dock='blocks'] .sidebar {
+    padding: var(--sn-block-gap);
+  }
+
+  .sidebar-resizer,
+  #sidebar-lock,
+  #sidebar-close {
+    display: none;
+  }
+
+  .key-hint,
+  [data-sn-shortcuts='inline'] .key-hint,
+  .help-text .shortcut-line {
+    display: none;
+  }
+
+  [data-sn-shortcuts='inline'] #quick-composer .composer-count {
+    display: inline;
+  }
+
+  .capture,
+  .capture.open {
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: calc(100vw / var(--app-zoom, 1));
+    height: calc(62dvh / var(--app-zoom, 1));
+    max-width: none;
+    border-bottom: 0;
+    border-radius: var(--sn-radius-lg) var(--sn-radius-lg) 0 0;
+    transform: none;
+  }
+
+  /* 设置窗口：分类栏在上，名称在控件上方，主题卡片排成三列，快捷键的两张卡片各占一行。
+   * 窗口铺满遮罩（layout.md 第七节「设置窗口铺满屏幕」），不用桌面「随内容伸缩、上边固定」的高度：
+   * 分类栏叠在页面上方，再限高 600 页面只剩半屏，上下还空出大片。 */
+  .modal.settings-modal {
+    align-self: stretch;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    margin-top: 0;
+  }
+
+  /* 分类栏叠在页面上方，左栏的底色不再铺满整个高度。 */
+  .modal.settings-modal::before {
+    display: none;
+  }
+
+  .settings-modal .settings-layout {
+    flex-direction: column;
+  }
+
+  .settings-modal .settings-nav {
+    width: auto;
+  }
+
+  .settings-modal .settings-panel {
+    border-left: 0;
+    border-radius: 0;
+  }
+
+  .settings-modal .appearance-display-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sn-space-3);
+  }
+
+  .settings-modal .surface-choice-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .settings-modal .settings-dashboard > .shortcut-section {
+    grid-column: 1 / -1;
+  }
+
+  .settings-modal :is(.settings-trash-toolbar, .trash-toolbar) {
+    flex-wrap: wrap;
+  }
+}
+
+/* ---------- 记录列表的滚动条（本次提出） ----------
+ * 新建卡片与下面的卡片同宽：列表始终留出滚动条的位置，滚动条细到 --sn-space-3，放进列表右侧的内边距里
+ * （右内边距减去滚动条宽度），卡片右边缘与新建卡片对齐，左右两侧到面板边缘的距离一致。
+ * Chromium 用 ::-webkit-scrollbar 定宽（同时把标准属性设回 auto，否则这些样式不生效）；其它浏览器沿用细滚动条。 */
+.sidebar > .note-list {
+  padding-right: calc(var(--sn-panel-padding) - var(--sn-space-3));
+  scrollbar-gutter: stable;
+}
+
+[data-sn-dock='blocks'] .sidebar > .note-list {
+  margin-right: calc((var(--sn-space-3) + var(--sn-border-width)) * -1);
+  padding-right: var(--sn-border-width);
+}
+
+@supports selector(::-webkit-scrollbar) {
+  .sidebar > .note-list {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+}
+
+.sidebar > .note-list::-webkit-scrollbar {
+  width: var(--sn-space-3);
+}
+
+.sidebar > .note-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar > .note-list::-webkit-scrollbar-thumb {
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-border-strong);
+}
+
+.sidebar > .note-list::-webkit-scrollbar-thumb:hover {
+  background: var(--sn-color-text-muted);
+}
+
+/* ---------- 列表上下边缘的渐隐（第八次反馈） ----------
+ * 卡片滚到列表的上边或下边时在 --sn-space-6 内逐渐变淡，不再被一刀截断；只在那一侧还有内容时出现，刚开始滚动时一段一段移进来。
+ * 遮罩加在列表（滚动容器）上，与滚动一起合成，快速滚动时不落后（第九次反馈：此前脚本按位置给每张卡片算遮罩，滚动时渐隐的一段
+ * 追着边缘晃动）。三层遮罩：最右边滚动条的一列（不变淡）、上边一段、下边一段，上下两段取交集。滚动驱动的动画只移动上边一段的位置、
+ * 改变下边一段的大小，遮罩的图案不变。列表没有可滚的内容时动画不生效，也就没有遮罩；浏览器不支持滚动驱动的动画时不渐隐。
+ * 遮罩的各项都写在动画里：没有遮罩时各层的位置与大小只保留一层，不能作为动画的起止值。
+ * 代价：列表带遮罩时，磨砂玻璃卡片的 backdrop-filter 只能取到列表里的内容，浏览器里列表中的卡片不再模糊页面上的模拟桌面
+ * （桌面端的磨砂由窗口材质提供，见已知问题）。 */
+@supports (animation-timeline: scroll()) {
+  .sidebar > .note-list {
+    animation:
+      sn-list-mask linear both,
+      sn-list-fade-top linear both,
+      sn-list-fade-bottom linear both;
+    animation-timeline: scroll(self), scroll(self), scroll(self);
+    animation-range: normal, 0 var(--sn-space-6), calc(100% - var(--sn-space-6)) 100%;
+  }
+}
+
+/* 列表能滚动时才有遮罩（滚动时间线不生效时动画不起作用）。 */
+@keyframes sn-list-mask {
+  from,
+  to {
+    mask-image: linear-gradient(#000 0 0), linear-gradient(transparent, #000 var(--sn-space-6)), linear-gradient(#000 calc(100% - var(--sn-space-6)), transparent); /* 固定：遮罩只取透明度 */
+    mask-composite: add, intersect, add;
+    mask-repeat: no-repeat;
+    mask-position: 100% 0, 0 0, 0 0;
+    mask-size:
+      var(--sn-space-3) 100%,
+      calc(100% - var(--sn-space-3)) calc(100% + var(--sn-space-6)),
+      calc(100% - var(--sn-space-3)) 100%;
+  }
+}
+
+/* 上边一段：在顶部时整个在可见区之上，滚过 --sn-space-6 之前移进来。 */
+@keyframes sn-list-fade-top {
+  from {
+    mask-position: 100% 0, 0 calc(var(--sn-space-6) * -1), 0 0;
+  }
+
+  to {
+    mask-position: 100% 0, 0 0, 0 0;
+  }
+}
+
+/* 下边一段：离底部还有 --sn-space-6 起往下伸出可见区，到底时整个在可见区之下。 */
+@keyframes sn-list-fade-bottom {
+  from {
+    mask-size:
+      var(--sn-space-3) 100%,
+      calc(100% - var(--sn-space-3)) calc(100% + var(--sn-space-6)),
+      calc(100% - var(--sn-space-3)) 100%;
+  }
+
+  to {
+    mask-size:
+      var(--sn-space-3) 100%,
+      calc(100% - var(--sn-space-3)) calc(100% + var(--sn-space-6)),
+      calc(100% - var(--sn-space-3)) calc(100% + var(--sn-space-6));
+  }
+}
+
+/* ---------- 编辑中的卡片保留高亮（本次提出） ----------
+ * 编辑中的卡片只有一圈强调色边框，同时换成编辑底色并浮起；不叠外圈，窗格的标题栏也不画顶部的强调色线，
+ * 几条线挨在一起像一层内衬（2026-11-11 第二次反馈）。编辑区里的输入面仍不加框。 */
+.note-list .note-card.is-editing,
+[data-sn-entries='panes'] .note-list .note-card.is-editing {
+  --local-overlay: transparent;
+  --local-shadow: var(--sn-shadow-editing);
+  border-color: var(--sn-color-accent);
+}
+
+[data-sn-entries='panes'] .note-list .note-card.is-editing > .note-header {
+  background: var(--sn-color-card-head-active);
+}
+
+[data-sn-entries='tiles'] .note-list .note-card.is-editing::after {
+  opacity: 0;
+}
+
+/* ---------- 拖动排序（Playground 的 sn-drag-ghost 与 sn-drop-line） ----------
+ * 拖影是卡片本身的副本：向右错开、倾斜、浮起；多选时是一叠真实的卡片（本次提出）：后面两层是其它选中卡片的副本，往右上错开、转开一点，
+ * 露出它们的标题栏，右上角写条数；开始拖动时看得见的选中卡片从列表飞进这一叠（.card-drag-flyer）。拖出侧栏时保持倾斜并放大一点，
+ * 松开后在那里打开记录窗口（窗口从倾斜的拖影展开、摆正）。插入线是一条强调色的线，左端一个小圆点，不写说明文字。
+ * 被拖动的卡片原地变淡，不加虚线框。 */
+.card-drag-ghost.note-list,
+.card-drag-flyer.note-list {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: var(--sn-z-tooltip);
+  display: block;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  white-space: normal;
+  pointer-events: none;
+  zoom: var(--app-zoom, 1);
+}
+
+.card-drag-ghost.note-list {
+  opacity: 0.94;
+  transform: translateX(var(--sn-space-6)) rotate(-2.5deg);
+  transform-origin: 50% 50%;
+  transition: transform var(--sn-duration-normal) var(--sn-ease-standard);
+}
+
+/* 飞进拖影的卡片在拖影之下，到了就并进那一叠。 */
+.card-drag-flyer.note-list {
+  z-index: calc(var(--sn-z-tooltip) - 1);
+}
+
+:is(.card-drag-ghost, .card-drag-flyer).note-list > .note-card {
+  --local-shadow: var(--sn-shadow-lg);
+  margin: 0;
+}
+
+.card-drag-ghost.note-list.is-window {
+  opacity: 1;
+  transform: translateX(var(--sn-space-6)) rotate(-2.5deg) scale(1.04);
+}
+
+/* 后面几层：与最上面的卡片一样大（更长的部分裁掉），越往后往右上错开越多、转得越多，卡片的标题栏从上边露出来。 */
+.card-drag-ghost.note-list > .card-drag-layer {
+  --local-shadow: var(--sn-shadow-md);
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+  overflow: hidden;
+  transform:
+    translate(calc(var(--local-layer) * var(--sn-space-4) * 1.25), calc(var(--local-layer) * var(--sn-space-4) * -1.6))
+    rotate(calc(var(--local-layer) * 2.5deg));
+  transform-origin: 50% 50%;
+}
+
+.card-drag-ghost.note-list > .note-card:not(.card-drag-layer) {
+  position: relative;
+}
+
+.card-drag-count {
+  position: absolute;
+  top: calc(var(--sn-space-3) * -1);
+  right: calc(var(--sn-space-3) * -1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: calc(var(--sn-icon-size) + var(--sn-space-2));
+  height: calc(var(--sn-icon-size) + var(--sn-space-2));
+  padding: 0 var(--sn-space-2);
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-accent);
+  color: var(--sn-color-on-accent);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+  font-weight: var(--sn-font-weight-semibold);
+}
+
+.card-drop-guide {
+  position: fixed;
+  z-index: var(--sn-z-tooltip);
+  height: var(--sn-space-4);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.card-drop-guide-line {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: var(--sn-focus-ring-width);
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-accent);
+  box-shadow: none;
+  transform: translateY(-50%);
+}
+
+.card-drop-guide-line::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  box-sizing: border-box;
+  width: var(--sn-space-4);
+  height: var(--sn-space-4);
+  border: var(--sn-focus-ring-width) solid var(--sn-color-accent);
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-panel);
+  transform: translate(-50%, -50%);
+}
+
+.note-list .note-card.is-sorting,
+.note-list .note-card.is-sorting-member {
+  border-style: solid;
+  opacity: var(--sn-opacity-disabled);
+  outline: none;
+  transform: none;
+}
+
+.note-list .note-card:is(.drop-before, .drop-after)::before {
+  content: none;
+}
+
+/* ---------- 标签整理：移除按钮（本次提出） ----------
+ * 每个标签右上角一个小圆点，里面是细的叉；不压住标签文字，悬停时换成危险色。 */
+.note-card .tag-chip-wrap {
+  position: relative;
+}
+
+.note-card .tag-remove {
+  position: absolute;
+  top: calc(var(--sn-space-2) * -1);
+  right: calc(var(--sn-space-2) * -1);
+  z-index: 3;
+  align-items: center;
+  justify-content: center;
+  width: var(--sn-space-5);
+  height: var(--sn-space-5);
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: var(--sn-border-width) solid var(--sn-color-card);
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-text-muted);
+  box-shadow: none;
+  color: var(--sn-color-card);
+}
+
+.note-card .tag-remove svg.icon {
+  width: var(--sn-space-4);
+  height: var(--sn-space-4);
+  stroke-width: calc(var(--sn-icon-stroke) * 1.2);
+}
+
+.note-card .tag-remove:hover {
+  background: var(--sn-color-danger);
+  color: var(--sn-color-on-accent);
+}
+
+/* ---------- 附件（与现有应用一致） ----------
+ * 缩略条：新建卡片与速记浮窗 70 × 55，卡片编辑 64 × 49，右上角一个小圆点的移除按钮。
+ * 编辑面中的图片与文件引用整块显示：图片是预览，文件是图标加名称的胶囊；点击打开附件弹窗。 */
+.attachment-list .attachment-item {
+  width: 70px; /* 固定：与现有应用的缩略图尺寸一致 */
+  height: 55px; /* 固定：与现有应用的缩略图尺寸一致 */
+  border: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  border-radius: var(--sn-radius-sm);
+  background: var(--sn-color-surface-sunken);
+}
+
+.note-edit-attachments .attachment-item {
+  width: 64px; /* 固定：与现有应用编辑中的缩略图尺寸一致 */
+  height: 49px; /* 固定：与现有应用编辑中的缩略图尺寸一致 */
+}
+
+.attachment-item > .attachment-remove {
+  top: calc(var(--sn-space-2) * -1);
+  right: calc(var(--sn-space-2) * -1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--sn-icon-size);
+  height: var(--sn-icon-size);
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: var(--sn-border-width) solid var(--sn-color-card);
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-text-muted);
+  box-shadow: none;
+  color: var(--sn-color-card);
+}
+
+.attachment-item > .attachment-remove svg.icon {
+  width: calc(var(--sn-space-4) + var(--sn-space-1));
+  height: calc(var(--sn-space-4) + var(--sn-space-1));
+  stroke-width: calc(var(--sn-icon-stroke) * 1.2);
+}
+
+.attachment-item > .attachment-remove:hover {
+  background: var(--sn-color-danger);
+  color: var(--sn-color-on-accent);
+}
+
+:is(.live-markdown-editor, .md-drag-ghost) .md-attachment-chip,
+.markdown-body .file-reference {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-2);
+  max-width: 100%;
+  height: calc(var(--sn-control-height-sm) - var(--sn-space-1));
+  margin: 0 var(--sn-space-1);
+  padding: 0 var(--sn-space-3);
+  overflow: hidden;
+  border: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  border-radius: var(--sn-radius-sm);
+  background: var(--sn-color-surface-sunken);
+  color: var(--sn-color-text-secondary);
+  font-family: var(--sn-font-ui);
+  font-size: var(--sn-font-size-sm);
+  line-height: 1;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+:is(.live-markdown-editor, .md-drag-ghost) .md-attachment-chip svg.icon,
+.markdown-body .file-reference svg.icon {
+  flex: none;
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  color: var(--sn-color-text-muted);
+}
+
+.live-markdown-editor .md-attachment-chip:hover,
+.markdown-body .file-reference:hover {
+  border-color: var(--sn-color-border-strong);
+  color: var(--sn-color-text);
+}
+
+/* 附件弹窗：标题前一个图片或文件图标；预览最高 320（按 13px 字号计），下面是可以改的 Markdown 原文。
+ * 比常规弹窗宽一些：原文整段显示，底栏放得下四个操作与「应用修改」（本次提出）。 */
+.modal.attachment-modal {
+  width: min(calc(var(--sn-dialog-width) * 1.3), calc((100vw - var(--sn-space-6)) / var(--app-zoom, 1)));
+}
+
+/* 合并成一条（第四次反馈）：标题与格式一行，下面是按卡片排版的实时预览；底栏左侧「保留原记录」，右侧「合并」。 */
+.modal.merge-modal {
+  width: calc(var(--sn-dialog-width) * 1.3);
+}
+
+.merge-modal .modal-header h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  min-width: 0;
+}
+
+.merge-modal .modal-header h2 svg.icon {
+  flex: none;
+  color: var(--sn-color-text-muted);
+}
+
+.merge-modal .merge-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sn-space-4) var(--sn-space-6);
+}
+
+.merge-modal .merge-field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  min-width: 0;
+}
+
+.merge-modal .merge-field:has(.merge-title) {
+  flex: 1 1 calc(var(--sn-dialog-width) * 0.5);
+}
+
+.merge-modal .merge-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.merge-modal .merge-field-label {
+  flex: none;
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+}
+
+.merge-modal .merge-format {
+  display: inline-flex;
+  gap: var(--sn-space-1);
+  padding: var(--sn-space-1);
+  border-radius: var(--sn-radius-control);
+  background: var(--sn-color-surface-sunken);
+}
+
+.merge-modal .merge-format-option {
+  height: var(--sn-control-height-sm);
+  padding: 0 var(--sn-space-4);
+  border: 0;
+  border-radius: var(--sn-radius-control);
+  background: transparent;
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+}
+
+.merge-modal .merge-format-option[aria-pressed='true'] {
+  background: var(--sn-color-surface-raised);
+  box-shadow: var(--sn-shadow-sm);
+  color: var(--sn-color-text);
+  font-weight: var(--sn-font-weight-medium);
+}
+
+.merge-modal .merge-preview-box {
+  max-height: 50dvh;
+  margin-top: var(--sn-space-5);
+  padding: var(--sn-space-5) var(--sn-space-6);
+  overflow-y: auto;
+  border: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-card);
+  scrollbar-width: thin;
+  scrollbar-color: var(--sn-color-border-strong) transparent;
+}
+
+.merge-modal .merge-preview-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sn-space-2);
+  margin-top: var(--sn-space-5);
+}
+
+.merge-modal .merge-preview-tags:empty {
+  display: none;
+}
+
+.merge-modal .merge-preview-tags .tag-chip {
+  display: inline-flex;
+  align-items: center;
+  height: calc(var(--sn-control-height-sm) - var(--sn-space-2));
+  padding: 0 var(--sn-space-3);
+  border-radius: var(--sn-radius-chip);
+  background: var(--sn-color-hover);
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+}
+
+.merge-modal .modal-footer .merge-keep {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-2);
+  margin-right: auto;
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+}
+
+.merge-modal .merge-keep input {
+  accent-color: var(--sn-color-accent);
+}
+
+.attachment-modal .modal-header h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  min-width: 0;
+}
+
+.attachment-modal .modal-header h2 svg.icon {
+  flex: none;
+  color: var(--sn-color-text-muted);
+}
+
+.attachment-modal .attachment-preview-image {
+  display: block;
+  max-width: 100%;
+  max-height: 320px; /* 固定：与现有应用附件弹窗的预览高度一致 */
+  margin: 0 auto;
+  border-radius: var(--sn-radius-sm);
+  object-fit: contain;
+}
+
+.attachment-modal .attachment-file {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-4);
+  padding: var(--sn-space-5);
+  border: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-surface-sunken);
+  color: var(--sn-color-text);
+  font-size: var(--sn-font-size-md);
+}
+
+/* 原文改得不再是单个附件时，预览按卡片的排版显示这段 Markdown；图片地址取不到时显示图片块。 */
+.attachment-modal .attachment-preview-text {
+  min-height: var(--sn-control-height);
+  padding: var(--sn-space-4) var(--sn-space-5);
+  border: var(--sn-border-width) dashed var(--sn-color-border);
+  border-radius: var(--sn-radius-md);
+  color: var(--sn-color-text);
+  overflow-wrap: anywhere;
+}
+
+.attachment-modal .attachment-file.is-missing {
+  color: var(--sn-color-text-muted);
+}
+
+/* Markdown 原文：名称在上，下面整行一个输入框，随内容加高、长地址折行，不出现滚动条（本次提出）。 */
+.attachment-modal .attachment-source {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sn-space-2);
+  margin-top: var(--sn-space-5);
+}
+
+.attachment-modal .attachment-source-label {
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+}
+
+.attachment-modal .attachment-source-input {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  min-height: calc(var(--sn-control-height) * 2.5);
+  margin: 0;
+  padding: var(--sn-space-4) var(--sn-space-5);
+  overflow: hidden;
+  font-family: var(--sn-font-code);
+  font-size: var(--sn-font-size-sm);
+  line-height: var(--sn-line-height-normal);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  resize: none;
+}
+
+/* 底栏：左侧是打开、更换、另存为与删除，右侧是主要操作「应用修改」。 */
+.attachment-modal .modal-footer {
+  justify-content: flex-start;
+}
+
+.attachment-modal .modal-footer .attachment-delete {
+  color: var(--sn-color-danger);
+}
+
+.attachment-modal .modal-footer .attachment-apply {
+  margin-left: auto;
+}
+
+/* ---------- 记录窗口（note-window.js，本次提出） ----------
+ * 卡片拖出侧栏或点「展开全文」时打开：与速记浮窗同一种窗口表面；标题栏拖动，四边与四角缩放，双击标题栏放大或还原；
+ * 置顶后叠在侧栏与速记浮窗之上。正文用卡片正文的排版，内容超出时在窗口里滚动。位置与尺寸由脚本写在行内样式上。 */
+.note-window {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-lg);
+  background: linear-gradient(var(--sn-color-card), var(--sn-color-card)), var(--sn-color-panel);
+  backdrop-filter: blur(var(--sn-panel-blur)) saturate(var(--sn-panel-saturate));
+  box-shadow: var(--sn-shadow-lg), inset 0 var(--sn-border-width) 0 var(--sn-color-edge-highlight);
+  outline: none;
+}
+
+/* 窗口本身不画焦点环：窗口打开时获得焦点，以便 Esc 关闭，不需要一圈框。 */
+.note-window:focus-visible {
+  outline: none;
+}
+
+/* 当前操作的窗口：边框带一点强调色，外面再淡淡一圈，很轻，不像焦点环那样醒目（本次提出）。 */
+.note-window:focus-within {
+  border-color: color-mix(in srgb, var(--sn-color-accent) 40%, var(--sn-color-border));
+  box-shadow:
+    var(--sn-shadow-lg),
+    0 0 0 var(--sn-border-width) color-mix(in srgb, var(--sn-color-accent) 16%, transparent),
+    inset 0 var(--sn-border-width) 0 var(--sn-color-edge-highlight);
+}
+
+.note-window-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sn-space-4);
+  height: var(--sn-header-height);
+  padding: 0 var(--sn-space-3) 0 var(--sn-panel-padding);
+  border-bottom: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  cursor: grab;
+  user-select: none;
+}
+
+.note-window.is-moving .note-window-header {
+  cursor: grabbing;
+}
+
+.note-window-emoji {
+  flex: none;
+  font-size: var(--sn-font-size-md);
+  line-height: 1;
+}
+
+.note-window-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--sn-color-text);
+  font-family: var(--sn-font-title);
+  font-size: var(--sn-font-size-md);
+  font-weight: var(--sn-title-weight);
+  letter-spacing: var(--sn-title-tracking);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-window .window-actions {
+  display: flex;
+  flex: none;
+  gap: var(--sn-space-1);
+}
+
+.note-window .note-window-pin[aria-pressed='true'] {
+  background: var(--sn-color-accent-subtle);
+  color: var(--sn-color-accent-text);
+}
+
+/* 置顶时图钉是实心的，与没置顶的空心图钉一眼分开（本次提出）。 */
+.note-window .note-window-pin[aria-pressed='true'] svg.icon {
+  fill: currentColor;
+}
+
+/* 正文四周留白相同；窗口按内容定大小时把它算在内（note-window.js 的 fitSize）。 */
+/* 正文外面一层横排的容器（第四次反馈）：标签页放在左侧时，标签栏排在正文之前。 */
+.note-window-main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.note-window-body {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: var(--sn-space-5) var(--sn-space-6) var(--sn-space-6);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sn-color-border-strong) transparent;
+}
+
+.note-window-content .note-image-button {
+  display: inline-flex;
+  margin-top: var(--sn-space-4);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.note-window-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sn-space-2);
+  margin-top: var(--sn-space-6);
+}
+
+.note-window-tags .tag-chip {
+  height: calc(var(--sn-control-height-sm) - var(--sn-space-2));
+  padding: 0 var(--sn-space-3);
+  border: 0;
+  border-radius: var(--sn-radius-chip);
+  background: var(--sn-color-hover);
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+}
+
+.note-window-tags .tag-chip:hover {
+  background: var(--sn-color-accent-subtle);
+  color: var(--sn-color-accent-text);
+}
+
+/* 编辑中：编辑底色，编辑器填满窗口，只在编辑器里滚动。 */
+.note-window.is-editing {
+  background: linear-gradient(var(--sn-color-editing), var(--sn-color-editing)), var(--sn-color-panel);
+}
+
+.note-window.is-editing .note-window-body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.note-window.is-editing .live-markdown-editor {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  padding: 0;
+  overflow-y: auto;
+}
+
+/* 标签页（本次提出）：两个以上时标题栏换成标签页，当前一页与窗口正文连成一片；
+ * 标签栏比单页的标题栏高一些，标签页之间留出间距；右侧一块空白（.note-window-grip）按住可以拖动窗口，标签页多了在左边横向滚动。
+ * 标签页可以拖到别的窗口合并、拖到窗口外拆开；拖动窗口、标签页或卡片到别的窗口时，那里的标题栏换成浅强调色，竖线标出插入位置。 */
+.note-window-tabs {
+  display: none;
+  flex: 0 1 auto;
+  align-items: flex-end;
+  align-self: stretch;
+  gap: var(--sn-space-2);
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.note-window.has-tabs .note-window-tabs {
+  display: flex;
+}
+
+.note-window-grip {
+  display: none;
+}
+
+.note-window.has-tabs .note-window-grip {
+  display: block;
+  flex: 1 0 calc(var(--sn-control-height) * 2.5);
+  align-self: stretch;
+}
+
+.note-window.has-tabs :is(.note-window-emoji, .note-window-title) {
+  display: none;
+}
+
+.note-window.has-tabs .note-window-header {
+  gap: var(--sn-space-3);
+  height: calc(var(--sn-header-height) + var(--sn-space-4));
+  padding-top: var(--sn-space-4);
+  padding-left: var(--sn-space-4);
+}
+
+/* 标签页（第四次反馈）：最宽放得下十来个字；关闭按钮不再常占位置，平时标题用满整个标签页，
+ * 当前一页与悬停时关闭按钮浮在右端。标题仍放不下时省略，悬停片刻显示全名（.note-window-tooltip）。 */
+.note-window-tab {
+  position: relative;
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--sn-space-3);
+  min-width: calc(var(--sn-control-height) * 2.5);
+  max-width: calc(var(--sn-control-height) * 9);
+  height: 100%;
+  margin-bottom: calc(var(--sn-border-width) * -1);
+  padding: 0 var(--sn-space-5);
+  border: var(--sn-border-width) solid transparent;
+  border-bottom: 0;
+  border-radius: var(--sn-radius-md) var(--sn-radius-md) 0 0;
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+  cursor: pointer;
+}
+
+.note-window-tab:hover {
+  background: var(--sn-color-hover);
+  color: var(--sn-color-text);
+}
+
+.note-window-tab.is-active {
+  border-color: var(--sn-color-border-subtle);
+  background: var(--sn-color-card);
+  color: var(--sn-color-text);
+  font-weight: var(--sn-font-weight-medium);
+}
+
+.note-window.is-editing .note-window-tab.is-active {
+  background: var(--sn-color-editing);
+}
+
+.note-window-tab:focus-visible {
+  outline: var(--sn-focus-ring-width) solid var(--sn-color-focus);
+  outline-offset: calc(var(--sn-focus-ring-width) * -1);
+}
+
+.note-window-tab-emoji {
+  flex: none;
+  line-height: 1;
+}
+
+.note-window-tab-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-window-tab .note-window-tab-close {
+  position: absolute;
+  top: 50%;
+  right: var(--sn-space-1);
+  width: var(--sn-control-height-sm);
+  height: var(--sn-control-height-sm);
+  background: inherit;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.note-window-tab:is(:hover, .is-active, :focus-within) .note-window-tab-close {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* 当前一页的关闭按钮一直在，标题让出它的位置；其余标签页悬停时按钮盖住标题的末尾。 */
+.note-window-tab.is-active {
+  padding-right: calc(var(--sn-control-height-sm) + var(--sn-space-2));
+}
+
+/* 标签页位置的按钮只在有标签页时出现。 */
+.note-window:not(.has-tabs) .note-window-layout {
+  display: none;
+}
+
+.note-window .note-window-layout[aria-pressed='true'] {
+  color: var(--sn-color-accent-text);
+}
+
+/* 标签页的全名：挂在 body 上，与应用图标名称的工具提示同一种样子。 */
+.note-window-tooltip {
+  position: fixed;
+  z-index: calc(var(--sn-z-tooltip) + 1);
+  max-width: calc(var(--sn-dialog-width) * 0.9);
+  padding: var(--sn-space-2) var(--sn-space-4);
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-sm);
+  background: var(--sn-color-surface-raised);
+  box-shadow: var(--sn-shadow-md);
+  color: var(--sn-color-text);
+  font-family: var(--sn-font-ui);
+  font-size: var(--sn-font-size-sm);
+  line-height: var(--sn-line-height-normal);
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  zoom: var(--app-zoom, 1);
+}
+
+/* 标签页放在左侧（第四次反馈）：标题栏恢复单页时的样子，写当前一页的标题；左侧一列竖排的标签页，
+ * 名称有一整列的宽度，当前一页浮起；标签栏与正文之间一条淡分隔线。拖动排序时插入线是一条横线。 */
+.note-window.has-tabs.is-side-tabs .note-window-header {
+  gap: var(--sn-space-4);
+  height: var(--sn-header-height);
+  padding-top: 0;
+  padding-left: var(--sn-panel-padding);
+}
+
+.note-window.has-tabs.is-side-tabs :is(.note-window-emoji, .note-window-title) {
+  display: revert;
+}
+
+.note-window.has-tabs.is-side-tabs .note-window-grip {
+  display: none;
+}
+
+.note-window.is-side-tabs .note-window-tabs {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: stretch;
+  align-self: stretch;
+  gap: var(--sn-space-1);
+  width: calc(var(--sn-control-height) * 6);
+  padding: var(--sn-space-3) var(--sn-space-2);
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-right: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  background: var(--sn-color-panel);
+}
+
+.note-window.is-side-tabs .note-window-tab {
+  flex: none;
+  min-width: 0;
+  max-width: none;
+  height: var(--sn-control-height);
+  margin: 0;
+  padding: 0 var(--sn-space-3) 0 var(--sn-space-4);
+  border: 0;
+  border-radius: var(--sn-radius-control);
+}
+
+.note-window.is-side-tabs .note-window-tab.is-active {
+  padding-right: calc(var(--sn-control-height-sm) + var(--sn-space-2));
+  background: var(--sn-color-card);
+  box-shadow: var(--sn-shadow-sm);
+}
+
+.note-window.is-editing.is-side-tabs .note-window-tab.is-active {
+  background: var(--sn-color-editing);
+}
+
+.note-window-tab .note-window-tab-close svg.icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.note-window.is-merge-target .note-window-header {
+  background: var(--sn-color-accent-subtle);
+}
+
+/* 正在拖动的标签页原处变淡；标签栏里的插入线是一条强调色的竖线，上端一个小圆点（与卡片排序的插入线同一种样子），
+ * 挂在 body 上、叠在拖影之上，位置与高度由脚本按屏幕坐标写入。 */
+.note-window-tab.is-drag-source {
+  opacity: var(--sn-opacity-disabled);
+}
+
+.note-window-tab-drop,
+.sidebar-tab-drop {
+  position: fixed;
+  z-index: calc(var(--sn-z-tooltip) + 1);
+  width: var(--sn-focus-ring-width);
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-accent);
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.note-window-tab-drop::before,
+.sidebar-tab-drop::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  box-sizing: border-box;
+  width: var(--sn-space-4);
+  height: var(--sn-space-4);
+  border: var(--sn-focus-ring-width) solid var(--sn-color-accent);
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-panel);
+  transform: translate(-50%, -50%);
+}
+
+/* 附件弹窗没有预览也没有原文时，正文区不显示（第五次反馈：标题下面不留空白）。 */
+.attachment-modal .modal-body.is-empty {
+  display: none;
+}
+
+/* 竖排的标签栏与最后一格菜单（第五次反馈）：插入线是一条横线，小圆点在左端。 */
+.note-window-tab-drop.is-horizontal,
+.sidebar-tab-drop.is-horizontal {
+  height: var(--sn-focus-ring-width);
+  transform: translateY(-50%);
+}
+
+.note-window-tab-drop.is-horizontal::before,
+.sidebar-tab-drop.is-horizontal::before {
+  top: 50%;
+  left: 0;
+}
+
+.note-window-tab-ghost {
+  position: fixed;
+  z-index: var(--sn-z-tooltip);
+  pointer-events: none;
+  opacity: 0.9;
+  transform: rotate(-2.5deg);
+  transition: transform var(--sn-duration-normal) var(--sn-ease-standard);
+  zoom: var(--app-zoom, 1);
+}
+
+/* 拖到窗口外：松开后拆成新窗口，拖影放大一点（与卡片拖出侧栏相同）。 */
+.note-window-tab-ghost.is-detaching {
+  opacity: 1;
+  transform: rotate(-2.5deg) scale(1.06);
+}
+
+.note-window-tab-ghost .note-window-tab {
+  height: calc(var(--sn-header-height) - var(--sn-space-1));
+  opacity: 1;
+  border-color: var(--sn-color-border);
+  border-bottom: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-card);
+  box-shadow: var(--sn-shadow-lg);
+  color: var(--sn-color-text);
+  font-family: var(--sn-font-ui);
+}
+
+/* 缩放手柄：四边是细条，四角是小方块，看不见，只换指针形状。 */
+.note-window-resize {
+  position: absolute;
+  z-index: 2;
+}
+
+.note-window-resize:is([data-edge='n'], [data-edge='s']) {
+  left: var(--sn-space-4);
+  right: var(--sn-space-4);
+  height: var(--sn-space-2);
+  cursor: ns-resize;
+}
+
+.note-window-resize:is([data-edge='e'], [data-edge='w']) {
+  top: var(--sn-space-4);
+  bottom: var(--sn-space-4);
+  width: var(--sn-space-2);
+  cursor: ew-resize;
+}
+
+.note-window-resize[data-edge='n'] { top: 0; }
+.note-window-resize[data-edge='s'] { bottom: 0; }
+.note-window-resize[data-edge='e'] { right: 0; }
+.note-window-resize[data-edge='w'] { left: 0; }
+
+.note-window-resize:is([data-edge='ne'], [data-edge='nw'], [data-edge='se'], [data-edge='sw']) {
+  width: var(--sn-space-5);
+  height: var(--sn-space-5);
+}
+
+.note-window-resize[data-edge='ne'] { top: 0; right: 0; cursor: nesw-resize; }
+.note-window-resize[data-edge='sw'] { bottom: 0; left: 0; cursor: nesw-resize; }
+.note-window-resize[data-edge='nw'] { top: 0; left: 0; cursor: nwse-resize; }
+.note-window-resize[data-edge='se'] { bottom: 0; right: 0; cursor: nwse-resize; }
+
+/* ---------- 浮层（layer.js，本次提出） ----------
+ * 问号说明、下拉列表、字体候选与图标的大图预览挂在 body 下的独立一层，按视口定位，叠在所有窗口之上，
+ * 不被设置页等可滚动的区域裁剪或遮挡，也不撑出滚动条。位置由脚本写在行内样式上。 */
+.floating-panel {
+  position: fixed;
+  right: auto;
+  bottom: auto;
+  z-index: var(--sn-z-tooltip);
+  box-sizing: border-box;
+}
+
+.settings-help-text.floating-panel,
+.help-text.floating-panel {
+  width: max-content;
+  max-width: calc(var(--sn-dialog-width) * 0.7);
+  margin: 0;
+  overflow-wrap: anywhere;
+  text-align: left;
+  pointer-events: none;
+}
+
+/* 下拉列表与字体候选：浮起的表面，一行一项；选中项前面打勾，键盘移到的项换成悬停色。 */
+.select-box-list.floating-panel,
+.font-combobox-list.floating-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: max-content;
+  min-width: 0;
+  max-height: calc(var(--sn-menu-item-height) * 11);
+  margin: 0;
+  padding: var(--sn-space-2);
+  overflow: auto;
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-surface-raised);
+  box-shadow: var(--sn-shadow-md);
+  color: var(--sn-color-text);
+  font-size: var(--sn-font-size-sm);
+  scrollbar-width: thin;
+  scrollbar-color: var(--sn-color-border-strong) transparent;
+}
+
+.font-combobox-list.floating-panel[hidden] {
+  display: none;
+}
+
+.select-box-option {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sn-space-3);
+  min-height: var(--sn-menu-item-height);
+  padding: 0 var(--sn-space-5) 0 var(--sn-space-3);
+  border-radius: var(--sn-radius-sm);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.select-box-option.is-active {
+  background: var(--sn-color-hover);
+}
+
+.select-box-option.is-selected {
+  color: var(--sn-color-accent-text);
+}
+
+.select-box-check {
+  display: inline-flex;
+  flex: none;
+  width: var(--sn-icon-size-sm);
+}
+
+.select-box-check .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.font-combobox-list.floating-panel .font-combobox-option {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  min-height: var(--sn-menu-item-height);
+  margin: 0;
+  padding: 0 var(--sn-space-4);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--sn-radius-sm);
+  background: transparent;
+  box-shadow: none;
+  color: var(--sn-color-text);
+  font-size: var(--sn-font-size-sm);
+  font-weight: var(--sn-body-weight);
+  line-height: var(--sn-line-height-tight);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.font-combobox-list.floating-panel .font-combobox-option:hover {
+  background: var(--sn-color-hover);
+}
+
+.font-combobox-list.floating-panel .font-combobox-option.is-active {
+  background: var(--sn-color-selected);
+}
+
+.font-combobox-list.floating-panel .font-combobox-option.is-selected {
+  color: var(--sn-color-accent-text);
+}
+
+.font-combobox-list.floating-panel .font-option-detail {
+  margin-left: var(--sn-space-4);
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-ui);
+  font-size: var(--sn-font-size-xs);
+}
+
+/* 应用图标的大图预览：图标上方的一块浮起的表面，只有图片，不写名称。 */
+.icon-preview-pop.floating-panel {
+  display: flex;
+  padding: var(--sn-space-3);
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-surface-raised);
+  box-shadow: var(--sn-shadow-lg);
+  pointer-events: none;
+}
+
+.icon-preview-pop img {
+  display: block;
+  width: calc(var(--sn-control-height-lg) * 3);
+  height: calc(var(--sn-control-height-lg) * 3);
+}
+
+/* ---------- 设置窗口：本轮调整 ---------- */
+
+/* 明暗模式的三张卡片与主题卡片同宽（排在五列的前三列），不再把这一行撑满。 */
+.settings-modal .theme-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+/* 页面标题右侧的操作（快捷键页的「恢复默认」）。 */
+.settings-modal .settings-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sn-space-4);
+}
+
+/* 下拉框（Playground 的 Select 小号）：文字靠左，箭头紧跟在文字之后，宽度随内容。 */
+.settings-modal .select-box {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sn-space-3);
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+  height: var(--sn-control-height-sm);
+  min-height: 0;
+  margin: 0;
+  padding: 0 var(--sn-space-2) 0 var(--sn-space-4);
+  border: var(--sn-border-width) solid var(--sn-color-border-strong);
+  border-radius: var(--sn-radius-control);
+  background: var(--sn-color-surface);
+  box-shadow: none;
+  color: var(--sn-color-text);
+  font-size: var(--sn-font-size-sm);
+  font-weight: var(--sn-body-weight);
+  line-height: var(--sn-line-height-tight);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--sn-duration-fast) var(--sn-ease-standard);
+}
+
+.settings-modal .select-box:hover {
+  border-color: var(--sn-color-text-muted);
+  background: var(--sn-color-surface);
+}
+
+.settings-modal .select-box-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-modal .select-box .icon {
+  flex: none;
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  color: var(--sn-color-text-muted);
+}
+
+/* 组合框（Playground 的 Combobox 数字款）：数值居中，右边是展开箭头；单位写在框外。 */
+.settings-modal .settings-combobox-wrap {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sn-space-3);
+}
+
+.settings-modal .settings-combobox {
+  display: inline-flex;
+  align-items: center;
+  width: calc(6ch + var(--sn-control-height-sm));
+  height: var(--sn-control-height-sm);
+  border: var(--sn-border-width) solid var(--sn-color-border-strong);
+  border-radius: var(--sn-radius-control);
+  background-color: var(--sn-color-surface);
+  color: var(--sn-color-text);
+  font-size: var(--sn-font-size-sm);
+  transition: border-color var(--sn-duration-fast) var(--sn-ease-standard);
+}
+
+.settings-modal .settings-combobox:hover:not(:focus-within) {
+  border-color: var(--sn-color-text-muted);
+}
+
+.settings-modal .settings-combobox:focus-within {
+  border-bottom-color: transparent;
+  background-image: linear-gradient(var(--sn-color-accent), var(--sn-color-accent));
+  background-position: bottom;
+  background-repeat: no-repeat;
+  background-size: 100% calc(var(--sn-border-width) * 2);
+  background-origin: border-box;
+}
+
+.settings-modal .settings-combobox .settings-combobox-input,
+.settings-modal .settings-combobox .settings-combobox-input:focus {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0 var(--sn-space-1) 0 var(--sn-space-2);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font-family: var(--sn-font-meta);
+  font-size: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  outline: none;
+}
+
+.settings-modal .settings-combobox-toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--sn-control-height-sm);
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0 var(--sn-radius-control) var(--sn-radius-control) 0;
+  background: transparent;
+  color: var(--sn-color-text-muted);
+}
+
+.settings-modal .settings-combobox-toggle .icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+.settings-modal .settings-unit {
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-sm);
+}
+
+/* 名称后面的取值与操作（附件、已有快照、目录）：紧跟在名称之后，路径占满剩余宽度。 */
+.settings-modal .settings-inline-value {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  min-width: 0;
+}
+
+.settings-modal .settings-inline-value.is-grow {
+  flex: 1;
+}
+
+.settings-modal .settings-row:has(.settings-inline-value.is-grow),
+.settings-modal .settings-row:has(.settings-inline-value.is-grow) > .settings-control {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-modal .settings-value {
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+  white-space: nowrap;
+}
+
+.settings-modal .settings-inline-value .settings-path {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--sn-color-text-secondary);
+  font-family: var(--sn-font-code);
+  font-size: var(--sn-font-size-xs);
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-modal .settings-inline-value .input,
+.settings-modal .settings-inline-value input.form-control:not([type='number']) {
+  flex: 1;
+  width: auto;
+}
+
+/* 快照列表：时间、原因、条数与大小、恢复，一行一份。 */
+.settings-modal .snapshot-list {
+  margin: 0;
+  padding: var(--sn-space-2) 0 0;
+  border-top: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  list-style: none;
+}
+
+.settings-modal .snapshot-item {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sn-space-5);
+  min-height: var(--sn-control-height);
+  font-size: var(--sn-font-size-sm);
+}
+
+.settings-modal .snapshot-time {
+  font-family: var(--sn-font-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-modal .snapshot-reason {
+  color: var(--sn-color-text-secondary);
+}
+
+.settings-modal .snapshot-meta {
+  color: var(--sn-color-text-muted);
+  text-align: right;
+}
+
+/* 云端备份的行：名称单独成一列，取值、输入框与操作紧跟在后（Playground 的 sn-set-data）。 */
+.settings-modal .data-rows {
+  display: grid;
+  grid-template-columns: minmax(calc(var(--sn-dialog-width) * 0.18), auto) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sn-space-3) var(--sn-space-4);
+}
+
+.settings-modal .data-row {
+  display: contents;
+}
+
+.settings-modal .data-row-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  min-width: 0;
+  min-height: var(--sn-control-height);
+}
+
+.settings-modal .data-row-controls input.form-control:not([type='number']) {
+  width: calc(var(--sn-dialog-width) * 0.65);
+}
+
+.settings-modal .data-row-controls .settings-status {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+/* 快捷键：一行是名称、改过时的「恢复默认」与按键；格式一组两列排列。 */
+.settings-modal .shortcut-format .shortcut-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sn-space-3) var(--sn-space-8);
+}
+
+.settings-modal .shortcut-binding {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-2);
+  min-width: 0;
+}
+
+.settings-modal .shortcut-key {
+  display: inline-flex;
+  align-items: center;
+  width: auto;
+  height: var(--sn-control-height-sm);
+  min-height: 0;
+  margin: 0;
+  padding: 0 var(--sn-space-3);
+  border: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  border-radius: var(--sn-radius-sm);
+  background: var(--sn-color-surface-sunken);
+  box-shadow: none;
+  color: var(--sn-color-text);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-sm);
+  white-space: nowrap;
+}
+
+.settings-modal .shortcut-key kbd {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+}
+
+.settings-modal button.shortcut-key:hover {
+  border-color: var(--sn-color-border-strong);
+}
+
+/* 录入中：与输入框获得焦点时一样，底边换成强调色线；浅强调色底表示正在等待按键。 */
+.settings-modal .shortcut-key.is-recording {
+  border-bottom-color: transparent;
+  background-color: var(--sn-color-accent-subtle);
+  background-image: linear-gradient(var(--sn-color-accent), var(--sn-color-accent));
+  background-position: bottom;
+  background-repeat: no-repeat;
+  background-size: 100% calc(var(--sn-border-width) * 2);
+  background-origin: border-box;
+  color: var(--sn-color-accent-text);
+  outline: none;
+}
+
+.settings-modal .shortcut-key.is-fixed {
+  color: var(--sn-color-text-muted);
+}
+
+.settings-modal .shortcut-message {
+  color: var(--sn-color-danger);
+  font-size: var(--sn-font-size-xs);
+}
+
+.settings-modal .shortcut-reset.icon-button {
+  width: var(--sn-control-height-sm);
+  height: var(--sn-control-height-sm);
+}
+
+/* 回收站：搜索与筛选一行（小号控件）；条数之后紧跟保留天数，批量操作在最右。 */
+.settings-modal .settings-trash-toolbar .settings-search {
+  height: var(--sn-control-height-sm);
+  font-size: var(--sn-font-size-sm);
+}
+
+.settings-modal .settings-trash-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  margin: 0 0 var(--sn-space-4);
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-sm);
+}
+
+.settings-modal .settings-trash-count {
+  font-family: var(--sn-font-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-modal .trash-retention {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  margin-left: var(--sn-space-3);
+  color: var(--sn-color-text-secondary);
+}
+
+.settings-modal .settings-spacer {
+  flex: 1;
+}
+
+.settings-modal .trash-item-meta.is-expired {
+  color: var(--sn-color-warning);
+}
+
+.settings-modal .settings-empty {
+  margin: 0;
+  padding: var(--sn-space-9) 0;
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-sm);
+  text-align: center;
+}
+
+/* 格式一组占满一行；按键不被压窄，文字不溢出边框。 */
+.settings-modal .settings-dashboard > .shortcut-section.shortcut-format {
+  grid-column: 1 / -1;
+}
+
+.settings-modal .shortcut-grid .settings-control {
+  flex: none;
+}
+
+.settings-modal .shortcut-grid .shortcut-key {
+  flex: none;
+  min-width: max-content;
+}
+
+/* 保留天数是条数后面的一段文字与组合框，不是单独的一块（旧样式中的边框、底色与内边距去掉）。 */
+.settings-modal .trash-retention {
+  flex-wrap: nowrap;
+  margin: 0 0 0 var(--sn-space-3);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.settings-modal .trash-retention .settings-row-label {
+  display: inline;
+}
+
+/* ---------- 设置窗口：第二次反馈的调整（2026-11-11） ---------- */
+
+/* 明暗模式与主题两行卡片的总宽相同（不必逐张对齐），都铺满名称右侧的一栏，右边与下面的滑块、数值框和字体预览对齐。
+ * 页面本身有最大宽度（见 .settings-panel > *），示例与下面的设置都在这一栏宽内，谁也不会把页面撑宽（本次提出：
+ * 第二次反馈时只把这两行限制在 480，页面没有最大宽度，小字号下下面的设置仍铺满整个面板）。 */
+.settings-modal :is(.theme-grid, .surface-choice-grid) {
+  width: 100%;
+}
+
+.settings-modal .theme-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* 控件用常规尺寸：小号按钮又扁又小；下拉框、输入框与组合框随之加高，同一行的控件一样高。 */
+.settings-modal .button,
+.settings-confirm-dialog .button {
+  gap: var(--sn-space-3);
+  height: var(--sn-control-height);
+  padding: 0 var(--sn-space-5);
+  font-size: var(--sn-font-size-md);
+}
+
+.settings-modal :is(select.form-control, select, .select-box, .settings-combobox, .font-combobox-field, input[type='number']),
+.settings-modal input.form-control:not([type='number']):not(.font-combobox-field > *),
+.settings-modal .settings-trash-toolbar .settings-search {
+  height: var(--sn-control-height);
+}
+
+.settings-modal .settings-combobox-toggle {
+  width: var(--sn-control-height);
+}
+
+.settings-modal :is(.settings-inline-value, .data-row-controls, .settings-actions) > .icon-button {
+  flex: none;
+  width: var(--sn-control-height);
+  height: var(--sn-control-height);
+}
+
+.settings-modal .settings-trash-toolbar .settings-search {
+  font-size: var(--sn-font-size-md);
+}
+
+/* 路径只占一行，放不下时末尾省略；后面的按钮紧跟在路径之后，不推到最右。 */
+.settings-modal .settings-path,
+.settings-modal .settings-inline-value .settings-path {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+}
+
+/* 快照（布局同现有应用）：列表是一块带边框的区域，一行一份：时间、原因、条数与大小、恢复；份数多时在框内滚动。 */
+.settings-modal .snapshot-list {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(var(--sn-control-height) * 8);
+  margin: var(--sn-space-4) 0 0;
+  padding: 0;
+  overflow-y: auto;
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-surface-sunken);
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+.settings-modal .snapshot-item {
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1.2fr) auto;
+  gap: var(--sn-space-4);
+  min-height: 0;
+  padding: var(--sn-space-2) var(--sn-space-2) var(--sn-space-2) var(--sn-space-5);
+}
+
+.settings-modal .snapshot-item + .snapshot-item {
+  border-top: var(--sn-border-width) solid var(--sn-color-border-subtle);
+}
+
+.settings-modal .snapshot-time {
+  color: var(--sn-color-text);
+  white-space: nowrap;
+}
+
+.settings-modal :is(.snapshot-reason, .snapshot-meta) {
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-modal .snapshot-reason {
+  color: var(--sn-color-text-secondary);
+}
+
+.settings-modal .snapshot-meta {
+  color: var(--sn-color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 减少动态效果 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .capture,
+  .note-card,
+  .note-actions,
+  .note-meta,
+  .header-search,
+  .header-search-field {
+    transition-duration: 0.01ms; /* 固定：减少动态效果时近似为零 */
+  }
+}
+
+/* ---------- Windows 对比主题：背景层里的线与叠加色会被去掉，改用系统高亮色的轮廓线 ---------- */
+@media (forced-colors: active) {
+  .note-list .note-card:is(:hover, .is-current, .is-selected, .is-editing),
+  .modal :is(.form-control, input, textarea):focus,
+  .header-search.is-open .header-search-field:focus-within,
+  .note-context-menu .note-context-item:focus-visible {
+    outline: var(--sn-focus-ring-width) solid Highlight; /* 固定：对比主题使用系统颜色 */
+    outline-offset: calc(var(--sn-border-width) * -1);
+  }
+}

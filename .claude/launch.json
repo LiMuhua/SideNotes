@@ -2,16 +2,16 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "prototype",
-      "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "5181", "--bind", "127.0.0.1", "--directory", "docs/prototype"],
-      "port": 5181
-    },
-    {
       "name": "app",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["dev"],
       "port": 1420
+    },
+    {
+      "name": "playground",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["exec", "vite", "--port", "1430", "--strictPort"],
+      "port": 1430
     }
   ]
 }

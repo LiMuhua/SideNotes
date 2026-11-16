@@ -1,0 +1,467 @@
+/* ==================== Playground 外壳 ====================
+ *
+ * 外壳不是 SideNotes 的设计，只是展示台：用自己的少量变量（--pg-*），中性配色，
+ * 明暗跟随 Playground 的明暗设置。不纳入设计令牌与「只用令牌」的样式检查。
+ */
+
+html,
+body,
+#playground-root {
+  height: 100%;
+  margin: 0;
+}
+
+.pg-shell {
+  --pg-bg: #e8eaed;
+  --pg-panel: #ffffff;
+  --pg-text: #1d2025;
+  --pg-muted: #5c636d;
+  --pg-border: #d3d7dd;
+  --pg-accent: #1f2937;
+  --pg-accent-text: #ffffff;
+  --pg-hover: rgb(0 0 0 / 0.05);
+  --pg-stage: #dcdfe3;
+  --pg-shadow: 0 16px 48px rgb(15 23 42 / 0.18), 0 2px 8px rgb(15 23 42 / 0.08);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--pg-bg);
+  color: var(--pg-text);
+  color-scheme: light;
+  font-family: 'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.pg-shell[data-pg-theme='dark'] {
+  --pg-bg: #0d0f12;
+  --pg-panel: #16191e;
+  --pg-text: #e3e6ea;
+  --pg-muted: #9aa1ab;
+  --pg-border: #2a2f37;
+  --pg-accent: #e3e6ea;
+  --pg-accent-text: #111318;
+  --pg-hover: rgb(255 255 255 / 0.06);
+  --pg-stage: #08090b;
+  --pg-shadow: 0 16px 48px rgb(0 0 0 / 0.55), 0 0 0 1px rgb(255 255 255 / 0.04);
+  color-scheme: dark;
+}
+
+.pg-shell *,
+.pg-shell *::before,
+.pg-shell *::after {
+  box-sizing: border-box;
+}
+
+/* 外壳自己的按钮与下拉框沿用外壳的字体。排除设计系统作用域（.sn-scope）：应用窗口、组件页与令牌页里的按钮
+ * 按 base.css 与各组件的规则显示（此前这条规则的优先级高于组件，盖掉了时间、标签、版本号的字号与按钮的字重）。
+ * 排除条件写在 :where() 里，优先级与原来的 .pg-shell button 相同，外壳自己的按钮不受影响。 */
+.pg-shell :is(button, select):where(:not(.sn-scope *)) {
+  font: inherit;
+}
+
+/* 外壳自己的焦点环。用 :where() 压低优先级：设计系统作用域（.sn-scope）里的元素沿用 base.css 与各组件的焦点样式，
+ * 不被这条规则盖成离开元素 2px 的外圈（此前输入框因此出现两层边框，圆角也对不上）。 */
+.pg-shell :where(:focus-visible) {
+  outline: 2px solid var(--pg-text);
+  outline-offset: 2px;
+}
+
+/* ---------- 顶栏 ---------- */
+.pg-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 24px;
+  height: 46px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--pg-border);
+  background: var(--pg-panel);
+}
+
+.pg-brand {
+  display: flex;
+  flex: none;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.pg-brand-name {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.pg-brand-sub {
+  color: var(--pg-muted);
+}
+
+.pg-pages {
+  display: flex;
+  gap: 16px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.pg-page-group {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}
+
+.pg-page-group + .pg-page-group {
+  padding-left: 16px;
+  border-left: 1px solid var(--pg-border);
+}
+
+.pg-page {
+  height: 30px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--pg-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pg-page:hover {
+  background: var(--pg-hover);
+  color: var(--pg-text);
+}
+
+.pg-page[aria-current='page'] {
+  background: var(--pg-accent);
+  color: var(--pg-accent-text);
+}
+
+/* 跳到交互原型：顶栏最右边的小号链接。 */
+.pg-jump {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  margin-left: auto;
+  padding: 0 10px;
+  border: 1px solid var(--pg-border);
+  border-radius: 6px;
+  color: var(--pg-muted);
+  font-size: 12px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.pg-jump:hover {
+  background: var(--pg-hover);
+  color: var(--pg-text);
+}
+
+/* ---------- 预览设置 ---------- */
+.pg-controls {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 22px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--pg-border);
+  background: var(--pg-panel);
+}
+
+.pg-choice,
+.pg-select {
+  display: inline-flex;
+  align-items: center;
+}
+
+.pg-choice-label {
+  margin-right: 8px;
+  color: var(--pg-muted);
+  font-size: 12px;
+}
+
+.pg-choice-option {
+  height: 26px;
+  margin-left: -1px;
+  padding: 0 10px;
+  border: 1px solid var(--pg-border);
+  background: var(--pg-panel);
+  color: var(--pg-text);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pg-choice-label + .pg-choice-option {
+  margin-left: 0;
+  border-radius: 6px 0 0 6px;
+}
+
+.pg-choice-option:last-child {
+  border-radius: 0 6px 6px 0;
+}
+
+.pg-choice-option:hover {
+  background: var(--pg-hover);
+}
+
+.pg-choice-option[aria-pressed='true'] {
+  position: relative;
+  border-color: var(--pg-accent);
+  background: var(--pg-accent);
+  color: var(--pg-accent-text);
+}
+
+.pg-select select {
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--pg-border);
+  border-radius: 6px;
+  background: var(--pg-panel);
+  color: var(--pg-text);
+  font-size: 12px;
+}
+
+.pg-spacer {
+  flex: 1;
+}
+
+.pg-button {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--pg-border);
+  border-radius: 6px;
+  background: var(--pg-panel);
+  color: var(--pg-text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pg-button:hover {
+  background: var(--pg-hover);
+}
+
+.pg-button.is-quiet {
+  border-color: transparent;
+  background: none;
+  color: var(--pg-muted);
+}
+
+.pg-hint {
+  flex: none;
+  margin: 0;
+  padding: 6px 16px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--pg-border);
+  background: var(--pg-panel);
+  color: var(--pg-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- 预览区 ---------- */
+.pg-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  background: var(--pg-stage);
+}
+
+.pg-stage {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 16px;
+  overflow: hidden;
+}
+
+.pg-stage.is-fit {
+  align-items: stretch;
+  padding: 12px;
+}
+
+.pg-stage-fill {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.pg-stage-fill > * {
+  flex: 1;
+  min-width: 0;
+}
+
+.pg-stage-fill > .sn-app {
+  box-shadow: var(--pg-shadow);
+}
+
+.pg-viewport {
+  position: relative;
+  flex: none;
+}
+
+.pg-viewport-inner {
+  transform-origin: 0 0;
+}
+
+.pg-viewport-inner > .sn-app {
+  box-shadow: var(--pg-shadow);
+}
+
+.pg-viewport-label {
+  margin: 0;
+  color: var(--pg-muted);
+  font-size: 12px;
+}
+
+.pg-shell.is-bare {
+  height: 100vh;
+}
+
+.pg-shell.is-bare .pg-stage {
+  padding: 0;
+}
+
+.pg-shell.is-bare .pg-viewport-inner > .sn-app,
+.pg-shell.is-bare .pg-stage-fill > .sn-app {
+  box-shadow: none;
+}
+
+.pg-scaled {
+  width: 100%;
+}
+
+.pg-scaled-box {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  box-shadow: var(--pg-shadow);
+}
+
+.pg-scaled-inner {
+  transform-origin: 0 0;
+}
+
+/* ---------- 方案对比 ---------- */
+.pg-compare {
+  flex: 1;
+  min-height: 0;
+  padding: 8px 8px 40px;
+  overflow: auto;
+}
+
+.pg-compare-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.pg-compare-column {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pg-compare-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.pg-compare-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.pg-compare-english,
+.pg-compare-refs {
+  color: var(--pg-muted);
+  font-size: 12px;
+}
+
+.pg-compare-idea,
+.pg-compare-refs {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.pg-compare-keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pg-compare-keywords li {
+  padding: 2px 8px;
+  border: 1px solid var(--pg-border);
+  border-radius: 999px;
+  color: var(--pg-muted);
+  font-size: 12px;
+}
+
+.pg-compare-column .pg-button {
+  align-self: flex-start;
+}
+
+.pg-compare-table {
+  width: 100%;
+  margin-top: 28px;
+  border-collapse: collapse;
+  background: var(--pg-panel);
+  font-size: 12.5px;
+}
+
+.pg-compare-table :is(th, td) {
+  padding: 8px 12px;
+  border: 1px solid var(--pg-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.pg-compare-table th[scope='row'] {
+  width: 200px;
+  color: var(--pg-muted);
+  font-weight: 500;
+}
+
+/* 表头的主题名：点一下切到该主题的侧栏。 */
+.pg-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: var(--pg-border);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.pg-link:hover {
+  text-decoration-color: currentColor;
+}
+
+.pg-compare-table code {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 12px;
+}
+
+@media (max-width: 1100px) {
+  .pg-compare-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

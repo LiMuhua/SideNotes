@@ -1,0 +1,19 @@
+/* ==================== 交互原型：旧样式层 ====================
+ *
+ * 原型早期的样式（styles.css 与 v2–v8）都放进级联层 legacy，顺序与原来的 <link> 相同。
+ * 层内的规则不论选择器优先级多高，都排在不分层的 theme.css 之后：theme.css 写了的属性一律以它为准，
+ * 与 Design Playground 的样式逐项对齐；theme.css 没写的属性（布局、原型独有的部件）仍沿用旧样式。
+ * 注意：层内的 !important 反而压过不分层的规则，旧样式中的 !important 只应留给 [hidden]、减少动态效果这类必须生效的场合。
+ */
+@import url('styles.css') layer(legacy);
+@import url('v2.css') layer(legacy);
+@import url('v3.css') layer(legacy);
+@import url('v4.css') layer(legacy);
+@import url('v5.css') layer(legacy);
+@import url('v6.css') layer(legacy);
+@import url('v6-settings.css') layer(legacy);
+@import url('v7-settings.css') layer(legacy);
+@import url('v7-menu.css') layer(legacy);
+@import url('v7-interactions.css') layer(legacy);
+@import url('v7.css') layer(legacy);
+@import url('v8.css') layer(legacy);

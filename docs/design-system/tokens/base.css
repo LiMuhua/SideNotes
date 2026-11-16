@@ -1,0 +1,43 @@
+/* ==================== SideNote 共享令牌 ====================
+ *
+ * 与主题无关、所有主题共用的基础令牌：4px 网格的间距、描边宽度、字重、层级与禁用透明度。
+ * 随主题或明暗模式变化的令牌写在各主题的令牌文件中，见 docs/design-system/design-tokens.md。
+ */
+
+:root {
+  /* 间距：4px 网格，另有 2px 与 6px 两个半档用于图标与紧凑控件。 */
+  --sn-space-0: 0px;
+  --sn-space-1: 2px;
+  --sn-space-2: 4px;
+  --sn-space-3: 6px;
+  --sn-space-4: 8px;
+  --sn-space-5: 12px;
+  --sn-space-6: 16px;
+  --sn-space-7: 20px;
+  --sn-space-8: 24px;
+  --sn-space-9: 32px;
+  --sn-space-10: 40px;
+
+  /* 描边与焦点环 */
+  --sn-border-width: 1px;
+  --sn-focus-ring-width: 2px;
+  --sn-focus-ring-offset: 2px;
+
+  /* 字重：内置的 Maple Mono 只有 400 与 700 两个字重，其余字体按系统可用字重就近显示。 */
+  --sn-font-weight-regular: 400;
+  --sn-font-weight-medium: 500;
+  --sn-font-weight-semibold: 600;
+  --sn-font-weight-bold: 700;
+
+  --sn-radius-full: 999px;
+  --sn-opacity-disabled: 0.45;
+
+  /* 层级：只使用这几档，避免组件各自写数字造成遮挡。 */
+  --sn-z-sticky: 10;
+  --sn-z-dropdown: 100;
+  --sn-z-overlay: 200;
+  --sn-z-dialog: 300;
+  --sn-z-popover: 400;
+  --sn-z-toast: 500;
+  --sn-z-tooltip: 600;
+}

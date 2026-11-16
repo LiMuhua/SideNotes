@@ -1,6 +1,7 @@
 // 使用 vitest/config 的 defineConfig：它在 Vite 配置类型上补充 test 字段，
 // Vite 自身会忽略该字段，两个工具因此共用同一份别名与插件配置。
 import { defineConfig } from 'vitest/config';
+import type { Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
@@ -30,8 +31,39 @@ const stripViewportMedia = {
   },
 };
 
+/**
+ * 开发服务器去掉地址中的 docs 一层：/prototype/ 是交互原型，/design-system/playground/ 是 Playground。
+ *
+ * 两个页面都在 docs/ 下，这里只改写请求路径，地址栏与地址参数保持不变。
+ * 服务目录仍是仓库根目录：原型引用的内置字体（src/styles/）与应用图标（src-tauri/icons/builtin/）在 docs 之外，
+ * 页面中的 ../../ 在地址里退到根为止，正好落到这两个目录，不必复制资源。
+ * 只在开发服务器中生效；vite build 只打包根目录的 index.html，原型与 Playground 都不进入正式构建。
+ */
+const docsPrefixes = ['/prototype/', '/design-system/'];
+const docsPages = ['/prototype', '/design-system/playground'];
+const designPlayground: Plugin = {
+  name: 'sidenotes-design-playground',
+  apply: 'serve',
+  configureServer(server) {
+    server.middlewares.use((req, res, next) => {
+      const url = req.url ?? '';
+      const queryStart = url.indexOf('?');
+      const pathname = queryStart === -1 ? url : url.slice(0, queryStart);
+      // 页面地址缺少末尾的斜杠时先补上，页面中的相对路径才会按目录解析。
+      if (docsPages.includes(pathname)) {
+        res.statusCode = 302;
+        res.setHeader('Location', pathname + '/' + (queryStart === -1 ? '' : url.slice(queryStart)));
+        res.end();
+        return;
+      }
+      if (docsPrefixes.some((prefix) => pathname.startsWith(prefix))) req.url = '/docs' + url;
+      next();
+    });
+  },
+};
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), designPlayground],
   css: {
     postcss: { plugins: [stripViewportMedia] },
   },
@@ -63,7 +95,8 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
-    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    // docs/design-system 下是设计系统的检查：令牌齐全、关键颜色组合的对比度达标、产品样式只引用令牌。
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'docs/design-system/**/*.test.ts', 'docs/design-system/**/*.test.tsx'],
     globals: false,
   },
 });

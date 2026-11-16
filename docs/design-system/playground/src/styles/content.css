@@ -1,0 +1,320 @@
+/* ==================== 内容：Markdown 预览与实时编辑器 ====================
+ *
+ * 预览由现有应用的 `Markdown` 组件渲染（.markdown-body），编辑由现有应用的编辑器生成 DOM
+ * （.live-markdown-editor，与 .markdown-body 同时存在）。这里只提供外观，结构与类名沿用现有实现。
+ * 正文字体、字号与行高来自记录正文令牌，代码用代码令牌。
+ */
+
+/* ---------- 正文 ---------- */
+.sn-scope .markdown-body {
+  color: var(--sn-color-text);
+  font-family: var(--sn-font-note);
+  font-size: var(--sn-note-size);
+  font-weight: var(--sn-body-weight);
+  line-height: var(--sn-note-line-height);
+  overflow-wrap: anywhere;
+}
+
+.sn-scope .markdown-body > * + * {
+  margin-top: 0.35em;
+}
+
+.sn-scope .markdown-body :is(h1, h2, h3, h4, h5, h6) {
+  margin-top: 0.6em;
+  font-family: var(--sn-font-title);
+  font-size: 1em;
+  font-weight: var(--sn-title-weight);
+  letter-spacing: var(--sn-title-tracking);
+  line-height: var(--sn-line-height-tight);
+}
+
+.sn-scope .markdown-body :is(h1, h2) {
+  font-size: 1.08em;
+}
+
+.sn-scope .markdown-body > :first-child {
+  margin-top: 0;
+}
+
+.sn-scope .markdown-body :is(ul, ol) {
+  margin: 0.2em 0;
+  padding-left: 1.4em;
+}
+
+.sn-scope .markdown-body ol {
+  padding-left: calc(var(--md-ol-digits, 1) * 0.6em + 1.1em);
+}
+
+.sn-scope .markdown-body li + li {
+  margin-top: 0.15em;
+}
+
+.sn-scope .markdown-body li.markdown-task {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+  margin-left: -1.4em;
+  list-style: none;
+}
+
+.sn-scope .markdown-body .md-task-toggle {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  flex: none;
+  margin: 0;
+  accent-color: var(--sn-color-accent);
+  translate: 0 0.15em;
+}
+
+.sn-scope .markdown-body blockquote {
+  margin: 0;
+  padding-left: var(--sn-space-5);
+  border-left: var(--sn-focus-ring-width) solid var(--sn-color-border-strong);
+  color: var(--sn-color-text-secondary);
+}
+
+.sn-scope .markdown-body code {
+  padding: 0.08em 0.35em;
+  border-radius: var(--sn-radius-xs);
+  background: var(--sn-code-bg);
+  color: var(--sn-code-text);
+  font-family: var(--sn-font-code);
+  font-size: 0.9em;
+}
+
+.sn-scope .markdown-body pre.markdown-code {
+  margin: 0.3em 0;
+  padding: var(--sn-space-4) var(--sn-space-5);
+  overflow: auto;
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-code-bg);
+  color: var(--sn-code-text);
+  font-family: var(--sn-font-code);
+  font-size: var(--sn-code-size);
+  line-height: var(--sn-line-height-normal);
+}
+
+.sn-scope .markdown-body pre.markdown-code code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
+}
+
+.sn-scope .markdown-body hr {
+  margin: 0.6em 0;
+  border: 0;
+  border-top: var(--sn-border-width) solid var(--sn-color-border);
+}
+
+.sn-scope .markdown-body a,
+.sn-scope .markdown-body .markdown-link {
+  color: var(--sn-color-accent-text);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.sn-scope .markdown-body strong {
+  font-weight: var(--sn-font-weight-bold);
+}
+
+.sn-scope .markdown-body .file-reference,
+.sn-scope .md-editor-file {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sn-space-2);
+  max-width: 100%;
+  padding: 0 var(--sn-space-3);
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-sm);
+  background: var(--sn-color-surface-sunken);
+  color: var(--sn-color-text-secondary);
+  font-size: 0.92em;
+}
+
+.sn-scope .markdown-body .file-reference svg.icon,
+.sn-scope .md-editor-file svg.icon {
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+}
+
+/* ---------- 实时编辑器 ---------- */
+.sn-editor-host {
+  min-width: 0;
+}
+
+.sn-scope .live-markdown-editor {
+  position: relative;
+  overflow-y: auto;
+  outline: none;
+  caret-color: var(--sn-color-caret);
+  cursor: text;
+}
+
+.sn-scope .live-markdown-editor.is-empty::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  inset-inline: 0;
+  color: var(--sn-color-text-muted);
+  white-space: pre-wrap;
+  pointer-events: none;
+}
+
+.sn-scope .md-editor-line {
+  display: block;
+  min-height: calc(var(--sn-note-line-height) * 1em);
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+/* Markdown 标记（#、**、- 等）：终端用强调色，像代码的语法着色；其余主题用弱化文字色。 */
+.sn-scope .md-syntax {
+  color: var(--sn-color-syntax);
+  font-weight: var(--sn-font-weight-regular);
+  font-style: normal;
+  text-decoration: none;
+}
+
+.sn-scope .md-syntax.is-hidden {
+  display: none;
+}
+
+.sn-scope .md-heading {
+  font-family: var(--sn-font-title);
+  font-weight: var(--sn-title-weight);
+}
+
+.sn-scope .md-quote {
+  padding-left: var(--sn-space-5);
+  border-left: var(--sn-focus-ring-width) solid var(--sn-color-border-strong);
+  color: var(--sn-color-text-secondary);
+}
+
+.sn-scope .live-markdown-editor .md-list-item {
+  --md-list-hang: max(1.6em, 3ch);
+  padding-left: calc(var(--md-list-hang) + var(--md-list-indent, 0) * 0.5em);
+  text-indent: calc(var(--md-list-hang) * -1);
+}
+
+.sn-scope .live-markdown-editor :is(.md-list-bullet, .md-list-marker.is-revealed) {
+  display: inline-block;
+  min-width: var(--md-list-hang);
+  color: var(--sn-color-syntax);
+  text-indent: 0;
+  white-space: pre;
+}
+
+.sn-scope :is(.md-fenced-code, .md-fence-marker) {
+  padding: 0 var(--sn-space-4);
+  background: var(--sn-code-bg);
+  color: var(--sn-code-text);
+  font-family: var(--sn-font-code);
+  font-size: var(--sn-code-size);
+}
+
+.sn-scope .md-fence-marker.is-collapsed {
+  min-height: var(--sn-space-2);
+  line-height: var(--sn-space-2);
+  border-radius: var(--sn-radius-xs);
+}
+
+.sn-scope .md-inline-code {
+  padding: 0.08em 0.35em;
+  border-radius: var(--sn-radius-xs);
+  background: var(--sn-code-bg);
+  color: var(--sn-code-text);
+  font-family: var(--sn-font-code);
+  font-size: 0.9em;
+}
+
+.sn-scope .md-rule {
+  display: flex;
+  align-items: center;
+}
+
+.sn-scope .md-rule-line {
+  flex: 1;
+  height: var(--sn-border-width);
+  background: var(--sn-color-border);
+}
+
+/* 编辑区的根元素同时带 markdown-body，选择器写到编辑区之内，才能盖过正文中待办按钮的样式。 */
+.sn-scope .live-markdown-editor .md-task-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  margin-right: var(--sn-space-3);
+  padding: 0;
+  border: var(--sn-border-width) solid var(--sn-color-border-strong);
+  border-radius: var(--sn-radius-xs);
+  color: var(--sn-color-accent-text);
+  font-size: 0.8em;
+  line-height: 1;
+  text-indent: 0;
+  vertical-align: -0.12em;
+}
+
+.sn-scope .live-markdown-editor .md-task-checkbox[aria-checked='true'] {
+  border-color: var(--sn-color-accent);
+  background: var(--sn-color-accent-subtle);
+}
+
+.sn-scope .md-tag-ghost {
+  color: var(--sn-color-text-muted);
+  pointer-events: none;
+  user-select: none;
+}
+
+.sn-scope .md-tag-ghost-hint {
+  display: inline-block;
+  margin-left: var(--sn-space-3);
+  padding: 0 var(--sn-space-2);
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-xs);
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-meta);
+  font-size: var(--sn-font-size-xs);
+  line-height: 1.5;
+}
+
+.sn-scope .md-editor-image {
+  display: inline-flex;
+  margin: var(--sn-space-2) 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--sn-radius-sm);
+  background: var(--sn-color-surface-sunken);
+}
+
+/* 图片缩略图：不超过卡片宽度，点击打开附件弹窗；高度上限与现有应用一致。 */
+.sn-scope .markdown-body .markdown-image-button {
+  display: inline-flex;
+  max-width: 100%;
+  margin: var(--sn-space-2) 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--sn-radius-sm);
+  background: var(--sn-color-surface-sunken);
+  cursor: zoom-in;
+}
+
+.sn-scope .markdown-body .markdown-image-button:hover {
+  box-shadow: 0 0 0 var(--sn-focus-ring-width) var(--sn-color-accent-subtle);
+}
+
+.sn-scope :is(.markdown-image-button, .md-editor-image) .markdown-image {
+  display: block;
+  max-width: 100%;
+  max-height: 150px; /* 固定：缩略图高度与现有应用一致 */
+  border: var(--sn-border-width) solid var(--sn-color-border-subtle);
+  border-radius: var(--sn-radius-sm);
+  object-fit: cover;
+}
+
+.sn-scope .md-editor-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

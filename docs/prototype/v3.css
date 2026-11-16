@@ -3,7 +3,7 @@
 .note-header{gap:8px;min-height:25px;margin-bottom:5px}
 .note-header .note-title{font-size:14px;line-height:1.5;font-weight:600;letter-spacing:0}
 .note-header .note-time{font-size:10px;color:var(--muted);line-height:1.5}
-.note-emoji{display:inline-flex;align-items:center;justify-content:center;flex:0 0 27px;width:27px;height:27px;border-radius:7px;padding:0;background:transparent;font-family:'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',sans-serif;font-size:20px;line-height:1;transition:background .15s,transform .15s}
+.note-emoji{display:inline-flex;align-items:center;justify-content:center;flex:0 0 27px;width:27px;height:27px;border-radius:7px;padding:0;background:transparent;font-family:var(--sn-font-ui);font-size:20px;line-height:1;transition:background .15s,transform .15s}
 .note-emoji:hover{background:var(--soft);transform:scale(1.08)}
 .note-emoji:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .note-card{padding-top:11px;max-height:320px}
@@ -11,12 +11,12 @@
 .note-tags{flex:1 1 0;flex-wrap:nowrap;min-width:0;gap:5px;overflow:visible;min-height:23px}
 .tag-chip-wrap{position:relative;display:inline-flex;align-items:center;flex:0 0 auto;min-width:0;max-width:150px;gap:0;overflow:visible}
 .tag-chip-wrap .tag-chip{max-width:150px;font-size:10px;line-height:15px;min-height:22px;padding:2px 7px;border-radius:6px}
-.tag-chip-wrap>.tag-remove{position:absolute;z-index:3;right:-5px;top:-5px;display:none;align-items:center;justify-content:center;width:15px;height:15px;min-width:15px;min-height:15px;margin:0;padding:0;border:1px solid var(--card);border-radius:50%;background:var(--muted);color:var(--card);box-shadow:0 1px 3px #00000018;font-size:11px;line-height:1}
+.tag-chip-wrap>.tag-remove{position:absolute;z-index:3;right:-5px;top:-5px;display:none;align-items:center;justify-content:center;width:15px;height:15px;min-width:15px;min-height:15px;margin:0;padding:0;border:1px solid var(--card);border-radius:50%;background:var(--muted);color:var(--card);box-shadow:var(--sn-shadow-sm);font-size:11px;line-height:1}
 .tag-chip-wrap>.tag-remove .icon{width:9px;height:9px;stroke-width:2}
 .tags-expanded .tag-chip-wrap{max-width:180px;margin-top:4px;margin-right:3px}
 .tags-expanded .tag-chip-wrap .tag-chip{max-width:180px}
 .tags-expanded .tag-chip-wrap>.tag-remove{display:inline-flex}
-.tags-expanded .tag-chip-wrap>.tag-remove:hover{background:var(--danger);color:#fff}
+.tags-expanded .tag-chip-wrap>.tag-remove:hover{background:var(--danger);color:var(--sn-color-on-accent)}
 .note-tags.tags-expanded{flex-wrap:wrap;gap:7px 5px;padding-top:1px;padding-bottom:2px;overflow:visible}
 .note-bottom:has(.tags-expanded){flex-wrap:wrap;align-items:flex-end;row-gap:6px}
 .note-bottom:has(.tags-expanded) .note-tags{flex-basis:100%}
@@ -49,7 +49,7 @@
 .emoji-categories>button:is(.active,.is-active,[aria-selected=true],[aria-pressed=true]){color:var(--accent);background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 18%,transparent)}
 .emoji-current-caption{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--muted);font-size:10px;line-height:1.8;margin:0 1px 9px}
 .emoji-grid{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));gap:5px;align-content:start;min-height:100px;max-height:350px;overflow:auto;scrollbar-width:thin;padding:3px 3px 4px}
-.emoji-grid>button.emoji-choice{position:relative;display:flex;align-items:center;justify-content:center;aspect-ratio:1;width:100%;min-width:0;min-height:37px;padding:3px;border:1px solid transparent;border-radius:8px;font-family:'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',sans-serif;font-size:25px;line-height:1;background:transparent;transition:background .12s,border-color .12s,transform .12s}
+.emoji-grid>button.emoji-choice{position:relative;display:flex;align-items:center;justify-content:center;aspect-ratio:1;width:100%;min-width:0;min-height:37px;padding:3px;border:1px solid transparent;border-radius:8px;font-family:var(--sn-font-ui);font-size:25px;line-height:1;background:transparent;transition:background .12s,border-color .12s,transform .12s}
 .emoji-grid>button.emoji-choice:hover{background:var(--soft);transform:translateY(-1px)}
 .emoji-grid>button.emoji-choice:is(.selected,.is-selected,.is-current,[aria-pressed=true],[aria-selected=true]){background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 38%,transparent)}
 .emoji-grid>button.emoji-choice:focus-visible{outline:2px solid var(--accent);outline-offset:0}
@@ -70,7 +70,7 @@
 .live-markdown-editor :is(.md-heading-3,.md-heading-4,.md-heading-5,.md-heading-6){font-size:1em}
 .live-markdown-editor .md-quote{border-left:2px solid color-mix(in srgb,var(--accent) 45%,var(--line));padding-left:10px;color:var(--subtle)}
 .live-markdown-editor .md-list-item{padding-left:4px}
-.live-markdown-editor .md-fenced-code{padding:0 9px;background:var(--soft);font: .94em/1.85 'Cascadia Code',Consolas,'Microsoft YaHei',monospace;border-left:2px solid var(--line);color:var(--subtle)}
+.live-markdown-editor .md-fenced-code{padding:0 9px;background:var(--soft);font: .94em/1.85 var(--sn-font-code);border-left:2px solid var(--line);color:var(--subtle)}
 .live-markdown-editor .md-rule{min-height:1.85em;background:linear-gradient(var(--line),var(--line)) center/100% 1px no-repeat}
 .live-markdown-editor .md-rule.is-active{background:none}
 .live-markdown-editor :is(strong,em,code,del){white-space:pre-wrap}
@@ -78,7 +78,7 @@
 .live-markdown-editor img{max-width:100%;max-height:170px;border-radius:6px;vertical-align:middle;object-fit:contain}
 #quick-composer .live-markdown-editor{position:relative;margin:0;padding:4px 1px 2px;min-height:40px;max-height:min(300px,38vh);height:auto;overflow-y:auto;border:0;background:none;resize:none;font-family:var(--note-font-family);font-size:var(--note-font-size);line-height:1.8}
 #quick-composer .live-markdown-editor .md-editor-line{line-height:1.8;min-height:1.8em}
-#quick-composer .live-markdown-editor.is-empty:before{font-size:12px;color:#97a38c}
+#quick-composer .live-markdown-editor.is-empty:before{font-size:12px;color:var(--sn-color-accent-text)}
 .capture-body .live-markdown-editor{position:relative;min-height:125px;max-height:36vh;overflow-y:auto;padding:9px 0;line-height:1.9;font-size:var(--note-font-size);background:none;border:0}
 .note-edit-input.live-markdown-editor{position:relative;min-height:160px;max-height:40vh;overflow-y:auto;padding:10px;border:1px solid var(--line);border-radius:7px;background:var(--card);resize:none}
 
@@ -108,7 +108,7 @@
 .setting-field-wide{grid-column:1/-1}
 .settings-grid input[type=number]{width:100%;min-width:0}
 .settings-font-row .settings-range{min-width:0;width:100%;height:35px;gap:10px;padding:0}
-.settings-font-row .settings-range input[type=range]{flex:1;width:100%!important;min-width:30px!important}
+.settings-font-row .settings-range input[type=range]{flex:1;width:100%;min-width:30px}
 .settings-font-row .settings-range output{font-size:11px;min-width:32px}
 .settings-font-preview{padding:12px 14px;margin-top:14px;font-size:var(--note-font-size);line-height:1.85;border:1px solid var(--line);background:var(--soft);border-radius:8px}
 .settings-inline{gap:9px}
@@ -123,7 +123,7 @@
 .font-combobox-toggle{position:absolute;right:3px;top:3px;display:flex;align-items:center;justify-content:center;width:27px;height:27px;flex-shrink:0;border-radius:5px;color:var(--muted);padding:0}
 .font-combobox-toggle:hover{background:var(--accent-soft);color:var(--accent)}
 .font-combobox-toggle .icon{width:12px;height:12px}
-.font-combobox-list{position:absolute;z-index:20;top:calc(100% + 5px);left:0;right:0;min-width:100%;max-height:220px;padding:5px;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:9px;box-shadow:0 10px 30px #17261621;scrollbar-width:thin}
+.font-combobox-list{position:absolute;z-index:20;top:calc(100% + 5px);left:0;right:0;min-width:100%;max-height:220px;padding:5px;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:9px;box-shadow:var(--sn-shadow-lg);scrollbar-width:thin}
 .font-combobox-option{display:flex;align-items:center;gap:8px;width:100%;padding:8px 9px;min-height:32px;border-radius:5px;font-size:11px;text-align:left;color:var(--subtle);line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .font-combobox-option:is(:hover,.is-active){background:var(--soft);color:var(--ink)}
 .font-combobox-option.is-selected{background:var(--accent-soft);color:var(--accent)}
@@ -142,7 +142,7 @@
 /* ==================== 版号与更新日志 ==================== */
 .sidebar-brand .version-button{position:relative;display:inline-flex;align-items:center;gap:5px;min-height:19px;padding:1px 2px;margin-top:2px;border-radius:4px;background:none;color:var(--muted);font-size:9px;font-weight:450;letter-spacing:.45px;line-height:1.5;white-space:nowrap}
 .sidebar-brand .version-button:hover{color:var(--accent);background:var(--accent-soft)}
-.version-button .update-dot{position:absolute;right:-4px;top:-1px;display:block;width:5px;height:5px;border-radius:50%;background:#438cf0;box-shadow:0 0 0 2px var(--paper)}
+.version-button .update-dot{position:absolute;right:-4px;top:-1px;display:block;width:5px;height:5px;border-radius:50%;background:var(--sn-color-accent-subtle);box-shadow:0 0 0 2px var(--paper)}
 .version-button .version-channel{font-size:8px;letter-spacing:.6px}
 .changelog-modal.modal{width:560px;max-width:min(560px,calc(100vw - 32px))}
 .changelog-modal .modal-header{border-bottom:0;padding-bottom:9px}
