@@ -1,6 +1,6 @@
 /**
- * 搜索命中的高亮（第七次反馈，与交互原型相同）：标题、正文与标签中的搜索词加上高亮底色（令牌见 base.css 的 ::highlight）；
- * 「#标签」只标在标签上（写完整的已有标签只标这个标签，没写完的按前缀）。
+ * 搜索命中的高亮（第七次反馈，与交互原型相同）：搜索词在标题与正文中加上高亮底色（令牌见 base.css 的 ::highlight）；
+ * 「#标签」只标在标签上（写完整的已有标签只标这个标签，没写完的按前缀）。文字不再标在标签上（第八次反馈：文字与标签分开搜）。
  *
  * 用 CSS 自定义高亮（CSS.highlights）标出文字范围，不改动 React 管理的节点：正文由桌面应用的 Markdown 组件渲染，
  * Playground 不往里面插入元素。同一页面上可能有好几个侧栏（组件页的示例），按实例分别登记，合成一个高亮。
@@ -49,7 +49,7 @@ export function findHits(root: Node, words: readonly string[]): Range[] {
 }
 
 /**
- * 侧栏列表中的命中：标题与正文按文字，标签按文字或「#标签」。
+ * 侧栏列表中的命中：标题与正文按文字，标签按「#标签」。
  * @param known 已有标签的 tagKey，「#标签」写完整的已有标签时只标这个标签。
  */
 export function listHits(list: Element, terms: string, known: ReadonlySet<string>): Range[] {
@@ -58,13 +58,10 @@ export function listHits(list: Element, terms: string, known: ReadonlySet<string
   list.querySelectorAll('.sn-note-title, .sn-note-markdown').forEach((element) => ranges.push(...findHits(element, words)));
   list.querySelectorAll<HTMLElement>('.sn-note-tag').forEach((chip) => {
     const key = tagKey(chip.dataset.tag ?? '');
-    if (tags.some((tag) => (known.has(tag) ? key === tag : key.startsWith(tag)))) {
-      const range = document.createRange();
-      range.selectNodeContents(chip);
-      ranges.push(range);
-    } else {
-      ranges.push(...findHits(chip, words));
-    }
+    if (!tags.some((tag) => (known.has(tag) ? key === tag : key.startsWith(tag)))) return;
+    const range = document.createRange();
+    range.selectNodeContents(chip);
+    ranges.push(range);
   });
   return ranges;
 }

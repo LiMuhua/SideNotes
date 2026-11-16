@@ -120,6 +120,29 @@ function FilterActions({ view, tag, onPin, onMerge }: { view: SidebarView; tag: 
 }
 
 /**
+ * 搜的词正好是已有标签的名称时，结果条数后面的「#开发 8 条」（第八次反馈）：文字与标签分开搜之后，点它改搜这个标签，
+ * 焦点回到搜索框。
+ */
+function WordTagAction({ view, tag, count }: { view: SidebarView; tag: string; count: number }) {
+  return (
+    <span className="sn-topline-actions">
+      <button
+        type="button"
+        className="sn-topline-action sn-word-tag"
+        aria-label={`改搜标签 #${tag}，${count} 条`}
+        onClick={(event) => {
+          view.setQuery(`#${tag}`);
+          event.currentTarget.closest('.sn-sidebar')?.querySelector<HTMLInputElement>('.sn-side-search input')?.focus();
+        }}
+      >
+        <span>#{tag}</span>
+        <span className="sn-word-tag-count">{count} 条</span>
+      </button>
+    </span>
+  );
+}
+
+/**
  * 搜索（第五次反馈：搜索全部记录；第六次反馈：回到页签栏的最右端）：点放大镜后搜索框从右向左铺满页签栏，盖住页签；
  * 再点放大镜收起并清空搜索词，标签筛选保留。有搜索词时列表是全部记录中的结果，按页签分组；结果的条数与
  * 「固定为页签」「合并」写在下面的筛选行，框里只有输入框与清空按钮。末尾正在输入 #标签 时以灰字联想已有标签，Tab 选用，
@@ -200,7 +223,7 @@ function SearchBox({ view, onInput }: { view: SidebarView; onInput?: (element: H
           ref={setInput}
           type="search"
           value={view.query}
-          placeholder="搜索全部记录、#标签…"
+          placeholder="搜文字，#标签 只搜标签"
           aria-label="搜索全部记录与标签"
           autoComplete="off"
           spellCheck={false}
@@ -306,6 +329,7 @@ export function ListTopline({ view, onManageTag, onSearchTags, onPin, onMerge, o
         ) : view.searching ? (
           <>
             <span className="sn-topline-search-count">{view.items.length} 条</span>
+            {view.wordTag ? <WordTagAction view={view} tag={view.wordTag.tag} count={view.wordTag.count} /> : null}
             {view.searchTag ? <FilterActions view={view} tag={view.searchTag} onPin={onPin} onMerge={onMerge} /> : null}
           </>
         ) : (

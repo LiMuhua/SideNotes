@@ -2,6 +2,8 @@
  * 全局搜索（第五次反馈）：Playground 的规则（playground/src/model/notes.tsx）与交互原型的 app.js 相同。
  *
  * - 搜索全部未删除的记录，与当前页签无关；只写 # 还没写标签名时不算搜索；
+ * - 文字与标签分开搜（第八次反馈）：不带 # 的词只搜标题、正文与附件名，带 # 的词只搜标签；搜的词正好是已有标签时，
+ *   筛选行里可以改搜这个标签（wordTag）；
  * - 写完整的已有标签只匹配这个标签，没写完的按前缀匹配；
  * - 结果按页签分组：每条记录放在它所在的页签——置顶的在置顶（第七次反馈），其余没有固定标签的在随记，有的在第一个固定标签；
  *   置顶组总在最上面，其余与页签栏的顺序相同，组内置顶在前；
@@ -10,7 +12,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { Note } from '@/core/types';
-import { homeTab, searchGroups, searchTerms, singleSearchTag } from '../playground/src/model/notes';
+import { homeTab, searchGroups, searchTerms, singleSearchTag, wordTag } from '../playground/src/model/notes';
 
 let sequence = 0;
 function note(text: string, extra: Partial<Note> = {}): Note {
@@ -77,6 +79,24 @@ describe('全局搜索', () => {
     expect(exact).toEqual([dev.id, product.id]);
     const prefix = searchGroups(notes, pinned, '#产品经').flatMap((group) => group.notes.map((item) => item.id));
     expect(prefix).toEqual([manager.id, product.id]);
+  });
+
+  it('不带 # 的词只搜标题、正文与附件名，不再命中标签（第八次反馈）', () => {
+    const ids = (query: string, list = notes) => searchGroups(list, pinned, query).flatMap((group) => group.notes.map((item) => item.id));
+    // 「产品」只在 product 的正文里；dev 与 manager 只有 #产品、#产品经理 标签
+    expect(ids('产品')).toEqual([product.id]);
+    expect(ids('评审 #产品')).toEqual([product.id]);
+    expect(ids('发布 #产品')).toEqual([dev.id]);
+    const attached = note('会议截图', { images: [{ id: 'a1', name: '产品原型.png', path: 'a1.png', size: 1, kind: 'image' } as unknown as Note['images'][number]] });
+    expect(ids('原型', [...notes, attached])).toEqual([attached.id]);
+  });
+
+  it('搜的词正好是已有标签的名称时返回这个标签与条数，筛选行里可以改搜它', () => {
+    expect(wordTag('产品', notes)).toEqual({ tag: '产品', count: 2 });
+    expect(wordTag(' 开发 ', notes)).toEqual({ tag: '开发', count: 1 });
+    expect(wordTag('#产品', notes)).toBeNull();
+    expect(wordTag('产品 评审', notes)).toBeNull();
+    expect(wordTag('不存在', notes)).toBeNull();
   });
 
   it('只搜一个已有标签时返回这个标签的写法，搜别的时为空', () => {

@@ -169,9 +169,11 @@ export function PartsSection() {
   const plain = useSidebarView();
   const wide = useSidebarView();
   const narrow = useSidebarView();
-  // 示例数据固定的标签中排在最后的「参考」：窄侧栏里本该收进最后一格，它是当前页签时排到「N ▾」前面（第七次反馈）。
+  // 示例数据固定的标签中排在最后的「参考」：窄侧栏里本该收进「N ▾」，它是当前页签时换进末格（第八次反馈）。
   const narrowHidden = useSidebarView({ tab: tabOfTag('参考') });
   const suggesting = useSidebarView({ searchOpen: true, query: '#工' });
+  // 搜的词正好是已有标签的名称（第八次反馈）：只搜文字，条数后面可以改搜这个标签。
+  const wordSearch = useSidebarView({ searchOpen: true, query: '开发' });
   const searching = useSidebarView({ searchOpen: true, query: '#阅读' });
   const tagged = useSidebarView({ tag: '阅读' });
   const selecting = useSidebarView({ checked: notesInTab(data.notes, 'workspace', data.pinnedTags).slice(0, 3).map((note) => note.id) });
@@ -189,7 +191,7 @@ export function PartsSection() {
       </Demo>
       <Demo
         title="最后一格"
-        note="只占一个位置，样子固定（第六次反馈）：页签都放得下、后面还有位置时是「+」，单击新建页签；真放不下时多出来的页签从右往左收进来，写「N ▾」，单击打开菜单；页签都放得下、只差「+」时不显示，不为它收起页签（第七次反馈）。当前页签不收：放不下时收它前面的页签，它排到「N ▾」前面（第七次反馈）。"
+        note="只占一个位置，样子固定（第六次反馈）：页签都放得下、后面还有位置时是「+」，单击新建页签；真放不下时多出来的页签从右往左收进来，写「N ▾」，单击打开菜单；页签都放得下、只差「+」时不显示，不为它收起页签（第七次反馈）。放不下时最后一个显示的页签与「N ▾」合成末格，中间一条短竖线；从菜单选页签只换末格里的页签，前面的页签不动，换进来的较宽时名字缩短（第八次反馈）。"
       >
         <div className="sn-card-matrix">
           <StateCell label="放得下时">
@@ -203,7 +205,7 @@ export function PartsSection() {
               <SidebarNav view={narrow} />
             </PanelSample>
           </StateCell>
-          <StateCell label="当前页签排到「N ▾」前面">
+          <StateCell label="当前页签换进末格">
             <PanelSample className="is-narrow">
               <SidebarNav view={narrowHidden} />
             </PanelSample>
@@ -239,12 +241,18 @@ export function PartsSection() {
       </Demo>
       <Demo
         title="搜索"
-        note="搜索全部记录，与当前页签无关；搜索框在页签栏，展开时盖住页签。输入 # 时以灰字联想已有标签，Tab 选用，↑ ↓ 切换候选（T41）。结果的条数写在筛选行左边，只搜一个标签时还有「固定为页签」与「合并」。结果按页签分组，置顶组总在最上面，组标题右侧「转到」切到这个页签；标题、正文与标签中命中的文字高亮（第七次反馈）。"
+        note="搜索全部记录，与当前页签无关；搜索框在页签栏，展开时盖住页签。文字与标签分开搜（第八次反馈）：不带 # 的词只搜标题、正文与附件名，带 # 的词只搜标签；搜的词正好是已有标签时，条数后面的「#开发 N 条」改搜这个标签。输入 # 时以灰字联想已有标签，Tab 选用，↑ ↓ 切换候选（T41）。结果的条数写在筛选行左边，只搜一个标签时还有「固定为页签」与「合并」。结果按页签分组，置顶组总在最上面，组标题右侧「转到」切到这个页签；命中的文字高亮（第七次反馈）。"
       >
         <div className="sn-card-matrix">
           <StateCell label="标签联想">
             <PanelSample>
               <SidebarNav view={suggesting} />
+            </PanelSample>
+          </StateCell>
+          <StateCell label="搜的词正好是标签">
+            <PanelSample>
+              <SidebarNav view={wordSearch} />
+              <ListTopline view={wordSearch} onManageTag={noop} onSearchTags={noop} />
             </PanelSample>
           </StateCell>
           <StateCell label="只搜一个标签">

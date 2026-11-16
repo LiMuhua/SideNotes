@@ -430,7 +430,8 @@ export function searchTerms(query: string): string {
 }
 
 /**
- * 搜索匹配：正文、标签与附件名中的文字都要出现；写完整的已有标签（如 #产品）只匹配这个标签，没写完的按前缀匹配。
+ * 搜索匹配，文字与标签分开搜（第八次反馈，与交互原型的 matchesQuery 相同）：不带 # 的词只搜标题、正文与附件名，不再命中标签；
+ * 带 # 的词只搜标签，写完整的已有标签（如 #产品）只匹配这个标签，没写完的按前缀匹配。两种可以一起写，同时满足。
  * @param known 已有标签的 tagKey。
  */
 export function matchesSearch(note: Note, terms: string, known: ReadonlySet<string>): boolean {
@@ -446,7 +447,7 @@ export function matchesSearch(note: Note, terms: string, known: ReadonlySet<stri
     .toLocaleLowerCase();
   const keys = parsed.tags.map(tagKey);
   if (!tags.every((tag) => keys.some((key) => (known.has(tag) ? key === tag : key.startsWith(tag))))) return false;
-  const haystack = `${parsed.body} ${parsed.tags.join(' ')} ${note.images.map((image) => image.name).join(' ')}`.toLocaleLowerCase();
+  const haystack = `${parsed.body} ${note.images.map((image) => image.name).join(' ')}`.toLocaleLowerCase();
   return text
     .split(/\s+/)
     .filter(Boolean)
@@ -480,6 +481,17 @@ export function singleSearchTag(query: string, notes: readonly Note[]): string {
   if (!match) return '';
   const key = tagKey(match[1]);
   return allTags(notes).find((item) => tagKey(item.tag) === key)?.tag ?? '';
+}
+
+/**
+ * 搜的词正好是一个已有标签的名称时（如「开发」）返回这个标签与条数，否则为空（第八次反馈）：文字与标签分开搜之后，
+ * 筛选行的结果条数后面出现「#开发 8 条」，点它改搜这个标签。
+ */
+export function wordTag(query: string, notes: readonly Note[]): { tag: string; count: number } | null {
+  const word = searchTerms(query);
+  if (!/^[\p{L}\p{N}_-]+$/u.test(word)) return null;
+  const key = tagKey(word);
+  return allTags(notes).find((item) => tagKey(item.tag) === key) ?? null;
 }
 
 export function tabCount(notes: readonly Note[], tab: SidebarTab, pinned: readonly string[]): number {
@@ -661,6 +673,8 @@ export function useSidebarView(options: SidebarViewOptions = {}) {
     groups,
     /** 只搜一个已有标签时的标签（筛选行里出现「固定为页签」「合并」）。 */
     searchTag: searching ? singleSearchTag(query, notes) : '',
+    /** 搜的词正好是已有标签的名称时的标签与条数（筛选行里出现「#开发 8 条」，第八次反馈）。 */
+    wordTag: searching ? wordTag(query, notes) : null,
     items,
     total,
     countOf,
