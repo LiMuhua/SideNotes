@@ -11,10 +11,12 @@ export type IconName =
   | 'archive'
   | 'arrow-left'
   | 'arrow-right'
+  | 'arrow-up'
   | 'arrow-up-right'
   | 'bell'
   | 'check'
   | 'check-circle'
+  | 'check-square'
   | 'chevron-down'
   | 'cloud'
   | 'cloud-off'
@@ -27,19 +29,25 @@ export type IconName =
   | 'external'
   | 'file'
   | 'file-text'
+  | 'fold'
   | 'folder'
+  | 'globe'
   | 'hash'
   | 'heart'
+  | 'help'
   | 'image'
   | 'info'
   | 'keyboard'
   | 'link'
   | 'loader'
   | 'lock'
+  | 'merge'
   | 'minus'
   | 'moon'
   | 'more'
   | 'note'
+  | 'panel-left'
+  | 'panel-top'
   | 'pin'
   | 'pin-off'
   | 'plus'
@@ -48,6 +56,7 @@ export type IconName =
   | 'settings'
   | 'sun'
   | 'trash'
+  | 'unfold'
   | 'unlock'
   | 'upload'
   | 'x';
@@ -188,6 +197,38 @@ export function IconSprite() {
       </symbol>
       <symbol id="i-bell" viewBox="0 0 24 24">
         <path d="M18 8a6 6 0 0 0-12 0v6l-2 3h16l-2-3zM10 21h4"/>
+      </symbol>
+      <symbol id="i-arrow-up" viewBox="0 0 24 24">
+        <path d="M12 19V5m-6 6 6-6 6 6" />
+      </symbol>
+      <symbol id="i-check-square" viewBox="0 0 24 24">
+        <rect x="4.5" y="4.5" width="15" height="15" rx="2.5" />
+        <path d="m8.5 12 2.5 2.5 4.5-5" />
+      </symbol>
+      <symbol id="i-fold" viewBox="0 0 24 24">
+        <path d="m7 20 5-5 5 5M7 4l5 5 5-5" />
+      </symbol>
+      <symbol id="i-unfold" viewBox="0 0 24 24">
+        <path d="m7 15 5 5 5-5M7 9l5-5 5 5" />
+      </symbol>
+      <symbol id="i-help" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.8M12 17h.01" />
+      </symbol>
+      <symbol id="i-panel-left" viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <path d="M9 4v16" />
+      </symbol>
+      <symbol id="i-panel-top" viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <path d="M3 9h18" />
+      </symbol>
+      <symbol id="i-merge" viewBox="0 0 24 24">
+        <path d="M8 6l4-4 4 4M12 2v10.3a4 4 0 0 1-1.2 2.9L4 22M20 22l-5-5" />
+      </symbol>
+      <symbol id="i-globe" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M3.5 12h17M12 3.5c2.3 2.4 3.5 5.2 3.5 8.5s-1.2 6.1-3.5 8.5c-2.3-2.4-3.5-5.2-3.5-8.5S9.7 5.9 12 3.5z" />
       </symbol>
     </svg>
   );

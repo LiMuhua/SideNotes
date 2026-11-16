@@ -1,14 +1,16 @@
 /**
- * 记录卡片。
+ * 记录卡片（原型第二版，components.md 第二节）。
  *
- * 结构与原型一致：Emoji、标题、时间按钮、正文、标签行与操作行；
- * 正文按设置限高，超出部分渐隐，悬停时提示双击查看全文（不再显示「展开全文」按钮）；
- * 折叠状态只保留标题行与操作行。
+ * 标题行：勾选框（多选按钮按下时代替 Emoji）、Emoji、标题（最多两行）与右侧一格；右侧一格平时是置顶标记与时间，
+ * 悬停、高亮或聚焦时换成操作按钮（置顶在最前，然后是复制、更多，收起在最右，落在时间原来的位置），标题宽度因此不变。
+ * 只有标题行的记录不留正文区；底部一行只在有标签时出现。正文按设置限高，超出部分渐隐，双击卡片查看全文。
+ * 列表只让一张卡片进入 Tab 顺序，卡片内的按钮也只在高亮的一张上可聚焦（interactions.md 3.2）。
  * 编辑态直接在卡片内嵌入实时 Markdown 编辑面，确认前不写入记录。
  */
 
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { Icon } from './Icon';
+import { KeyHint } from './KeyHint';
 import { LiveEditor } from './LiveEditor';
 import { TagInput } from './TagInput';
 import { Markdown, MarkdownInline } from './Markdown';
@@ -26,6 +28,8 @@ export interface NoteCardProps {
   editing: EditSession | null;
   /** 单击选中的卡片：与悬停使用同一种边框高亮，Ctrl+C 复制它。 */
   current: boolean;
+  /** 列表唯一的 Tab 停靠点：编辑中的卡片，否则是高亮的卡片，没有高亮时是第一张。 */
+  tabStop: boolean;
   /** 是否处于多选状态。 */
   selected: boolean;
   /** 记录菜单正为这张卡片打开。 */
@@ -61,7 +65,6 @@ export interface NoteCardProps {
   onToggleCollapse: () => void;
   onCopy: () => void;
   onTogglePin: () => void;
-  onArchive: () => void;
   onMore: (anchor: HTMLElement) => void;
   onFilterTag: (tag: string) => void;
   onRemoveTag: (tag: string) => void;
@@ -108,7 +111,6 @@ function Attachments({
               type="button"
               className="icon-button attachment-remove"
               aria-label={`移除 ${image.name}`}
-              title={`移除 ${image.name}`}
               onClick={(event) => {
                 event.stopPropagation();
                 onRemove(image.id);
@@ -127,6 +129,7 @@ function Attachments({
 function TagRow({
   tags,
   expanded,
+  tabIndex,
   onFilter,
   onRemove,
   onRename,
@@ -134,6 +137,8 @@ function TagRow({
 }: {
   tags: string[];
   expanded: boolean;
+  /** 只有高亮的卡片里的按钮进入 Tab 顺序。 */
+  tabIndex: number;
   onFilter: (tag: string) => void;
   onRemove: (tag: string) => void;
   onRename: (tag: string, next: string) => void;
@@ -142,6 +147,45 @@ function TagRow({
   const [renaming, setRenaming] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const input = useRef<HTMLInputElement>(null);
+  const row = useRef<HTMLDivElement>(null);
+  // 放不下的标签收起，「…」常驻并写出收起了几个（与原型的 fitCardTags 相同）；没有收起时「…」平时隐藏。
+  const [hiddenCount, setHiddenCount] = useState(0);
+
+  useLayoutEffect(() => {
+    const element = row.current;
+    if (!element) return;
+    const fit = (): void => {
+      const wraps = Array.from(element.querySelectorAll<HTMLElement>('.tag-chip-wrap'));
+      const more = element.querySelector<HTMLElement>('.tags-more');
+      wraps.forEach((wrap) => {
+        wrap.hidden = false;
+      });
+      if (!more || expanded) {
+        setHiddenCount(0);
+        return;
+      }
+      const width = element.clientWidth;
+      if (!width) return;
+      const reserve = more.getBoundingClientRect().width || 24;
+      const gap = 4;
+      let used = 0;
+      let visible = 0;
+      for (const wrap of wraps) {
+        const next = used + wrap.getBoundingClientRect().width + (visible ? gap : 0);
+        if (next + reserve + gap <= width) {
+          used = next;
+          visible += 1;
+        } else {
+          wrap.hidden = true;
+        }
+      }
+      setHiddenCount(wraps.length - visible);
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [tags, expanded, renaming]);
   // 与原型一致：单击标签延迟筛选，留出双击改名的判断时间。立即筛选会让列表重排，第二下点到别处。
   const filterTimer = useRef(0);
   useEffect(() => () => window.clearTimeout(filterTimer.current), []);
@@ -162,7 +206,7 @@ function TagRow({
   }, [draft, renaming, onRename]);
 
   return (
-    <div className={expanded ? 'note-tags tags-expanded' : 'note-tags'}>
+    <div ref={row} className={expanded ? 'note-tags tags-expanded' : 'note-tags'}>
       {tags.map((tag) =>
         renaming === tag ? (
           <TagInput
@@ -175,7 +219,6 @@ function TagRow({
             exclude={tags.filter((item) => item !== tag)}
             grow
             aria-label="修改此记录的标签"
-            title="Enter 确认，Esc 取消；输入时 Tab 选用联想的标签"
             onValueChange={setDraft}
             onClick={(event) => event.stopPropagation()}
             onBlur={commit}
@@ -197,6 +240,8 @@ function TagRow({
             <button
               type="button"
               className="tag-chip"
+              data-tag={tag}
+              tabIndex={tabIndex}
               onClick={(event) => {
                 event.stopPropagation();
                 window.clearTimeout(filterTimer.current);
@@ -214,9 +259,10 @@ function TagRow({
             </button>
             <button
               type="button"
-              className="icon-button tag-remove"
+              className="tag-remove"
               aria-label={`从此记录移除 #${tag}`}
-              title={`从此记录移除 #${tag}`}
+              data-tag={tag}
+              tabIndex={tabIndex}
               onClick={(event) => {
                 event.stopPropagation();
                 onRemove(tag);
@@ -231,8 +277,9 @@ function TagRow({
         <button
           type="button"
           className="tags-more"
-          aria-label={expanded ? '收起标签' : '展开并管理标签'}
-          title={expanded ? '收起标签' : '展开并管理标签'}
+          aria-label={expanded ? '收起标签' : hiddenCount ? `展开剩余 ${hiddenCount} 个标签` : '管理标签'}
+          data-hidden-count={hiddenCount}
+          tabIndex={tabIndex}
           onClick={(event) => {
             event.stopPropagation();
             onToggleExpanded();
@@ -276,11 +323,22 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
     };
   }, [note.text, note.images.length, isEditing, note.collapsed]);
 
+  const tabIndex = props.current ? 0 : -1;
+  const title = noteTitle(note);
+  // 首行若是结构化内容（代码、列表、引用、图片等），标题不复用该行文本，正文从头显示。
+  const display = noteDisplay(note.text);
+  // 标题行去掉标题标记后渲染；标题中的附件同样可以点击，位置加上标题文字在原文中的起点换算回原文。
+  const titleText = display.firstLine.replace(/^#{1,6}\s+/, '');
+  const titleOffset = note.text.indexOf(display.firstLine) + display.firstLine.length - titleText.length;
+  // 只有标题行的记录不留正文区，与收起的记录一样只剩标题行。
+  const single = !display.body.trim() && !note.images.length;
+
   const classes = [
     'note-card',
     note.pinned ? 'is-pinned' : '',
     isEditing ? 'is-editing' : '',
     note.collapsed ? 'is-collapsed' : '',
+    single && !isEditing ? 'is-single' : '',
     props.current ? 'is-current' : '',
     props.selected ? 'is-selected' : '',
     props.menuOpen ? 'is-menu-open' : '',
@@ -295,33 +353,35 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
     .filter(Boolean)
     .join(' ');
 
-  const title = noteTitle(note);
-  // 首行若是结构化内容（代码、列表、引用、图片等），标题不复用该行文本，正文从头显示。
-  const display = noteDisplay(note.text);
-  // 标题行去掉标题标记后渲染；标题中的附件同样可以点击，位置加上标题文字在原文中的起点换算回原文。
-  const titleText = display.firstLine.replace(/^#{1,6}\s+/, '');
-  const titleOffset = note.text.indexOf(display.firstLine) + display.firstLine.length - titleText.length;
+  /** 卡片上的按钮：阻止冒泡，不触发卡片的单击选中与双击编辑。 */
+  const run = (action: () => void) => (event: MouseEvent) => {
+    event.stopPropagation();
+    action();
+  };
 
   return (
     <article
       className={classes}
       data-note-id={note.id}
-      tabIndex={0}
+      tabIndex={props.tabStop || isEditing ? 0 : -1}
       aria-label={title}
       aria-selected={props.selected}
+      aria-current={props.current ? 'true' : undefined}
       // 编辑中焦点离开整张卡片（而不只是编辑面）才算失焦，卡片内的工具按钮不打断编辑。
       onBlur={isEditing ? props.onEditBlur : undefined}
     >
       <header className="note-header">
+        {/* 多选按钮按下时，图标的位置换成勾选框（theme.css 的 .note-list.is-selecting）。 */}
+        <span className="note-select-mark" aria-hidden="true">
+          <Icon name="check" />
+        </span>
         <button
           type="button"
           className="note-emoji"
-          aria-label="选择记录 Emoji"
-          title="更换 Emoji"
-          onClick={(event) => {
-            event.stopPropagation();
-            props.onChooseEmoji();
-          }}
+          data-action="choose-emoji"
+          aria-label="更换 Emoji"
+          tabIndex={tabIndex}
+          onClick={run(props.onChooseEmoji)}
         >
           {note.emoji || '📝'}
         </button>
@@ -341,21 +401,77 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
             />
           )}
         </h3>
-        <button
-          type="button"
-          className="note-time"
-          aria-expanded={!note.collapsed}
-          aria-label={`${note.collapsed ? '展开' : '折叠'}记录正文`}
-          title={`创建：${new Date(note.createdAt).toLocaleString('zh-CN', { hour12: false })}\n修改：${new Date(
-            note.updatedAt,
-          ).toLocaleString('zh-CN', { hour12: false })}`}
-          onClick={(event) => {
-            event.stopPropagation();
-            props.onToggleCollapse();
-          }}
-        >
-          {formatTime(note.createdAt)}
-        </button>
+        <div className="note-side">
+          {/* 平时是置顶标记与创建时间；点时间收起或展开正文（时间不进入 Tab 顺序，键盘用收起按钮）。 */}
+          <span className="note-meta">
+            {note.pinned ? (
+              <span className="note-pin" aria-label="已置顶">
+                <Icon name="pin" />
+              </span>
+            ) : null}
+            <button
+              type="button"
+              className="note-time"
+              data-action="toggle-note-collapse"
+              tabIndex={-1}
+              aria-label={note.collapsed ? '展开正文' : '收起正文'}
+              onClick={run(props.onToggleCollapse)}
+            >
+              {formatTime(note.createdAt)}
+            </button>
+          </span>
+          {isEditing ? null : (
+            <div className="note-actions">
+              {note.status === 'active' ? (
+                <button
+                  type="button"
+                  className={note.pinned ? 'icon-button note-pin-toggle is-pinned' : 'icon-button note-pin-toggle'}
+                  data-action="pin-note"
+                  aria-pressed={note.pinned}
+                  aria-label={note.pinned ? '取消置顶' : '置顶记录'}
+                  tabIndex={tabIndex}
+                  onClick={run(props.onTogglePin)}
+                >
+                  <Icon name={note.pinned ? 'pin-off' : 'pin'} />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="icon-button"
+                data-action="copy-note"
+                aria-label="复制记录与附件 · Ctrl+C"
+                tabIndex={tabIndex}
+                onClick={run(props.onCopy)}
+              >
+                <Icon name="copy" />
+              </button>
+              <button
+                type="button"
+                className="icon-button"
+                data-action="more-note"
+                aria-label="更多操作 · Shift+F10"
+                tabIndex={tabIndex}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  props.onMore(event.currentTarget);
+                }}
+              >
+                <Icon name="more" />
+              </button>
+              <button
+                type="button"
+                className={note.collapsed ? 'icon-button note-collapse is-collapsed' : 'icon-button note-collapse'}
+                data-action="toggle-note-collapse"
+                aria-label={note.collapsed ? '展开正文' : '收起正文'}
+                aria-expanded={!note.collapsed}
+                tabIndex={tabIndex}
+                onClick={run(props.onToggleCollapse)}
+              >
+                <Icon name="chevron-down" />
+              </button>
+            </div>
+          )}
+        </div>
       </header>
 
       {isEditing && editing ? (
@@ -370,47 +486,25 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
             onReady={props.onEditReady}
             onAttachment={props.onAttachment}
           />
-          <Attachments
-            images={editing.images}
-            onOpen={props.onEmbeddedImage}
-            onRemove={props.onRemoveEditImage}
-          />
+          <Attachments images={editing.images} onOpen={props.onEmbeddedImage} onRemove={props.onRemoveEditImage} />
           <div className="note-edit-actions">
             <div className="composer-tools">
-              <button
-                type="button"
-                className="icon-button"
-                aria-label="添加图片"
-                title="添加图片"
-                onClick={props.onAttachEditImage}
-              >
+              <button type="button" className="icon-button" aria-label="添加图片" onClick={props.onAttachEditImage}>
                 <Icon name="image" />
               </button>
-              <button
-                type="button"
-                className="icon-button"
-                aria-label="引用文件"
-                title="引用文件"
-                onClick={props.onAttachEditFile}
-              >
+              <button type="button" className="icon-button" aria-label="引用文件" onClick={props.onAttachEditFile}>
                 <Icon name="file" />
               </button>
             </div>
             <div className="composer-actions">
-              <button
-                type="button"
-                className="icon-button"
-                aria-label="取消修改 · Esc"
-                title="取消修改 · Esc"
-                onClick={props.onCancelEdit}
-              >
+              <KeyHint combo={saveKeys} />
+              <button type="button" className="icon-button" aria-label="取消修改 · Esc" onClick={props.onCancelEdit}>
                 <Icon name="x" />
               </button>
               <button
                 type="button"
                 className="icon-button primary"
                 aria-label={`保存修改 · ${saveKeys}`}
-                title={`保存修改 · ${saveKeys}`}
                 onClick={props.onFinishEdit}
               >
                 <Icon name="check" />
@@ -418,109 +512,50 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
             </div>
           </div>
         </>
-      ) : (
-        <>
-          <div
-            ref={content}
-            className="note-content markdown-body"
-            title={truncated && !note.collapsed ? '内容较长，双击卡片查看全文' : undefined}
-          >
-            <Markdown
-              text={display.body}
-              sourceMap
-              handlers={{
-                // 解析位置相对显示正文（去掉了标题行），换算回原文再切换待办或打开附件弹窗。
-                onTaskToggle: (offset, checked) => props.onTaskToggle(sourceOffset(note.text, display, offset), checked),
-                onAttachment: (attachment, event) => {
-                  const start = sourceOffset(note.text, display, attachment.start);
-                  const end = sourceOffset(note.text, display, attachment.end);
-                  props.onAttachment({ ...attachment, start, end, source: note.text.slice(start, end) }, event);
-                },
-              }}
-            />
-            {note.images.map((image) => (
-              <button
-                key={image.id}
-                type="button"
-                className="note-image-button"
-                aria-label={`图片：${image.name}`}
-                data-drag-item="image"
-                data-image-id={image.id}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  props.onEmbeddedImage(image);
-                }}
-              >
-                <img className="note-image" src={image.data} alt={image.name} loading="lazy" draggable={false} />
-              </button>
-            ))}
-          </div>
-        </>
+      ) : single ? null : (
+        <div ref={content} className="note-content markdown-body">
+          <Markdown
+            text={display.body}
+            sourceMap
+            handlers={{
+              // 解析位置相对显示正文（去掉了标题行），换算回原文再切换待办或打开附件弹窗。
+              onTaskToggle: (offset, checked) => props.onTaskToggle(sourceOffset(note.text, display, offset), checked),
+              onAttachment: (attachment, event) => {
+                const start = sourceOffset(note.text, display, attachment.start);
+                const end = sourceOffset(note.text, display, attachment.end);
+                props.onAttachment({ ...attachment, start, end, source: note.text.slice(start, end) }, event);
+              },
+            }}
+          />
+          {note.images.map((image) => (
+            <button
+              key={image.id}
+              type="button"
+              className="note-image-button"
+              aria-label={`图片：${image.name}`}
+              data-drag-item="image"
+              data-image-id={image.id}
+              tabIndex={tabIndex}
+              onClick={run(() => props.onEmbeddedImage(image))}
+            >
+              <img className="note-image" src={image.data} alt={image.name} loading="lazy" draggable={false} />
+            </button>
+          ))}
+        </div>
       )}
 
-      {isEditing ? null : (
+      {/* 底部只在有标签时出现，没有标签时不占位置。 */}
+      {isEditing || !parsed.tags.length ? null : (
         <footer className="note-bottom">
           <TagRow
             tags={parsed.tags}
             expanded={props.tagsExpanded}
+            tabIndex={tabIndex}
             onFilter={props.onFilterTag}
             onRemove={props.onRemoveTag}
             onRename={props.onRenameTag}
             onToggleExpanded={props.onToggleTagsExpanded}
           />
-          <div className="note-actions">
-            <button
-              type="button"
-              className="icon-button"
-              aria-label="复制记录与附件"
-              title="复制记录与附件"
-              onClick={(event) => {
-                event.stopPropagation();
-                props.onCopy();
-              }}
-            >
-              <Icon name="copy" />
-            </button>
-            {note.status === 'active' ? (
-              <button
-                type="button"
-                className="icon-button"
-                aria-pressed={note.pinned}
-                aria-label={note.pinned ? '取消置顶' : '置顶记录'}
-                title={note.pinned ? '取消置顶' : '置顶记录'}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  props.onTogglePin();
-                }}
-              >
-                <Icon name={note.pinned ? 'pin-off' : 'pin'} />
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="icon-button"
-              aria-label={note.status === 'archived' ? '恢复记录' : '归档记录'}
-              title={note.status === 'archived' ? '恢复记录' : '归档记录'}
-              onClick={(event) => {
-                event.stopPropagation();
-                props.onArchive();
-              }}
-            >
-              <Icon name={note.status === 'archived' ? 'restore' : 'archive'} />
-            </button>
-            <button
-              type="button"
-              className="icon-button"
-              aria-label="更多操作"
-              title="更多操作"
-              onClick={(event) => {
-                event.stopPropagation();
-                props.onMore(event.currentTarget);
-              }}
-            >
-              <Icon name="more" />
-            </button>
-          </div>
         </footer>
       )}
     </article>

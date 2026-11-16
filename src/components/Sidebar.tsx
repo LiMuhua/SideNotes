@@ -22,7 +22,8 @@ import { TagFilter } from "./TagFilter";
 import { TagManageDialog } from "./TagManageDialog";
 import { ChangelogDialog } from "./ChangelogDialog";
 import { UsageGuide } from "./UsageGuide";
-import { ConfirmDialog, ToastRegion } from "./Modal";
+import { ToastRegion } from "./Modal";
+import appIcon from "../assets/favicon.svg";
 import { AttachmentDialog, type AttachmentSubject } from "./AttachmentDialog";
 import { useStore } from "../hooks/useStore";
 import { useShortcut } from "../hooks/useShortcut";
@@ -42,7 +43,7 @@ import {
   type ReferenceSpan,
 } from "../core/attachments";
 import { parse, removeTag, tagKey, canonicalize } from "../core/tags";
-import { sidebarWindowWidth, uiZoom } from "../core/settings";
+import { WIDTH_RANGE, sidebarWindowWidth, uiZoom } from "../core/settings";
 import { comboFromEvent, matches } from "../core/shortcuts";
 import type { EditSession, Note, NoteImage, TabKey } from "../core/types";
 import type { EditorAttachment, MarkdownEditor } from "../core/editor";
@@ -92,7 +93,6 @@ export function Sidebar() {
 
   /* ==================== UI 层叠状态 ==================== */
   const [tagsExpandedId, setTagsExpandedId] = useState<string | null>(null);
-  const [trashTarget, setTrashTarget] = useState<Note | null>(null);
   // key 每次打开递增：在另一张卡片上右键时重新挂载菜单，焦点回到首项。
   const [contextMenu, setContextMenu] = useState<{ note: Note; anchor: MenuAnchor; key: number } | null>(null);
   /** 空白处的右键菜单。 */
@@ -129,6 +129,16 @@ export function Sidebar() {
 
   const listRef = useRef<HTMLDivElement>(null);
   const trashRef = useRef<HTMLDivElement>(null);
+
+  /** 高亮一张卡片并把焦点移过去，滚到看得见的位置。 */
+  const focusCard = useCallback((id: string | undefined) => {
+    if (!id) return;
+    setCurrentId(id);
+    const card = listRef.current?.querySelector<HTMLElement>(`.note-card[data-note-id="${CSS.escape(id)}"]`);
+    card?.focus({ preventScroll: true });
+    card?.scrollIntoView({ block: "nearest" });
+  }, []);
+
 
   /** 打开记录菜单：右下角「…」按钮传入按钮元素，右键传入鼠标位置。 */
   const openNoteMenu = useCallback((note: Note, anchor: MenuAnchor) => {
@@ -174,7 +184,7 @@ export function Sidebar() {
 
   // 对话框打开期间鼠标移出侧栏不收起，否则对话框会随侧栏一起消失。
   const dialogOpen = Boolean(
-    trashTarget || managingTag || attachmentDialog || emojiTarget || changelogOpen || guideVisible,
+    managingTag || attachmentDialog || emojiTarget || changelogOpen || guideVisible,
   );
   // 卡片菜单与对话框渲染在侧栏元素之外，鼠标移上去就会触发侧栏的 mouseleave。
   // 与原型的 keepVisible 一致：到点时按最新状态再判断一次，避免先移出侧栏、随后才打开对话框时仍被收起。
@@ -254,6 +264,28 @@ export function Sidebar() {
     latestWidth.current = width;
   }, []);
 
+  /* 宽度手柄：指针一移上去就是左右箭头，停留 400ms 后才高亮，只是划过不会闪一下（interactions.md 第四节）。 */
+  const [resizerArmed, setResizerArmed] = useState(false);
+  const armTimer = useRef(0);
+  useEffect(() => () => window.clearTimeout(armTimer.current), []);
+  const handleResizerEnter = useCallback(() => {
+    window.clearTimeout(armTimer.current);
+    armTimer.current = window.setTimeout(() => setResizerArmed(true), 400);
+  }, []);
+  const handleResizerLeave = useCallback(() => {
+    window.clearTimeout(armTimer.current);
+    if (!resizing.current) setResizerArmed(false);
+  }, []);
+  /** 手柄获得焦点后 ←、→ 每次调整 8px，按住 Shift 每次 40px；朝屏幕内侧是加宽。 */
+  const handleResizerKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const settings = store.getState().settings;
+    const delta = (event.key === "ArrowLeft" ? 1 : -1) * (settings.edge === "right" ? 1 : -1) * (event.shiftKey ? 40 : 8);
+    const width = Math.max(WIDTH_RANGE.min, Math.min(WIDTH_RANGE.max, settings.width + delta));
+    if (width !== settings.width) void store.updateSettings({ width });
+  }, []);
+
   const handleResizePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       event.preventDefault();
@@ -315,6 +347,7 @@ export function Sidebar() {
     }
     // 松手才把宽度写入设置并落盘一次。
     void store.updateSettings({ width: latestWidth.current });
+    if (!(event.currentTarget as HTMLElement).matches(":hover")) setResizerArmed(false);
     // 拖动途中指针移出过窗口时，松手后补上推迟的收起。
     if (hidePending.current) scheduleHide();
   }, [scheduleHide]);
@@ -343,6 +376,9 @@ export function Sidebar() {
   const [loaded, setLoaded] = useState({ key: viewKey, count: pageSize });
   const loadedCount = loaded.key === viewKey ? Math.max(loaded.count, pageSize) : pageSize;
   const renderedNotes = useMemo(() => listNotes.slice(0, loadedCount), [listNotes, loadedCount]);
+  // 列表只占一个 Tab 停靠点：编辑中的卡片，否则是高亮的卡片，没有高亮时是第一张（interactions.md 3.2）。
+  const tabStopId =
+    editing?.id ?? (currentId && renderedNotes.some((note) => note.id === currentId) ? currentId : renderedNotes[0]?.id);
   const hasMore = renderedNotes.length < listNotes.length;
   const loadMoreRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -769,6 +805,20 @@ export function Sidebar() {
 
   /** 拖入文件时停留进入编辑的卡片：编辑面先不获得焦点，放下插入后再聚焦（见 NoteCard 的 editAutoFocus）。 */
   const [dragEditId, setDragEditId] = useState<string | null>(null);
+
+  /**
+   * 进入编辑时把卡片滚到列表顶部（「编辑时滚到顶部」，默认打开）；退出编辑时列表不滚动。
+   * 从资源管理器拖入文件、停留后进入编辑的卡片不滚动，否则放下的位置会从指针下面移走。
+   */
+  const editingId = editing?.id ?? null;
+  useEffect(() => {
+    if (!editingId || editingId === dragEditId || !store.getState().settings.scrollOnEdit) return;
+    const card = listRef.current?.querySelector<HTMLElement>(`.note-card[data-note-id="${CSS.escape(editingId)}"]`);
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    card?.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" });
+    // 只在开始编辑另一张卡片时滚动一次。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingId]);
   const fileDrop = useFileDrop({
     // 对话框开着时交给对话框处理（附件弹窗接收拖入的文件用于替换）。
     enabled: () => !document.querySelector(".modal-backdrop"),
@@ -856,7 +906,10 @@ export function Sidebar() {
       }
       if (event.key === "Escape") {
         if (contextMenu) {
+          // 菜单关闭后焦点回到它所属的卡片（interactions.md 3.3）。
+          const id = contextMenu.note.id;
           setContextMenu(null);
+          window.requestAnimationFrame(() => focusCard(id));
           return;
         }
         if (sidebarMenu) {
@@ -879,31 +932,76 @@ export function Sidebar() {
           closeGuide();
           return;
         }
-        if (trashTarget) {
-          setTrashTarget(null);
-          return;
-        }
         if (tagMenuOpen) {
           setTagMenuOpen(false);
           return;
         }
+        // Esc 逐级退出（interactions.md 3.4）：菜单与弹窗在上面已经关闭，拖动由 useCardInteractions 取消。
         if (editing) {
           cancelEdit();
           return;
         }
-        if (composerActive) {
+        // 新建卡片失去焦点，草稿保留。
+        const active = document.activeElement;
+        if (composerActive || (active instanceof HTMLElement && active.closest("#quick-composer"))) {
           setComposerActive(false);
+          if (active instanceof HTMLElement && active.closest("#quick-composer")) active.blur();
           return;
         }
-        // 搜索面板开着时 Esc 收起搜索并清空查询；标签筛选独立保留。
+        if (interactions.hasSelection) {
+          interactions.clearSelection();
+          return;
+        }
+        // 关闭搜索框并清空搜索词，标签筛选保留。
         if (searchOpen) {
           setSearchOpen(false);
           setQuery("");
           return;
         }
+        if (selectedTag) {
+          setSelectedTag("");
+          return;
+        }
         // 都没有，收起侧栏。
         setTagMenuOpen(false);
         void bridge.hideSidebar(currentLayout());
+      }
+      // 焦点不在卡片上时，↑ ↓ 与 Enter 作用于高亮的卡片（悬停高亮、编辑或菜单结束后），焦点随之落到卡片上。
+      if (
+        ["ArrowUp", "ArrowDown", "Enter"].includes(event.key) &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.shiftKey &&
+        !event.isComposing &&
+        currentId &&
+        !editing &&
+        !dialogOpen &&
+        !contextMenu &&
+        !sidebarMenu
+      ) {
+        const target = event.target instanceof Element ? event.target : null;
+        const own = target?.closest(
+          'input, textarea, select, button, a[href], [contenteditable="true"], [role="menu"], [role="listbox"], .note-card',
+        );
+        const card = listRef.current?.querySelector<HTMLElement>(`.note-card[data-note-id="${CSS.escape(currentId)}"]`);
+        if (!own && card) {
+          event.preventDefault();
+          if (event.key === "Enter") {
+            const note = store.getState().notes.find((item) => item.id === currentId);
+            if (note) beginEdit(note);
+          } else {
+            const cards = Array.from(listRef.current?.querySelectorAll<HTMLElement>(".note-card") ?? []);
+            const index = cards.indexOf(card);
+            focusCard(cards[event.key === "ArrowDown" ? Math.min(cards.length - 1, index + 1) : Math.max(0, index - 1)]?.dataset.noteId);
+          }
+          return;
+        }
+      }
+      // Ctrl+, 打开设置窗口：侧栏获得焦点时响应，编辑中也可用。
+      if (matches(event, shortcuts, "settings")) {
+        event.preventDefault();
+        window.dispatchEvent(new CustomEvent("sidenotes:open-settings"));
       }
       if (matches(event, shortcuts, "search")) {
         event.preventDefault();
@@ -1022,12 +1120,18 @@ export function Sidebar() {
         toast("操作未保存", null, true);
         return;
       }
-      toast(`已${collapse ? "收起" : "展开"} ${ids.length} 张卡片`, {
-        label: "撤销",
-        run: () => {
-          void store.restoreNotes(undo);
+      // 连续收起/展开全部只留最新的一条提示（DS-14）。
+      toast(
+        `已${collapse ? "收起" : "展开"} ${ids.length} 张卡片`,
+        {
+          label: "撤销",
+          run: () => {
+            void store.restoreNotes(undo);
+          },
         },
-      });
+        false,
+        "collapse-all",
+      );
     },
     [listNotes, toast],
   );
@@ -1065,17 +1169,75 @@ export function Sidebar() {
     [isBlank, interactions, dialogOpen, toggleCollapseAll],
   );
 
-  /** 键盘焦点在卡片上时 Enter 或空格开始编辑。 */
+  /** 移入回收站：不确认，提示条可以撤销（DS-12）；永久删除与清空回收站仍要确认。 */
+  const moveToTrash = useCallback(async (notes: Note[]) => {
+    if (!notes.length) return false;
+    const undo = await store.moveNotes(notes.map((note) => note.id), "trash");
+    if (!undo) {
+      toast(SAVE_FAILED_MESSAGE, null, true);
+      return false;
+    }
+    toast("已移入回收站", {
+      label: "撤销",
+      run: () => {
+        // 撤销还原删除前的状态、置顶与顺序；写入失败时与原型一样提示保存失败。
+        void store.restoreNotes(undo).then((ok) => {
+          if (!ok) toast(SAVE_FAILED_MESSAGE, null, true);
+        });
+      },
+    });
+    return true;
+  }, [toast]);
+
+  /**
+   * 卡片的键盘操作（interactions.md 3.2）：↑ ↓ 移动并高亮，Home、End 到两端，Enter 编辑，
+   * Delete 移入回收站（不确认，可以撤销），Shift+F10 或菜单键在卡片左上角附近打开卡片菜单。
+   * 只处理焦点落在卡片本身的按键，卡片内的按钮与编辑区各自处理。
+   */
   const handleListKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
-      if (event.key !== "Enter" && event.key !== " ") return;
+      if (event.defaultPrevented || event.nativeEvent.isComposing) return;
       const target = event.target as HTMLElement;
-      if (!target.matches(".note-card")) return;
-      event.preventDefault();
+      if (!target.matches(".note-card") || target.classList.contains("is-editing")) return;
+      const cards = Array.from(listRef.current?.querySelectorAll<HTMLElement>(".note-card") ?? []);
+      const index = cards.indexOf(target);
       const note = store.getState().notes.find((item) => item.id === target.dataset.noteId);
-      if (note) beginEdit(note);
+      if (!note || index < 0) return;
+      const plain = !event.altKey && !event.ctrlKey && !event.metaKey;
+      const next =
+        event.key === "ArrowDown"
+          ? cards[Math.min(cards.length - 1, index + 1)]
+          : event.key === "ArrowUp"
+            ? cards[Math.max(0, index - 1)]
+            : event.key === "Home"
+              ? cards[0]
+              : event.key === "End"
+                ? cards[cards.length - 1]
+                : null;
+      if (next && plain) {
+        event.preventDefault();
+        focusCard(next.dataset.noteId);
+        return;
+      }
+      if (event.key === "Enter" && plain && !event.shiftKey) {
+        event.preventDefault();
+        beginEdit(note);
+        return;
+      }
+      if (event.key === "Delete" && plain) {
+        event.preventDefault();
+        setCurrentId(note.id);
+        void moveToTrash([note]);
+        return;
+      }
+      if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+        event.preventDefault();
+        setCurrentId(note.id);
+        const box = target.getBoundingClientRect();
+        openNoteMenu(note, { x: box.left + 24, y: box.top + 32 });
+      }
     },
-    [beginEdit],
+    [beginEdit, focusCard, moveToTrash, openNoteMenu],
   );
 
   const handleMenuCommand = useCallback(
@@ -1117,11 +1279,11 @@ export function Sidebar() {
           window.dispatchEvent(new CustomEvent("sidenotes:note-info", { detail: note }));
           break;
         case "trash":
-          setTrashTarget(note);
+          await moveToTrash([note]);
           break;
       }
     },
-    [tab, beginEdit, handleCopyNote, handleArchiveNote, toast],
+    [tab, beginEdit, handleCopyNote, handleArchiveNote, moveToTrash, toast],
   );
 
   /** 空白处菜单的命令。 */
@@ -1169,25 +1331,6 @@ export function Sidebar() {
    * 确认后把记录移入回收站，并在提示条中提供撤销，对应原型 requestDelete。
    * 保存失败时返回 false，确认对话框保持打开，记录原样保留。
    */
-  const handleMoveToTrash = useCallback(async () => {
-    if (!trashTarget) return false;
-    const undo = await store.moveNotes([trashTarget.id], "trash");
-    if (!undo) {
-      toast(SAVE_FAILED_MESSAGE, null, true);
-      return false;
-    }
-    toast("已移入回收站", {
-      label: "撤销",
-      run: () => {
-        // 撤销还原删除前的状态、置顶与顺序；写入失败时与原型一样提示保存失败。
-        void store.restoreNotes(undo).then((ok) => {
-          if (!ok) toast(SAVE_FAILED_MESSAGE, null, true);
-        });
-      },
-    });
-    return true;
-  }, [trashTarget, toast]);
-
   const handleTaskToggle = useCallback(
     async (noteId: string, offset: number, checked: boolean) => {
       const note = state.notes.find((item) => item.id === noteId);
@@ -1527,7 +1670,7 @@ export function Sidebar() {
 
   // 底部存储状态：读库失败与写入失败都显示为异常。
   const storageError = state.loadFailed || state.saveFailed;
-  const storageStatus = state.loadFailed ? "未能读取本地记录" : state.saveFailed ? "本地存储失败" : "本地已保存";
+  const storageStatus = state.loadFailed ? "未能读取本地记录" : state.saveFailed ? "本地保存失败" : "本地已保存";
 
   return (
     <>
@@ -1547,12 +1690,19 @@ export function Sidebar() {
       >
         {/* 拖动宽度手柄 */}
         <div
-          className="sidebar-resizer"
+          id="sidebar-resizer"
+          className={resizerArmed ? "sidebar-resizer is-armed" : "sidebar-resizer"}
           data-edge={state.settings.edge}
           role="separator"
           aria-orientation="vertical"
           aria-label="调整侧栏宽度"
+          aria-valuemin={WIDTH_RANGE.min}
+          aria-valuemax={WIDTH_RANGE.max}
+          aria-valuenow={state.settings.width}
           tabIndex={0}
+          onPointerEnter={handleResizerEnter}
+          onPointerLeave={handleResizerLeave}
+          onKeyDown={handleResizerKeyDown}
           onPointerDown={handleResizePointerDown}
           onPointerMove={handleResizePointerMove}
           onPointerUp={handleResizePointerUp}
@@ -1561,49 +1711,29 @@ export function Sidebar() {
 
         <header className="sidebar-header">
           <div className="sidebar-brand">
-            <div className="brand-mark" aria-hidden="true">
-              <i />
-              <i />
-              <i />
-            </div>
-            <div>
-              <h2>SideNotes</h2>
-              <button
-                id="app-version"
-                type="button"
-                className="version-button"
-                data-action="show-changelog"
-                aria-label="版本与更新"
-                title="版本与更新日志"
-                onClick={() => setChangelogOpen(true)}
-              >
-                <span>{__APP_VERSION__} PREVIEW</span>
-                <span className="update-dot" hidden />
-              </button>
-            </div>
+            {/* 品牌标记就是应用图标，配色固定，不随主题变化（components.md 第七节）。 */}
+            <img className="brand-mark" src={appIcon} alt="" aria-hidden="true" />
+            <h2>SideNotes</h2>
           </div>
           <div className="window-actions">
             <button
+              id="sidebar-lock"
               type="button"
               className={`icon-button${pinned ? " is-pinned" : ""}${settingsOpen && !pinned ? " is-linked" : ""}`}
+              data-action="lock-sidebar"
               aria-pressed={pinned || settingsOpen}
-              aria-label={pinned ? "取消固定侧栏" : "固定侧栏保持展开"}
-              title={
-                pinned
-                  ? "取消固定侧栏"
-                  : settingsOpen
-                    ? "设置窗口打开期间侧栏保持展开，关闭设置后恢复自动收起；点击可一直固定"
-                    : "固定侧栏保持展开"
-              }
+              aria-label={pinned ? "取消固定侧栏" : "固定侧栏"}
               onClick={togglePinned}
             >
               <Icon name={pinned || settingsOpen ? "pin" : "pin-off"} />
             </button>
             <button
+              id="sidebar-close"
               type="button"
               className="icon-button"
+              data-action="hide-sidebar"
               aria-label="收起侧栏"
-              title="收起侧栏 · Esc"
+              aria-keyshortcuts="Escape"
               onClick={() => void bridge.hideSidebar(currentLayout())}
             >
               <Icon name={state.settings.edge === "left" ? "arrow-left" : "arrow-right"} />
@@ -1661,7 +1791,6 @@ export function Sidebar() {
               aria-label={`搜索记录 · ${searchKeys}`}
               aria-controls="search-panel"
               aria-expanded={searchOpen}
-              title={`搜索 · ${searchKeys}`}
               onClick={() => {
                 const next = !searchOpen;
                 setSearchOpen(next);
@@ -1785,7 +1914,6 @@ export function Sidebar() {
           }}
           onFocus={() => setComposerActive(true)}
           onSave={() => void saveComposer()}
-          onClose={() => setComposerActive(false)}
           onAttachImage={() => triggerFileInput("image", "composer")}
           onAttachFile={() => triggerFileInput("file", "composer")}
           onRemoveImage={(id) => store.removeDraftImage(id)}
@@ -1843,7 +1971,6 @@ export function Sidebar() {
                   className="button secondary"
                   data-action="clear-filters"
                   aria-label="清除筛选"
-                  title="清除筛选"
                   onClick={clearFilters}
                 >
                   清除筛选
@@ -1857,6 +1984,7 @@ export function Sidebar() {
                 note={note}
                 editing={editing}
                 current={currentId === note.id}
+                tabStop={tabStopId === note.id}
                 selected={interactions.selected.has(note.id)}
                 menuOpen={contextMenu?.note.id === note.id}
                 itemTarget={interactions.itemTargetId === note.id || fileDrop.targetId === note.id}
@@ -1888,7 +2016,6 @@ export function Sidebar() {
                 onToggleCollapse={() => void store.setCollapsed([note.id], !note.collapsed)}
                 onCopy={() => void handleCopyNote(note)}
                 onTogglePin={() => void store.updateNote(note.id, { pinned: !note.pinned })}
-                onArchive={() => void handleArchiveNote(note)}
                 onMore={(anchor) => openNoteMenu(note, anchor)}
                 onFilterTag={selectTag}
                 onRemoveTag={async (tag) => {
@@ -1923,20 +2050,42 @@ export function Sidebar() {
 
         {/* 底部状态栏 */}
         <footer className="sidebar-footer">
+          {/* 正常时不显示状态；出错时版本号左边出现警告图标与原因。 */}
           <span
             id="storage-status"
-            className={storageError ? "is-error" : ""}
+            className={storageError ? "storage-status is-error" : "storage-status"}
             aria-label={storageStatus}
-            title={storageStatus}
+            hidden={!storageError}
           >
-            {storageError ? <Icon name="alert" /> : <span className="small-dot" />}
+            {storageError ? (
+              <>
+                <Icon name="alert" />
+                {storageStatus}
+              </>
+            ) : null}
           </span>
+          <button
+            id="app-version"
+            type="button"
+            className="version-button"
+            data-action="show-changelog"
+            aria-label={`版本 ${__APP_VERSION__}，查看更新日志`}
+            onClick={() => setChangelogOpen(true)}
+          >
+            <span className="version-label">{`v${__APP_VERSION__}`}</span>
+            {/* 检查更新尚未接入，角标不显示。 */}
+            <span className="update-badge" aria-hidden="true" hidden>
+              <Icon name="arrow-up" />
+            </span>
+          </button>
           <span className="footer-right">
             <button
+              id="settings-button"
               type="button"
               className="icon-button"
-              aria-label="偏好设置与数据"
-              title="偏好设置与数据"
+              data-action="settings"
+              aria-label="设置"
+              aria-keyshortcuts="Control+Comma"
               onClick={() => window.dispatchEvent(new CustomEvent("sidenotes:open-settings"))}
             >
               <Icon name="settings" />
@@ -2010,17 +2159,6 @@ export function Sidebar() {
             await store.updateNote(emojiTarget.id, { emoji });
             setEmojiTarget(null);
           }}
-        />
-      ) : null}
-
-      {/* 移入回收站确认 */}
-      {trashTarget ? (
-        <ConfirmDialog
-          title="将这条记录移入回收站？"
-          description={`“${(trashTarget.text.split("\n")[0] || "图片记录").slice(0, 70)}”会暂存于回收站，可在设置中恢复。`}
-          confirmLabel="移入回收站"
-          onConfirm={handleMoveToTrash}
-          onCancel={() => setTrashTarget(null)}
         />
       ) : null}
 

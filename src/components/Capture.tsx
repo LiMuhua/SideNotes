@@ -339,7 +339,7 @@ export function Capture() {
           </div>
         </footer>
 
-        <ToastRegion />
+        <ToastRegion className="capture-toast-region" />
       </div>
 
       <input ref={fileInput} type="file" hidden multiple accept="image/*" onChange={handleFileSelected} />

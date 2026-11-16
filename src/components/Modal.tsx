@@ -7,7 +7,8 @@
 
 import { useCallback, useEffect, useId, useRef, type ReactNode } from 'react';
 import { Icon, type IconName } from './Icon';
-import { useToastContext } from '../hooks/useToast';
+import { TOAST_DURATION, useToastContext } from '../hooks/useToast';
+import type { ToastItem } from '../core/types';
 
 export interface ModalProps {
   title: string;
@@ -90,7 +91,6 @@ export function Modal({ title, icon, className, children, footer, onClose }: Mod
             className="icon-button"
             data-action="close-modal"
             aria-label="关闭对话框"
-            title="关闭对话框"
             onClick={onClose}
           >
             <Icon name="x" />
@@ -128,7 +128,6 @@ export function ConfirmDialog({ title, description, confirmLabel = '确认', onC
             className="button secondary"
             data-action="close-modal"
             aria-label="取消"
-            title="取消"
             onClick={onCancel}
           >
             取消
@@ -138,7 +137,6 @@ export function ConfirmDialog({ title, description, confirmLabel = '确认', onC
             className="button danger"
             data-action=""
             aria-label={confirmLabel}
-            title={confirmLabel}
             onClick={() => {
               if (pending.current) return;
               pending.current = true;
@@ -161,38 +159,77 @@ export function ConfirmDialog({ title, description, confirmLabel = '确认', onC
   );
 }
 
-/** 提示条区域。 */
-export function ToastRegion() {
+/**
+ * 一条提示：停留 6 秒，带操作的 9 秒；指针停在提示条上或焦点在提示条内时暂停计时，离开后接着计时（至少再停 1 秒）。
+ */
+function Toast({ item, onDismiss }: { item: ToastItem; onDismiss: (id: string) => void }) {
+  const node = useRef<HTMLDivElement>(null);
+  const remaining = useRef<number>(item.actions.length ? TOAST_DURATION.action : TOAST_DURATION.plain);
+  const started = useRef(0);
+  const timer = useRef(0);
+
+  const resume = useCallback(() => {
+    window.clearTimeout(timer.current);
+    started.current = Date.now();
+    timer.current = window.setTimeout(() => onDismiss(item.id), remaining.current);
+  }, [item.id, onDismiss]);
+
+  const pause = useCallback(() => {
+    window.clearTimeout(timer.current);
+    remaining.current = Math.max(1000, remaining.current - (Date.now() - started.current));
+  }, []);
+
+  useEffect(() => {
+    resume();
+    return () => window.clearTimeout(timer.current);
+  }, [resume]);
+
+  return (
+    <div
+      ref={node}
+      className={item.error ? 'toast error' : 'toast'}
+      role={item.error ? 'alert' : undefined}
+      onPointerEnter={pause}
+      onPointerLeave={() => {
+        if (!node.current?.contains(document.activeElement)) resume();
+      }}
+      onFocus={pause}
+      onBlur={(event) => {
+        if (!node.current?.contains(event.relatedTarget as Node | null) && !node.current?.matches(':hover')) resume();
+      }}
+    >
+      <Icon name={item.error ? 'alert' : 'check-circle'} />
+      <span>{item.message}</span>
+      {item.actions.map((action) => (
+        <button
+          key={action.label}
+          type="button"
+          className="toast-action"
+          onClick={() => {
+            action.run();
+            onDismiss(item.id);
+          }}
+        >
+          {action.label}
+        </button>
+      ))}
+      <button type="button" className="icon-button" data-action="" aria-label="关闭提示" onClick={() => onDismiss(item.id)}>
+        <Icon name="x" />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * 提示区域：每个窗口一个，放在窗口的面板里（侧栏的随侧栏收起）。
+ * `className` 区分窗口：速记浮窗是 capture-toast-region，设置窗口是 settings-toast-region（位置见 theme.css）。
+ */
+export function ToastRegion({ className }: { className?: string }) {
   const { items, dismiss } = useToastContext();
   return (
-    <div className="toast-region" role="status" aria-live="polite" aria-atomic="true">
+    <div className={className ? `toast-region ${className}` : 'toast-region'} role="status" aria-live="polite" aria-atomic="true">
       {items.map((item) => (
-        <div key={item.id} className={item.error ? 'toast error' : 'toast'}>
-          <Icon name={item.error ? 'alert' : 'check-circle'} />
-          <span>{item.message}</span>
-          {item.action ? (
-            <button
-              type="button"
-              className="toast-action"
-              onClick={() => {
-                item.action?.run();
-                dismiss(item.id);
-              }}
-            >
-              {item.action.label}
-            </button>
-          ) : null}
-          <button
-            type="button"
-            className="icon-button"
-            data-action=""
-            aria-label="关闭提示"
-            title="关闭提示"
-            onClick={() => dismiss(item.id)}
-          >
-            <Icon name="x" />
-          </button>
-        </div>
+        <Toast key={item.id} item={item} onDismiss={dismiss} />
       ))}
     </div>
   );

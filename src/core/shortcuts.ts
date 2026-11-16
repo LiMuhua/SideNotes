@@ -13,6 +13,7 @@ export type ShortcutId =
   | 'sidebar'
   | 'newNote'
   | 'search'
+  | 'settings'
   | 'save'
   | 'bold'
   | 'italic'
@@ -48,6 +49,8 @@ export const SHORTCUT_COMMANDS: readonly ShortcutCommand[] = [
   { id: 'sidebar', label: '呼出侧栏', group: 'global', defaultKeys: 'Alt+Shift+S' },
   { id: 'newNote', label: '新建记录', group: 'app', defaultKeys: 'Ctrl+N' },
   { id: 'search', label: '搜索记录与标签', group: 'app', defaultKeys: 'Ctrl+F' },
+  // 原型第二版：打开设置，侧栏获得焦点时响应，编辑中也可用（interactions.md 3.1）。
+  { id: 'settings', label: '打开设置', group: 'app', defaultKeys: 'Ctrl+,' },
   { id: 'save', label: '保存记录', group: 'app', defaultKeys: 'Ctrl+Enter' },
   { id: 'bold', label: '加粗', group: 'format', defaultKeys: 'Ctrl+B' },
   { id: 'italic', label: '斜体', group: 'format', defaultKeys: 'Ctrl+I' },

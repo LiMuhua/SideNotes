@@ -199,9 +199,9 @@ export function SettingsDialog({ onClose, onMinimize }: SettingsDialogProps) {
             </div>
           </div>
         </div>
+        <ToastRegion className="settings-toast-region" />
       </section>
       {confirm ? <ConfirmOverlay request={confirm} onClose={() => setConfirm(null)} /> : null}
-      <ToastRegion />
     </ConfirmProvider>
   );
 }

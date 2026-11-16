@@ -138,20 +138,6 @@ body[data-window='sidebar'] .list-topline {
   z-index: 13;
 }
 
-/* 新建卡片固定在列表之上，独占一块区域，不随列表滚动，也就不会和滚上来的卡片叠在一起。
- * 外层不铺背景，圆角之外直接露出侧栏底色，不再有矩形底板的方角。
- * 右侧让出列表滚动条的宽度（由脚本实测写入 --note-list-gutter），与记录卡片左右对齐。 */
-body[data-window='sidebar'] .composer-dock {
-  position: relative;
-  z-index: 12;
-  flex-shrink: 0;
-  padding: 0 calc(16px + var(--note-list-gutter, 0px)) 0 16px;
-}
-
-body[data-window='sidebar'] .composer-dock > #quick-composer.sidebar-composer {
-  margin: 3px 0 4px;
-}
-
 /* 卡片正文的最大高度由设置决定（按 13px 字号计），超出部分沿用原型的渐隐，悬停时提示双击查看全文。 */
 body[data-window='sidebar'] .note-card > .note-content {
   max-height: var(--note-content-max-height, 220px);

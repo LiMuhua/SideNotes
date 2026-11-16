@@ -261,8 +261,11 @@ export interface ToastAction {
 export interface ToastItem {
   id: string;
   message: string;
-  action?: ToastAction;
+  /** 提示条上的操作，如「撤销」「查看」「放回」。 */
+  actions: ToastAction[];
   error?: boolean;
+  /** 同一个 key 的提示只留最新的一条。 */
+  key?: string;
 }
 
 /** 正在进行的编辑事务：确认前不写入记录。 */
