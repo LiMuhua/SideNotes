@@ -476,8 +476,8 @@ export function AboutPanel() {
   const open = (label: string) => toast({ message: `打开${label}（示例）` });
   return (
     // 第五次反馈：标题与其他页一样在最上面，内容从上往下排，排完还空就留空；「检查更新」放在版本号旁边。
-    // 第七次反馈：项目与开源致谢是带边框的按钮，宽度随内容；项目一行最后是本项目的许可证 AGPL-3.0（仓库还没有 LICENSE 文件，
-    // 桌面端链接到 GNU 官网的全文）。
+    // 第七次反馈：项目与开源致谢是带边框的按钮，宽度随内容；项目一行最后是本项目的许可证 AGPL-3.0（桌面端链接到
+    // GNU 官网的全文，与仓库根目录的 LICENSE 相同）。
     <SettingsPage title="关于">
       <div className="sn-about-hero">
         <AppIcon />
