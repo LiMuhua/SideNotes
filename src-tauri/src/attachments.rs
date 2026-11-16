@@ -156,13 +156,26 @@ pub struct AttachmentUsage {
 
 /// 文件夹内全部文件的字节数（递归）。
 fn folder_size(path: &Path) -> u64 {
+    folder_size_within(path, 0)
+}
+
+/// 统计时跟随软链接（`fs::metadata` 跟随，`DirEntry::metadata` 在 Windows 上不跟随）；
+/// 限制层数，链接指回上级目录时不会无限递归。
+fn folder_size_within(path: &Path, depth: usize) -> u64 {
+    const MAX_DEPTH: usize = 32;
     let Ok(entries) = std::fs::read_dir(path) else {
         return 0;
     };
     entries
         .flatten()
-        .map(|entry| match entry.metadata() {
-            Ok(meta) if meta.is_dir() => folder_size(&entry.path()),
+        .map(|entry| match std::fs::metadata(entry.path()) {
+            Ok(meta) if meta.is_dir() => {
+                if depth < MAX_DEPTH {
+                    folder_size_within(&entry.path(), depth + 1)
+                } else {
+                    0
+                }
+            }
             Ok(meta) => meta.len(),
             Err(_) => 0,
         })
@@ -176,7 +189,8 @@ pub fn usage(root: &Path) -> AttachmentUsage {
     };
     entries
         .flatten()
-        .filter(|entry| entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false))
+        // is_dir 跟随软链接：指向别处的附件子文件夹也计入。
+        .filter(|entry| entry.path().is_dir())
         .fold(AttachmentUsage::default(), |total, entry| AttachmentUsage {
             count: total.count + 1,
             size: total.size + folder_size(&entry.path()),
@@ -210,6 +224,7 @@ pub fn cleanup(root: &Path, texts: &[String], grace: Duration, now: SystemTime) 
     let haystack = texts.join("\n").to_lowercase();
     let mut report = CleanupReport::default();
     for entry in entries.flatten() {
+        // 只清理真实的子文件夹：file_type 不跟随软链接，链接一律跳过，不会顺着链接删掉别处的文件。
         let Ok(kind) = entry.file_type() else { continue };
         if !kind.is_dir() {
             continue;

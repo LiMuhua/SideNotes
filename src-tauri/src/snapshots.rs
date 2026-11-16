@@ -363,7 +363,7 @@ pub fn restore(store: &Store, root: &Path, id: &str, now: i64) -> AppResult<Rest
         drop(Store::open(&temp)?);
         let from = PathBuf::from(&info.data_directory);
         if !info.data_directory.is_empty() && from != data_dir {
-            rewrite_paths(&temp, &from, &data_dir)?;
+            rewrite_paths(&temp, &[from], &data_dir)?;
         }
         store.replace_records(&temp)
     })();
@@ -568,7 +568,7 @@ mod tests {
         let image = import_bytes(&root.join("a"), "图.png", b"png").expect("写入附件");
         save(&store, &[note("a", format!("![图]({})", image.path))], serde_json::json!({}));
         let snapshot = create(&store, &snapshots, "manual", T0).expect("创建快照");
-        crate::migration::migrate(&store, &root.join("b")).expect("迁移");
+        crate::migration::migrate(&store, &root.join("b"), &[]).expect("迁移");
 
         restore(&store, &snapshots, &snapshot.id, T0 + 1000).expect("恢复快照");
         let text = store.load().expect("读取").notes[0].text.clone();

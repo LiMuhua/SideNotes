@@ -37,6 +37,9 @@ pub struct AppState {
     pub default_dir: PathBuf,
     /// 启动时记下的数据目录不可用、暂时改用默认目录时，为原来的目录；迁移成功后清空。
     pub unavailable_dir: Mutex<Option<PathBuf>>,
+    /// 当前数据目录的其它写法：解析软链接之前的路径（系统应用数据目录或 location.json 中记下的写法），
+    /// 较早的记录按这些写法引用附件；迁移时一并改写，迁移成功后清空。
+    pub data_aliases: Mutex<Vec<PathBuf>>,
 }
 
 /// 读取完整快照。
@@ -102,7 +105,9 @@ pub fn storage_info(state: State<'_, AppState>) -> AppResult<StorageInfo> {
 /// 各窗口需要重新读库，由前端广播。
 #[tauri::command]
 pub async fn migrate_storage(app: AppHandle, state: State<'_, AppState>, target: String) -> AppResult<MigrationReport> {
-    let report = migration::migrate(&state.store, &PathBuf::from(target.trim()))?;
+    // 目标是软链接时迁到它指向的实际目录（见 paths）。
+    let aliases = state.data_aliases.lock().map(|aliases| aliases.clone()).unwrap_or_default();
+    let report = migration::migrate(&state.store, &crate::paths::resolve(std::path::Path::new(target.trim())), &aliases)?;
     let directory = state.store.directory();
     let attachments_dir = directory.join(attachments::ATTACHMENTS_DIR);
     std::fs::create_dir_all(&attachments_dir)?;
@@ -110,6 +115,9 @@ pub async fn migrate_storage(app: AppHandle, state: State<'_, AppState>, target:
     location::remember(&state.default_dir, &directory)?;
     if let Ok(mut unavailable) = state.unavailable_dir.lock() {
         *unavailable = None;
+    }
+    if let Ok(mut aliases) = state.data_aliases.lock() {
+        aliases.clear();
     }
     Ok(report)
 }
@@ -122,20 +130,20 @@ pub async fn export_backup(
     name: String,
     contents: String,
 ) -> AppResult<backup::ExportReport> {
-    backup::export(&state.store, std::path::Path::new(directory.trim()), &name, &contents)
+    backup::export(&state.store, &crate::paths::resolve(std::path::Path::new(directory.trim())), &name, &contents)
 }
 
 /// 导入备份时拷回附件：把 JSON 文件 `file` 旁边 `folder` 文件夹中的附件复制到数据目录，返回新复制的数量。
 #[tauri::command]
 pub async fn import_backup_attachments(state: State<'_, AppState>, file: String, folder: String) -> AppResult<usize> {
-    backup::import_attachments(&state.store.directory(), std::path::Path::new(&file), &folder)
+    backup::import_attachments(&state.store.directory(), &crate::paths::resolve(std::path::Path::new(&file)), &folder)
 }
 
-/// 快照目录：设置中填写的目录，没有填写时为数据目录下的 snapshots 文件夹。
+/// 快照目录：设置中填写的目录，没有填写时为数据目录下的 snapshots 文件夹；是软链接时用实际位置。
 fn snapshot_root(state: &AppState, directory: &str) -> PathBuf {
     match directory.trim() {
         "" => state.store.directory().join(snapshots::SNAPSHOTS_DIR),
-        custom => PathBuf::from(custom),
+        custom => crate::paths::resolve(std::path::Path::new(custom)),
     }
 }
 

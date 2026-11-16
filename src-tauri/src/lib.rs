@@ -9,6 +9,7 @@ mod fonts;
 mod location;
 mod migration;
 mod models;
+mod paths;
 mod recorder;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod shortcuts;
@@ -43,10 +44,18 @@ pub fn run() {
             let handle = app.handle().clone();
 
             // 数据默认落在系统应用数据目录；在设置中更换过存储位置时，按其中记下的目录打开（见 location）。
-            let default_dir = handle.path().app_data_dir()?;
-            std::fs::create_dir_all(&default_dir)?;
+            // 目录是软链接时一律用实际位置（见 paths），比较、迁移与清理都按实际目录进行。
+            let literal_default = handle.path().app_data_dir()?;
+            std::fs::create_dir_all(&literal_default)?;
+            let default_dir = paths::resolve(&literal_default);
             let resolved = location::resolve(&default_dir);
             let data_dir = resolved.directory.clone();
+            // 解析之前的写法：较早的记录按它引用附件，迁移时一并改写。
+            let data_aliases: Vec<std::path::PathBuf> = [Some(literal_default), location::recorded(&default_dir)]
+                .into_iter()
+                .flatten()
+                .filter(|alias| *alias != data_dir && paths::same_location(alias, &data_dir))
+                .collect();
             std::fs::create_dir_all(&data_dir)?;
             let store = Store::open(&data_dir.join(location::DATABASE_FILE))?;
 
@@ -74,6 +83,7 @@ pub fn run() {
                 hotkeys: Mutex::new(hotkeys),
                 default_dir,
                 unavailable_dir: Mutex::new(resolved.unavailable),
+                data_aliases: Mutex::new(data_aliases),
             });
 
             // 窗口在状态就绪后才创建。配置中的窗口默认先于 setup 创建，页面会在

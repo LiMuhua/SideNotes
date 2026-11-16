@@ -32,17 +32,31 @@ fn other(message: impl Into<String>) -> AppError {
 }
 
 /// 递归复制文件夹，目标中已经存在的文件不覆盖。
+///
+/// 软链接按它指向的内容复制：指向目录的链接复制其中的文件（`DirEntry::file_type` 不跟随链接，
+/// 会把它当成文件去复制而失败），指向文件的链接复制文件内容。链接指回正在复制的上级目录时跳过，避免无限递归。
 pub(crate) fn copy_dir(from: &Path, to: &Path) -> AppResult<()> {
+    copy_dir_within(from, to, &mut Vec::new())
+}
+
+fn copy_dir_within(from: &Path, to: &Path, ancestors: &mut Vec<PathBuf>) -> AppResult<()> {
+    let real = crate::paths::resolve(from);
+    if ancestors.contains(&real) {
+        return Ok(());
+    }
+    ancestors.push(real);
     std::fs::create_dir_all(to)?;
     for entry in std::fs::read_dir(from)? {
-        let entry = entry?;
-        let target = to.join(entry.file_name());
-        if entry.file_type()?.is_dir() {
-            copy_dir(&entry.path(), &target)?;
+        let path = entry?.path();
+        let Some(name) = path.file_name() else { continue };
+        let target = to.join(name);
+        if path.is_dir() {
+            copy_dir_within(&path, &target, ancestors)?;
         } else if !target.exists() {
-            std::fs::copy(entry.path(), &target)?;
+            std::fs::copy(&path, &target)?;
         }
     }
+    ancestors.pop();
     Ok(())
 }
 
@@ -56,15 +70,17 @@ fn copy_attachments(from: &Path, to: &Path) -> AppResult<usize> {
     std::fs::create_dir_all(to)?;
     let mut copied = 0;
     for entry in entries {
-        let entry = entry?;
-        let target = to.join(entry.file_name());
-        if entry.file_type()?.is_dir() {
+        let path = entry?.path();
+        let Some(name) = path.file_name() else { continue };
+        let target = to.join(name);
+        // is_dir 跟随软链接，指向目录的链接按目录复制（见 copy_dir）。
+        if path.is_dir() {
             if !target.exists() {
                 copied += 1;
             }
-            copy_dir(&entry.path(), &target)?;
+            copy_dir(&path, &target)?;
         } else if !target.exists() {
-            std::fs::copy(entry.path(), &target)?;
+            std::fs::copy(&path, &target)?;
         }
     }
     Ok(copied)
@@ -80,15 +96,21 @@ fn prefixes(directory: &Path) -> [String; 2] {
 ///
 /// 导入附件时写入的是「数据目录\attachments\子文件夹\文件名」的完整路径，前缀与当前数据目录逐字相同，
 /// 按前缀替换即可；用户手工改写过大小写或斜杠方向的路径不改写，原目录保留，这些引用仍能找到文件。
-pub(crate) fn rewrite_paths(database: &Path, from: &Path, to: &Path) -> AppResult<usize> {
+/// `from` 可以有几种写法：数据目录经过软链接时，较早的记录写的是链接的路径，与解析后的实际路径一起改写。
+pub(crate) fn rewrite_paths(database: &Path, from: &[PathBuf], to: &Path) -> AppResult<usize> {
     let connection = Connection::open(database)?;
     let mut changed = 0;
-    for (old, new) in prefixes(from).iter().zip(prefixes(to).iter()) {
-        for table in ["notes", "drafts"] {
-            changed += connection.execute(
-                &format!("UPDATE {table} SET text = REPLACE(text, ?1, ?2) WHERE instr(text, ?1) > 0"),
-                params![old, new],
-            )?;
+    for source in from {
+        for (old, new) in prefixes(source).iter().zip(prefixes(to).iter()) {
+            if old == new {
+                continue;
+            }
+            for table in ["notes", "drafts"] {
+                changed += connection.execute(
+                    &format!("UPDATE {table} SET text = REPLACE(text, ?1, ?2) WHERE instr(text, ?1) > 0"),
+                    params![old, new],
+                )?;
+            }
         }
     }
     Ok(changed)
@@ -126,8 +148,9 @@ fn overlap(source: &Path, target: &Path) -> Option<AppError> {
     }
 }
 
-/// 把数据迁移到 `target` 并改用那里的数据库。
-pub fn migrate(store: &Store, target: &Path) -> AppResult<MigrationReport> {
+/// 把数据迁移到 `target` 并改用那里的数据库。`aliases` 是当前数据目录的其它写法（如软链接的路径），
+/// 记录中按这些写法引用的附件也改写到新目录。
+pub fn migrate(store: &Store, target: &Path, aliases: &[PathBuf]) -> AppResult<MigrationReport> {
     if target.as_os_str().is_empty() || !target.is_absolute() {
         return Err(other("请选择一个完整的目标目录"));
     }
@@ -149,7 +172,9 @@ pub fn migrate(store: &Store, target: &Path) -> AppResult<MigrationReport> {
     let database = target.join(DATABASE_FILE);
     store.copy_to(&database)?;
     let attachments = copy_attachments(&source.join(ATTACHMENTS_DIR), &target.join(ATTACHMENTS_DIR))?;
-    let rewritten = rewrite_paths(&database, &source, target)?;
+    let mut from = vec![source.clone()];
+    from.extend(aliases.iter().filter(|alias| **alias != source).cloned());
+    let rewritten = rewrite_paths(&database, &from, target)?;
     store.relocate(&database)?;
     Ok(MigrationReport {
         directory: target.display().to_string(),
@@ -210,7 +235,7 @@ mod tests {
         std::fs::create_dir_all(&target).unwrap();
         std::fs::write(target.join(DATABASE_FILE), b"old").unwrap();
 
-        let report = migrate(&store, &target).expect("迁移");
+        let report = migrate(&store, &target, &[]).expect("迁移");
         assert_eq!(report.attachments, 1);
         assert_eq!(report.rewritten, 2);
         assert!(report.backup.contains(".bak-"));
@@ -242,13 +267,59 @@ mod tests {
         let root = temp_root("refuse");
         let source = root.join("data");
         let store = Store::open(&source.join(DATABASE_FILE)).expect("打开数据库");
-        assert!(migrate(&store, &source).is_err());
-        assert!(migrate(&store, &source.join("子目录")).is_err());
+        assert!(migrate(&store, &source, &[]).is_err());
+        assert!(migrate(&store, &source.join("子目录"), &[]).is_err());
         assert!(!source.join("子目录").exists());
-        assert!(migrate(&store, &root).is_err());
-        assert!(migrate(&store, Path::new("相对路径")).is_err());
+        assert!(migrate(&store, &root, &[]).is_err());
+        assert!(migrate(&store, Path::new("相对路径"), &[]).is_err());
         assert_eq!(store.path(), source.join(DATABASE_FILE));
         drop(store);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+
+    #[test]
+    fn copies_folders_through_links_without_looping() {
+        let root = temp_root("links");
+        let real = root.join("real");
+        std::fs::create_dir_all(real.join("inner")).unwrap();
+        std::fs::write(real.join("inner").join("a.txt"), b"a").unwrap();
+        let source = root.join("source");
+        std::fs::create_dir_all(&source).unwrap();
+        if !crate::paths::link_dir(&real, &source.join("linked")) || !crate::paths::link_dir(&source, &source.join("loop")) {
+            eprintln!("无法创建软链接或目录联接，跳过");
+            return;
+        }
+        let target = root.join("target");
+        copy_dir(&source, &target).unwrap();
+        // 指向目录的链接复制成实际的文件夹与文件；指回上级的链接不再展开。
+        assert_eq!(std::fs::read(target.join("linked").join("inner").join("a.txt")).unwrap(), b"a");
+        assert!(!target.join("loop").join("loop").exists());
+        let _ = std::fs::remove_dir(source.join("linked"));
+        let _ = std::fs::remove_dir(source.join("loop"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+
+    #[test]
+    fn rewrites_references_written_with_another_spelling_of_the_directory() {
+        let root = temp_root("alias");
+        let source = root.join("实际目录");
+        let target = root.join("新目录");
+        let store = Store::open(&source.join(DATABASE_FILE)).expect("打开数据库");
+        // 较早的记录按链接的路径引用附件（这里只比较文字，链接本身不必存在）。
+        let alias = root.join("链接");
+        let old = alias.join(ATTACHMENTS_DIR).join("2-0").join("图.png");
+        let current = source.join(ATTACHMENTS_DIR).join("3-0").join("图.png");
+        let text = format!("![旧]({}) ![新]({})", old.display(), current.display());
+        let draft = Draft { text: String::new(), images: vec![], updated_at: 1 };
+        store.save(&[note("a", text)], &draft, &serde_json::json!({}), &HashMap::new()).expect("写入");
+
+        migrate(&store, &target, &[alias]).expect("迁移");
+        let snapshot = store.load().expect("读取");
+        let moved_old = target.join(ATTACHMENTS_DIR).join("2-0").join("图.png");
+        let moved_current = target.join(ATTACHMENTS_DIR).join("3-0").join("图.png");
+        assert_eq!(snapshot.notes[0].text, format!("![旧]({}) ![新]({})", moved_old.display(), moved_current.display()));
         let _ = std::fs::remove_dir_all(&root);
     }
 }

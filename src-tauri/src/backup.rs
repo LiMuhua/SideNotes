@@ -58,8 +58,8 @@ pub fn export(store: &Store, parent: &Path, name: &str, contents: &str) -> AppRe
     }
     let data_dir = store.directory();
     let source = data_dir.join(ATTACHMENTS_DIR);
-    // 导出到附件文件夹里会被当作没有引用的附件清理掉。
-    if parent.starts_with(&source) {
+    // 导出到附件文件夹里会被当作没有引用的附件清理掉。按实际位置判断：经过软链接也不能导出到那里。
+    if crate::paths::is_within(parent, &source) {
         return Err(other("不能导出到附件文件夹里，请换一个位置"));
     }
     let name = sanitize_name(name);
@@ -100,7 +100,8 @@ pub fn import_attachments(data_dir: &Path, file: &Path, folder: &str) -> AppResu
     let mut copied = 0;
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
-        if !is_attachment_folder(&name) || !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+        // is_dir 跟随软链接：备份里指向目录的链接也按附件文件夹拷回。
+        if !is_attachment_folder(&name) || !entry.path().is_dir() {
             continue;
         }
         if target.join(&name).exists() {
