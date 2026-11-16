@@ -1607,7 +1607,6 @@ function initialize() {
   if(window.LiveMarkdown){window.LiveMarkdown.attach(elements.draftInput,{value:state.draft.text,minHeight:100,maxHeight:340});window.LiveMarkdown.attach(elements.sidebarDraft,{value:state.draft.text,minHeight:56,maxHeight:240});}
   initializeSidebarResize();
   initializeListLoading();
-  initializeListFade();
   initializeContentDrop();
   refreshVersionBadge();
   initializeHeaderInteractions();
@@ -1840,54 +1839,6 @@ function appendNextPage(requested){
   scheduleTagLayout();if(window.NoteInteractions)window.NoteInteractions.refresh();
 }
 /** 连接滚动降级入口，批次追加不增加人为等待。 */
-/* ==================== 列表边缘的渐隐（第八次反馈） ==================== */
-
-/**
- * @brief 记录列表上下边缘的渐隐：卡片与组标题滚到列表的上边或下边时，在 --sn-space-6 内逐渐变淡，不再被一刀截断；
- * 只在那一侧还有内容时出现，刚开始滚动时随滚动距离由浅到深。遮罩写进各自的 --local-edge-fade（theme.css）。
- * 遮罩不加在列表上：列表带遮罩时，磨砂玻璃卡片的背景模糊只能取到列表里的内容，透出的壁纸不再模糊。
- */
-function fadeListEdges(){
-  ui.listFadeFrame=0;const list=elements.noteList;if(!list||!list.isConnected)return;
-  const size=parseFloat(window.getComputedStyle(list).getPropertyValue('--sn-space-6'))||0;
-  const box=list.getBoundingClientRect(),scale=list.offsetHeight?box.height/list.offsetHeight:1,rest=list.scrollHeight-list.clientHeight-list.scrollTop;
-  // 按字号缩放时滚动位置有小数，滚到头还差不到一像素，算作那一侧没有内容。
-  const above=list.scrollTop<1?0:Math.min(list.scrollTop,size),below=rest<1?0:Math.min(rest,size);
-  const items=Array.from(list.querySelectorAll(':scope > .note-card, :scope > .search-group')),rects=items.map(function measure(item){return item.getBoundingClientRect();});
-  items.forEach(function fade(item,index){
-    const mask=edgeMask((rects[index].top-box.top)/scale-list.clientTop,rects[index].height/scale,list.clientHeight,above,below,size);
-    if(mask)item.style.setProperty('--local-edge-fade',mask);else item.style.removeProperty('--local-edge-fade');
-  });
-}
-/**
- * @brief 一项的遮罩（与 Playground 的 ui/edgeFade.ts 相同）：上边一段从全透明到不透明、下边一段从不透明到全透明，长度都是 size，
- * 随上下还有的内容（最多 size）从可见区之外移进来：上面没有内容时，上边这一段整个在可见区之外，看不出变淡。
- * @param {number} top 这一项的上边到可见区上边的距离（CSS 像素，在上面时为负）。 @param {number} height 这一项的高度。
- * @param {number} view 可见区的高度。 @param {number} above 上面还有的内容。 @param {number} below 下面还有的内容。 @param {number} size 渐隐的长度。
- * @return {string} 遮罩，这一项不在渐隐的位置时为空。
- */
-function edgeMask(top,height,view,above,below,size){
-  const start=above-size-top,end=view-below-top,fadeTop=above>0&&start+size>0&&start<height,fadeBottom=below>0&&end<height&&end+size>0;
-  if(!fadeTop&&!fadeBottom)return '';
-  const px=function px(value){return Math.round(value*10)/10+'px';};
-  const stops=fadeTop?['transparent '+px(start),'#000 '+px(start+size)]:['#000 0px'];
-  if(fadeBottom)stops.push('#000 '+px(end),'transparent '+px(end+size));
-  return 'linear-gradient(to bottom, '+stops.join(', ')+')';
-}
-/** 滚动、列表或卡片的尺寸变化、卡片增减之后，下一帧重算渐隐。 */
-function scheduleListFade(){if(!ui.listFadeFrame)ui.listFadeFrame=window.requestAnimationFrame(fadeListEdges);}
-/** 安装一次：滚动时、列表与其中各项的尺寸变化时、项目增减时重算。 */
-function initializeListFade(){
-  const list=elements.noteList;if(!list)return;
-  list.addEventListener('scroll',scheduleListFade,{passive:true});
-  const resized=window.ResizeObserver?new ResizeObserver(scheduleListFade):null;
-  if(resized)resized.observe(list);
-  const watch=function watch(node){if(resized&&node.nodeType===1&&node.matches('.note-card, .search-group'))resized.observe(node);};
-  Array.from(list.children).forEach(watch);
-  if(window.MutationObserver)new MutationObserver(function changed(records){records.forEach(function record(item){item.addedNodes.forEach(watch);item.removedNodes.forEach(function forget(node){if(resized&&node.nodeType===1)resized.unobserve(node);});});scheduleListFade();}).observe(list,{childList:true});
-  scheduleListFade();
-}
-
 function initializeListLoading(){elements.noteList.addEventListener('scroll',function nearListEnd(){if(state.settings.lazyLoading&&ui.sentinel&&elements.noteList.scrollHeight-elements.noteList.scrollTop-elements.noteList.clientHeight<=96)appendNextPage();},{passive:true});}
 /** @brief 根据操作区以外的实际宽度展示尽可能多的标签。 @param {HTMLElement} card 记录卡片。 */
 function fitCardTags(card){

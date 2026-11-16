@@ -1483,13 +1483,6 @@ body.is-dragging-tab * {
   overflow: hidden auto;
 }
 
-/* 列表上下边缘的渐隐（第八次反馈）：卡片与组标题滚到列表的上边或下边时在 --sn-space-6 内逐渐变淡，不再被一刀截断；
- * 只在那一侧还有内容时出现。app.js 的 fadeListEdges 按位置写入 --local-edge-fade。遮罩加在卡片自己身上而不是列表上：
- * 列表带遮罩时，磨砂玻璃卡片的背景模糊只能取到列表里的内容，透出的壁纸不再模糊。 */
-.sidebar > .note-list > :is(.note-card, .search-group) {
-  mask-image: var(--local-edge-fade, none);
-}
-
 .note-list .empty-state {
   color: var(--sn-color-text-muted);
   font-size: var(--sn-font-size-sm);
@@ -4948,6 +4941,68 @@ body.is-dragging-attachment * {
 
 .sidebar > .note-list::-webkit-scrollbar-thumb:hover {
   background: var(--sn-color-text-muted);
+}
+
+/* ---------- 列表上下边缘的渐隐（第八次反馈） ----------
+ * 卡片滚到列表的上边或下边时在 --sn-space-6 内逐渐变淡，不再被一刀截断；只在那一侧还有内容时出现，刚开始滚动时一段一段移进来。
+ * 遮罩加在列表（滚动容器）上，与滚动一起合成，快速滚动时不落后（第九次反馈：此前脚本按位置给每张卡片算遮罩，滚动时渐隐的一段
+ * 追着边缘晃动）。三层遮罩：最右边滚动条的一列（不变淡）、上边一段、下边一段，上下两段取交集。滚动驱动的动画只移动上边一段的位置、
+ * 改变下边一段的大小，遮罩的图案不变。列表没有可滚的内容时动画不生效，也就没有遮罩；浏览器不支持滚动驱动的动画时不渐隐。
+ * 遮罩的各项都写在动画里：没有遮罩时各层的位置与大小只保留一层，不能作为动画的起止值。
+ * 代价：列表带遮罩时，磨砂玻璃卡片的 backdrop-filter 只能取到列表里的内容，浏览器里列表中的卡片不再模糊页面上的模拟桌面
+ * （桌面端的磨砂由窗口材质提供，见已知问题）。 */
+@supports (animation-timeline: scroll()) {
+  .sidebar > .note-list {
+    animation:
+      sn-list-mask linear both,
+      sn-list-fade-top linear both,
+      sn-list-fade-bottom linear both;
+    animation-timeline: scroll(self), scroll(self), scroll(self);
+    animation-range: normal, 0 var(--sn-space-6), calc(100% - var(--sn-space-6)) 100%;
+  }
+}
+
+/* 列表能滚动时才有遮罩（滚动时间线不生效时动画不起作用）。 */
+@keyframes sn-list-mask {
+  from,
+  to {
+    mask-image: linear-gradient(#000 0 0), linear-gradient(transparent, #000 var(--sn-space-6)), linear-gradient(#000 calc(100% - var(--sn-space-6)), transparent); /* 固定：遮罩只取透明度 */
+    mask-composite: add, intersect, add;
+    mask-repeat: no-repeat;
+    mask-position: 100% 0, 0 0, 0 0;
+    mask-size:
+      var(--sn-space-3) 100%,
+      calc(100% - var(--sn-space-3)) calc(100% + var(--sn-space-6)),
+      calc(100% - var(--sn-space-3)) 100%;
+  }
+}
+
+/* 上边一段：在顶部时整个在可见区之上，滚过 --sn-space-6 之前移进来。 */
+@keyframes sn-list-fade-top {
+  from {
+    mask-position: 100% 0, 0 calc(var(--sn-space-6) * -1), 0 0;
+  }
+
+  to {
+    mask-position: 100% 0, 0 0, 0 0;
+  }
+}
+
+/* 下边一段：离底部还有 --sn-space-6 起往下伸出可见区，到底时整个在可见区之下。 */
+@keyframes sn-list-fade-bottom {
+  from {
+    mask-size:
+      var(--sn-space-3) 100%,
+      calc(100% - var(--sn-space-3)) calc(100% + var(--sn-space-6)),
+      calc(100% - var(--sn-space-3)) 100%;
+  }
+
+  to {
+    mask-size:
+      var(--sn-space-3) 100%,
+      calc(100% - var(--sn-space-3)) calc(100% + var(--sn-space-6)),
+      calc(100% - var(--sn-space-3)) calc(100% + var(--sn-space-6));
+  }
 }
 
 /* ---------- 编辑中的卡片保留高亮（本次提出） ----------

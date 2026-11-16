@@ -24,7 +24,6 @@ import { allTags, belongsTo, homeTab, pinnedTagOf, searchTerms, tabLabel, tabNam
 import { Button } from '../ui/Button';
 import { cx, useSurface, useFormFactor } from '../ui/context';
 import { ContextMenu, type MenuItem } from '../ui/Menu';
-import { useEdgeFade } from '../ui/edgeFade';
 import { EmptyState } from '../ui/Misc';
 import { listHits, setSearchHits } from '../ui/searchHighlight';
 import { useToast } from '../ui/Tabs';
@@ -100,9 +99,6 @@ export function SidebarPanel(props: SidebarPanelProps) {
     setSearchHits(hits, listHits(list, searchTerms(view.query), new Set(allTags(data.notes).map((item) => tagKey(item.tag)))));
   });
   useEffect(() => () => setSearchHits(hits, []), [hits]);
-  // 列表上下边缘的渐隐（第八次反馈）：卡片滚到列表的上边或下边时逐渐变淡，不再被一刀截断。
-  const list = useRef<HTMLDivElement>(null);
-  useEdgeFade(list);
   const [infoNote, setInfoNote] = useState<Note | null>(null);
   const [emojiNote, setEmojiNote] = useState<Note | null>(null);
   const [managingTag, setManagingTag] = useState<string | null>(null);
@@ -552,7 +548,7 @@ export function SidebarPanel(props: SidebarPanelProps) {
           announceSaved(note, skipped);
         }}
       />
-      <div ref={list} className={cx('sn-note-list', `is-${surface.entries}`)} role="list" aria-label={`${items.length} 条记录`}>
+      <div className={cx('sn-note-list', `is-${surface.entries}`)} role="list" aria-label={`${items.length} 条记录`}>
         {items.length ? (
           view.searching ? (
             view.groups.map((group) => (

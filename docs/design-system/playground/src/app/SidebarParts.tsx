@@ -223,7 +223,7 @@ function SearchBox({ view, onInput }: { view: SidebarView; onInput?: (element: H
           ref={setInput}
           type="search"
           value={view.query}
-          placeholder="搜文字，#标签 只搜标签"
+          placeholder="搜正文，#标签 筛选，如「开发 #发布」"
           aria-label="搜索全部记录与标签"
           autoComplete="off"
           spellCheck={false}
