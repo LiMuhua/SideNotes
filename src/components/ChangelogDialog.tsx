@@ -24,22 +24,18 @@ export function ChangelogDialog({ onClose }: { onClose: () => void }) {
   const latest = CHANGELOG[0];
   return (
     <Modal title="版本与更新" className="changelog-modal" footer={null} onClose={onClose}>
-      <p className="version-summary">{`SideNotes ${__APP_VERSION__} PREVIEW`}</p>
-      <section className="changelog-entry">
-        <h3>本次更新</h3>
-        <ul className="changelog-list">
-          {points(latest.summary).map((point) => (
-            <li key={point}>{point}</li>
-          ))}
-        </ul>
-      </section>
+      <p className="version-summary">{`SideNotes ${__APP_VERSION__}`}</p>
+      <ul className="update-notes">
+        {points(latest.summary).map((point) => (
+          <li key={point}>{point}</li>
+        ))}
+      </ul>
       <div className="update-actions">
         <button
           type="button"
           className="button secondary"
           data-action=""
           aria-label="检查更新"
-          title="检查更新"
           onClick={() => toast('更新服务待桌面端接入')}
         >
           <Icon name="restore" />

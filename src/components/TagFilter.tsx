@@ -8,7 +8,8 @@
  * 展开状态由侧栏统一管理：点击按钮展开，切换页签或按 Esc 时收起。
  */
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, type KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
 import { rankTags } from '../core/notes';
 import { belongsTo } from '../core/tabs';
@@ -31,6 +32,8 @@ export interface TagFilterProps {
   onClear: () => void;
   onManage: (tag: string) => void;
   onSearch: () => void;
+  /** 菜单挂在筛选行（.list-topline）下，与原型的 #tag-dropdown 位置相同；为空时挂在按钮旁边。 */
+  menuHost?: HTMLElement | null;
 }
 
 export function TagFilter({
@@ -44,6 +47,7 @@ export function TagFilter({
   onClear,
   onManage,
   onSearch,
+  menuHost,
 }: TagFilterProps) {
   const notes = useStoreSlice((state) => state.notes);
   const tagUsage = useStoreSlice((state) => state.tagUsage);
@@ -63,11 +67,23 @@ export function TagFilter({
   useEffect(() => {
     if (!open) return;
     const dismiss = (event: MouseEvent): void => {
-      if (!(event.target as Element | null)?.closest?.('.tag-filter-wrap')) onOpenChange(false);
+      if (!(event.target as Element | null)?.closest?.('.tag-filter-wrap, #tag-dropdown')) onOpenChange(false);
     };
     document.addEventListener('click', dismiss);
     return () => document.removeEventListener('click', dismiss);
   }, [open, onOpenChange]);
+
+  /** 菜单里 ↑ ↓ 在选项之间移动焦点（原型 moveInMenu）。 */
+  const moveInMenu = (event: KeyboardEvent<HTMLDivElement>): void => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    const options = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('.tag-option'));
+    const index = options.indexOf(document.activeElement as HTMLElement);
+    if (index < 0) return;
+    event.preventDefault();
+    options[Math.max(0, Math.min(options.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)))].focus();
+  };
+
+  const renderMenu = (menu: React.ReactElement) => (menuHost ? createPortal(menu, menuHost) : menu);
 
   const option = (tag: string, count: number) => (
     <button
@@ -115,7 +131,8 @@ export function TagFilter({
       >
         <Icon name="x" />
       </button>
-      <div id="tag-dropdown" className="tag-dropdown" role="menu" aria-label="标签筛选" hidden={!open}>
+      {renderMenu(
+      <div id="tag-dropdown" className="tag-dropdown" role="menu" aria-label="标签筛选" hidden={!open} onKeyDown={moveInMenu}>
         {priority ? (
           <div className="tag-option-row current-tag-row">
             {option(priority.tag, priority.count)}
@@ -157,7 +174,8 @@ export function TagFilter({
             ) : null}
           </button>
         </div>
-      </div>
+      </div>,
+      )}
     </div>
   );
 }

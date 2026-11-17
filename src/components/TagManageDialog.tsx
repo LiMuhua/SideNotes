@@ -72,7 +72,6 @@ export function TagManageDialog({ tag, onClose, onRenamed, onRemoved }: TagManag
             className="button danger"
             data-action=""
             aria-label="移除此标签"
-            title="移除此标签"
             onClick={() => setConfirming(true)}
           >
             <Icon name="trash" />
@@ -83,7 +82,6 @@ export function TagManageDialog({ tag, onClose, onRenamed, onRemoved }: TagManag
             className="button primary"
             data-action=""
             aria-label="重命名 / 合并"
-            title="重命名 / 合并"
             onClick={() => void rename()}
           >
             <Icon name="edit" />

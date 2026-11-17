@@ -7,7 +7,7 @@
 
 import { useMemo, useState } from 'react';
 import { Modal } from './Modal';
-import { EMOJI_GROUPS, EMOJI_ITEMS, searchEmoji, pickEmoji } from '../core/emoji';
+import { EMOJI_GROUPS, searchEmoji, pickEmoji } from '../core/emoji';
 import type { Note } from '../core/types';
 
 export interface EmojiPickerProps {
@@ -74,10 +74,7 @@ export function EmojiPicker({ note, notes, onClose, onChoose }: EmojiPickerProps
       />
       <CategoryTabs
         selected={category}
-        onSelect={(next) => {
-          setCategory(next);
-          if (query.trim()) setQuery('');
-        }}
+        onSelect={setCategory}
       />
       <div className="emoji-grid" aria-label="Emoji 候选">
         {matches.map((item) => {
@@ -87,7 +84,6 @@ export function EmojiPicker({ note, notes, onClose, onChoose }: EmojiPickerProps
               key={`${item.emoji}-${item.category}`}
               type="button"
               className={`emoji-choice${item.emoji === note.emoji ? ' is-current' : ''}`}
-              title={`${item.label}${occupied ? ' · 已被其他记录使用' : ''}`}
               aria-label={item.label}
               disabled={occupied}
               onClick={() => onChoose(item.emoji)}
@@ -109,7 +105,6 @@ export function EmojiPicker({ note, notes, onClose, onChoose }: EmojiPickerProps
         >
           随机分配
         </button>
-        <span className="emoji-count">{EMOJI_ITEMS.length} 个候选</span>
       </div>
     </Modal>
   );

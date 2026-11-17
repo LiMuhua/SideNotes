@@ -219,6 +219,8 @@ export function Sidebar() {
   // 对话框打开期间鼠标移出侧栏不收起，否则对话框会随侧栏一起消失。
   /** 合并成一条的弹窗：来源（按列表中的顺序）、合并到的已有卡片与按标签合并时的标签。 */
   const [mergeRequest, setMergeRequest] = useState<{ notes: Note[]; target: Note | null; tag?: string } | null>(null);
+  /** 筛选行：标签菜单挂在它下面（原型 #tag-dropdown 是 .list-topline 的子元素）。 */
+  const [topline, setTopline] = useState<HTMLDivElement | null>(null);
   /** 「记录信息」弹窗（卡片菜单，原型 note-menu.js 的 showInfo）。 */
   const [infoNote, setInfoNote] = useState<Note | null>(null);
   const dialogOpen = Boolean(
@@ -287,6 +289,8 @@ export function Sidebar() {
   const startWidth = useRef(0);
   const latestWidth = useRef(0);
   const resizeFrame = useRef(0);
+  /** 拖动调宽时捕获指针的手柄，Esc 取消时释放。 */
+  const resizeCapture = useRef<{ element: HTMLElement; pointerId: number } | null>(null);
   /** 指针屏幕坐标的位移换算为设置中宽度的比例；浏览器预览没有窗口与界面缩放，保持 1。 */
   const widthPerScreen = useRef(1);
 
@@ -348,6 +352,7 @@ export function Sidebar() {
       latestWidth.current = state.settings.width;
       refreshPixelRatio();
       (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+      resizeCapture.current = { element: event.currentTarget as HTMLElement, pointerId: event.pointerId };
       document.body.style.userSelect = "none";
       document.body.classList.add("is-resizing-sidebar");
       cancelHide();
@@ -380,6 +385,31 @@ export function Sidebar() {
     },
     [state.settings.edge, state.settings.edgeTrigger, commitWidth],
   );
+
+  /** 取消拖动调宽：宽度回到开始拖动前，不写入设置。 */
+  const cancelResize = useCallback(() => {
+    if (!resizing.current) return;
+    resizing.current = false;
+    document.body.style.userSelect = "";
+    document.body.classList.remove("is-resizing-sidebar");
+    if (resizeFrame.current) {
+      window.cancelAnimationFrame(resizeFrame.current);
+      resizeFrame.current = 0;
+    }
+    const capture = resizeCapture.current;
+    resizeCapture.current = null;
+    try {
+      if (capture?.element.hasPointerCapture(capture.pointerId)) capture.element.releasePointerCapture(capture.pointerId);
+    } catch {
+      /* 忽略已释放 */
+    }
+    commitWidth(startWidth.current);
+    void bridge.applySidebarLayout(
+      bridge.sidebarLayout({ ...store.getState().settings, width: startWidth.current }),
+      store.getState().settings.edgeTrigger,
+    );
+    if (hidePending.current) scheduleHide();
+  }, [commitWidth, scheduleHide]);
 
   const handleResizePointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (!resizing.current) return;
@@ -745,14 +775,21 @@ export function Sidebar() {
   /** 打开搜索并聚焦输入框：Ctrl+F 与空白处菜单共用。 */
   const openSearch = useCallback(() => {
     setSearchOpen(true);
-    window.setTimeout(() => document.getElementById("search-input")?.focus(), 50);
+    window.setTimeout(() => {
+      const input = document.getElementById("search-input") as HTMLInputElement | null;
+      input?.focus();
+      // 已有搜索词时全选，直接输入就是换一个词（原型 toggleSearch）。
+      input?.select();
+    }, 50);
   }, []);
 
   /** 新建记录：先提交正在进行的编辑，再聚焦新建卡片。Ctrl+N 与空白处菜单共用。 */
   const startNewNote = useCallback(() => {
     if (editingRef.current) void commitEdit();
+    // 搜索中新建：先结束搜索，回到原来的页签（原型 newNote）。
+    if (searchTerms(query) || searchOpen) endSearch();
     window.dispatchEvent(new CustomEvent("sidenotes:focus-composer"));
-  }, [commitEdit]);
+  }, [commitEdit, query, searchOpen, endSearch]);
 
   /**
    * 固定或取消固定侧栏：标题栏按钮与空白处菜单共用。固定只让侧栏保持展开；
@@ -1012,7 +1049,7 @@ export function Sidebar() {
       toast(SAVE_FAILED_MESSAGE, null, true);
       return false;
     }
-    toast("已移入回收站", {
+    toast(notes.length > 1 ? `已移入回收站 ${notes.length} 条记录` : "已移入回收站", {
       label: "撤销",
       run: () => {
         // 撤销还原删除前的状态、置顶与顺序；写入失败时与原型一样提示保存失败。
@@ -1315,6 +1352,13 @@ export function Sidebar() {
   /* ==================== 键盘快捷键 ==================== */
   useEffect(() => {
     const handler = (event: KeyboardEvent): void => {
+      // 拖动调宽时按 Esc：取消，宽度回到开始拖动前（原型 finishSidebarResize(false)）。
+      if (event.key === "Escape" && resizing.current) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        cancelResize();
+        return;
+      }
       const shortcuts = store.getState().settings.shortcuts;
       // 对话框里的保存快捷键交给对话框自己（合并成一条的「合并」、附件弹窗的「应用修改」），
       // 否则在对话框里按 Ctrl+Enter 会保存新建卡片的草稿。
@@ -1379,6 +1423,7 @@ export function Sidebar() {
         }
         if (tagMenuOpen) {
           setTagMenuOpen(false);
+          document.getElementById("tag-filter-button")?.focus();
           return;
         }
         // 标签整理态：放弃没确认的改名，收起整理（原型 Esc 的第一层）。
@@ -1407,6 +1452,8 @@ export function Sidebar() {
         // 结束搜索：搜索框收起但还有搜索词（点放大镜收起时保留）时同样结束，回到原来的页签与滚动位置。
         if (searchOpen || searchText) {
           endSearch();
+          // 焦点回到放大镜，接着按 Enter 或空格可以再搜（原型 toggleSearch(false)）。
+          window.requestAnimationFrame(() => document.querySelector<HTMLElement>("#header-search .search-toggle")?.focus());
           return;
         }
         if (selectedTag) {
@@ -1523,7 +1570,7 @@ export function Sidebar() {
    */
   const handleListHover = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
-      if (interactions.isBusy() || interactions.isSelecting()) return;
+      if (interactions.isBusy()) return;
       const id = (event.target as HTMLElement).closest<HTMLElement>(".note-card")?.dataset.noteId;
       if (id) setCurrentId((previous) => (previous === id ? previous : id));
     },
@@ -2017,7 +2064,8 @@ export function Sidebar() {
   /** 点卡片上的标签：平时按这个标签筛选；搜索时改搜这个标签（与原型 setSearchQuery 相同）。 */
   const filterByTag = useCallback(
     (tag: string) => {
-      if (searching) setSearchQuery(`#${tag}`);
+      // 搜索时改搜这个标签，末尾带一个空格，接着就能输入别的词（原型 setSearchQuery）。
+      if (searching) setSearchQuery(`#${tag} `);
       else selectTag(tag);
     },
     [searching, setSearchQuery, selectTag],
@@ -2347,50 +2395,11 @@ export function Sidebar() {
           </div>
         </div>
 
-        {/* 整理提醒：记录超过设置的条数时提醒整理（固定为页签或合并成一条），可以稍后再说。 */}
-        {nudgeVisible ? (
-          <div id="workspace-nudge" className="workspace-nudge">
-            <Icon name="info" />
-            <span>{`${state.notes.filter((note) => note.status === "active").length} 条记录，建议整理。`}</span>
-            <button
-              type="button"
-              className="nudge-link"
-              data-action="tidy-workspace"
-              onClick={() => {
-                switchTab("workspace");
-                toast("可以把同一类的记录固定为页签，或合并成一条。");
-              }}
-            >
-              查看
-            </button>
-            <button
-              type="button"
-              className="nudge-link"
-              data-action="snooze-tidy"
-              onClick={() => {
-                void store.updateSettings({ tidySnoozeUntil: Date.now() + 7 * 86_400_000 });
-                setNudgeDismissed(true);
-              }}
-            >
-              稍后
-            </button>
-            <button
-              type="button"
-              className="button secondary compact"
-              data-action="tidy-settings"
-              onClick={() => window.dispatchEvent(new CustomEvent("sidenotes:open-settings"))}
-            >
-              <Icon name="settings" />
-              设置
-            </button>
-          </div>
-        ) : null}
-
         {/* 筛选行（原型 renderFilterRow）：左边写列表里是什么——有选中的卡片时是「已选 N 条」，搜索时是结果条数，平时是标签下拉；
             后面是这时能做的操作：选中时「合并」「移入回收站」；搜的词正好是已有标签时「#开发 N 条」改搜这个标签；
             按一个标签筛选或只搜一个已有标签时「固定为页签」（还没固定时）与「合并」（两条以上时）。
             右边是对整个列表的操作：多选与收起/展开全部。 */}
-        <div className="list-topline">
+        <div ref={setTopline} className="list-topline">
           <div className="list-filter">
             {selectedIds.length ? (
               <span id="selection-summary" className="search-summary selection-summary">{`已选 ${selectedIds.length} 条`}</span>
@@ -2408,6 +2417,7 @@ export function Sidebar() {
                 onClear={clearTagFilter}
                 onManage={manageTag}
                 onSearch={searchTags}
+                menuHost={topline}
               />
             )}
             <p id="list-summary">
@@ -2506,6 +2516,45 @@ export function Sidebar() {
           <div className="desktop-notice is-error">
             <Icon name="alert" />
             {state.loadFailed ? "未能读取本地记录，已暂停保存，以免覆盖已有数据" : "本地存储不可用，请导出备份后重试"}
+          </div>
+        ) : null}
+
+        {/* 整理提醒：记录超过设置的条数时提醒整理（固定为页签或合并成一条），可以稍后再说。与原型相同，在筛选行之下。 */}
+        {nudgeVisible ? (
+          <div id="workspace-nudge" className="workspace-nudge">
+            <Icon name="info" />
+            <span>{`${state.notes.filter((note) => note.status === "active").length} 条记录，建议整理。`}</span>
+            <button
+              type="button"
+              className="nudge-link"
+              data-action="tidy-workspace"
+              onClick={() => {
+                switchTab("workspace");
+                toast("可以把同一类的记录固定为页签，或合并成一条。");
+              }}
+            >
+              查看
+            </button>
+            <button
+              type="button"
+              className="nudge-link"
+              data-action="snooze-tidy"
+              onClick={() => {
+                void store.updateSettings({ tidySnoozeUntil: Date.now() + 7 * 86_400_000 });
+                setNudgeDismissed(true);
+              }}
+            >
+              稍后
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              data-action="tidy-settings"
+              aria-label="设置"
+              onClick={() => window.dispatchEvent(new CustomEvent("sidenotes:open-settings"))}
+            >
+              <Icon name="settings" />
+            </button>
           </div>
         ) : null}
 
@@ -2650,8 +2699,17 @@ export function Sidebar() {
             ))
           )}
           {hasMore ? (
-            <div ref={loadMoreRef} className="list-load-more" role="status">
-              {`已显示 ${renderedNotes.length} / ${listNotes.length} 条，继续滚动加载`}
+            <div ref={loadMoreRef} className="load-more-sentinel" role="status">
+              <span className="load-more-status">{`已显示 ${renderedNotes.length} / ${listNotes.length} 条`}</span>
+              <button
+                type="button"
+                className="load-more-button"
+                data-action="load-more"
+                aria-label="加载更多"
+                onClick={() => setLoaded({ key: viewKey, count: loadedCount + pageSize })}
+              >
+                加载更多
+              </button>
             </div>
           ) : null}
         </div>
@@ -2836,6 +2894,7 @@ export function Sidebar() {
           onClose={() => setManagingTag(null)}
           onRenamed={(next) => {
             if (selectedTag && tagKey(selectedTag) === tagKey(managingTag)) setSelectedTag(next);
+            if (tagKey(tagOfTab(tab)) === tagKey(managingTag)) setTab(tabOfTag(next));
             setManagingTag(null);
           }}
           onRemoved={() => {

@@ -669,7 +669,6 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
           t.selected.add(card.dataset.noteId);
         }
       });
-      t.mode = true;
       commitSelection();
     };
 
