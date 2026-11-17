@@ -138,13 +138,13 @@ export function App({ role }: AppProps) {
     const unsubscribe = bridge.subscribeAll([
       // 托盘：打开设置窗口。
       bridge.onAppEvent(bridge.APP_EVENTS.traySettings, () => {
-        void bridge.showSettings();
+        void bridge.showSettings(uiZoom(store.getState().settings.fontSize));
       }),
     ]);
 
     // 侧栏内的设置按钮通过自定义事件打开设置窗口。
     const openSettings = (): void => {
-      void bridge.showSettings();
+      void bridge.showSettings(uiZoom(store.getState().settings.fontSize));
     };
     window.addEventListener('sidenotes:open-settings', openSettings);
 

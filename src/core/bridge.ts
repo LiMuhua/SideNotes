@@ -8,7 +8,7 @@
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow, Window } from '@tauri-apps/api/window';
-import { readText } from '@tauri-apps/plugin-clipboard-manager';
+import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { readFile, readTextFile, writeFile } from '@tauri-apps/plugin-fs';
 import { isPermissionGranted, requestPermission } from '@tauri-apps/plugin-notification';
@@ -312,12 +312,12 @@ async function textScale(): Promise<number> {
 }
 
 /**
- * 显示设置窗口；带上文本缩放比例，使设置内容按原型尺寸完整显示。
- * 比例按调用方窗口测得，已包含字号对应的界面缩放（各窗口的缩放相同）。
+ * 显示设置窗口；带上系统的文本缩放比例，窗口按原型的 880 × 560 换算为逻辑尺寸。
+ * 比例按调用方窗口测得，其中包含字号对应的界面缩放 `zoom`（各窗口相同），这里除去：设置窗口不随字号变化。
  */
-export async function showSettings(): Promise<void> {
+export async function showSettings(zoom = 1): Promise<void> {
   if (!isDesktop()) return;
-  await invoke('show_settings', { textScale: await textScale() });
+  await invoke('show_settings', { textScale: (await textScale()) / (zoom > 0 ? zoom : 1) });
 }
 
 /**
@@ -407,6 +407,12 @@ export async function readClipboardText(): Promise<string> {
   } catch {
     return '';
   }
+}
+
+/** 把文字写入剪贴板：桌面端经剪贴板插件写入（设置窗口复制目录路径等），浏览器预览用网页的剪贴板。 */
+export async function writeClipboardText(text: string): Promise<void> {
+  if (isDesktop()) await writeText(text);
+  else await navigator.clipboard.writeText(text);
 }
 
 /** 导入后的附件：显示名称与应用数据目录中副本的完整路径。 */

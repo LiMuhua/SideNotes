@@ -18,7 +18,7 @@ import {
   resolveTheme,
 } from '../../core/settings';
 import { SURFACES, surfaceAttributes } from '../../core/surfaces';
-import type { EdgeSide, Settings, SurfaceMode, ToastPosition } from '../../core/types';
+import type { EdgeSide, Settings, SurfaceMode, ToastPosition, WindowTabsPosition } from '../../core/types';
 import { useToast } from '../../hooks/useToast';
 import { Combobox } from './Combobox';
 import { ActionButton, Group, Help, RangeField, Row, SelectField, TextField, Toggle, classes, type SaveSettings } from './controls';
@@ -40,6 +40,12 @@ const TOAST_POSITION_LABELS: ReadonlyArray<readonly [ToastPosition, string]> = [
   ['top-center', '顶部正中'],
   ['top-right', '右上角'],
   ['bottom-center', '底部正中'],
+];
+
+/** 记录窗口的标签页位置，顺序与原型相同：顶部、左侧（默认左侧）。 */
+const WINDOW_TABS_LABELS: ReadonlyArray<readonly [WindowTabsPosition, string]> = [
+  ['top', '顶部'],
+  ['side', '左侧'],
 ];
 
 /** 常用延迟只写数字，单位 ms 固定显示在输入框之后。 */
@@ -203,7 +209,10 @@ function HideDelayField({ value, save }: { value: number; save: SaveSettings }) 
   );
 }
 
-/** 列表加载与整理提醒，交互分类末尾的紧凑配置。 */
+/**
+ * 交互分类末尾的「其它」（原型 settings.js 的 runtimeSettings）：固定两行，第一行窗口标签页、通知位置，
+ * 第二行列表加载、整理提醒；每行按各自的宽度排开，太窄放不下时行内折行。
+ */
 function RuntimeGroup({ settings, save }: PanelProps) {
   const toast = useToast();
   // 关闭整理提醒时阈值记为 0，这里记住上一次的阈值，重新开启时恢复。
@@ -211,88 +220,96 @@ function RuntimeGroup({ settings, save }: PanelProps) {
 
   return (
     <Group title="其它" className="settings-wide settings-runtime-card">
-      <div className="settings-runtime-row">
-        <div className="settings-runtime-field">
-          <div className="settings-runtime-name">
-            列表加载
-            <Help title="列表加载" description="滚动到底部时按批加载，每批 5–100 条" />
-          </div>
-          <div className="settings-runtime-controls">
-            <Toggle
-              label="滚动按需加载"
-              title="滚动按需加载"
-              checked={settings.lazyLoading}
-              onChange={(lazyLoading) => void save({ lazyLoading })}
-            />
-            <label className="settings-runtime-value">
-              <TextField
-                label="每批加载记录数"
-                type="number"
-                min={5}
-                max={100}
-                value={String(settings.pageSize)}
-                disabled={!settings.lazyLoading}
-                onCommit={(raw) => {
-                  const pageSize = Number(raw);
-                  if (!Number.isInteger(pageSize) || pageSize < 5 || pageSize > 100) {
-                    toast('每批加载 5 至 100 条');
-                    return false;
-                  }
-                  return save({ pageSize });
-                }}
+      <div className="settings-runtime-rows">
+        <div className="settings-runtime-row">
+          <div className="settings-runtime-field">
+            <div className="settings-runtime-name">
+              窗口标签页
+              <Help title="窗口标签页" description="记录窗口中标签页的位置，窗口标题栏上的按钮也能切换" />
+            </div>
+            <div className="settings-runtime-controls">
+              <SelectField
+                label="记录窗口的标签页位置"
+                options={WINDOW_TABS_LABELS}
+                value={settings.windowTabs}
+                onChange={(position) => void save({ windowTabs: position as WindowTabsPosition })}
               />
-              <span className="settings-runtime-suffix">条/批</span>
-            </label>
+            </div>
+          </div>
+          <div className="settings-runtime-field">
+            <div className="settings-runtime-name">通知位置</div>
+            <div className="settings-runtime-controls">
+              <SelectField
+                label="通知弹出位置"
+                options={TOAST_POSITION_LABELS}
+                value={settings.toastPosition}
+                onChange={(position) => void save({ toastPosition: position as ToastPosition })}
+              />
+            </div>
           </div>
         </div>
-        <div className="settings-runtime-field">
-          <div className="settings-runtime-name">
-            整理提醒
-            <Help title="整理提醒" description="工作区记录超过这个数时提醒整理" />
+        <div className="settings-runtime-row">
+          <div className="settings-runtime-field">
+            <div className="settings-runtime-name">
+              列表加载
+              <Help title="列表加载" description="滚动到列表底部时按批加载" />
+            </div>
+            <div className="settings-runtime-controls">
+              <Toggle label="滚动按需加载" checked={settings.lazyLoading} onChange={(lazyLoading) => void save({ lazyLoading })} />
+              <label className="settings-runtime-value">
+                <TextField
+                  label="每批加载记录数"
+                  type="number"
+                  min={5}
+                  max={100}
+                  value={String(settings.pageSize)}
+                  disabled={!settings.lazyLoading}
+                  onCommit={(raw) => {
+                    const pageSize = Number(raw);
+                    if (!Number.isInteger(pageSize) || pageSize < 5 || pageSize > 100) {
+                      toast('每批加载 5 至 100 条');
+                      return false;
+                    }
+                    return save({ pageSize });
+                  }}
+                />
+                <span className="settings-runtime-suffix">条/批</span>
+              </label>
+            </div>
           </div>
-          <div className="settings-runtime-controls">
-            <Toggle
-              label="启用工作区整理提醒"
-              title="启用工作区整理提醒"
-              checked={settings.tidyLimit > 0}
-              onChange={(enabled) => void save({ tidyLimit: enabled ? previousLimit : 0 })}
-            />
-            <label className="settings-runtime-value">
-              <TextField
-                label="工作区整理提醒阈值"
-                type="number"
-                min={1}
-                max={100000}
-                value={String(settings.tidyLimit || previousLimit)}
-                disabled={!settings.tidyLimit}
-                onCommit={async (raw) => {
-                  const tidyLimit = Number(raw);
-                  if (!Number.isInteger(tidyLimit) || tidyLimit < 1 || tidyLimit > 100000) {
-                    toast('请输入 1 至 100000 的整数');
-                    return false;
-                  }
-                  if (!(await save({ tidyLimit }))) return false;
-                  setPreviousLimit(tidyLimit);
-                  return true;
-                }}
+          <div className="settings-runtime-field">
+            <div className="settings-runtime-name">
+              整理提醒
+              <Help title="整理提醒" description="记录超过这个数时提醒整理" />
+            </div>
+            <div className="settings-runtime-controls">
+              <Toggle
+                label="启用整理提醒"
+                checked={settings.tidyLimit > 0}
+                onChange={(enabled) => void save({ tidyLimit: enabled ? previousLimit : 0 })}
               />
-              <span className="settings-runtime-suffix">条</span>
-            </label>
-          </div>
-        </div>
-        <div className="settings-runtime-field">
-          <div className="settings-runtime-name">
-            通知位置
-            <Help title="通知位置" description="「已保存」等操作提示弹出的位置" />
-          </div>
-          <div className="settings-runtime-controls">
-            <SelectField
-              label="通知弹出位置"
-              className="settings-runtime-select"
-              options={TOAST_POSITION_LABELS}
-              value={settings.toastPosition}
-              onChange={(position) => void save({ toastPosition: position as ToastPosition })}
-            />
+              <label className="settings-runtime-value">
+                <TextField
+                  label="整理提醒阈值"
+                  type="number"
+                  min={1}
+                  max={100000}
+                  value={String(settings.tidyLimit || previousLimit)}
+                  disabled={!settings.tidyLimit}
+                  onCommit={async (raw) => {
+                    const tidyLimit = Number(raw);
+                    if (!Number.isInteger(tidyLimit) || tidyLimit < 1 || tidyLimit > 100000) {
+                      toast('请输入 1 至 100000 的整数');
+                      return false;
+                    }
+                    if (!(await save({ tidyLimit }))) return false;
+                    setPreviousLimit(tidyLimit);
+                    return true;
+                  }}
+                />
+                <span className="settings-runtime-suffix">条</span>
+              </label>
+            </div>
           </div>
         </div>
       </div>
@@ -312,7 +329,7 @@ export function AppearancePanel({ settings, save }: PanelProps) {
           </Row>
           <Row title="字号">
             <RangeField
-              label="字体大小"
+              label="字号"
               settingKey="fontSize"
               value={settings.fontSize}
               min={FONT_SIZE_RANGE.min}
@@ -367,7 +384,7 @@ export function AppearancePanel({ settings, save }: PanelProps) {
           </Row>
           <Row title="出入动画" className="sidebar-width-row">
             <RangeField
-              label="出入动画时长"
+              label="出入动画"
               settingKey="animDuration"
               value={settings.animDuration}
               min={ANIM_DURATION_RANGE.min}
@@ -383,7 +400,7 @@ export function AppearancePanel({ settings, save }: PanelProps) {
             className="sidebar-width-row"
           >
             <RangeField
-              label="卡片最大高度"
+              label="卡片高度"
               settingKey="cardMaxHeight"
               value={settings.cardMaxHeight}
               min={CARD_HEIGHT_RANGE.min}

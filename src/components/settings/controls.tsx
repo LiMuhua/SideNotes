@@ -7,8 +7,9 @@
  * 交互语义同样沿用原型：文本框在失焦或回车时提交，数值框越界时就近校正并提示。
  */
 
-import { useId, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode, type Ref } from 'react';
+import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ReactNode, type Ref } from 'react';
 import { Icon, type IconName } from '../Icon';
+import { Floating } from '../Floating';
 import { boundedNumber } from '../../core/settings';
 import { useToast } from '../../hooks/useToast';
 import type { Settings } from '../../core/types';
@@ -54,31 +55,17 @@ export function ActionButton({ label, icon, leading, children, className = 'butt
   );
 }
 
-/** 字段说明：悬停、聚焦或点击问号时显示，气泡限制在设置面板之内。 */
+/**
+ * 字段说明：悬停、聚焦或点击问号时显示（原型 settings.js 的 help）。
+ * 说明挂在 body 下的浮层中（Floating），不被设置页的滚动区域裁剪，放不下时翻到上方。
+ */
 export function Help({ title, description }: { title: string; description: string }) {
   const id = `setting-help-${useId()}`;
   const [shown, setShown] = useState(false);
-  const holder = useRef<HTMLSpanElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
-  const bubble = useRef<HTMLSpanElement>(null);
-
-  // 靠近面板边缘的问号会把气泡推出可视区，这里按面板边界平移回来。
-  useLayoutEffect(() => {
-    const message = bubble.current;
-    if (!shown || !message) return;
-    message.style.transform = '';
-    const panel = holder.current?.closest('.settings-panel');
-    if (!panel) return;
-    const bounds = panel.getBoundingClientRect();
-    message.style.maxWidth = `${Math.max(100, bounds.width - 16)}px`;
-    const rect = message.getBoundingClientRect();
-    const offset = Math.max(bounds.left + 8 - rect.left, Math.min(0, bounds.right - 8 - rect.right));
-    if (offset) message.style.transform = `translateX(${offset}px)`;
-  }, [shown]);
 
   return (
     <span
-      ref={holder}
       className="settings-help"
       onMouseEnter={() => setShown(true)}
       onMouseLeave={() => {
@@ -91,7 +78,7 @@ export function Help({ title, description }: { title: string; description: strin
         className="settings-help-button"
         aria-label={`${title}说明`}
         aria-expanded={shown}
-        aria-describedby={id}
+        aria-describedby={shown ? id : undefined}
         onClick={() => setShown(true)}
         onFocus={() => setShown(true)}
         onBlur={() => setShown(false)}
@@ -105,9 +92,9 @@ export function Help({ title, description }: { title: string; description: strin
       >
         ?
       </button>
-      <span ref={bubble} id={id} className="settings-help-text" role="tooltip" hidden={!shown}>
+      <Floating anchor={trigger} open={shown} options={{ placement: 'bottom-start' }} id={id} role="tooltip" className="settings-help-text settings-floating">
         {description}
-      </span>
+      </Floating>
     </span>
   );
 }
@@ -184,7 +171,11 @@ export function Toggle({
   );
 }
 
-/** 下拉框。 */
+/**
+ * 下拉框（原型 settings.js 的 select）：按钮写出当前项与箭头，列表挂在 body 下的浮层中，与按钮同宽，放不下时翻到上方。
+ * 点击或按 ↓、↑、Enter、空格展开；展开后方向键与 Home、End 移动，Enter 或空格选用，Esc 只收起列表（不关闭设置窗口），
+ * Tab 或失焦收起。选项上按下鼠标不夺走焦点。
+ */
 export function SelectField({
   label,
   options,
@@ -198,19 +189,100 @@ export function SelectField({
   className?: string;
   onChange: (next: string) => void;
 }) {
+  const listId = `select-list-${useId()}`;
+  const button = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(-1);
+  const current = String(value);
+  const currentIndex = options.findIndex(([optionValue]) => String(optionValue) === current);
+
+  // 键盘移到的一项滚进列表的可视范围。
+  useEffect(() => {
+    if (open && active >= 0) document.getElementById(`${listId}-${active}`)?.scrollIntoView({ block: 'nearest' });
+  }, [open, active, listId]);
+
+  const expand = (): void => {
+    setOpen(true);
+    setActive(Math.max(0, currentIndex));
+  };
+  const collapse = (focus: boolean): void => {
+    setOpen(false);
+    setActive(-1);
+    if (focus) button.current?.focus();
+  };
+  const choose = (next: string): void => {
+    collapse(true);
+    if (next !== current) onChange(next);
+  };
+  const move = (index: number): void => setActive(Math.max(0, Math.min(options.length - 1, index)));
+
   return (
-    <select
-      className={classes('form-control', className)}
-      aria-label={label}
-      value={String(value)}
-      onChange={(event) => onChange(event.target.value)}
-    >
-      {options.map(([optionValue, text]) => (
-        <option key={String(optionValue)} value={String(optionValue)}>
-          {text}
-        </option>
-      ))}
-    </select>
+    <>
+      <button
+        ref={button}
+        type="button"
+        className={classes('select-box', className)}
+        aria-label={label}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        aria-activedescendant={open && active >= 0 ? `${listId}-${active}` : undefined}
+        value={current}
+        onClick={() => (open ? collapse(false) : expand())}
+        onBlur={() => collapse(false)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape' && open) {
+            event.preventDefault();
+            event.stopPropagation();
+            collapse(true);
+          } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            if (!open) expand();
+            else move(active + (event.key === 'ArrowDown' ? 1 : -1));
+          } else if ((event.key === 'Home' || event.key === 'End') && open) {
+            event.preventDefault();
+            move(event.key === 'Home' ? 0 : options.length - 1);
+          } else if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            if (open && options[active]) choose(String(options[active][0]));
+            else expand();
+          } else if (event.key === 'Tab' && open) {
+            collapse(false);
+          }
+        }}
+      >
+        <span className="select-box-value">{currentIndex >= 0 ? options[currentIndex][1] : ''}</span>
+        <Icon name="chevron-down" />
+      </button>
+      <Floating
+        anchor={button}
+        open={open}
+        options={{ placement: 'bottom-start', offset: 4, matchWidth: true, scroll: true }}
+        id={listId}
+        role="listbox"
+        aria-label={label}
+        className="select-box-list settings-floating"
+      >
+        {options.map(([optionValue, text], index) => {
+          const selected = String(optionValue) === current;
+          return (
+            <div
+              key={String(optionValue)}
+              id={`${listId}-${index}`}
+              role="option"
+              aria-selected={selected}
+              className={classes('select-box-option', selected && 'is-selected', index === active && 'is-active')}
+              onMouseDown={(event) => event.preventDefault()}
+              onMouseEnter={() => setActive(index)}
+              onClick={() => choose(String(optionValue))}
+            >
+              <span className="select-box-check">{selected ? <Icon name="check" /> : null}</span>
+              <span className="select-box-label">{text}</span>
+            </div>
+          );
+        })}
+      </Floating>
+    </>
   );
 }
 
