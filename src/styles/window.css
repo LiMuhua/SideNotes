@@ -33,6 +33,70 @@ body[data-window='settings'] .settings-modal.modal {
   animation: none;
 }
 
+/* ==================== 窗口材质（T84，技术决策第 40 条） ====================
+ * 侧栏与速记浮窗是透明窗口，App.tsx 按主题在根节点写 data-sn-window（core/surfaces 的 windowMaterial）：
+ * - acrylic（Windows 11、磨砂玻璃）：系统给窗口加亚克力，并画圆角、细边框与投影。侧栏窗口本身离开屏幕边缘
+ *   （windows.rs 的 place_sidebar），页面里不再留白；面板与浮窗外圈的圆角、边框与投影交给系统。
+ *   页面里的 backdrop-filter 背后是透明的，没有东西可模糊，一并去掉，磨砂由窗口材质提供。
+ * - clear（杂志）：透明、不加材质，浮动面板的留白在窗口内、透出桌面，面板的圆角与投影照原型由页面画。
+ * - opaque（终端、记录纸）：面板铺满窗口，与不透明窗口相同；速记浮窗的外圈圆角与投影同样交给系统。
+ * acrylic 与 clear 不画根节点的底色（theme.css 的 :root 背景），留白与圆角之外才透得出去。 */
+:root:is([data-sn-window='acrylic'], [data-sn-window='clear']) {
+  background: transparent;
+}
+
+:root[data-sn-window='acrylic'] body[data-window='sidebar'] .sidebar {
+  padding: 0;
+}
+
+:root[data-sn-window='acrylic'] body[data-window='sidebar'] .sidebar::before {
+  inset: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+:root[data-sn-window='acrylic'] .sidebar::before,
+:root[data-sn-window='acrylic'] .sidebar > *,
+:root[data-sn-window='acrylic'] .note-card,
+:root[data-sn-window='acrylic'] .capture {
+  backdrop-filter: none;
+}
+
+:root:is([data-sn-window='acrylic'], [data-sn-window='opaque']) body[data-window='capture'] .capture {
+  border-color: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+:root[data-sn-window='acrylic'] body[data-window='capture'] .capture::before {
+  display: none;
+}
+
+/* ==================== 调宽手柄（原型第二版） ====================
+ * 停留 400ms（is-armed）、拖动或获得焦点时，手柄亮起一条强调色的线，与 Playground 的 .sn-resizer 相同；
+ * theme.css（与原型）的 ::after 缺 content，高亮画不出来，这里补上。手柄贴在窗口的内侧边（窗口外收不到指针），
+ * 线跨在面板边上，一半在窗口外，看到的是贴边的一条。获得焦点时由这条线指示，不画焦点环。 */
+body[data-window='sidebar'] .sidebar-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: var(--sn-space-1);
+}
+
+body[data-window='sidebar'] .sidebar-resizer[data-edge='right']::after {
+  left: calc(var(--sn-space-1) / -2);
+}
+
+body[data-window='sidebar'] .sidebar-resizer[data-edge='left']::after {
+  right: calc(var(--sn-space-1) / -2);
+}
+
+body[data-window='sidebar'] .sidebar-resizer:focus-visible {
+  outline: none;
+}
+
 /* 页签栏的测量行（SidebarTabs）：与页签栏同样的页签，看不见，按内容排开，只用来量各个页签的宽度。
  * 原型直接在页签栏里逐个隐藏页签来量；React 不便改动它渲染的节点，改用这一行。 */
 .sidebar-navigation .sidebar-tabs.tabs-measure {

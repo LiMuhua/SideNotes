@@ -63,7 +63,7 @@ import {
   type ReferenceSpan,
 } from "../core/attachments";
 import { parse, removeTag, tagKey, canonicalize, isValidTag, withTag } from "../core/tags";
-import { WIDTH_RANGE, sidebarWindowWidth, uiZoom } from "../core/settings";
+import { WIDTH_RANGE, uiZoom } from "../core/settings";
 import { comboFromEvent, matches } from "../core/shortcuts";
 import type { EditSession, Note, NoteImage, TabKey } from "../core/types";
 import type { EditorAttachment, MarkdownEditor } from "../core/editor";
@@ -74,6 +74,8 @@ const SAVE_FAILED_MESSAGE = "保存失败，原记录未改动。请导出备份
 
 /** 设置窗口打开期间推迟收起，按此间隔复查它是否已关闭。 */
 const SETTINGS_POLL_INTERVAL = 400;
+/** 指针停在侧栏与屏幕边缘之间的留白里时，复查是否已经离开的间隔（毫秒）。 */
+const GAP_POLL_INTERVAL = 150;
 
 /** 两组图片附件是否相同（只比较标识与顺序）。 */
 function sameImages(left: NoteImage[], right: NoteImage[]): boolean {
@@ -202,8 +204,9 @@ export function Sidebar() {
         width: state.settings.width,
         fontSize: state.settings.fontSize,
         animDuration: state.settings.animDuration,
+        surface: state.settings.surface,
       }),
-    [state.settings.edge, state.settings.width, state.settings.fontSize, state.settings.animDuration],
+    [state.settings.edge, state.settings.width, state.settings.fontSize, state.settings.animDuration, state.settings.surface],
   );
 
   // 对话框打开期间鼠标移出侧栏不收起，否则对话框会随侧栏一起消失。
@@ -235,10 +238,15 @@ export function Sidebar() {
       // 与原型一致：设置弹窗打开期间侧栏保持展开。设置是独立窗口，打开时侧栏会失焦，
       // 鼠标也可能移到设置窗口上，所以到点时先查询设置窗口是否正在显示；
       // 显示时稍后复查，设置窗口关闭（含最小化）后再收起，不需要鼠标重新移入移出。
-      void bridge.isSettingsVisible().then((settingsOpen) => {
+      // 窗口离开屏幕边缘的主题（T84）：指针停在侧栏与屏幕边缘之间的留白里也算在侧栏上，稍后复查。
+      void Promise.all([bridge.isSettingsVisible(), bridge.sidebarHoldsCursor()]).then(([settingsOpen, holdsCursor]) => {
         if (token !== hideToken.current || mustStay()) return;
         if (settingsOpen) {
           hideTimer.current = window.setTimeout(attempt, SETTINGS_POLL_INTERVAL);
+          return;
+        }
+        if (holdsCursor) {
+          hideTimer.current = window.setTimeout(attempt, GAP_POLL_INTERVAL);
           return;
         }
         hidePending.current = false;
@@ -349,12 +357,12 @@ export function Sidebar() {
       resizeFrame.current = window.requestAnimationFrame(() => {
         resizeFrame.current = 0;
         void bridge.applySidebarLayout(
-          { edge: state.settings.edge, width: sidebarWindowWidth(latestWidth.current, state.settings.fontSize) },
+          bridge.sidebarLayout({ ...store.getState().settings, width: latestWidth.current }),
           state.settings.edgeTrigger,
         );
       });
     },
-    [state.settings.edge, state.settings.edgeTrigger, state.settings.fontSize, commitWidth],
+    [state.settings.edge, state.settings.edgeTrigger, commitWidth],
   );
 
   const handleResizePointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {

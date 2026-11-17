@@ -64,7 +64,7 @@ pub fn last_layout() -> SidebarLayout {
         .lock()
         .ok()
         .and_then(|slot| slot.clone())
-        .unwrap_or_else(|| SidebarLayout { edge: "right".into(), width: 400.0, anim_duration: 260.0 })
+        .unwrap_or_else(|| SidebarLayout { edge: "right".into(), width: 400.0, anim_duration: 260.0, gap: 0.0 })
 }
 
 /// 侧栏几何配置，由前端设置驱动。
@@ -78,6 +78,11 @@ pub struct SidebarLayout {
     /// 出入动画时长（毫秒）；0 表示不做动画。
     #[serde(default)]
     pub anim_duration: f64,
+    /// 面板与屏幕边缘之间的留白（逻辑像素，已乘界面缩放）。Windows 11 与磨砂玻璃的窗口本身就是面板：
+    /// 窗口离开屏幕边缘与上下边这段距离，由系统给窗口画圆角、投影与亚克力材质（T84，技术决策第 40 条）。
+    /// `width` 仍是包括留白在内的宽度，面板在屏幕上占的位置与贴边时相同。其余主题为 0。
+    #[serde(default)]
+    pub gap: f64,
 }
 
 impl SidebarLayout {
@@ -145,7 +150,7 @@ fn sidebar_geometry(sidebar: &WebviewWindow, layout: &SidebarLayout, prefer_curs
     let monitor = pick_monitor(sidebar, prefer_cursor)?;
     let monitors = sidebar.available_monitors().unwrap_or_default();
     let monitor = dock_monitor(monitor, &monitors, left_edge);
-    Ok(place_sidebar(work_area(&monitor), layout.width, left_edge, frame_inset(sidebar)))
+    Ok(place_sidebar(work_area(&monitor), layout.width, left_edge, frame_inset(sidebar), layout.gap))
 }
 
 /// 屏幕的整屏矩形（物理像素）：左、上、右、下。
@@ -225,22 +230,26 @@ fn frame_inset(window: &WebviewWindow) -> (f64, f64) {
 /// 让内容区贴住工作区的左或右边缘，收起时整块内容区移到工作区之外。
 ///
 /// `area` 为工作区的逻辑坐标 (x, y, 宽, 高)，`inset` 为外框到内容区的偏移；
+/// `gap` 为面板离开屏幕边缘与上下边的留白：窗口宽度少这一段、上下各让出这一段，面板的内侧边位置不变。
 /// 返回的坐标已换算为外框位置。
-fn place_sidebar(area: (f64, f64, f64, f64), width: f64, left_edge: bool, inset: (f64, f64)) -> SidebarGeometry {
+fn place_sidebar(area: (f64, f64, f64, f64), width: f64, left_edge: bool, inset: (f64, f64), gap: f64) -> SidebarGeometry {
     let (area_x, area_y, area_width, area_height) = area;
+    // 留白取自令牌（8–12px 乘界面缩放），限制在合理范围内，避免异常值把窗口挤没。
+    let gap = gap.clamp(0.0, (area_height / 4.0).min(64.0));
     // 字号小于 13px 时窗口会比设置中的宽度窄，下限放宽到 300。
-    let width = width.clamp(300.0, area_width.max(300.0));
+    let total = width.clamp(300.0, area_width.max(300.0));
+    let width = (total - gap).max(240.0);
     let (content_x, offscreen_content_x) = if left_edge {
-        (area_x, area_x - width)
+        (area_x + gap, area_x - width)
     } else {
-        (area_x + area_width - width, area_x + area_width)
+        (area_x + area_width - gap - width, area_x + area_width)
     };
     SidebarGeometry {
         final_x: content_x - inset.0,
         offscreen_x: offscreen_content_x - inset.0,
-        y: area_y - inset.1,
+        y: area_y + gap - inset.1,
         width,
-        height: area_height,
+        height: area_height - gap * 2.0,
     }
 }
 
@@ -635,6 +644,51 @@ fn resize_capture(capture: &WebviewWindow, zoom: f64) -> AppResult<()> {
 /// 应用界面缩放（字号设置）：当前窗口的 WebView 整页缩放到 `zoom` 倍。
 ///
 /// 速记浮窗与设置窗口是尺寸固定的对话式窗口，同时按缩放比例调整尺寸，内容所占的网页尺寸不变；
+/// 窗口材质（T84，adaptation.md 第三、四节，技术决策第 40 条），作用于调用方窗口：
+/// - `acrylic`：透明窗口加亚克力，Windows 11 与磨砂玻璃。窗口本身就是面板，系统画圆角、细边框与投影。
+/// - `clear`：透明、不加材质，杂志的浮动面板。留白在窗口内、透出桌面，面板的圆角与投影由页面画，
+///   不要系统投影：它画在整个窗口外，会在留白外圈多出一道边框。
+/// - 其余（`opaque`）：不加材质，页面铺满不透明的底色，保留系统投影。
+///
+/// 透明只能在建窗口时指定，侧栏与速记浮窗都建成透明窗口（tauri.conf.json），切换主题时只换材质。
+/// Linux 不支持材质，失败时忽略，页面仍按不透明的颜色显示。
+pub fn set_window_material(window: &WebviewWindow, material: &str) -> AppResult<()> {
+    use tauri::window::{Effect, EffectsBuilder};
+    let effects = if material == "acrylic" {
+        Some(EffectsBuilder::new().effect(Effect::Acrylic).build())
+    } else {
+        None
+    };
+    let _ = window.set_effects(effects);
+    window.set_shadow(material != "clear")?;
+    Ok(())
+}
+
+/// 指针是否在侧栏上，或在侧栏与所贴的屏幕边缘之间（T84）。
+///
+/// Windows 11 与磨砂玻璃的侧栏窗口离开屏幕边缘一段留白，这段留白不属于窗口，指针停在里面时页面收到 mouseleave。
+/// 页面到点收起前查询这里：留白仍算侧栏，不收起（adaptation.md 第四节）。范围是窗口所在屏幕的工作区里，
+/// 从窗口的内侧边到屏幕边缘、从工作区顶边到底边的整条。
+pub fn sidebar_holds_cursor(app: &AppHandle) -> bool {
+    let Some(sidebar) = app.get_webview_window(SIDEBAR_LABEL) else {
+        return false;
+    };
+    if !sidebar.is_visible().unwrap_or(false) {
+        return false;
+    }
+    let (Ok(cursor), Ok(position), Ok(size), Ok(Some(monitor))) =
+        (sidebar.cursor_position(), sidebar.outer_position(), sidebar.outer_size(), sidebar.current_monitor())
+    else {
+        return false;
+    };
+    let area = monitor.work_area();
+    let (area_left, area_top) = (f64::from(area.position.x), f64::from(area.position.y));
+    let (area_right, area_bottom) = (area_left + f64::from(area.size.width), area_top + f64::from(area.size.height));
+    let (window_left, window_right) = (f64::from(position.x), f64::from(position.x) + f64::from(size.width));
+    let (left, right) = if last_layout().edge == "left" { (area_left, window_right) } else { (window_left, area_right) };
+    cursor.x >= left && cursor.x <= right && cursor.y >= area_top && cursor.y <= area_bottom
+}
+
 /// 侧栏的宽度由用户设置，不随缩放改变。
 /// 设置窗口正在显示时，窗口与最小尺寸同时按缩放比例调整（见 rescale_settings）；
 /// 隐藏时只记下缩放，下次打开时由前端传入包含缩放的文本缩放比例重新摆放。
@@ -708,7 +762,7 @@ mod tests {
 
     #[test]
     fn right_edge_content_touches_work_area() {
-        let geometry = place_sidebar(AREA, 452.0, false, INSET);
+        let geometry = place_sidebar(AREA, 452.0, false, INSET, 0.0);
         // 内容区左边 = 外框横坐标 + 偏移；右边再加上宽度，应正好落在工作区右边缘。
         assert!(close(geometry.final_x + INSET.0 + geometry.width, 2560.0));
         assert!(close(geometry.y + INSET.1, 0.0));
@@ -719,15 +773,15 @@ mod tests {
 
     #[test]
     fn left_edge_content_touches_work_area() {
-        let geometry = place_sidebar(AREA, 452.0, true, INSET);
+        let geometry = place_sidebar(AREA, 452.0, true, INSET, 0.0);
         assert!(close(geometry.final_x + INSET.0, 0.0));
         assert!(close(geometry.offscreen_x + INSET.0 + geometry.width, 0.0));
     }
 
     #[test]
     fn width_is_clamped_to_work_area() {
-        assert!(close(place_sidebar((0.0, 0.0, 1000.0, 800.0), 9999.0, false, (0.0, 0.0)).width, 1000.0));
-        assert!(close(place_sidebar(AREA, 100.0, false, (0.0, 0.0)).width, 300.0));
+        assert!(close(place_sidebar((0.0, 0.0, 1000.0, 800.0), 9999.0, false, (0.0, 0.0), 0.0).width, 1000.0));
+        assert!(close(place_sidebar(AREA, 100.0, false, (0.0, 0.0), 0.0).width, 300.0));
     }
 
     #[test]
@@ -774,10 +828,26 @@ mod tests {
 
     #[test]
     fn without_frame_inset_positions_are_unchanged() {
-        let geometry = place_sidebar(AREA, 416.0, false, (0.0, 0.0));
+        let geometry = place_sidebar(AREA, 416.0, false, (0.0, 0.0), 0.0);
         assert!(close(geometry.final_x, 2144.0));
         assert!(close(geometry.offscreen_x, 2560.0));
         assert!(close(geometry.y, 0.0));
+    }
+
+    #[test]
+    fn floating_panel_leaves_a_gap_to_the_screen_edges() {
+        // Windows 11 主题：12px 留白乘 1.25 的界面缩放。内侧边与贴边时相同，窗口窄一段，上下各让出留白。
+        let gap = 15.0;
+        let right = place_sidebar(AREA, 452.0, false, INSET, gap);
+        assert!(close(right.final_x + INSET.0, 2560.0 - 452.0));
+        assert!(close(right.final_x + INSET.0 + right.width, 2560.0 - gap));
+        assert!(close(right.y + INSET.1, gap));
+        assert!(close(right.height, 1440.0 - gap * 2.0));
+        assert!(close(right.offscreen_x + INSET.0, 2560.0));
+        let left = place_sidebar(AREA, 452.0, true, INSET, gap);
+        assert!(close(left.final_x + INSET.0, gap));
+        assert!(close(left.final_x + INSET.0 + left.width, 452.0));
+        assert!(close(left.offscreen_x + INSET.0 + left.width, 0.0));
     }
 
 

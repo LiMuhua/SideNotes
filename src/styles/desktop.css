@@ -126,11 +126,6 @@ body[data-window='sidebar'] .sidebar-resizer[data-edge='left'] {
   right: 0;
 }
 
-body[data-window='sidebar'] .sidebar-resizer:hover,
-body[data-window='sidebar'] .sidebar-resizer:focus-visible {
-  background: color-mix(in srgb, var(--sn-color-accent) 24%, transparent);
-}
-
 /* 修正原型的层级缺陷：列表顶栏（z-index 6）低于新建卡片（z-index 12），
  * 展开的标签菜单会被新建卡片遮住上半部分。顶栏只有菜单会越出自身范围，
  * 提到新建卡片之上不影响其它布局。 */
@@ -1001,11 +996,6 @@ body[data-window='sidebar'] .filter-banner-clear {
 
 body[data-window='sidebar'] .filter-banner-clear:hover {
   background: var(--accent-hover);
-}
-
-body[data-window='sidebar'] .sidebar-navigation.has-search-query #header-search.is-open {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--sn-color-accent-subtle);
 }
 
 /* ==================== 数据与同步 ====================

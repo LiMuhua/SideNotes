@@ -83,6 +83,32 @@ export function surfaceAttributes(surface: SurfaceMode, theme: 'light' | 'dark')
   };
 }
 
+/**
+ * 窗口材质（T84，adaptation.md 第三、四节，技术决策第 40 条）：
+ * - `acrylic`：Windows 11 与磨砂玻璃。透明窗口加亚克力，窗口本身就是面板，侧栏窗口离开屏幕边缘一段留白；
+ * - `clear`：杂志。透明、不加材质，浮动面板的留白在窗口内，透出桌面；
+ * - `opaque`：终端与记录纸，贴边整块，面板铺满窗口。
+ * 设置窗口一律不透明，不经过这里。
+ */
+export type WindowMaterial = 'acrylic' | 'clear' | 'opaque';
+
+/** 主题对应的窗口材质。 */
+export function windowMaterial(surface: SurfaceMode): WindowMaterial {
+  const item = surfaceSpec(surface);
+  if (item.translucent) return 'acrylic';
+  return item.dock === 'flush' ? 'opaque' : 'clear';
+}
+
+/**
+ * 侧栏窗口与屏幕边缘之间的留白（未缩放的 CSS 像素）：只有窗口本身就是面板的 `acrylic` 主题才有，取自令牌
+ * `--sn-panel-inset`（Windows 11 12px、磨砂玻璃 10px）。读取的是根节点当前的令牌，要在写入主题属性之后调用。
+ */
+export function windowGap(surface: SurfaceMode): number {
+  if (windowMaterial(surface) !== 'acrylic' || typeof document === 'undefined') return 0;
+  const value = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sn-panel-inset'));
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
 /** 把主题、明暗与结构差异写到元素上（窗口的根节点）。 */
 export function applySurface(node: HTMLElement, surface: SurfaceMode, theme: 'light' | 'dark'): void {
   for (const [name, value] of Object.entries(surfaceAttributes(surface, theme))) node.setAttribute(name, value);

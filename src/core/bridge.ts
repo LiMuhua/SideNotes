@@ -31,7 +31,8 @@ import type {
   TagUsage,
 } from './types';
 import { normalizeDraft, normalizeNote } from './notes';
-import { normalizeSettings, sidebarWindowWidth } from './settings';
+import { normalizeSettings, sidebarWindowWidth, uiZoom } from './settings';
+import { windowGap, type WindowMaterial } from './surfaces';
 import type { GlobalShortcutId } from './shortcuts';
 
 /** 侧栏几何参数。 */
@@ -40,6 +41,8 @@ export interface SidebarLayout {
   width: number;
   /** 出入动画时长（毫秒），0 表示关闭动画。 */
   animDuration?: number;
+  /** 面板与屏幕边缘之间的留白（逻辑像素，已乘界面缩放）；窗口本身就是面板的主题才有（core/surfaces 的 windowGap）。 */
+  gap?: number;
 }
 
 /** 后端事件名。 */
@@ -268,12 +271,13 @@ export async function recordShortcut(handler: (keys: RecordedKeys) => void): Pro
 
 /** 按当前设置组装侧栏布局：窗口宽度随字号等比加宽（见 sidebarWindowWidth），带上出入动画时长。 */
 export function sidebarLayout(
-  settings: Pick<Settings, 'edge' | 'width' | 'fontSize' | 'animDuration'>,
+  settings: Pick<Settings, 'edge' | 'width' | 'fontSize' | 'animDuration' | 'surface'>,
 ): SidebarLayout {
   return {
     edge: settings.edge,
     width: sidebarWindowWidth(settings.width, settings.fontSize),
     animDuration: settings.animDuration,
+    gap: Math.round(windowGap(settings.surface) * uiZoom(settings.fontSize) * 100) / 100,
   };
 }
 
@@ -322,6 +326,16 @@ export async function showSettings(): Promise<void> {
  */
 export function setUiZoom(zoom: number): Promise<void> {
   return call<void>('set_ui_zoom', { zoom }, undefined as unknown as void);
+}
+
+/** 按主题设置当前窗口的材质（T84）：acrylic、clear 或 opaque，见 core/surfaces 的 windowMaterial。 */
+export function setWindowMaterial(material: WindowMaterial): Promise<void> {
+  return call<void>('set_window_material', { material }, undefined as unknown as void);
+}
+
+/** 指针是否在侧栏或它与屏幕边缘之间的留白里；侧栏到点收起前查询，留白里不收起（T84）。 */
+export function sidebarHoldsCursor(): Promise<boolean> {
+  return call<boolean>('sidebar_holds_cursor', {}, false);
 }
 
 /** 隐藏设置窗口。 */

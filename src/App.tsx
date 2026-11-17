@@ -18,7 +18,7 @@ import { useStoreSlice } from './hooks/useStore';
 import * as store from './core/store';
 import * as bridge from './core/bridge';
 import { resolveTheme, resolveFontFamily, uiZoom } from './core/settings';
-import { applySurface } from './core/surfaces';
+import { applySurface, windowMaterial } from './core/surfaces';
 import type { WindowRole } from './main';
 
 export interface AppProps {
@@ -88,6 +88,17 @@ export function App({ role }: AppProps) {
     root.style.setProperty('--note-content-max-height', `${settings.cardMaxHeight}px`);
   }, [settings, systemDark]);
 
+  /* ==================== 窗口材质（T84） ==================== */
+  // 侧栏与速记浮窗是透明窗口：按主题加亚克力（Windows 11、磨砂玻璃）、只透明（杂志）或铺满不透明的底色。
+  // 根节点的 data-sn-window 供 window.css 去掉对应的留白、圆角与投影；设置窗口一律不透明，不写。
+  const { surface } = settings;
+  useEffect(() => {
+    if (role === 'settings') return;
+    const material = windowMaterial(surface);
+    document.documentElement.dataset.snWindow = material;
+    void bridge.setWindowMaterial(material);
+  }, [role, surface]);
+
   /* ==================== 字号：全局的界面缩放 ==================== */
   // 字号不只改正文：各窗口的 WebView 整页缩放到「字号 ÷ 13」倍，正文显示为所选字号，
   // 按钮、标签与设置窗口的文字随之等比放大，布局与原型保持同样的比例。
@@ -100,11 +111,12 @@ export function App({ role }: AppProps) {
   // 只在宽度、字号、贴边、动画时长或边缘唤出变化时通知后端，避免任意状态变化都重设窗口位置，
   // 打断正在进行的滑入滑出动画。窗口宽度随字号等比加宽。后端记下这份布局，
   // 边缘唤出、全局热键与托盘直接按它显示或切换侧栏。
+  // 主题决定窗口是否离开屏幕边缘（windowGap），所以主题变化时也重新对齐。
   const { edge, width, edgeTrigger, animDuration } = settings;
   useEffect(() => {
     if (role !== 'sidebar' || !ready) return;
-    void bridge.applySidebarLayout(bridge.sidebarLayout({ edge, width, fontSize, animDuration }), edgeTrigger);
-  }, [role, ready, edge, width, fontSize, animDuration, edgeTrigger]);
+    void bridge.applySidebarLayout(bridge.sidebarLayout({ edge, width, fontSize, animDuration, surface }), edgeTrigger);
+  }, [role, ready, edge, width, fontSize, animDuration, edgeTrigger, surface]);
 
   /* ==================== 全局退出事件 ==================== */
   // 托盘菜单的退出必须在任何加载状态下都可用，因此不放在 Sidebar 内部。

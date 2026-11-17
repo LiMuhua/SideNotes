@@ -147,6 +147,8 @@ pub fn run() {
             commands::show_settings,
             commands::hide_settings,
             commands::set_ui_zoom,
+            commands::set_window_material,
+            commands::sidebar_holds_cursor,
             commands::open_devtools,
             commands::system_fonts,
             commands::inspect_file,

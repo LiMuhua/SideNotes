@@ -266,6 +266,18 @@ pub fn set_ui_zoom(window: WebviewWindow, zoom: f64) -> AppResult<()> {
     windows::set_ui_zoom(&window, zoom)
 }
 
+/// 按主题设置调用方窗口的材质：acrylic、clear 或 opaque（见 windows::set_window_material）。
+#[tauri::command]
+pub fn set_window_material(window: WebviewWindow, material: String) -> AppResult<()> {
+    windows::set_window_material(&window, &material)
+}
+
+/// 指针是否在侧栏或它与屏幕边缘之间的留白里；页面到点收起前查询，留白里不收起。
+#[tauri::command]
+pub fn sidebar_holds_cursor(app: AppHandle) -> bool {
+    windows::sidebar_holds_cursor(&app)
+}
+
 /// 打开指定窗口的开发者工具，供设置页「关于 › 调试」排查界面问题。
 #[tauri::command]
 pub fn open_devtools(app: AppHandle, label: String) -> AppResult<()> {
