@@ -74,7 +74,8 @@ export interface EditorOptions {
   placeholder?: string;
   ariaLabel?: string;
   minHeight?: number;
-  maxHeight?: number;
+  /** 最大高度（像素），默认 380；null 表示不限，由外面的布局决定高度。 */
+  maxHeight?: number | null;
   /** 原文变化时回调。 */
   onChange?: (value: string) => void;
   /** 需要应用层处理的图片预览请求；提供了 onAttachment 时不再使用。 */
@@ -281,7 +282,8 @@ export class MarkdownEditor {
     this.element.spellcheck = false;
     this.element.tabIndex = 0;
     if (typeof options.minHeight === 'number') this.element.style.minHeight = `${options.minHeight}px`;
-    this.element.style.maxHeight = `${options.maxHeight ?? 380}px`;
+    // null 表示不限高度：编辑器由外面的布局决定高度（速记浮窗填满标题区与底栏之间）。
+    if (options.maxHeight !== null) this.element.style.maxHeight = `${options.maxHeight ?? 380}px`;
     this.element.style.overflowY = 'auto';
     this.element.style.whiteSpace = 'pre-wrap';
     this.element.style.overflowWrap = 'anywhere';

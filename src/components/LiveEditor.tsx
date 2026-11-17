@@ -18,7 +18,8 @@ export interface LiveEditorProps {
   placeholder?: string;
   ariaLabel?: string;
   minHeight?: number;
-  maxHeight?: number;
+  /** 最大高度（像素）；null 表示不限，由外面的布局决定。 */
+  maxHeight?: number | null;
   autoFocus?: boolean;
   onChange: (value: string) => void;
   onPreviewImage?: (src: string, alt: string) => void;

@@ -1,12 +1,16 @@
 /**
- * 速记浮窗。
+ * 速记浮窗（原型第二版，与交互原型 index.html 的 #capture 与 app.js 的速记部分相同）。
  *
- * 独占一个 Tauri 窗口；草稿与侧栏共享同一数据库，
- * 保存后侧栏列表刷新时自动拾取新记录。
+ * 独占一个 Tauri 窗口；草稿与侧栏共享同一数据库，保存后侧栏列表刷新时自动拾取新记录。
+ * - 标题区：应用图标、「速记」与问号，快捷键与 Markdown 的说明收在问号里；右边是「在侧栏继续」与收起。
+ * - 编辑区填满标题区与底栏之间；底栏是附件工具、字数（按字符计）与收起、保存。不显示草稿状态。
+ * - 保存快捷键保存并收起；空草稿不收起，附件还在读取时只提示。附件弹窗与问号说明打开时，按键先交给它们。
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Icon, IconSprite } from './Icon';
+import { Floating, comboKeys } from './Floating';
+import appIcon from '../assets/favicon.svg';
 import { LiveEditor } from './LiveEditor';
 import { ToastRegion } from './Modal';
 import { AttachmentDialog, type AttachmentSubject } from './AttachmentDialog';
@@ -16,7 +20,7 @@ import { matches } from '../core/shortcuts';
 import { useToast } from '../hooks/useToast';
 import * as store from '../core/store';
 import * as bridge from '../core/bridge';
-import { chooseAndImportFiles, importPastedFiles, openAttachment, replaceReference } from '../core/attachments';
+import { importPastedFiles, openAttachment, referencesFor, replaceReference } from '../core/attachments';
 import { caretFromPoint, isFileDrag } from '../hooks/useFileDrop';
 import type { NoteImage } from '../core/types';
 import type { EditorAttachment, MarkdownEditor } from '../core/editor';
@@ -33,7 +37,6 @@ export function Capture() {
     replaceSource?: (source: string) => boolean;
     replaceImage?: (image: NoteImage | null) => boolean;
   } | null>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
 
   /** 点击编辑面中的附件：按住 Ctrl 直接打开，否则打开附件弹窗，修改写回编辑器。 */
   const handleAttachment = useCallback(
@@ -143,25 +146,38 @@ export function Capture() {
     return () => window.removeEventListener('focus', handler);
   }, []);
 
+  /**
+   * 保存草稿为记录。与原型相同：空草稿不保存也不收起，附件还在读取时只提示；
+   * 按保存键时保存并收起，点保存按钮时浮窗保持展开，焦点回到编辑区。
+   */
   const saveDraft = useCallback(async (hideWindow: boolean): Promise<void> => {
-    if (!localText.trim() && !state.draft.images.length) {
-      if (hideWindow) void bridge.hideCapture();
+    if (store.getState().pendingAttachments > 0) {
+      toast('内容正在读取，请稍候');
       return;
     }
+    if (!localText.trim() && !state.draft.images.length) return;
     // 速记浮窗的记录进入随记（不带页签的标签）。
     const note = await store.saveDraftAsNote();
     if (!note) { toast('保存失败', null, true); return; }
     setLocalText('');
-    if (hideWindow) void bridge.hideCapture();
-    else toast('记录已保存');
+    if (hideWindow) {
+      void bridge.hideCapture();
+      return;
+    }
+    toast('记录已保存');
+    window.setTimeout(() => editorRef.current?.focus({ preventScroll: true }), 0);
   }, [localText, state.draft.images.length, toast]);
 
-  // 保存记录的快捷键（默认 Ctrl+Enter）保存并隐藏浮窗。
+  // 保存记录的快捷键（默认 Ctrl+Enter）保存并隐藏浮窗，Esc 收起。输入法组字时不处理；
+  // 附件弹窗打开时按键交给弹窗（弹窗里的 Ctrl+Enter 是「应用修改」），问号说明自己处理 Esc。
   useEffect(() => {
     const handler = (event: KeyboardEvent): void => {
+      if (event.isComposing || event.keyCode === 229 || event.defaultPrevented) return;
+      if (document.querySelector('.modal-backdrop')) return;
       if (matches(event, store.getState().settings.shortcuts, 'save')) {
         event.preventDefault();
         void saveDraft(true);
+        return;
       }
       if (event.key === 'Escape') void bridge.hideCapture();
     };
@@ -169,51 +185,55 @@ export function Capture() {
     return () => document.removeEventListener('keydown', handler, true);
   }, [saveDraft]);
 
-  const handleFileSelected = async (event: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
-    const files = Array.from(event.target.files ?? []);
-    event.target.value = '';
-    if (!files.length) return;
-    store.setPendingAttachments(files.length);
-    const images: NoteImage[] = [];
-    for (const file of files) {
-      if (!file.type.startsWith('image/')) { toast(`${file.name} 不是图片`, null, true); store.setPendingAttachments(-1); continue; }
-      if (file.size > 2 * 1024 * 1024) { toast(`${file.name} 超过 2 MB`, null, true); store.setPendingAttachments(-1); continue; }
-      await new Promise<void>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          images.push({ id: crypto.randomUUID(), name: file.name, type: file.type, data: String(reader.result) });
-          store.setPendingAttachments(-1);
-          resolve();
-        };
-        reader.onerror = () => { toast(`读取失败`, null, true); store.setPendingAttachments(-1); resolve(); };
-        reader.readAsDataURL(file);
-      });
+  /** 在光标处插入附件的 Markdown；编辑器还没就绪时接在末尾。 */
+  const insertMarkdown = useCallback((markdown: string): void => {
+    const editor = editorRef.current;
+    if (editor) {
+      editor.focus({ preventScroll: true });
+      editor.replace(markdown);
+    } else {
+      setLocalText((prev) => prev + (prev ? '\n' : '') + markdown);
     }
-    store.addDraftImages(images);
-  };
+  }, []);
+
+  /** 添加图片或引用文件：复制一份到数据目录，在光标处插入引用（与原型相同，图片也写进正文）。 */
+  const attachFiles = useCallback(
+    async (images: boolean): Promise<void> => {
+      try {
+        const paths = await bridge.chooseFiles({ images });
+        if (!paths?.length) return;
+        store.setPendingAttachments(1);
+        try {
+          insertMarkdown(referencesFor(await bridge.importFiles(paths)));
+        } finally {
+          store.setPendingAttachments(-1);
+        }
+      } catch (error) {
+        toast(`${images ? '图片' : '文件'}未能插入：${bridge.errorText(error, '请稍后重试')}`, null, true);
+      }
+    },
+    [insertMarkdown, toast],
+  );
 
   const empty = !localText.trim() && !state.draft.images.length;
+  /** 字数按字符计：一个 Emoji 算一个字（与原型 Array.from 相同）。 */
+  const charCount = Array.from(localText).length;
 
   return (
     <>
       <IconSprite />
-      <div className="capture open">
+      <section className="capture open" aria-labelledby="capture-title">
         <header className="capture-header">
           <div className="capture-heading">
-            <div className="capture-mark">
-              <div className="brand-mark small"><i /><i /><i /></div>
-            </div>
-            <div>
-              <h2>速记</h2>
-              <p>Markdown · #标签</p>
-            </div>
+            <img className="brand-mark is-small" src={appIcon} alt="" aria-hidden="true" />
+            <h2 id="capture-title">速记</h2>
+            <CaptureHelp saveKeys={saveKeys} />
           </div>
           <div className="window-actions">
             <button
               type="button"
               className="icon-button"
               aria-label="在侧栏继续"
-              title="在侧栏继续"
               onClick={async () => {
                 // 把当前浮窗草稿带到侧栏：先确保侧栏可见，再聚焦侧栏输入入口。
                 await bridge.hideCapture();
@@ -221,13 +241,13 @@ export function Capture() {
                 window.dispatchEvent(new CustomEvent('sidenotes:focus-composer'));
               }}
             >
-              <Icon name="expand" />
+              <Icon name="arrow-up-right" />
             </button>
             <button
               type="button"
               className="icon-button"
-              aria-label="保留草稿并收起速记浮窗"
-              title="保留草稿并收起 · Esc"
+              aria-label="保留草稿并收起速记"
+              aria-keyshortcuts="Escape"
               onClick={() => void bridge.hideCapture()}
             >
               <Icon name="x" />
@@ -238,13 +258,13 @@ export function Capture() {
         <div className="capture-body">
           <LiveEditor
             value={localText}
-            placeholder={`随手记… 支持 Markdown 与 #标签\n${saveKeys} 保存并收起，Esc 直接收起`}
-            ariaLabel={`速记输入，${saveKeys} 保存并收起`}
+            placeholder="随手记… 支持 Markdown 与 #标签"
+            ariaLabel="速记内容"
             autoFocus
             onChange={setLocalText}
             onReady={(editor) => { editorRef.current = editor; }}
             onAttachment={handleAttachment}
-            maxHeight={Math.min(280, Math.max(100, window.innerHeight * 0.4))}
+            maxHeight={null}
           />
 
           {state.draft.images.length ? (
@@ -273,56 +293,22 @@ export function Capture() {
           ) : null}
         </div>
 
-        <div className="capture-meta">
-          <span id="draft-status">
-            <span className="small-dot" />
-            {state.draftDirty ? ' 草稿未保存' : ' 草稿已同步'}
-          </span>
-          <span id="capture-char-count">{localText.length} 字</span>
-        </div>
-
         <footer className="capture-footer">
           <div className="composer-tools">
-            <button
-              type="button"
-              className="icon-button"
-              aria-label="添加图片附件；截图也可直接粘贴到光标处"
-              title="添加图片附件；截图也可直接粘贴到光标处"
-              onClick={() => fileInput.current?.click()}
-            >
+            <button type="button" className="icon-button" aria-label="添加图片" onClick={() => void attachFiles(true)}>
               <Icon name="image" />
             </button>
-            <button
-              type="button"
-              className="icon-button"
-              aria-label="引用文件（复制一份保存）；也可粘贴复制的文件"
-              title="引用文件（复制一份保存）；也可粘贴复制的文件"
-              onClick={async () => {
-                // 文件引用：复制到应用数据目录中维护，在光标处插入引用（图片为内嵌图片）。
-                try {
-                  const markdown = await chooseAndImportFiles();
-                  if (!markdown) return;
-                  if (editorRef.current) {
-                    editorRef.current.focus({ preventScroll: true });
-                    editorRef.current.replace(markdown);
-                  } else {
-                    setLocalText((prev) => prev + (prev ? '\n' : '') + markdown);
-                  }
-                } catch (error) {
-                  const reason = bridge.errorText(error, '请稍后重试');
-                  toast(`文件未能引用：${reason}`, null, true);
-                }
-              }}
-            >
+            <button type="button" className="icon-button" aria-label="引用文件" onClick={() => void attachFiles(false)}>
               <Icon name="file" />
             </button>
           </div>
+          <span id="capture-char-count" className="composer-count">{`${charCount} 字`}</span>
           <div className="composer-actions">
             <button
               type="button"
               className="icon-button"
               aria-label="保留草稿并收起"
-              title="保留草稿并收起 · Esc"
+              aria-keyshortcuts="Escape"
               onClick={() => void bridge.hideCapture()}
             >
               <Icon name="x" />
@@ -331,7 +317,6 @@ export function Capture() {
               type="button"
               className="icon-button primary"
               aria-label="保存记录，保持浮窗展开"
-              title="保存记录，保持浮窗展开"
               disabled={empty || state.pendingAttachments > 0}
               onClick={() => void saveDraft(false)}
             >
@@ -341,9 +326,7 @@ export function Capture() {
         </footer>
 
         <ToastRegion className="capture-toast-region" />
-      </div>
-
-      <input ref={fileInput} type="file" hidden multiple accept="image/*" onChange={handleFileSelected} />
+      </section>
 
       {attachmentDialog ? (
         <AttachmentDialog
@@ -354,5 +337,57 @@ export function Capture() {
         />
       ) : null}
     </>
+  );
+}
+
+/**
+ * 标题旁的问号：悬停、获得焦点或点击时显示快捷键与 Markdown 的说明，Esc 只关说明（原型 initializeHelp）。
+ * 说明挂在 body 下的浮层中，不被浮窗裁剪；按键随设置中的绑定变化。
+ */
+function CaptureHelp({ saveKeys }: { saveKeys: string }) {
+  const id = `capture-help-${useId()}`;
+  const [shown, setShown] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  return (
+    <span
+      className="help-anchor"
+      onMouseEnter={() => setShown(true)}
+      onMouseLeave={() => {
+        if (document.activeElement !== trigger.current) setShown(false);
+      }}
+    >
+      <button
+        ref={trigger}
+        type="button"
+        className="help-button"
+        aria-label="速记说明"
+        aria-expanded={shown}
+        aria-describedby={id}
+        onClick={() => setShown((value) => !value)}
+        onFocus={() => setShown(true)}
+        onBlur={() => setShown(false)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape' && shown) {
+            event.preventDefault();
+            event.stopPropagation();
+            setShown(false);
+          }
+        }}
+      >
+        ?
+      </button>
+      <Floating anchor={trigger} open={shown} options={{ placement: 'bottom-start' }} id={id} role="tooltip" className="help-text">
+        <span className="help-line shortcut-line">
+          {comboKeys(saveKeys).map((key) => (
+            <kbd key={key}>{key}</kbd>
+          ))}{' '}
+          保存并收起
+        </span>
+        <span className="help-line shortcut-line">
+          <kbd>Esc</kbd> 收起，草稿保留
+        </span>
+        <span className="help-line">支持 Markdown 与 #标签</span>
+      </Floating>
+    </span>
   );
 }

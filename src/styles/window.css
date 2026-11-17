@@ -116,3 +116,11 @@ body[data-window='sidebar'] .sidebar-resizer:focus-visible {
   background-color: var(--sn-color-highlight);
   color: inherit;
 }
+
+/* 速记浮窗的编辑区填满标题区与底栏之间（原型第二版）：编辑器外面多一层 .live-editor-host，让它也参与纵向排布。 */
+.capture .capture-body .live-editor-host {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
