@@ -198,7 +198,7 @@ export function SettingsDialog({ onClose, onMinimize }: SettingsDialogProps) {
                 <DataPanel settings={settings} save={save} saveFailed={saveFailed} loadFailed={loadFailed} />
               ) : null}
               {section === 'trash' ? <TrashPanel notes={notes} settings={settings} save={save} /> : null}
-              {section === 'about' ? <AboutPanel /> : null}
+              {section === 'about' ? <AboutPanel appIcon={settings.appIcon} /> : null}
             </div>
           </div>
         </div>

@@ -8,9 +8,9 @@
  * 外部链接交给系统浏览器打开，不在设置窗口内跳转；按钮与链接不加悬停提示。
  */
 
-import logoUrl from '../../assets/favicon.svg';
 import * as bridge from '../../core/bridge';
 import { useToast } from '../../hooks/useToast';
+import { useAppIconSource } from '../../hooks/useAppIcon';
 import { Icon, type IconName } from '../Icon';
 import { ActionButton, Group } from './controls';
 
@@ -66,8 +66,10 @@ function ExternalLink({ label, url, icon, glyph, note }: { label: string; url: s
   );
 }
 
-export function AboutPanel() {
+export function AboutPanel({ appIcon }: { appIcon: string }) {
   const toast = useToast();
+  // 关于页的图标随设置中的应用图标更换（T85）。
+  const logoUrl = useAppIconSource(appIcon);
 
   return (
     <>

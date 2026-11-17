@@ -6,7 +6,7 @@
  * 「出入动画」为桌面端按需求新增的一行，复用宽度行的样式轨道。
  */
 
-import { useState, type KeyboardEvent } from 'react';
+import { useState } from 'react';
 import {
   ANIM_DURATION_RANGE,
   CARD_HEIGHT_RANGE,
@@ -19,7 +19,8 @@ import {
 import { SURFACES, surfaceAttributes } from '../../core/surfaces';
 import type { EdgeSide, Settings, SurfaceMode, ToastPosition, WindowTabsPosition } from '../../core/types';
 import { useToast } from '../../hooks/useToast';
-import { ActionButton, Group, Help, NumberCombobox, RangeField, Row, SelectField, TextField, Toggle, classes, type SaveSettings } from './controls';
+import { ActionButton, Group, Help, NumberCombobox, RangeField, Row, SelectField, TextField, Toggle, classes, moveRadio, type SaveSettings } from './controls';
+import { AppIconPicker } from './AppIconPicker';
 import { FontPicker } from './FontPicker';
 
 const THEMES: ReadonlyArray<readonly [Settings['theme'], string]> = [
@@ -74,30 +75,6 @@ function MiniSidebar({ surface, theme }: { surface: SurfaceMode; theme: 'light' 
       </span>
     </span>
   );
-}
-
-/**
- * 单选组的键盘操作：方向键切换并立即生效，Home、End 到两端；焦点跟着移到新选中的一项。
- */
-function moveRadio(event: KeyboardEvent<HTMLDivElement>): void {
-  const radios = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
-  const index = radios.indexOf(event.target as HTMLButtonElement);
-  if (index < 0) return;
-  const last = radios.length - 1;
-  const next =
-    event.key === 'ArrowRight' || event.key === 'ArrowDown'
-      ? (index + 1) % radios.length
-      : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
-        ? (index - 1 + radios.length) % radios.length
-        : event.key === 'Home'
-          ? 0
-          : event.key === 'End'
-            ? last
-            : -1;
-  if (next < 0) return;
-  event.preventDefault();
-  radios[next].click();
-  radios[next].focus();
 }
 
 /**
@@ -165,6 +142,12 @@ function DisplayGroup({ settings, save }: PanelProps) {
                 );
               })}
             </div>
+          </Row>
+        </div>
+        {/* 应用图标排在主题之后（components.md 7.2）。 */}
+        <div className="settings-option-block">
+          <Row title="应用图标" description="标题区、速记浮窗、关于页与网页图标都换成选中的图标">
+            <AppIconPicker settings={settings} save={save} />
           </Row>
         </div>
       </div>

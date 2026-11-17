@@ -870,3 +870,52 @@ export async function startResizeDragging(edge: string): Promise<void> {
   if (!isDesktop() || !(edge in RESIZE_DIRECTIONS)) return;
   await getCurrentWindow().startResizeDragging(RESIZE_DIRECTIONS[edge as keyof typeof RESIZE_DIRECTIONS]);
 }
+
+/* ==================== 应用图标（T85） ==================== */
+
+/** 上传的图片。 */
+export interface CustomAppIcon {
+  /** PNG 的完整路径（系统应用数据目录的 app-icon/custom.png）。 */
+  path: string;
+  /** 修改时间（毫秒）：换了图片时显示地址随之变化，不读缓存。 */
+  modified: number;
+}
+
+/** 任一窗口上传或移除了自定义图标后，后端广播的事件。 */
+export const APP_ICON_CHANGED = 'sidenotes://app-icon-changed';
+
+/** 更换各窗口与托盘的图标：folder 为内置图标的目录名，为 null 时用上传的图片。 */
+export function applyAppIcon(folder: string | null): Promise<void> {
+  return call<void>('apply_app_icon', { folder }, undefined as unknown as void);
+}
+
+/** 读取上传的图片；没有上传或在浏览器预览中为 null。 */
+export function customAppIcon(): Promise<CustomAppIcon | null> {
+  return call<CustomAppIcon | null>('custom_app_icon', undefined, null);
+}
+
+/** 保存裁好的图片：512 × 512 的 PNG 与多尺寸的 ICO。 */
+export function saveCustomAppIcon(png: Uint8Array, ico: Uint8Array): Promise<CustomAppIcon> {
+  return call<CustomAppIcon>('save_custom_app_icon', { png: Array.from(png), ico: Array.from(ico) });
+}
+
+/** 移除上传的图片。 */
+export function removeCustomAppIcon(): Promise<void> {
+  return call<void>('remove_custom_app_icon');
+}
+
+/** 读出上传的图片（移除前保存一份，撤销时写回）；读不到时为 null。 */
+export async function readCustomAppIcon(path: string): Promise<{ png: Uint8Array; ico: Uint8Array } | null> {
+  if (!isDesktop()) return null;
+  try {
+    const [png, ico] = await Promise.all([readFile(path), readFile(path.replace(/\.png$/i, '.ico'))]);
+    return { png, ico };
+  } catch {
+    return null;
+  }
+}
+
+/** 订阅自定义图标的变化（任一窗口上传或移除）。 */
+export function onAppIconChanged(handler: () => void): Promise<UnlistenFn> {
+  return onAppEvent(APP_ICON_CHANGED, handler);
+}

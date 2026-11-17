@@ -25,11 +25,11 @@ import { TagManageDialog } from "./TagManageDialog";
 import { ChangelogDialog } from "./ChangelogDialog";
 import { UsageGuide } from "./UsageGuide";
 import { Modal, ToastRegion } from "./Modal";
-import appIcon from "../assets/favicon.svg";
 import { AttachmentDialog, type AttachmentSubject } from "./AttachmentDialog";
 import { useStore } from "../hooks/useStore";
 import { useShortcut } from "../hooks/useShortcut";
 import { useToast } from "../hooks/useToast";
+import { useAppIconSource } from "../hooks/useAppIcon";
 import { useCardInteractions, type ItemDrop } from "../hooks/useCardInteractions";
 import { useFileDrop, type FileDropTarget } from "../hooks/useFileDrop";
 import * as store from "../core/store";
@@ -91,6 +91,7 @@ function notePlace(note: Note, pinned: readonly string[]): string {
 
 export function Sidebar() {
   const state = useStore();
+  const appIcon = useAppIconSource(state.settings.appIcon);
   const searchKeys = useShortcut("search");
   const toast = useToast();
 

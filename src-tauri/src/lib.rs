@@ -1,5 +1,6 @@
 //! SideNotes 桌面端入口。
 
+mod app_icon;
 mod attachments;
 mod backup;
 mod commands;
@@ -67,6 +68,10 @@ pub fn run() {
             let attachments_dir = data_dir.join(attachments::ATTACHMENTS_DIR);
             std::fs::create_dir_all(&attachments_dir)?;
             app.asset_protocol_scope().allow_directory(&attachments_dir, true)?;
+            // 上传的应用图标在系统应用数据目录的 app-icon/（不随数据目录迁移），同样开放给本地文件协议显示。
+            let icon_dir = app_icon::custom_dir(&default_dir);
+            std::fs::create_dir_all(&icon_dir)?;
+            app.asset_protocol_scope().allow_directory(&icon_dir, false)?;
 
             let watcher = Arc::new(EdgeWatcher::new());
 
@@ -204,6 +209,10 @@ pub fn run() {
             note_windows::overlay_ready,
             note_windows::overlay_done,
             note_windows::set_window_border_color,
+            app_icon::apply_app_icon,
+            app_icon::custom_app_icon,
+            app_icon::save_custom_app_icon,
+            app_icon::remove_custom_app_icon,
         ])
         .run(tauri::generate_context!())
         .expect("SideNotes 启动失败");

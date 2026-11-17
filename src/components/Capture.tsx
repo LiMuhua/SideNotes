@@ -10,7 +10,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Icon, IconSprite } from './Icon';
 import { Floating, comboKeys } from './Floating';
-import appIcon from '../assets/favicon.svg';
 import { LiveEditor } from './LiveEditor';
 import { ToastRegion } from './Modal';
 import { AttachmentDialog, type AttachmentSubject } from './AttachmentDialog';
@@ -23,11 +22,13 @@ import * as bridge from '../core/bridge';
 import { importPastedFiles, openAttachment, referencesFor, replaceReference } from '../core/attachments';
 import { placeAttachment } from '../core/insert';
 import { caretFromPoint, isFileDrag } from '../hooks/useFileDrop';
+import { useAppIconSource } from '../hooks/useAppIcon';
 import type { NoteImage } from '../core/types';
 import type { EditorAttachment, MarkdownEditor } from '../core/editor';
 
 export function Capture() {
   const state = useStore();
+  const appIcon = useAppIconSource(state.settings.appIcon);
   const saveKeys = useShortcut('save');
   const toast = useToast();
   const editorRef = useRef<MarkdownEditor | null>(null);

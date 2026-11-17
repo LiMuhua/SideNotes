@@ -21,6 +21,8 @@ import * as store from './core/store';
 import * as bridge from './core/bridge';
 import { resolveTheme, resolveFontFamily, uiZoom } from './core/settings';
 import { applySurface, windowMaterial } from './core/surfaces';
+import { appIconFolder, appIconSource } from './core/appIcons';
+import { useCustomAppIcon } from './hooks/useAppIcon';
 import type { WindowRole } from './main';
 
 export interface AppProps {
@@ -101,6 +103,25 @@ export function App({ role }: AppProps) {
     document.documentElement.dataset.snWindow = material;
     void bridge.setWindowMaterial(material);
   }, [role, surface]);
+
+  /* ==================== 应用图标（T85） ==================== */
+  // 品牌标记由各组件按设置显示（hooks/useAppIcon）；这里更换网页图标，并由侧栏请后端更换各窗口与托盘的图标，
+  // 后端对所有窗口一次生效，之后新建的记录窗口也用它。上传的图片读取之前不更换，免得先换成默认图标再换回来。
+  const { appIcon } = settings;
+  const customIcon = useCustomAppIcon();
+  const iconSource = appIconSource(appIcon, customIcon.url);
+  useEffect(() => {
+    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    if (!link || link.getAttribute('href') === iconSource) return;
+    link.type = appIcon === 'custom' && customIcon.url ? 'image/png' : 'image/svg+xml';
+    link.setAttribute('href', iconSource);
+  }, [appIcon, customIcon.url, iconSource]);
+  useEffect(() => {
+    if (role !== 'sidebar' || !ready || !customIcon.loaded) return;
+    void bridge.applyAppIcon(appIconFolder(appIcon, Boolean(customIcon.url))).catch(() => {
+      /* 换不了时保留原来的图标，品牌标记照常按设置显示。 */
+    });
+  }, [role, ready, appIcon, customIcon.loaded, customIcon.url]);
 
   /* ==================== 字号：全局的界面缩放 ==================== */
   // 字号不只改正文：各窗口的 WebView 整页缩放到「字号 ÷ 13」倍，正文显示为所选字号，

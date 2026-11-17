@@ -7,7 +7,7 @@
  * 交互语义同样沿用原型：文本框在失焦或回车时提交，数值框越界时就近校正并提示。
  */
 
-import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ReactNode, type Ref } from 'react';
+import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type Ref } from 'react';
 import { Icon, type IconName } from '../Icon';
 import { Floating } from '../Floating';
 import { useWheelCommit } from './wheel';
@@ -21,6 +21,30 @@ export type SaveSettings = (patch: Partial<Settings>) => Promise<boolean>;
 /** 拼接类名，忽略空值。 */
 export function classes(...names: Array<string | false | null | undefined>): string {
   return names.filter(Boolean).join(' ');
+}
+
+/**
+ * 单选组的键盘操作：方向键切换并立即生效，Home、End 到两端；焦点跟着移到新选中的一项。
+ */
+export function moveRadio(event: ReactKeyboardEvent<HTMLDivElement>): void {
+  const radios = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
+  const index = radios.indexOf(event.target as HTMLButtonElement);
+  if (index < 0) return;
+  const last = radios.length - 1;
+  const next =
+    event.key === 'ArrowRight' || event.key === 'ArrowDown'
+      ? (index + 1) % radios.length
+      : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+        ? (index - 1 + radios.length) % radios.length
+        : event.key === 'Home'
+          ? 0
+          : event.key === 'End'
+            ? last
+            : -1;
+  if (next < 0) return;
+  event.preventDefault();
+  radios[next].click();
+  radios[next].focus();
 }
 
 /** 原型 button() 中只放图标、不追加文字的样式。 */

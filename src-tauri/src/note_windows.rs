@@ -380,6 +380,7 @@ fn build(app: &AppHandle, label: &str) -> AppResult<WebviewWindow> {
     let window = builder.build()?;
     // 出入由页面与动画层负责，不要系统的淡入淡出：交接给窗口时会叠出一层半透明。
     windows::disable_transitions(&window);
+    crate::app_icon::apply_current(&window);
     Ok(window)
 }
 
