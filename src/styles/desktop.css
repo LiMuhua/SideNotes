@@ -57,34 +57,10 @@ body[data-window='sidebar'] .sidebar.open {
   box-shadow: none;
 }
 
-/* 右侧边：左侧一条分隔线，无右边距。 */
-body[data-window='sidebar'][data-edge='right'] .sidebar {
-  border-left: 1px solid var(--line);
-  border-right: none;
-}
-
-/* 左侧边：右侧一条分隔线，无左边距；消除原型 left 定位偏移。 */
+/* 左侧边：消除原型 left 定位偏移。 */
 body[data-window='sidebar'][data-edge='left'] .sidebar {
-  border-left: none;
-  border-right: 1px solid var(--line);
   left: 0 !important;
   right: auto !important;
-}
-
-/* 侧栏显示/隐藏动画：透明度 + 横向微移。窗口始终存在，靠前端控制过渡。 */
-body[data-window='sidebar'] .sidebar {
-  transition:
-    opacity var(--sidebar-anim-duration, 220ms) ease,
-    transform var(--sidebar-anim-duration, 220ms) cubic-bezier(0.22, 0.7, 0.36, 1);
-}
-
-body[data-window='sidebar'] .sidebar.is-hiding {
-  opacity: 0;
-  transform: translateX(var(--sidebar-hide-offset, 18px));
-}
-
-body[data-window='sidebar'][data-edge='left'] .sidebar.is-hiding {
-  transform: translateX(calc(var(--sidebar-hide-offset, 18px) * -1));
 }
 
 /* 侧栏贴在屏幕边缘、位置由应用管理，标题栏不作为窗口拖动区域：
@@ -718,68 +694,6 @@ body[data-window='settings'] .settings-delay-field > .settings-runtime-suffix {
 
 .usage-guide-section li + li {
   margin-top: 2px;
-}
-
-/* ==================== 筛选条 ====================
- * 用户反馈搜索状态不醒目，常忘了列表只是搜索结果。搜索或按标签筛选时，列表正上方显示筛选条，
- * 左右与卡片对齐：强调色浅底、左侧色条，写明当前条件与「匹配 / 全部」条数，「显示全部」一键退出。
- * 有搜索内容时搜索框也换成强调色边框。 */
-body[data-window='sidebar'] .filter-banner {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 8px;
-  margin: 4px calc(16px + var(--note-list-gutter, 0px)) 2px 16px;
-  padding: 6px 6px 6px 10px;
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
-  border-left: 3px solid var(--accent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--accent) 10%, var(--card));
-  color: var(--ink);
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-body[data-window='sidebar'] .filter-banner > .icon {
-  flex-shrink: 0;
-  width: 14px;
-  height: 14px;
-  color: var(--accent);
-}
-
-body[data-window='sidebar'] .filter-banner-text {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-body[data-window='sidebar'] .filter-banner-text strong {
-  color: var(--accent);
-  font-weight: 600;
-}
-
-body[data-window='sidebar'] .filter-banner-count {
-  flex-shrink: 0;
-  color: var(--subtle);
-  font-size: 10px;
-  white-space: nowrap;
-}
-
-body[data-window='sidebar'] .filter-banner-clear {
-  flex-shrink: 0;
-  padding: 3px 9px;
-  border-radius: 6px;
-  background: var(--accent);
-  color: var(--paper);
-  font-size: 10px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-body[data-window='sidebar'] .filter-banner-clear:hover {
-  background: var(--accent-hover);
 }
 
 /* ==================== 从资源管理器拖入文件 ====================
