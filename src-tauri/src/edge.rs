@@ -5,6 +5,7 @@
 //! 轮询间隔 120 ms，远低于单次 CPU 可感知负载，又足够跟上正常移动速度。
 //!
 //! 只有整个桌面的外沿算边缘：两块屏幕相接的一边，指针跨屏时必然经过，不唤出（见 windows::is_outer_edge）。
+//! 全屏程序（游戏、视频、演示）在前台时，这块屏幕的边缘不唤出（见 fullscreen::blocks_edge），快捷键与托盘照常。
 //! 唤出直接在这里完成，用前端最近一次给出的布局，不经过侧栏页面的脚本。
 
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
@@ -101,6 +102,9 @@ pub fn spawn(app: AppHandle, watcher: Arc<EdgeWatcher>) {
         let within_vertical = cursor.y >= area.position.y as f64
             && cursor.y <= (area.position.y as f64 + area.size.height as f64);
         if !hit || !within_vertical || !crate::windows::is_outer_edge(&sidebar, &monitor, on_left) {
+            continue;
+        }
+        if crate::fullscreen::blocks_edge(cursor.x, cursor.y) {
             continue;
         }
 

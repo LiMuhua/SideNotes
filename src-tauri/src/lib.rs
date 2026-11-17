@@ -6,6 +6,7 @@ mod commands;
 mod edge;
 mod error;
 mod fonts;
+mod fullscreen;
 mod location;
 mod migration;
 mod models;
