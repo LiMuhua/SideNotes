@@ -136,3 +136,41 @@ body[data-window='sidebar'] .sidebar-resizer:focus-visible {
   flex-wrap: wrap;
   row-gap: var(--sn-space-2);
 }
+
+/* ==================== 记录窗口与动画层（T83，技术决策第 41 条） ====================
+ * 每个记录窗口是一个独立的 Tauri 窗口，窗口就是面板：.note-window 铺满窗口，位置与尺寸由后端决定，
+ * theme.css 按页面浮层写的定位不再适用。亚克力与不透明的窗口外圈的圆角、细边框与投影由系统画
+ * （获得焦点时系统边框换成强调色，见 NoteWindow.tsx），页面不再画；杂志的透明窗口照原型由页面画。 */
+body[data-window='note'] .note-window {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+:root:is([data-sn-window='acrylic'], [data-sn-window='opaque']) body[data-window='note'] .note-window {
+  border-color: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+:root[data-sn-window='acrylic'] body[data-window='note'] .note-window {
+  backdrop-filter: none;
+}
+
+/* 动画层：整页透明、不接收指针；拖影、插入线与窗口的副本按后端给出的位置画。 */
+body[data-window='overlay'] {
+  overflow: hidden;
+  pointer-events: none;
+}
+
+body[data-window='overlay'] .overlay-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+.note-window.is-overlay-copy {
+  position: fixed;
+  pointer-events: none;
+}

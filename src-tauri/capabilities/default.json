@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "SideNotes 侧栏、速记与设置窗口所需的最小权限集合",
-  "windows": ["main", "capture", "settings"],
+  "description": "SideNotes 侧栏、速记、设置、记录窗口与动画层所需的最小权限集合",
+  "windows": ["main", "capture", "settings", "overlay", "note-*"],
   "permissions": [
     "core:default",
     "core:window:allow-show",
@@ -16,6 +16,7 @@
     "core:window:allow-set-skip-taskbar",
     "core:window:allow-is-visible",
     "core:window:allow-start-dragging",
+    "core:window:allow-start-resize-dragging",
     "core:window:allow-current-monitor",
     "core:window:allow-primary-monitor",
     "core:window:allow-monitor-from-point",

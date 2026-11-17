@@ -13,6 +13,8 @@ import { Icon, IconSprite } from './components/Icon';
 import { Sidebar } from './components/Sidebar';
 import { Capture } from './components/Capture';
 import { SettingsDialog } from './components/settings/SettingsDialog';
+import { NoteWindow } from './components/NoteWindow';
+import { Overlay } from './components/Overlay';
 import { ToastProvider } from './hooks/useToast';
 import { useStoreSlice } from './hooks/useStore';
 import * as store from './core/store';
@@ -89,12 +91,13 @@ export function App({ role }: AppProps) {
   }, [settings, systemDark]);
 
   /* ==================== 窗口材质（T84） ==================== */
-  // 侧栏与速记浮窗是透明窗口：按主题加亚克力（Windows 11、磨砂玻璃）、只透明（杂志）或铺满不透明的底色。
+  // 侧栏、速记浮窗与记录窗口是透明窗口：按主题加亚克力（Windows 11、磨砂玻璃）、只透明（杂志）或铺满不透明的底色。
   // 根节点的 data-sn-window 供 window.css 去掉对应的留白、圆角与投影；设置窗口一律不透明，不写。
+  // 动画层（T83）始终全透明、不要系统投影。
   const { surface } = settings;
   useEffect(() => {
     if (role === 'settings') return;
-    const material = windowMaterial(surface);
+    const material = role === 'overlay' ? 'clear' : windowMaterial(surface);
     document.documentElement.dataset.snWindow = material;
     void bridge.setWindowMaterial(material);
   }, [role, surface]);
@@ -173,6 +176,8 @@ export function App({ role }: AppProps) {
       {role === 'sidebar' ? <Sidebar /> : null}
       {role === 'capture' ? <Capture /> : null}
       {role === 'settings' ? <SettingsDialog onClose={closeSettings} onMinimize={minimizeSettings} /> : null}
+      {role === 'note' ? <NoteWindow /> : null}
+      {role === 'overlay' ? <Overlay /> : null}
     </ToastProvider>
   );
 }

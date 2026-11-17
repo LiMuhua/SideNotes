@@ -10,12 +10,15 @@
  * - 按住卡片中的图片附件或文件引用（含内嵌图片）并移动，可以拖到另一张卡片里：
  *   插入线标出落点（图片之间，或正文段落之间），松开后从原卡片移出并提供撤销。
  * - 拖动途中按 Esc 取消。
+ * - 卡片拖出侧栏（指针越过侧栏朝屏幕内侧的边）松开后在记录窗口中打开，经过已开的窗口时并进它的标签页（T83）：
+ *   侧栏窗口按住指针，拖影离开侧栏后画在动画层上，落点与新开窗口由后端判断（core/bridge 的 dragBegin 等）。
  *
  * 跟随指针的卡片、插入线与框选矩形是挂在 body 上的临时元素；卡片与页签的状态类
  * 经 React 状态下发，避免与 React 渲染互相覆盖。
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import * as bridge from '../core/bridge';
 import type { Note, TabKey } from '../core/types';
 
 /** 长按多久开始拖动。 */
@@ -135,7 +138,7 @@ interface Gesture {
   timer: number;
   ids: Set<string>;
   originTab: TabKey;
-  targetMode: '' | 'list' | 'tab' | 'trash';
+  targetMode: '' | 'list' | 'tab' | 'trash' | 'window';
   targetDestination: string;
   targetId: string;
   after: boolean;
@@ -144,6 +147,16 @@ interface Gesture {
   /** 停在页签栏最后一格上展开过菜单：结束时收起。 */
   menuOpened: boolean;
   ghost: HTMLElement | null;
+  /** 拖影里抓住的那张卡片的副本。 */
+  copy: HTMLElement | null;
+  /** 指针相对卡片左上角的位置：拖影贴着抓点。 */
+  grabX: number;
+  grabY: number;
+  /** 指针在侧栏之外（松开后在记录窗口中打开）。 */
+  outside: boolean;
+  /** 已经通知后端开始跨窗口拖动，结束时要通知它。 */
+  session: boolean;
+  /** 读屏用的说明文字（不放进页面，与原型相同）。 */
   label: HTMLElement | null;
   guide: HTMLElement | null;
   guideLabel: HTMLElement | null;
@@ -186,6 +199,28 @@ function shortTitle(note: Note | undefined): string {
 /** 页签名称（去掉计数）。 */
 function tabName(tab: Element): string {
   return (tab.textContent ?? '').replace(/\d+/g, '').trim();
+}
+
+/** 卡片的干净副本：去掉拖动、选中与插入线的状态和 id（原型 cardCopy）。 */
+function cardCopy(card: HTMLElement): HTMLElement {
+  const copy = card.cloneNode(true) as HTMLElement;
+  copy.classList.remove('is-sort-pending', 'is-sorting', 'is-sorting-member', 'drop-before', 'drop-after', 'is-selected', 'is-current');
+  copy.removeAttribute('id');
+  copy.removeAttribute('tabindex');
+  copy.querySelectorAll('[id]').forEach((node) => node.removeAttribute('id'));
+  copy.querySelectorAll('img[loading]').forEach((node) => node.removeAttribute('loading'));
+  return copy;
+}
+
+/**
+ * 指针是否越过了侧栏朝屏幕内侧的边（原型 updateDropTarget 的 outside）：贴右边时在侧栏左边之外，贴左边时在右边之外。
+ * 只有桌面端能把卡片拖出窗口；浏览器预览没有记录窗口。
+ */
+function outsideSidebar(x: number): boolean {
+  if (!bridge.isDesktop()) return false;
+  const sidebar = document.querySelector('.sidebar')?.getBoundingClientRect();
+  if (!sidebar) return false;
+  return document.body.dataset.edge === 'left' ? x > sidebar.right + 4 : x < sidebar.left - 4;
 }
 
 export function useCardInteractions(options: CardInteractionOptions): CardInteractions {
@@ -431,6 +466,15 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
         }
         trash.classList.remove('is-target');
       }
+      // 拖出侧栏：松开后在那里打开记录窗口；经过已开的窗口时由它标出合并的位置（T83）。
+      gesture.outside = outsideSidebar(gesture.x);
+      gesture.ghost?.classList.toggle('is-window', gesture.outside);
+      if (gesture.outside) {
+        clearTabTarget(gesture);
+        gesture.targetMode = 'window';
+        if (label) label.textContent = `${gesture.ids.size} 条 · 松开后在窗口中打开`;
+        return;
+      }
       const hit = document.elementFromPoint(gesture.x, gesture.y);
       const tabTarget =
         hit?.closest<HTMLElement>('.sidebar-tabs:not(.tabs-measure) [data-tab], .sidebar-tabs .tab-more:not(.is-add), .tab-menu [data-tab]') ?? null;
@@ -478,14 +522,6 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
       );
       if (!candidates.length) {
         if (label) label.textContent = `${gesture.ids.size} 条 · 当前没有可用落点`;
-        if (gesture.guide && gesture.guideLabel) {
-          gesture.guide.hidden = false;
-          gesture.guide.classList.add('is-invalid');
-          gesture.guide.style.left = `${listBounds.left + 5}px`;
-          gesture.guide.style.width = `${Math.max(0, listBounds.width - 10)}px`;
-          gesture.guide.style.top = `${Math.max(listBounds.top + 8, Math.min(gesture.y - 10, listBounds.bottom - 26))}px`;
-          gesture.guideLabel.textContent = '此处不能放置';
-        }
         return;
       }
       type Candidate = { card: HTMLElement; bounds: DOMRect; after: boolean; distance: number };
@@ -515,19 +551,19 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
       gesture.targetId = note.id;
       gesture.after = best.after;
       setDropTarget({ id: note.id, after: best.after });
-      const group = note.pinned ? '置顶' : '普通';
       const position = best.after ? '之后' : '之前';
       if (label) label.textContent = `${gesture.ids.size} 条 · 松开后放到「${shortTitle(note)}」${position}`;
-      if (gesture.guide && gesture.guideLabel) {
+      if (gesture.guide) {
+        // 插入线横跨卡片的宽度，位于两张卡片的间隙中间（Playground 的 sn-drop-line）。
         const insertionY = best.after
           ? Math.min(best.bounds.bottom, listBounds.bottom - 2)
           : Math.max(best.bounds.top, listBounds.top + 2);
+        const gap = parseFloat(window.getComputedStyle(list).rowGap) || 0;
         gesture.guide.hidden = false;
         gesture.guide.classList.remove('is-invalid');
-        gesture.guide.style.left = `${Math.max(4, listBounds.left + 5)}px`;
-        gesture.guide.style.width = `${Math.max(0, listBounds.width - 10)}px`;
-        gesture.guide.style.top = `${Math.max(4, insertionY - 10)}px`;
-        gesture.guideLabel.textContent = `${group} · 放在「${shortTitle(note)}」${position}，松开保存`;
+        gesture.guide.style.left = `${best.bounds.left}px`;
+        gesture.guide.style.width = `${Math.max(0, best.bounds.width)}px`;
+        gesture.guide.style.top = `${best.after ? insertionY + gap / 2 : insertionY - gap / 2}px`;
       }
     };
 
@@ -640,10 +676,19 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
     /** 跟随指针更新反馈及落点。 */
     const paintGesture = (gesture: Gesture): void => {
       if (t.gesture !== gesture || !gesture.active) return;
-      if (gesture.kind === 'sort' || gesture.kind === 'item') {
+      if (gesture.kind === 'sort') {
+        // 拖影贴着抓点（原型 paintGesture）；拖出侧栏后拖影画在动画层上，这里的藏起来（窗口外画不出来）。
+        const wasOutside = gesture.outside;
+        if (gesture.ghost) {
+          gesture.ghost.style.left = `${gesture.x - gesture.grabX}px`;
+          gesture.ghost.style.top = `${gesture.y - gesture.grabY}px`;
+        }
+        updateDropTarget(gesture);
+        if (gesture.ghost) gesture.ghost.style.visibility = gesture.outside ? 'hidden' : '';
+        if (gesture.session && (gesture.outside || wasOutside)) void bridge.dragUpdate(gesture.outside);
+      } else if (gesture.kind === 'item') {
         if (gesture.ghost) gesture.ghost.style.transform = `translate(${gesture.x + 12}px,${gesture.y + 12}px)`;
-        if (gesture.kind === 'sort') updateDropTarget(gesture);
-        else updateItemTarget(gesture);
+        updateItemTarget(gesture);
       } else {
         updateFrame(gesture);
       }
@@ -657,7 +702,7 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
         return;
       }
       const list = opts().listRef.current;
-      if (list && gesture.targetMode !== 'tab' && gesture.targetMode !== 'trash') {
+      if (list && gesture.targetMode !== 'tab' && gesture.targetMode !== 'trash' && gesture.targetMode !== 'window') {
         const bounds = list.getBoundingClientRect();
         const margin = 38;
         let speed = 0;
@@ -687,17 +732,53 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
       setSorting(true);
       window.getSelection()?.removeAllRanges();
 
-      const note = findNote(gesture.id);
-      gesture.ghost = element('div', 'card-drag-ghost batch-drag-ghost');
-      gesture.ghost.setAttribute('aria-hidden', 'true');
-      const heading = element('strong', '', `${note?.emoji || '📝'} ${(firstLine(note) || '图片记录').slice(0, 44)}`);
-      gesture.label = element('span', '', `${gesture.ids.size} 条 · 拖到 Tab 切换页面，或拖到红色回收站`);
-      gesture.ghost.append(heading, gesture.label);
+      // 拖影是卡片本身的副本：向右错开、倾斜、浮起（Playground 的 sn-drag-ghost）；拖出侧栏时保持倾斜并放大一点。
+      // 副本放进带 note-list 类的外壳，卡片的样式照常生效。多选时是一叠真实的卡片：抓住的那张在最上面，
+      // 后面叠着另外两张选中卡片的副本，右上角写出条数；选中的卡片不在当前列表中时，用抓住那张的副本垫在后面。
+      // 说明文字只留给读屏，不放进页面（原型 activateSort）。
+      const card = gesture.card as HTMLElement;
+      const source = card.getBoundingClientRect();
+      gesture.grabX = gesture.startX - source.left;
+      gesture.grabY = gesture.startY - source.top;
+      const ghost = element('div', 'card-drag-ghost note-list');
+      ghost.setAttribute('aria-hidden', 'true');
+      ghost.style.width = `${source.width}px`;
+      const list = opts().listRef.current;
+      const members =
+        gesture.ids.size > 1 && list
+          ? Array.from(list.querySelectorAll<HTMLElement>('.note-card')).filter(
+              (item) => item !== card && gesture.ids.has(item.dataset.noteId ?? ''),
+            )
+          : [];
+      for (let layer = Math.min(2, gesture.ids.size - 1); layer > 0; layer -= 1) {
+        const back = cardCopy(members[layer - 1] ?? card);
+        back.classList.add('card-drag-layer');
+        back.style.setProperty('--local-layer', String(layer));
+        ghost.append(back);
+      }
+      const copy = cardCopy(card);
+      copy.classList.add('is-current');
+      ghost.append(copy);
+      if (gesture.ids.size > 1) ghost.append(element('span', 'card-drag-count', String(gesture.ids.size)));
+      gesture.ghost = ghost;
+      gesture.copy = copy;
+      gesture.label = element('span', '', `${gesture.ids.size} 条`);
       gesture.guide = element('div', 'card-drop-guide');
       gesture.guide.hidden = true;
-      gesture.guideLabel = element('span', 'card-drop-guide-label', '松开后放在这里');
-      gesture.guide.append(element('span', 'card-drop-guide-line'), gesture.guideLabel);
+      gesture.guide.append(element('span', 'card-drop-guide-line'));
       document.body.append(gesture.ghost, gesture.guide);
+      // 桌面端：拖影也交给动画层，拖出侧栏后画在那里。抓点按拖影的错开量修正，窗口从拖影所在的位置展开。
+      if (bridge.isDesktop()) {
+        const shift = new DOMMatrixReadOnly(window.getComputedStyle(ghost).transform).e;
+        gesture.session = true;
+        void bridge.dragBegin({
+          kind: 'cards',
+          ids: Array.from(gesture.ids),
+          html: ghost.outerHTML,
+          ghost: { x: 0, y: 0, width: source.width, height: copy.offsetHeight || source.height },
+          grab: [gesture.grabX - (Number.isFinite(shift) ? shift : 0), gesture.grabY],
+        });
+      }
       try {
         if (gesture.card && gesture.pointerId !== undefined) gesture.card.setPointerCapture(gesture.pointerId);
       } catch {
@@ -775,6 +856,11 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
       } catch {
         // 系统可能已经释放指针捕获。
       }
+      // 没有在记录窗口中打开的拖动（取消、放回列表、移到页签或回收站）：通知后端收起动画层上的拖影。
+      if (gesture.session) {
+        gesture.session = false;
+        void bridge.dragEnd(false, false);
+      }
       gesture.ghost?.remove();
       gesture.guide?.remove();
       gesture.overlay?.remove();
@@ -836,6 +922,11 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
         tabTimer: 0,
         menuOpened: false,
         ghost: null,
+        copy: null,
+        grabX: 0,
+        grabY: 0,
+        outside: false,
+        session: false,
         label: null,
         guide: null,
         guideLabel: null,
@@ -907,6 +998,13 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
         consume(event);
       }
       const { active, kind, targetId, after, ids, targetMode, targetDestination, originTab } = gesture;
+      // 拖出侧栏松开：后端在松开处新开记录窗口（拖出的窗口默认置顶），落在已开的窗口上时并进它的标签页。
+      if (active && kind === 'sort' && targetMode === 'window' && gesture.session) {
+        gesture.session = false;
+        void bridge.dragEnd(true, true).then((result) => {
+          if (result.target || result.opened) clearSelection();
+        });
+      }
       const itemDrop: ItemDrop | null =
         kind === 'item' && gesture.itemTarget
           ? {

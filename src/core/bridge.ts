@@ -6,7 +6,8 @@
  */
 
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
-import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { emit, emitTo, listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { getCurrentWindow, Window } from '@tauri-apps/api/window';
 import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
@@ -654,4 +655,218 @@ export async function onStoreChange(handler: (change: StoreChange) => void): Pro
 export async function onSettingsVisibility(handler: (showing: boolean) => void): Promise<UnlistenFn> {
   if (!isDesktop()) return () => {};
   return listen<boolean>(APP_EVENTS.settingsVisibility, (event) => handler(Boolean(event.payload)));
+}
+
+/* ==================== 记录窗口（T83，技术决策第 41 条） ==================== */
+
+/** 页面像素或物理像素的矩形，由用途决定。 */
+export interface PixelRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** 记录窗口的打开请求（后端 note_windows::OpenPayload）。 */
+export interface NoteWindowOpen {
+  tabs: string[];
+  active: string;
+  pinned: boolean;
+  /** drag：拖出的，关闭时倾斜着缩回卡片；expand：展开全文的，原路滑回。 */
+  origin: 'drag' | 'expand';
+  /** 出场动画：展开全文、拖出侧栏、标签页拆出；restore 为开发时整页重载后恢复原来的标签页。 */
+  kind: 'expand' | 'drop' | 'detach' | 'restore';
+  /** 目标屏幕的工作区（物理像素）。 */
+  area: PixelRect;
+}
+
+/** 记录窗口、动画层与侧栏之间的事件（后端 note_windows::events）。 */
+export const NOTE_WINDOW_EVENTS = {
+  open: 'sidenotes://note-window/open',
+  add: 'sidenotes://note-window/add',
+  remove: 'sidenotes://note-window/remove',
+  activate: 'sidenotes://note-window/activate',
+  hint: 'sidenotes://note-window/hint',
+  close: 'sidenotes://note-window/close',
+  ghost: 'sidenotes://overlay/ghost',
+  indicator: 'sidenotes://overlay/indicator',
+  morph: 'sidenotes://overlay/morph',
+  clear: 'sidenotes://overlay/clear',
+  land: 'sidenotes://card-land',
+  /** 记录窗口问侧栏：这条记录的卡片在屏幕上的位置（关闭时缩回去），载荷 { id, reply }。 */
+  cardRectRequest: 'sidenotes://card-rect-request',
+  /** 侧栏的回答，载荷 { id, rect }，rect 为屏幕物理像素，卡片看不见时为 null。 */
+  cardRect: 'sidenotes://card-rect',
+  /** 记录窗口里点了标签：侧栏按这个标签筛选，载荷为标签名。 */
+  filterTag: 'sidenotes://filter-tag',
+} as const;
+
+/** 页面矩形（DOMRect）取出可以序列化的四个值。 */
+export function rectOf(rect: DOMRect | PixelRect): PixelRect {
+  return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+}
+
+/**
+ * 只订阅发给本窗口的事件。后端用 emit_to 指定窗口发送，但默认的 listen 收得到发给任何窗口的事件，
+ * 记录窗口之间会互相串，所以按本窗口的标签订阅。
+ */
+export async function onWindowEvent<T>(event: string, handler: (payload: T) => void): Promise<UnlistenFn> {
+  if (!isDesktop()) return () => {};
+  return getCurrentWebviewWindow().listen<T>(event, (received) => handler(received.payload));
+}
+
+/** 发事件给指定窗口。 */
+export async function emitToWindow(label: string, event: string, payload: unknown): Promise<void> {
+  if (!isDesktop()) return;
+  try {
+    await emitTo(label, event, payload);
+  } catch {
+    /* 窗口已经关闭。 */
+  }
+}
+
+/** 当前窗口的标签；浏览器预览为空串。 */
+export function currentLabel(): string {
+  if (!isDesktop()) return '';
+  try {
+    return getCurrentWindow().label;
+  } catch {
+    return '';
+  }
+}
+
+/** 当前窗口内容区左上角在屏幕上的位置（物理像素）。 */
+export async function innerOrigin(): Promise<{ x: number; y: number }> {
+  if (!isDesktop()) return { x: window.screenX, y: window.screenY };
+  const position = await getCurrentWindow().innerPosition();
+  return { x: position.x, y: position.y };
+}
+
+/** 当前窗口是否显示中。 */
+export async function isWindowVisible(): Promise<boolean> {
+  if (!isDesktop()) return true;
+  try {
+    return await getCurrentWindow().isVisible();
+  } catch {
+    return false;
+  }
+}
+
+/** 记录窗口启动：取等着它的打开请求（备用窗口没有时为 null，之后用事件送达）。 */
+export function noteWindowInit(): Promise<NoteWindowOpen | null> {
+  return call<NoteWindowOpen | null>('note_window_init', undefined, null);
+}
+
+/** 展开全文：在记录窗口中打开，`from` 为卡片的矩形（页面像素）。已经打开时切到它的标签页。 */
+export function openNoteWindow(ids: string[], from: DOMRect | null): Promise<void> {
+  return call<void>(
+    'open_note_window',
+    { ids, from: from ? rectOf(from) : null, dpr: window.devicePixelRatio },
+    undefined as unknown as void,
+  );
+}
+
+/**
+ * 量好尺寸（页面像素）后显示窗口；`snapshot` 为窗口的副本，动画层用它播放打开动画，为空时直接显示。
+ * 换算成物理像素再交给后端：页面像素比含 Windows 的文本缩放，后端算不出来。
+ */
+export function presentNoteWindow(width: number, height: number, snapshot: string | null): Promise<void> {
+  const ratio = window.devicePixelRatio;
+  return call<void>('note_window_present', { width: width * ratio, height: height * ratio, dpr: ratio, snapshot }, undefined as unknown as void);
+}
+
+/** 标签页、当前页、置顶与标题栏的位置（页面像素）同步给后端。 */
+export function syncNoteWindow(state: { tabs: string[]; active: string; pinned: boolean; bands: PixelRect[] }): Promise<void> {
+  return call<void>('note_window_sync', { ...state, dpr: window.devicePixelRatio }, undefined as unknown as void);
+}
+
+/** 关闭窗口：有副本时在动画层上缩回 `to`（卡片在屏幕上的矩形），`to` 为空时原地提起淡出；没有副本时直接关闭。 */
+export function closeNoteWindow(snapshot: string | null, to: PixelRect | null): Promise<void> {
+  return call<void>('note_window_close', { snapshot, to }, undefined as unknown as void);
+}
+
+/** 直接关闭当前记录窗口，不播放动画。 */
+export function destroyNoteWindow(): Promise<void> {
+  return call<void>('note_window_destroy', undefined, undefined as unknown as void);
+}
+
+/** 双击标题栏：放大到工作区里侧栏之外的部分，再双击还原。 */
+export function maximizeNoteWindow(): Promise<void> {
+  return call<void>('note_window_maximize', { dpr: window.devicePixelRatio }, undefined as unknown as void);
+}
+
+/** 窗口加宽 `delta`（页面像素，负数为减窄）：标签页换到左侧或顶部时，正文宽度不变。 */
+export function widenNoteWindow(delta: number): Promise<void> {
+  return call<void>('note_window_widen', { delta, dpr: window.devicePixelRatio }, undefined as unknown as void);
+}
+
+/** 关闭全部记录窗口，返回是否有窗口。 */
+export function closeAllNoteWindows(): Promise<boolean> {
+  return call<boolean>('close_all_note_windows', undefined, false);
+}
+
+/** 跨窗口拖动：卡片拖出侧栏、标签页拖出窗口、拖动窗口的标题栏。 */
+export type DragKind = 'cards' | 'tab' | 'move';
+
+/** 开始拖动。`html` 为拖影（画在动画层上），`ghost` 为拖影的大小，`grab` 为指针相对拖影左上角（页面像素）。 */
+export function dragBegin(request: {
+  kind: DragKind;
+  ids: string[];
+  html?: string;
+  ghost?: PixelRect;
+  grab?: [number, number];
+}): Promise<void> {
+  return call<void>(
+    'drag_begin',
+    { request: { ...request, grab: request.grab ?? [0, 0], dpr: window.devicePixelRatio } },
+    undefined as unknown as void,
+  );
+}
+
+/** 拖动的一步：`outside` 为指针离开了来源（侧栏或窗口）。返回指针下可以合并的窗口。 */
+export function dragUpdate(outside: boolean): Promise<string | null> {
+  return call<string | null>('drag_update', { outside }, null);
+}
+
+/** 结束拖动：`drop` 为假时取消；`detach` 为标签页拖到窗口外时可以拆成新窗口（窗口不止一个标签页）。 */
+export function dragEnd(drop: boolean, outside: boolean, detach = false): Promise<{ target: string | null; opened: boolean }> {
+  return call('drag_end', { drop, outside, detach }, { target: null, opened: false });
+}
+
+/** 拖动经过本窗口时算出的插入线（页面像素），由动画层画在最上面；null 时收起。 */
+export function dragIndicator(rect: PixelRect | null, horizontal: boolean): Promise<void> {
+  return call<void>('drag_indicator', { rect, horizontal, dpr: window.devicePixelRatio }, undefined as unknown as void);
+}
+
+/** 动画层：关闭动画的第一帧已经画出。 */
+export function overlayReady(id: number): Promise<void> {
+  return call<void>('overlay_ready', { id }, undefined as unknown as void);
+}
+
+/** 动画层：动画播放完毕。 */
+export function overlayDone(id: number): Promise<void> {
+  return call<void>('overlay_done', { id }, undefined as unknown as void);
+}
+
+/** 系统画边框的窗口：获得焦点时边框的颜色（#rrggbb），null 恢复默认。 */
+export function setWindowBorderColor(color: string | null): Promise<void> {
+  return call<void>('set_window_border_color', { color }, undefined as unknown as void);
+}
+
+/** 缩放手柄的边与系统缩放方向的对应。 */
+const RESIZE_DIRECTIONS = {
+  n: 'North',
+  s: 'South',
+  e: 'East',
+  w: 'West',
+  ne: 'NorthEast',
+  nw: 'NorthWest',
+  se: 'SouthEast',
+  sw: 'SouthWest',
+} as const;
+
+/** 按住窗口的边或角缩放（系统的缩放手势）。 */
+export async function startResizeDragging(edge: string): Promise<void> {
+  if (!isDesktop() || !(edge in RESIZE_DIRECTIONS)) return;
+  await getCurrentWindow().startResizeDragging(RESIZE_DIRECTIONS[edge as keyof typeof RESIZE_DIRECTIONS]);
 }

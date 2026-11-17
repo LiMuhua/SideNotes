@@ -377,7 +377,7 @@ export function AppearancePanel({ settings, save }: PanelProps) {
           </Row>
           <Row
             title="卡片高度"
-            description="超出部分渐隐，双击卡片查看全文"
+            description="超出的部分渐隐；点「展开全文」或把卡片拖出侧栏，在窗口中查看全文"
             className="sidebar-width-row"
           >
             <RangeField

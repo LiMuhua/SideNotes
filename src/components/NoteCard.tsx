@@ -3,7 +3,8 @@
  *
  * 标题行：勾选框（多选按钮按下时代替 Emoji）、Emoji、标题（最多两行）与右侧一格；右侧一格平时是置顶标记与时间，
  * 悬停、高亮或聚焦时换成操作按钮（置顶在最前，然后是复制、更多，收起在最右，落在时间原来的位置），标题宽度因此不变。
- * 只有标题行的记录不留正文区；底部一行只在有标签时出现。正文按设置限高，超出部分渐隐，双击卡片查看全文。
+ * 只有标题行的记录不留正文区；底部一行只在有标签时出现。正文按设置限高，超出部分渐隐，下面出现「展开全文」，
+ * 点它在记录窗口中查看全文（T83）。
  * 列表只让一张卡片进入 Tab 顺序，卡片内的按钮也只在高亮的一张上可聚焦（interactions.md 3.2）。
  * 编辑态直接在卡片内嵌入实时 Markdown 编辑面，确认前不写入记录。
  */
@@ -80,6 +81,8 @@ export interface NoteCardProps {
   /** 点击以 data URL 保存在记录里的图片附件。 */
   onEmbeddedImage: (image: NoteImage) => void;
   onTaskToggle: (offset: number, checked: boolean) => void;
+  /** 「展开全文」：在记录窗口中打开，从这张卡片的位置展开（T83）。 */
+  onExpand: (card: HTMLElement) => void;
 }
 
 /** 卡片内的图片附件列表。 */
@@ -545,6 +548,26 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
             </button>
           ))}
         </div>
+      )}
+
+      {/* 正文超出卡片高度时出现「展开全文」（原型 note-expand），收起的卡片不显示。 */}
+      {isEditing || single ? null : (
+        <button
+          type="button"
+          className="note-expand"
+          data-action="open-note"
+          aria-label="展开全文"
+          hidden={!truncated}
+          tabIndex={tabIndex}
+          onClick={(event) => {
+            event.stopPropagation();
+            const card = event.currentTarget.closest<HTMLElement>('.note-card');
+            if (card) props.onExpand(card);
+          }}
+        >
+          <Icon name="chevron-down" />
+          展开全文
+        </button>
       )}
 
       {/* 底部只在有标签时出现，没有标签时不占位置。 */}

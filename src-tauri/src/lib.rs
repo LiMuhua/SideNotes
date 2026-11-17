@@ -10,6 +10,7 @@ mod fullscreen;
 mod location;
 mod migration;
 mod models;
+mod note_windows;
 mod paths;
 mod recorder;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -21,7 +22,7 @@ mod windows;
 
 use std::sync::{Arc, Mutex};
 
-use tauri::{Manager, WebviewWindowBuilder, WindowEvent};
+use tauri::{Emitter, Manager, WebviewWindowBuilder, WindowEvent};
 
 use commands::AppState;
 use edge::EdgeWatcher;
@@ -89,22 +90,32 @@ pub fn run() {
 
             // 窗口在状态就绪后才创建。配置中的窗口默认先于 setup 创建，页面会在
             // manage 之前调用 load_snapshot 而失败，以空列表启动；此后的整体写入
-            // 会覆盖数据库中的其它记录。配置里三个窗口均设为 create: false，统一在此创建。
-            // 侧栏与速记浮窗交给一个隐藏的所有者窗口，不出现在任务栏、Alt+Tab 与 Win+Tab 中（见 windows::create_owner_window）。
+            // 会覆盖数据库中的其它记录。配置里的窗口均设为 create: false，统一在此创建。
+            // 侧栏、速记浮窗、记录窗口与动画层交给一个隐藏的所有者窗口，不出现在任务栏、Alt+Tab 与 Win+Tab 中
+            // （见 windows::create_owner_window）。
             #[cfg(windows)]
             let owner = windows::create_owner_window();
+            #[cfg(windows)]
+            if let Some(owner) = owner {
+                note_windows::set_owner(owner);
+            }
             for config in handle.config().app.windows.iter().filter(|config| !config.create) {
                 let builder = WebviewWindowBuilder::from_config(&handle, config)?;
                 #[cfg(windows)]
                 let builder = match owner {
-                    Some(owner) if config.label == windows::SIDEBAR_LABEL || config.label == windows::CAPTURE_LABEL => {
-                        builder.owner_raw(owner)
-                    }
+                    Some(owner) if config.label != windows::SETTINGS_LABEL => builder.owner_raw(owner),
                     _ => builder,
                 };
-                builder.build()?;
+                let window = builder.build()?;
+                if config.label == note_windows::OVERLAY_LABEL {
+                    // 动画层点击穿透，指针始终落在下面的窗口上（拖动中的来源窗口仍按住指针）。
+                    window.set_ignore_cursor_events(true)?;
+                    windows::disable_transitions(&window);
+                }
             }
             windows::disable_sidebar_transitions(&handle);
+            // 启动稳定后建好一个备用的记录窗口，打开记录窗口时不用等 WebView 创建。
+            note_windows::ensure_spare_later(&handle, std::time::Duration::from_secs(3));
 
             #[cfg(desktop)]
             tray::setup(&handle)?;
@@ -114,6 +125,17 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             match event {
+                // 记录窗口的 Alt+F4：交给页面按关闭流程处理（先保存编辑，再播放关闭动画）。
+                WindowEvent::CloseRequested { api, .. } if note_windows::is_note(window.label()) => {
+                    api.prevent_close();
+                    let _ = window.emit_to(window.label(), note_windows::events::CLOSE, ());
+                }
+                WindowEvent::Destroyed if note_windows::is_note(window.label()) => {
+                    note_windows::forget(window.label());
+                }
+                WindowEvent::Focused(true) if note_windows::is_note(window.label()) => {
+                    note_windows::touch(window.label());
+                }
                 // 关闭按钮只隐藏窗口；退出统一走托盘菜单，避免误关导致后台驻留消失。
                 WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
@@ -166,6 +188,22 @@ pub fn run() {
             commands::restore_snapshot,
             commands::copy_file_paths,
             commands::quit_app,
+            note_windows::note_window_init,
+            note_windows::open_note_window,
+            note_windows::note_window_present,
+            note_windows::note_window_sync,
+            note_windows::note_window_close,
+            note_windows::note_window_destroy,
+            note_windows::note_window_maximize,
+            note_windows::note_window_widen,
+            note_windows::close_all_note_windows,
+            note_windows::drag_begin,
+            note_windows::drag_update,
+            note_windows::drag_end,
+            note_windows::drag_indicator,
+            note_windows::overlay_ready,
+            note_windows::overlay_done,
+            note_windows::set_window_border_color,
         ])
         .run(tauri::generate_context!())
         .expect("SideNotes 启动失败");

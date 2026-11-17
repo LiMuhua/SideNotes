@@ -336,12 +336,19 @@ fn set_bounds_native(window: &WebviewWindow, x: f64, y: f64, width: f64, height:
 /// 一次淡出动画，而这段动画出现在挪回后的位置：平移结束约 90 毫秒后，侧栏会在原处闪现
 /// 并淡出。出入效果已由平移完成，系统动画是多余的。
 pub fn disable_sidebar_transitions(app: &AppHandle) {
-    #[cfg(windows)]
     if let Some(sidebar) = app.get_webview_window(SIDEBAR_LABEL) {
+        disable_transitions(&sidebar);
+    }
+}
+
+/// 关闭窗口的系统显示与隐藏动画（侧栏、记录窗口与动画层：出入都由应用自己的动画完成）。
+pub fn disable_transitions(window: &WebviewWindow) {
+    #[cfg(windows)]
+    {
         use ::windows::core::BOOL;
         use ::windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_TRANSITIONS_FORCEDISABLED};
 
-        if let Ok(hwnd) = sidebar.hwnd() {
+        if let Ok(hwnd) = window.hwnd() {
             let disabled = BOOL::from(true);
             // SAFETY：传入的指针指向本函数内的 BOOL，大小与之匹配。失败只会保留系统动画。
             let _ = unsafe {
@@ -355,7 +362,7 @@ pub fn disable_sidebar_transitions(app: &AppHandle) {
         }
     }
     #[cfg(not(windows))]
-    let _ = app;
+    let _ = window;
 }
 
 /// 侧栏与速记浮窗的所有者：一个从不显示的隐藏窗口。

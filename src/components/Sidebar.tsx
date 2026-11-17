@@ -1407,6 +1407,12 @@ export function Sidebar() {
           return;
         }
       }
+      // 关闭全部记录窗口（应用内快捷键，默认 Alt+Shift+W）：侧栏与各记录窗口里都能用。
+      if (matches(event, shortcuts, "closeWindows")) {
+        event.preventDefault();
+        void bridge.closeAllNoteWindows();
+        return;
+      }
       // Ctrl+, 打开设置窗口：侧栏获得焦点时响应，编辑中也可用。
       if (matches(event, shortcuts, "settings")) {
         event.preventDefault();
@@ -1977,6 +1983,58 @@ export function Sidebar() {
     [searching, setSearchQuery, selectTag],
   );
 
+  /* ==================== 记录窗口（T83） ==================== */
+  // 记录窗口关闭时缩回侧栏中的卡片：它来问卡片在屏幕上的位置（侧栏收起或卡片不在视野里时回答 null，窗口原地淡出），
+  // 缩回之后卡片轻轻一顿（原型 land）。记录窗口里点标签时，侧栏按这个标签筛选并展开。
+  const filterByTagRef = useRef(filterByTag);
+  const currentLayoutRef = useRef(currentLayout);
+  useLayoutEffect(() => {
+    filterByTagRef.current = filterByTag;
+    currentLayoutRef.current = currentLayout;
+  });
+  useEffect(() => {
+    const EVENTS = bridge.NOTE_WINDOW_EVENTS;
+    /** 侧栏列表中看得见的卡片（原型 cardElement）。 */
+    const visibleCard = (id: string): HTMLElement | null => {
+      const list = listRef.current;
+      const card = list?.querySelector<HTMLElement>(`.note-card[data-note-id="${CSS.escape(id)}"]`);
+      if (!list || !card) return null;
+      const rect = card.getBoundingClientRect();
+      const bounds = list.getBoundingClientRect();
+      return rect.width && rect.bottom > bounds.top && rect.top < bounds.bottom ? card : null;
+    };
+    return bridge.subscribeAll([
+      bridge.onWindowEvent<{ id: string; reply: string }>(EVENTS.cardRectRequest, (request) => {
+        void (async () => {
+          let rect: bridge.PixelRect | null = null;
+          const card = visibleCard(request.id);
+          if (card && (await bridge.isWindowVisible())) {
+            const box = card.getBoundingClientRect();
+            const origin = await bridge.innerOrigin();
+            const ratio = window.devicePixelRatio;
+            rect = { x: origin.x + box.left * ratio, y: origin.y + box.top * ratio, width: box.width * ratio, height: box.height * ratio };
+          }
+          void bridge.emitToWindow(request.reply, EVENTS.cardRect, { id: request.id, rect });
+        })();
+      }),
+      bridge.onWindowEvent<string>(EVENTS.land, (id) => {
+        const card = visibleCard(id);
+        if (!card || typeof card.animate !== "function" || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+        const root = window.getComputedStyle(document.documentElement);
+        const token = root.getPropertyValue("--sn-duration-normal").trim();
+        const normal = (token.endsWith("ms") ? parseFloat(token) : parseFloat(token) * 1000) || 167;
+        card.animate([{ transform: "none" }, { offset: 0.4, transform: "scale(1.015)" }, { transform: "none" }], {
+          duration: normal * 2,
+          easing: root.getPropertyValue("--sn-ease-standard").trim() || "ease",
+        });
+      }),
+      bridge.onWindowEvent<string>(EVENTS.filterTag, (tag) => {
+        filterByTagRef.current(tag);
+        void bridge.showSidebar(currentLayoutRef.current());
+      }),
+    ]);
+  }, []);
+
   const clearTagFilter = useCallback(() => {
     setSelectedTag("");
     setTagMenuOpen(false);
@@ -2497,6 +2555,11 @@ export function Sidebar() {
                 onAttachment={(reference, event) => handleNoteAttachment(note, reference, event)}
                 onEmbeddedImage={(image) => handleEmbeddedImage(note, image)}
                 onTaskToggle={(offset, checked) => void handleTaskToggle(note.id, offset, checked)}
+                onExpand={(card) => {
+                  void bridge.openNoteWindow([note.id], card.getBoundingClientRect()).catch((error: unknown) => {
+                    toast(`未能打开窗口：${bridge.errorText(error)}`, null, true);
+                  });
+                }}
               />
               </Fragment>
             ))

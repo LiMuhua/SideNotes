@@ -70,6 +70,26 @@
         "visible": false,
         "shadow": true,
         "focus": true
+      },
+      {
+        "label": "overlay",
+        "dragDropEnabled": false,
+        "create": false,
+        "title": "SideNotes 动画层",
+        "url": "index.html",
+        "width": 800,
+        "height": 600,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "visible": false,
+        "shadow": false,
+        "focus": false,
+        "focusable": false
       }
     ],
     "security": {
