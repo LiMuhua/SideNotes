@@ -21,7 +21,7 @@
  */
 
 import { fileLabel, filePath, isImageName, isLegacyToken } from './files';
-import { placeAttachment } from './insert';
+import { placeAttachment, titleLine } from './insert';
 import {
   codeLanguage,
   continueBlock,
@@ -39,6 +39,7 @@ import {
   type EditResult,
 } from './markdown-commands';
 import { comboFromEvent, commandFor, physicalKey, type ShortcutBindings, type ShortcutId } from './shortcuts';
+import { bodyEnd } from './tags';
 
 /** 行模型，保留各行原始换行符与首尾空白。 */
 interface LineModel {
@@ -221,6 +222,38 @@ function markerVisible(caret: number | null, start: number, length: number): boo
 let focusedEditor: MarkdownEditor | null = null;
 let selectionFrame = 0;
 
+/** 编辑面中按住附件（图片或文件块）准备拖动或正在拖动（原型 editor.js 的 pressAttachment）。 */
+interface AttachmentDrag {
+  node: HTMLElement;
+  pointerId: number;
+  /** 按下的位置。 */
+  x: number;
+  y: number;
+  /** 附件引用在原文中的范围。 */
+  start: number;
+  end: number;
+  /** 移动超过 4 像素后才算开始拖动；之前松开是单击，照常打开附件弹窗。 */
+  active: boolean;
+  /** 落点（按移动前的原文偏移计），-1 表示没有落点（在附件自身或范围之外）。 */
+  target: number;
+  bounds: { min: number; max: number; own: { start: number; end: number } } | null;
+  ghost: HTMLDivElement | null;
+  guide: HTMLDivElement | null;
+  /** 拖影 left、top 为 0 时在屏幕上的位置（外层可能有位移）。 */
+  origin: { x: number; y: number };
+}
+
+/** 同一时间只有一个附件在拖动。 */
+let attachmentDrag: AttachmentDrag | null = null;
+/** 从编辑面中拖动选中的文字：落在同一个编辑面时移到落点，不是复制一份。 */
+let textDrag: { editor: MarkdownEditor; start: number; end: number } | null = null;
+
+/** 文档中取视口坐标处的光标位置（Chromium 两种接口都有，旧版只有 caretRangeFromPoint）。 */
+type CaretDocument = Document & {
+  caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+  caretRangeFromPoint?: (x: number, y: number) => Range | null;
+};
+
 /** 登记当前聚焦的实例。 */
 function setFocusedEditor(editor: MarkdownEditor | null): void {
   focusedEditor = editor;
@@ -264,6 +297,8 @@ export class MarkdownEditor {
   /** 组合结束的吸收阶段不追加中间撤销快照。 */
   private compositionEnding = false;
   private destroyed = false;
+  /** 拖动附件松开后浏览器还会派发一次单击，不能当作点开附件。 */
+  private suppressClick = false;
   /** 排版期间忽略选区事件。 */
   private rendering = false;
   private selection: SourceRange;
@@ -408,6 +443,39 @@ export class MarkdownEditor {
   }
 
   /** 记录当前状态用于撤销。拖放等外部插入在修改前调用。 */
+  /** 视口坐标处的原文位置（拖放的落点）；取不到时是末尾。 */
+  offsetAt(x: number, y: number): number {
+    const doc = document as CaretDocument;
+    const point = doc.caretPositionFromPoint?.(x, y) ?? null;
+    const range = point ? null : (doc.caretRangeFromPoint?.(x, y) ?? null);
+    const offset = point
+      ? this.sourceOffset(point.offsetNode, point.offset)
+      : range
+        ? this.sourceOffset(range.startContainer, range.startOffset)
+        : null;
+    return offset === null ? this.value.length : offset;
+  }
+
+  /**
+   * 把一段原文移到另一个位置（编辑面中拖动选中的文字），记入撤销历史；落点在这段原文之内时不动。
+   * @param target 落点，按移动前的原文计。
+   */
+  moveText(start: number, end: number, target: number): boolean {
+    if (!(end > start) || (target >= start && target <= end)) return false;
+    const text = this.value.slice(start, end);
+    if (!text) return false;
+    this.remember({ start, end, direction: 'none' });
+    const rest = this.value.slice(0, start) + this.value.slice(end);
+    const at = target > end ? target - text.length : target;
+    this.value = rest.slice(0, at) + text + rest.slice(at);
+    const caret = at + text.length;
+    this.selection = { start: caret, end: caret, direction: 'none' };
+    this.activeLine = this.lineAt(caret);
+    this.render(this.selection);
+    this.notify();
+    return true;
+  }
+
   remember(selection: SourceRange): void {
     this.undoStack.push({ value: this.value, selection: { ...selection } });
     if (this.undoStack.length > 100) this.undoStack.shift();
@@ -797,9 +865,11 @@ export class MarkdownEditor {
     parent.append(source);
 
     const isImage = attachment.kind === 'image';
-    const chip = element(isImage ? 'button' : 'span', isImage ? 'md-editor-image md-attachment' : 'md-editor-file md-attachment');
-    if (chip instanceof HTMLButtonElement) chip.type = 'button';
+    // 图片与文件块都是按钮（原型 md-editor-image、md-attachment-chip）；不用原生拖放，按住移动由 pressAttachment 处理。
+    const chip = element('button', isImage ? 'md-editor-image' : 'md-attachment-chip');
+    chip.type = 'button';
     chip.tabIndex = -1;
+    chip.draggable = false;
     chip.contentEditable = 'false';
     chip.dataset.mdDecoration = '';
     chip.dataset.mdAttachment = attachment.kind;
@@ -817,7 +887,6 @@ export class MarkdownEditor {
       picture.draggable = false;
       chip.append(picture);
     } else {
-      chip.setAttribute('role', 'button');
       chip.setAttribute('aria-label', `文件：${attachment.label}`);
       // 文件图标取页面中的图标定义（侧栏与速记浮窗都挂载了 IconSprite）。
       const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -826,9 +895,236 @@ export class MarkdownEditor {
       const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
       use.setAttribute('href', '#i-file');
       icon.append(use);
-      chip.append(icon, element('span', 'md-editor-file-name', attachment.label));
+      chip.append(icon, element('span', '', attachment.label));
     }
     parent.append(chip);
+  }
+
+  /* ==================== 拖动附件调整位置（原型第二版） ==================== */
+
+  /**
+   * 按住编辑面中的图片或文件块：移动 4 像素后开始拖动，松开时移到插入光标处；没有移动就是单击，照常打开附件弹窗。
+   * 不用浏览器的原生拖放：按下附件时要阻止默认行为，光标与焦点才不会被附件夺走（见 mousedown），原生拖放因此无法开始。
+   * Esc 取消拖动，不退出编辑。
+   */
+  private pressAttachment(event: PointerEvent): void {
+    const node = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-md-attachment]') : null;
+    if (!node || !this.element.contains(node) || event.button !== 0 || attachmentDrag || this.composing) return;
+    if (this.element.contentEditable === 'false') return;
+    const start = Number(node.dataset.mdStart);
+    const end = Number(node.dataset.mdEnd);
+    if (!(end > start) || !this.value.slice(start, end).trim()) return;
+    const drag: AttachmentDrag = {
+      node,
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      start,
+      end,
+      active: false,
+      target: -1,
+      bounds: null,
+      ghost: null,
+      guide: null,
+      origin: { x: 0, y: 0 },
+    };
+    attachmentDrag = drag;
+    const move = (next: Event): void => {
+      if ((next as PointerEvent).pointerId === drag.pointerId) this.moveAttachmentDrag(drag, next as PointerEvent);
+    };
+    const stop = (last: Event): void => {
+      if (last.type === 'keydown') {
+        const key = last as KeyboardEvent;
+        if (key.key !== 'Escape') return;
+        if (drag.active) {
+          key.preventDefault();
+          key.stopPropagation();
+        }
+      } else if ((last as PointerEvent).pointerId !== drag.pointerId) return;
+      window.removeEventListener('pointermove', move, true);
+      window.removeEventListener('pointerup', stop, true);
+      window.removeEventListener('pointercancel', stop, true);
+      window.removeEventListener('keydown', stop, true);
+      this.endAttachmentDrag(drag, last.type === 'pointerup');
+    };
+    window.addEventListener('pointermove', move, true);
+    window.addEventListener('pointerup', stop, true);
+    window.addEventListener('pointercancel', stop, true);
+    window.addEventListener('keydown', stop, true);
+  }
+
+  /**
+   * 拖动中：插入光标落在指针处的字符之间；指针靠近编辑区上下边缘时滚动。
+   * 拖影的左上角跟着指针，拿起时从原处平滑移到指针的右下方，插入光标与它左边、上面的字不被挡；
+   * 拖影放在编辑区的前面、垫在文字下面并半透明，与它重叠的字也能看清，插入光标在最上层。
+   */
+  private moveAttachmentDrag(drag: AttachmentDrag, event: PointerEvent): void {
+    if (!drag.active) {
+      if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 4 || !drag.node.isConnected) return;
+      drag.active = true;
+      const box = drag.node.getBoundingClientRect();
+      const grab = { x: drag.x - box.left, y: drag.y - box.top };
+      drag.bounds = this.attachmentBounds(drag);
+      const ghost = element('div', 'md-drag-ghost is-under-text');
+      ghost.setAttribute('aria-hidden', 'true');
+      ghost.append(drag.node.cloneNode(true));
+      // 插入光标：一条强调色的竖线，上端一个小圆点（与标签页的插入线同一种样子），落在字符之间。
+      const guide = element('div', 'md-drop-caret');
+      guide.hidden = true;
+      // 拖影的定位原点：侧栏与记录窗口的外层可能有位移，先量出 left、top 为 0 时落在屏幕上的哪里。
+      const probe = element('span', 'md-drag-probe');
+      this.element.before(probe);
+      const origin = probe.getBoundingClientRect();
+      probe.remove();
+      drag.origin = { x: origin.left, y: origin.top };
+      ghost.style.setProperty('--local-ghost-x', `${-grab.x}px`);
+      ghost.style.setProperty('--local-ghost-y', `${-grab.y}px`);
+      this.element.before(ghost);
+      this.element.classList.add('is-attachment-drop');
+      document.body.append(guide);
+      // 下一帧移到指针的右下方（过渡在样式里）。
+      window.requestAnimationFrame(() =>
+        window.requestAnimationFrame(() => {
+          ghost.style.setProperty('--local-ghost-x', 'var(--sn-space-3)');
+          ghost.style.setProperty('--local-ghost-y', 'var(--sn-space-4)');
+        }),
+      );
+      drag.ghost = ghost;
+      drag.guide = guide;
+      drag.node.classList.add('is-drag-source');
+      document.body.classList.add('is-dragging-attachment');
+    }
+    event.preventDefault();
+    const { ghost, guide, bounds } = drag;
+    if (!ghost || !guide || !bounds) return;
+    ghost.style.left = `${event.clientX - drag.origin.x}px`;
+    ghost.style.top = `${event.clientY - drag.origin.y}px`;
+    const box = this.element.getBoundingClientRect();
+    const edge = 24;
+    if (this.element.scrollHeight > this.element.clientHeight) {
+      if (event.clientY < box.top + edge) this.element.scrollTop -= Math.ceil((box.top + edge - event.clientY) / 3);
+      else if (event.clientY > box.bottom - edge) this.element.scrollTop += Math.ceil((event.clientY - box.bottom + edge) / 3);
+    }
+    // 指针处的原文位置，限制在标题行之后、正文末尾之前；落在附件自身（含紧挨着的空白）等于没动，不显示插入光标。
+    const target = Math.max(bounds.min, Math.min(bounds.max, this.offsetAt(event.clientX, event.clientY)));
+    drag.target = target >= bounds.own.start && target <= bounds.own.end ? -1 : target;
+    const caret = drag.target < 0 ? null : this.caretRect(drag.target);
+    if (!caret) {
+      guide.hidden = true;
+      return;
+    }
+    guide.hidden = caret.top + caret.height < box.top - 1 || caret.top > box.bottom + 1;
+    guide.style.left = `${caret.left}px`;
+    guide.style.top = `${caret.top}px`;
+    guide.style.height = `${caret.height}px`;
+  }
+
+  /** 原文偏移在屏幕上的位置（插入光标）：这个位置的文字矩形；紧挨着图片、文件块或空行时取它们的边缘。 */
+  private caretRect(offset: number): { left: number; top: number; height: number } | null {
+    const line = this.element.children[this.lineAt(offset)];
+    if (!line) return null;
+    const widget = Array.from(line.querySelectorAll<HTMLElement>('[data-md-attachment]')).find(
+      (node) => Number(node.dataset.mdStart) === offset || Number(node.dataset.mdEnd) === offset,
+    );
+    if (widget) {
+      const box = widget.getBoundingClientRect();
+      return { left: Number(widget.dataset.mdStart) === offset ? box.left : box.right, top: box.top, height: box.height };
+    }
+    const point = this.domPoint(offset);
+    const range = document.createRange();
+    try {
+      range.setStart(point.node, point.offset);
+      range.collapse(true);
+    } catch {
+      return null;
+    }
+    const rect = Array.from(range.getClientRects()).find((item) => item.height > 0);
+    if (rect) return { left: rect.left, top: rect.top, height: rect.height };
+    const box = line.getBoundingClientRect();
+    return { left: box.left, top: box.top, height: box.height };
+  }
+
+  /**
+   * 附件可以放的范围（按移动前的原文偏移计）：标题行之后、正文末尾之前，标题与标签不变（与插入附件的规则一致）；
+   * 附件自身连同紧挨着的空白算作原处。标题与正文末尾按去掉附件后的原文找，再换回移动前的偏移。
+   */
+  private attachmentBounds(drag: AttachmentDrag): { min: number; max: number; own: { start: number; end: number } } {
+    const length = drag.end - drag.start;
+    const remaining = this.value.slice(0, drag.start) + this.value.slice(drag.end);
+    const original = (offset: number): number => (offset < drag.start ? offset : offset + length);
+    const title = titleLine(remaining);
+    // 标题行之后：下一行的开头；标题后面没有换行时（只有标题一行）是标题行末尾，松开时另起一行。
+    const next = title ? /^(?:\r\n|\r|\n)/.exec(remaining.slice(title.end)) : null;
+    const min = title ? title.end + (next ? next[0].length : 0) : 0;
+    const max = bodyEnd(remaining);
+    let ownStart = drag.start;
+    let ownEnd = drag.end;
+    while (ownStart > 0 && /[\t ]/.test(this.value[ownStart - 1])) ownStart -= 1;
+    while (ownEnd < this.value.length && /[\t ]/.test(this.value[ownEnd])) ownEnd += 1;
+    return { min: original(min), max: Math.max(original(min), original(max)), own: { start: ownStart, end: ownEnd } };
+  }
+
+  /** 结束拖动：松开时移动附件，取消或没有落点时不改动。 */
+  private endAttachmentDrag(drag: AttachmentDrag, commit: boolean): void {
+    attachmentDrag = null;
+    if (!drag.active) return;
+    drag.ghost?.remove();
+    drag.guide?.remove();
+    this.element.classList.remove('is-attachment-drop');
+    drag.node.classList.remove('is-drag-source');
+    document.body.classList.remove('is-dragging-attachment');
+    // 松开后浏览器还会派发一次单击，不能当作点开附件。
+    this.suppressClick = true;
+    window.setTimeout(() => {
+      this.suppressClick = false;
+    }, 0);
+    if (!commit || drag.target < 0 || this.destroyed) return;
+    if (!this.hasFocus()) this.element.focus({ preventScroll: true });
+    this.moveAttachment(drag.start, drag.end, drag.target);
+  }
+
+  /**
+   * 把附件引用移到字符位置 target（落点精确到字符），记入撤销历史。
+   * 原来那一行只剩空白或列表、引用标记时整行删掉；夹在两个空格之间时去掉一个，免得留下双空格。
+   * 落点在标题行末尾（只有标题一行）时另起一行，标题不变。
+   * @param target 落点，按移动前的原文偏移计。
+   */
+  private moveAttachment(start: number, end: number, target: number): boolean {
+    const text = this.value.slice(start, end).trim();
+    if (!text) return false;
+    const lines = splitLines(this.value);
+    const eol = (this.value.match(/\r\n|\r|\n/) ?? ['\n'])[0];
+    const index = this.lineAt(start);
+    const line = lines[index];
+    const rest = line.text.slice(0, start - line.start) + line.text.slice(end - line.start);
+    let cutStart = start;
+    let cutEnd = end;
+    if (!rest.replace(/^\s{0,3}(?:(?:[-+*]|\d+[.)])\s*(?:\[[ xX]\]\s*)?|>\s*)/, '').trim()) {
+      cutStart = line.start;
+      cutEnd = line.end + line.eol.length;
+      if (!line.eol && index > 0) cutStart -= lines[index - 1].eol.length;
+      // 这一行前后都是空行时一并去掉后面那个，免得留下连着的两行空白。
+      const previous = lines[index - 1];
+      const following = lines[index + 1];
+      if (line.eol && previous && !previous.text.trim() && following && !following.text.trim()) {
+        cutEnd = following.end + following.eol.length;
+      }
+    } else if (this.value[start - 1] === ' ' && this.value[end] === ' ') cutEnd += 1;
+    if (target > cutStart && target < cutEnd) return false;
+    const remaining = this.value.slice(0, cutStart) + this.value.slice(cutEnd);
+    const position = Math.min(remaining.length, target >= cutEnd ? target - (cutEnd - cutStart) : target);
+    const title = titleLine(remaining);
+    const intoTitle = Boolean(title && position <= title.end);
+    const insert = intoTitle ? eol + text : text;
+    const at = intoTitle && title ? title.end : position;
+    this.remember({ start, end, direction: 'none' });
+    this.value = remaining.slice(0, at) + insert + remaining.slice(at);
+    const caret = at + insert.length;
+    this.selection = { start: caret, end: caret, direction: 'none' };
+    this.activeLine = this.lineAt(caret);
+    this.render(this.selection);
+    this.notify();
+    return true;
   }
 
   /** 当前渲染出的附件在原文中的范围。 */
@@ -1476,6 +1772,7 @@ export class MarkdownEditor {
       if (chip && this.element.contains(chip)) {
         event.preventDefault();
         event.stopPropagation();
+        if (this.suppressClick) return;
         const info = this.attachmentInfo(chip);
         if (!info) return;
         if (this.options.onAttachment) this.options.onAttachment(info, event as MouseEvent);
@@ -1485,9 +1782,37 @@ export class MarkdownEditor {
 
     this.listen(this.element, 'beforeinput', (event) => this.beforeInput(event as InputEvent));
 
-    // 编辑面内不拖动选中的文字：拖动是先删去原处再插到新位置，两步之间编辑器会重新排版，落点可能错位。
+    // 按住编辑面中的图片或文件块：移动 4 像素后开始拖动，松开时移到插入光标处（原型 pressAttachment）。
+    this.listen(this.element, 'pointerdown', (event) => this.pressAttachment(event as PointerEvent));
+
+    // 从编辑面中拖动选中的文字（原型 editor.js）：记下原文范围，落在同一个编辑面时一步移到落点（moveText），
+    // 不经过浏览器「先删去原处再插到落点」的两步，落点不会因为中间的重新排版而错位。
     // 从别处拖来的文字照常插在落点（见 beforeInput 的 insertFromDrop）；拖入的文件由应用处理。
-    this.listen(this.element, 'dragstart', (event) => event.preventDefault());
+    this.listen(this.element, 'dragstart', (event) => {
+      const transfer = (event as DragEvent).dataTransfer;
+      const range = this.atomicRange(this.readSelection());
+      if (!transfer || !(range.end > range.start)) {
+        event.preventDefault();
+        return;
+      }
+      textDrag = { editor: this, start: range.start, end: range.end };
+      transfer.setData('text/plain', this.value.slice(range.start, range.end));
+      transfer.effectAllowed = 'copyMove';
+    });
+    this.listen(this.element, 'dragend', () => {
+      window.setTimeout(() => {
+        if (textDrag?.editor === this) textDrag = null;
+      }, 0);
+    });
+    this.listen(this.element, 'drop', (event) => {
+      const drop = event as DragEvent;
+      if (drop.defaultPrevented || textDrag?.editor !== this) return;
+      drop.preventDefault();
+      drop.stopPropagation();
+      const { start, end } = textDrag;
+      textDrag = null;
+      this.moveText(start, end, this.offsetAt(drop.clientX, drop.clientY));
+    });
 
     this.listen(this.element, 'input', (event) => {
       if (event.target === this.element) this.absorbDOM(!this.composing && !(event as InputEvent).isComposing);

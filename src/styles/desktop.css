@@ -411,63 +411,6 @@ body[data-window='capture'] .capture-body {
   text-underline-offset: 2px;
 }
 
-/* 编辑面中的附件与卡片预览一样整块显示（原文隐藏），点击打开附件弹窗。 */
-.md-editor-image {
-  display: inline-flex;
-  padding: 0;
-  margin: 4px 0;
-  border: 0;
-  border-radius: 7px;
-  overflow: hidden;
-  background: var(--soft);
-  cursor: pointer;
-  vertical-align: middle;
-}
-
-.md-editor-image .markdown-image {
-  display: block;
-  max-height: 150px;
-  max-width: 100%;
-  object-fit: cover;
-}
-
-/* 文件块沿用卡片预览中 .file-reference 的外观。 */
-.md-editor-file {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 100%;
-  margin: 2px 2px 2px 0;
-  padding: 2px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--soft);
-  color: var(--accent);
-  font-size: 0.85em;
-  line-height: 1.6;
-  vertical-align: middle;
-  cursor: pointer;
-  user-select: none;
-}
-
-.md-editor-file .icon {
-  width: 13px;
-  height: 13px;
-  flex-shrink: 0;
-}
-
-.md-editor-file-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.md-editor-file:hover,
-.md-editor-image:hover {
-  outline: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
-  outline-offset: 1px;
-}
-
 /* ==================== 桌面端新增状态 ==================== */
 
 /* 热键冲突与保存失败的提示沿用原型的警告条外观。 */

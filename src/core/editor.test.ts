@@ -559,3 +559,45 @@ describe('附件整块显示', () => {
     expect(Array.from(editor.element.querySelectorAll<HTMLElement>('.md-syntax')).some((node) => !node.hidden)).toBe(true);
   });
 });
+
+describe('编辑面中移动原文（拖动选中的文字与附件）', () => {
+  beforeEach(() => {
+    document.body.replaceChildren();
+  });
+
+  /** 拖动附件松开时的移动（私有方法，拖动的指针与布局在桌面端验证）。 */
+  function moveAttachment(editor: MarkdownEditor, start: number, end: number, target: number): boolean {
+    return (editor as unknown as { moveAttachment: (a: number, b: number, c: number) => boolean }).moveAttachment(start, end, target);
+  }
+
+  it('选中的文字移到落点，可以撤销；落点在原文之内时不动', () => {
+    const { editor } = mount('甲乙丙丁');
+    editor.element.focus();
+    expect(editor.moveText(0, 1, 3)).toBe(true);
+    expect(editor.getValue()).toBe('乙丙甲丁');
+    expect(editor.moveText(1, 3, 2)).toBe(false);
+    expect(editor.getValue()).toBe('乙丙甲丁');
+    editor.element.dispatchEvent(new InputEvent('beforeinput', { inputType: 'historyUndo', bubbles: true, cancelable: true }));
+    expect(editor.getValue()).toBe('甲乙丙丁');
+  });
+
+  it('附件移到字符之间，原来独占的一行整行去掉', () => {
+    const image = '![图](C:/a/图.png)';
+    const value = `标题\n第一段\n${image}\n第二段`;
+    const { editor } = mount(value);
+    const start = value.indexOf(image);
+    // 放到「第二段」的「二」之后。
+    const target = value.indexOf('二') + 1;
+    expect(moveAttachment(editor, start, start + image.length, target)).toBe(true);
+    expect(editor.getValue()).toBe(`标题\n第一段\n第二${image}段`);
+  });
+
+  it('夹在两个空格之间的附件移走后只留一个空格；落点在标题行时另起一行', () => {
+    const file = '[报告.pdf](<C:/a/报告.pdf>)';
+    const value = `标题\n前 ${file} 后`;
+    const { editor } = mount(value);
+    const start = value.indexOf(file);
+    expect(moveAttachment(editor, start, start + file.length, 1)).toBe(true);
+    expect(editor.getValue()).toBe(`标题\n${file}\n前 后`);
+  });
+});
