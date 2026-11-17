@@ -2,7 +2,8 @@
  * 新建卡片（原型第二版，components.md 1.3）。
  *
  * 固定在列表之上，不随列表滚动；工具栏一直显示：左边是添加图片与引用文件，右边是字数、
- * 保存的快捷键（终端主题写在界面上）与保存按钮。Esc 让新建卡片失去焦点，草稿保留。
+ * 保存的快捷键（终端主题写在界面上）与保存按钮。有内容时 Esc 让新建卡片失去焦点，草稿保留；
+ * 点工具栏的空白处或卡片边缘时焦点留在编辑区（原型 createComposer）。
  */
 
 import { Icon } from './Icon';
@@ -41,12 +42,22 @@ export function Composer(props: ComposerProps) {
   const saveKeys = useShortcut('save');
   const empty = !props.text.trim() && !props.images.length;
   return (
-    <section id="quick-composer" className="sidebar-composer composer-placeholder is-active" aria-label="直接记录" onFocus={props.onFocus}>
+    <section
+      id="quick-composer"
+      className="sidebar-composer composer-placeholder is-active"
+      aria-label="直接记录"
+      onFocus={props.onFocus}
+      onMouseDown={(event) => {
+        if (event.button !== 0 || (event.target as Element).closest('button,a,input,textarea,[contenteditable="true"]')) return;
+        event.preventDefault();
+        event.currentTarget.querySelector<HTMLElement>('.live-editor-host [contenteditable]')?.focus({ preventScroll: true });
+      }}
+    >
       <LiveEditor
         value={props.text}
         placeholder={`记一条… 支持 Markdown、#标签\n${saveKeys} 保存，侧栏保持展开`}
         ariaLabel={`直接输入新记录，${saveKeys} 保存，侧栏保持展开`}
-        minHeight={76}
+        minHeight={56}
         maxHeight={props.maxHeight}
         onChange={props.onChange}
         onReady={props.onReady}

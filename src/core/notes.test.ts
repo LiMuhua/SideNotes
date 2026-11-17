@@ -243,6 +243,10 @@ describe('展示辅助', () => {
   it('标题取首个非空行并去掉标记', () => {
     expect(noteTitle(note({ text: '## 发布检查\n\n正文 #开发' }))).toBe('发布检查');
     expect(noteTitle(note({ text: '**加粗标题**\n\n正文' }))).toBe('加粗标题');
+    // 原型第二版：引用、待办与有序列表的标记也去掉。
+    expect(noteTitle(note({ text: '> 引用的一句' }))).toBe('引用的一句');
+    expect(noteTitle(note({ text: '- [ ] 待办事项\n- [x] 已完成' }))).toBe('待办事项');
+    expect(noteTitle(note({ text: '2) 第二步' }))).toBe('第二步');
   });
 
   it('首行是图片或链接时只取说明文字', () => {

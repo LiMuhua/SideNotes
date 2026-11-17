@@ -225,7 +225,7 @@ export function noteTitle(note: Note): string {
   if (!line) return note.images.length ? '图片记录' : '记录';
   return (
     line
-      .replace(/^#{1,6}\s+|^[-*+]\s+|^\d+\.\s+/, '')
+      .replace(/^\s*(?:#{1,6}\s+|>\s*|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+)/, '')
       .replace(/!\[([^\]]*)\]\((?:<[^>]*>|[^)]*)\)/g, (_match, alt: string) => alt || '图片')
       .replace(/\[([^\]]*)\]\((?:<[^>]*>|[^)]*)\)/g, '$1')
       .replace(/<\/?u>/gi, '')

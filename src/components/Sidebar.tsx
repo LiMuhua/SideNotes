@@ -24,7 +24,7 @@ import { TagFilter } from "./TagFilter";
 import { TagManageDialog } from "./TagManageDialog";
 import { ChangelogDialog } from "./ChangelogDialog";
 import { UsageGuide } from "./UsageGuide";
-import { ToastRegion } from "./Modal";
+import { Modal, ToastRegion } from "./Modal";
 import appIcon from "../assets/favicon.svg";
 import { AttachmentDialog, type AttachmentSubject } from "./AttachmentDialog";
 import { useStore } from "../hooks/useStore";
@@ -81,6 +81,12 @@ const GAP_POLL_INTERVAL = 150;
 /** 两组图片附件是否相同（只比较标识与顺序）。 */
 function sameImages(left: NoteImage[], right: NoteImage[]): boolean {
   return left.length === right.length && left.every((image, index) => image.id === right[index].id);
+}
+
+/** 记录所在的位置（记录信息）：置顶、固定的标签页签或随记（原型 note-menu.js 的 place）。 */
+function notePlace(note: Note, pinned: readonly string[]): string {
+  const tag = pinnedTagOf(note, pinned);
+  return [note.pinned ? "置顶" : "", tag ? `页签「${tag}」` : note.pinned ? "" : "随记"].filter(Boolean).join("、");
 }
 
 export function Sidebar() {
@@ -213,9 +219,18 @@ export function Sidebar() {
   // 对话框打开期间鼠标移出侧栏不收起，否则对话框会随侧栏一起消失。
   /** 合并成一条的弹窗：来源（按列表中的顺序）、合并到的已有卡片与按标签合并时的标签。 */
   const [mergeRequest, setMergeRequest] = useState<{ notes: Note[]; target: Note | null; tag?: string } | null>(null);
+  /** 「记录信息」弹窗（卡片菜单，原型 note-menu.js 的 showInfo）。 */
+  const [infoNote, setInfoNote] = useState<Note | null>(null);
   const dialogOpen = Boolean(
-    managingTag || attachmentDialog || emojiTarget || changelogOpen || guideVisible || mergeRequest,
+    managingTag || attachmentDialog || emojiTarget || changelogOpen || guideVisible || mergeRequest || infoNote,
   );
+
+  /** 关闭「记录信息」：焦点回到打开它的卡片（原型第二版）。 */
+  const closeInfo = useCallback(() => {
+    const id = infoNote?.id;
+    setInfoNote(null);
+    window.requestAnimationFrame(() => focusCard(id));
+  }, [infoNote, focusCard]);
   // 卡片菜单与对话框渲染在侧栏元素之外，鼠标移上去就会触发侧栏的 mouseleave。
   // 与原型的 keepVisible 一致：到点时按最新状态再判断一次，避免先移出侧栏、随后才打开对话框时仍被收起。
   // 实际值在卡片手势之后计算（见下方）：holdRef 为任何情况下都保持展开的条件；
@@ -673,8 +688,12 @@ export function Sidebar() {
    */
   const saveComposer = useCallback(
     async () => {
-      // 与原型一致：草稿为空时不保存也不提示。
-      const { draft } = store.getState();
+      // 与原型一致：附件还在读取时只提示；草稿为空时不保存也不提示。
+      const { draft, pendingAttachments } = store.getState();
+      if (pendingAttachments > 0) {
+        toast("内容正在读取，请稍候");
+        return;
+      }
       if (!draft.text.trim() && !draft.images.length) return;
       // 在置顶页签中新建的置顶；在标签页签中新建的带上这个标签（新建卡片上的「#标签」，点 × 这条不带）。
       const note = await store.saveDraftAsNote({ pinned: tab === "pinned", tag: draftTag });
@@ -691,6 +710,8 @@ export function Sidebar() {
       setComposerText("");
       const skipped = tabTag && skipTag && tagKey(skipTag) === tagKey(tabTag) ? tabTag : "";
       setSkipTag("");
+      // 保存后列表回到顶部，新记录就在新建卡片下面（原型 focusNewComposer）。
+      if (listRef.current) listRef.current.scrollTop = 0;
       announceSaved(note, skipped);
     },
     [tab, draftTag, tabTag, skipTag, setSkipTag, announceSaved, toast],
@@ -738,8 +759,20 @@ export function Sidebar() {
    * 侧栏不出现在任务栏、Alt+Tab 与 Win+Tab 中（2026-11-16 用户要求，见后端 windows::create_owner_window）。
    */
   const togglePinned = useCallback(() => {
-    setPinned(!pinned);
-  }, [pinned]);
+    const next = !pinned;
+    setPinned(next);
+    if (next) {
+      cancelHide();
+      if (!editingRef.current && !searchOpen) window.dispatchEvent(new CustomEvent("sidenotes:focus-composer"));
+    }
+  }, [pinned, cancelHide, searchOpen]);
+
+  /** 手动收起侧栏（收起按钮、Esc、空白处菜单）：同时解除固定（原型 hideSidebar(true)）。 */
+  const hideManually = useCallback(() => {
+    setPinned(false);
+    setTagMenuOpen(false);
+    void bridge.hideSidebar(currentLayout());
+  }, [currentLayout]);
 
   /* ==================== 窗口失焦自动收起 ==================== */
   // 点到侧栏窗口之外与鼠标移出同样触发收起；是否保持展开由到点时的状态决定，
@@ -1293,10 +1326,9 @@ export function Sidebar() {
           void commitEdit();
           return;
         }
-        // 与原型一致：按键发生在新建卡片内即保存。保存后焦点仍留在新建卡片里，
-        // 不会再触发 focus，不能只依赖「新建卡片激活」状态，否则接着按 Ctrl+Enter 没有反应。
+        // 与原型一致：只有按键发生在新建卡片内才保存草稿（焦点在别处时不保存）。
         const inComposer = event.target instanceof Element && Boolean(event.target.closest("#quick-composer"));
-        if (composerActive || inComposer) {
+        if (inComposer) {
           void saveComposer();
         }
       }
@@ -1337,6 +1369,10 @@ export function Sidebar() {
           setChangelogOpen(false);
           return;
         }
+        if (infoNote) {
+          closeInfo();
+          return;
+        }
         if (guideVisible) {
           closeGuide();
           return;
@@ -1345,16 +1381,22 @@ export function Sidebar() {
           setTagMenuOpen(false);
           return;
         }
+        // 标签整理态：放弃没确认的改名，收起整理（原型 Esc 的第一层）。
+        if (tagsExpandedId) {
+          setTagsExpandedId(null);
+          return;
+        }
         // Esc 逐级退出（interactions.md 3.4）：菜单与弹窗在上面已经关闭，拖动由 useCardInteractions 取消。
         if (editing) {
           cancelEdit();
           return;
         }
-        // 新建卡片失去焦点，草稿保留。
+        // 新建卡片有内容时失去焦点，草稿保留；没有内容时照常往下（结束搜索、清除筛选或收起侧栏），与原型相同。
         const active = document.activeElement;
-        if (composerActive || (active instanceof HTMLElement && active.closest("#quick-composer"))) {
+        const draftFilled = Boolean(store.getState().draft.text.trim() || store.getState().draft.images.length);
+        if (draftFilled && active instanceof HTMLElement && active.closest("#quick-composer")) {
           setComposerActive(false);
-          if (active instanceof HTMLElement && active.closest("#quick-composer")) active.blur();
+          active.blur();
           return;
         }
         if (interactions.hasSelection) {
@@ -1371,9 +1413,8 @@ export function Sidebar() {
           setSelectedTag("");
           return;
         }
-        // 都没有，收起侧栏。
-        setTagMenuOpen(false);
-        void bridge.hideSidebar(currentLayout());
+        // 都没有，收起侧栏（手动收起，解除固定）。
+        hideManually();
       }
       // 焦点不在卡片上时，↑ ↓ 与 Enter 作用于高亮的卡片（悬停高亮、编辑或菜单结束后），焦点随之落到卡片上。
       if (
@@ -1680,7 +1721,7 @@ export function Sidebar() {
           break;
         }
         case "info":
-          window.dispatchEvent(new CustomEvent("sidenotes:note-info", { detail: note }));
+          setInfoNote(note);
           break;
         case "trash": {
           // 多选之中的卡片：作用于全部选中的记录（与原型 note-menu.js 的 targetIds 相同）。
@@ -1734,12 +1775,11 @@ export function Sidebar() {
           setGuideOpen(true);
           break;
         case "hide":
-          setTagMenuOpen(false);
-          void bridge.hideSidebar(currentLayout());
+          hideManually();
           break;
       }
     },
-    [startNewNote, openSearch, toggleCollapseAll, interactions, togglePinned, state.settings.edge, currentLayout],
+    [startNewNote, openSearch, toggleCollapseAll, interactions, togglePinned, state.settings.edge, hideManually],
   );
 
   /**
@@ -1983,6 +2023,36 @@ export function Sidebar() {
     [searching, setSearchQuery, selectTag],
   );
 
+  /* ==================== 标签整理态 ==================== */
+  // 整理态（卡片上的标签带 ×）时按在整理区之外：先退出整理态，这一下不再触发别的操作（原型 exitTagsFirst）。
+  // 改名框失焦时自己提交或放弃。
+  useEffect(() => {
+    if (!tagsExpandedId) return;
+    let swallowClick = false;
+    const onPointerDown = (event: PointerEvent): void => {
+      if (event.button !== 0) return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest(".note-tags.tags-expanded, .tag-suggestions, .floating-panel")) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      swallowClick = true;
+      (document.activeElement as HTMLElement | null)?.blur?.();
+      setTagsExpandedId(null);
+    };
+    const onClick = (event: MouseEvent): void => {
+      if (!swallowClick) return;
+      swallowClick = false;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("click", onClick, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("click", onClick, true);
+    };
+  }, [tagsExpandedId]);
+
   /* ==================== 记录窗口（T83） ==================== */
   // 记录窗口关闭时缩回侧栏中的卡片：它来问卡片在屏幕上的位置（侧栏收起或卡片不在视野里时回答 null，窗口原地淡出），
   // 缩回之后卡片轻轻一顿（原型 land）。记录窗口里点标签时，侧栏按这个标签筛选并展开。
@@ -2140,7 +2210,17 @@ export function Sidebar() {
         />
 
         <header className="sidebar-header">
-          <div className="sidebar-brand">
+          <div
+            className="sidebar-brand"
+            onDoubleClick={(event) => {
+              // 双击标题区的品牌：列表滚回顶部（原型第二版）。
+              if ((event.target as Element).closest("button")) return;
+              event.preventDefault();
+              window.getSelection()?.removeAllRanges();
+              const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+              listRef.current?.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+            }}
+          >
             {/* 品牌标记就是应用图标，配色固定，不随主题变化（components.md 第七节）。 */}
             <img className="brand-mark" src={appIcon} alt="" aria-hidden="true" />
             <h2>SideNotes</h2>
@@ -2155,7 +2235,7 @@ export function Sidebar() {
               aria-label={pinned ? "取消固定侧栏" : "固定侧栏"}
               onClick={togglePinned}
             >
-              <Icon name={pinned || settingsOpen ? "pin" : "pin-off"} />
+              <Icon name="pin" />
             </button>
             <button
               id="sidebar-close"
@@ -2164,7 +2244,7 @@ export function Sidebar() {
               data-action="hide-sidebar"
               aria-label="收起侧栏"
               aria-keyshortcuts="Escape"
-              onClick={() => void bridge.hideSidebar(currentLayout())}
+              onClick={hideManually}
             >
               <Icon name={state.settings.edge === "left" ? "arrow-left" : "arrow-right"} />
             </button>
@@ -2536,8 +2616,11 @@ export function Sidebar() {
                 onMore={(anchor) => openNoteMenu(note, anchor)}
                 onFilterTag={filterByTag}
                 onRemoveTag={async (tag) => {
-                  const newText = removeTag(note.text, tag);
-                  await store.commitEdit(note.id, newText, note.images);
+                  // 去掉最后一个标签后记录没有正文也没有图片时，留下标签名作为正文（原型 removeNoteTag）。
+                  let newText = removeTag(note.text, tag);
+                  if (!newText.trim() && !note.images.length) newText = tag;
+                  if (await store.commitEdit(note.id, newText, note.images)) toast(`已从此记录移除 #${tag}`);
+                  else toast("标签未保存，请重试", null, true);
                 }}
                 onRenameTag={async (tag, next) => {
                   const parsed = parse(note.text);
@@ -2552,6 +2635,8 @@ export function Sidebar() {
                 onToggleTagsExpanded={() =>
                   setTagsExpandedId((prev) => (prev === note.id ? null : note.id))
                 }
+                onEnterTagsExpanded={() => setTagsExpandedId(note.id)}
+                onInvalidTag={() => toast("标签使用文字、数字、下划线或短横线，最多40字", null, true)}
                 onAttachment={(reference, event) => handleNoteAttachment(note, reference, event)}
                 onEmbeddedImage={(image) => handleEmbeddedImage(note, image)}
                 onTaskToggle={(offset, checked) => void handleTaskToggle(note.id, offset, checked)}
@@ -2646,6 +2731,25 @@ export function Sidebar() {
         />
       ) : null}
 
+      {/* 记录信息（卡片菜单） */}
+      {infoNote ? (
+        <Modal title="记录信息" className="note-info-modal" onClose={closeInfo}>
+          {[
+            ["创建时间", new Date(infoNote.createdAt).toLocaleString("zh-CN", { hour12: false })],
+            ["修改时间", new Date(infoNote.updatedAt).toLocaleString("zh-CN", { hour12: false })],
+            ["正文长度", `${infoNote.text.length} 字`],
+            ["图片附件", `${infoNote.images.length} 张`],
+            ["位置", notePlace(infoNote, pinnedTags)],
+            ["标识", infoNote.id],
+          ].map(([label, value]) => (
+            <div key={label} className="info-row">
+              <span>{label}</span>
+              <span>{value}</span>
+            </div>
+          ))}
+        </Modal>
+      ) : null}
+
       {/* 卡片上下文菜单 */}
       {contextMenu ? (
         <NoteMenu
@@ -2674,7 +2778,9 @@ export function Sidebar() {
             const { note } = moveMenu;
             setMoveMenu(null);
             const ids = interactions.selected.has(note.id) && interactions.selected.size > 1 ? Array.from(interactions.selected) : [note.id];
-            void moveToTab(ids, destination, searching ? "home" : undefined);
+            void moveToTab(ids, destination, searching ? "home" : undefined).then((done) => {
+              if (done) interactions.clearSelection();
+            });
           }}
           onClose={() => setMoveMenu(null)}
         />

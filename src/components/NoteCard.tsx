@@ -16,7 +16,7 @@ import { LiveEditor } from './LiveEditor';
 import { TagInput } from './TagInput';
 import { Markdown, MarkdownInline } from './Markdown';
 import { formatTime, likelyLong, noteTitle } from '../core/notes';
-import { parse } from '../core/tags';
+import { isValidTag, parse } from '../core/tags';
 import { noteDisplay, sourceOffset } from '../core/display';
 import type { AttachmentReference } from '../core/attachments';
 import type { EditSession, Note, NoteImage } from '../core/types';
@@ -73,6 +73,10 @@ export interface NoteCardProps {
   onRemoveTag: (tag: string) => void;
   onRenameTag: (tag: string, next: string) => void;
   onToggleTagsExpanded: () => void;
+  /** 双击标签改名时进入整理态（原型 startTagRename）。 */
+  onEnterTagsExpanded: () => void;
+  /** 改的标签名不合规（原型 finishTagRename 的提示）。 */
+  onInvalidTag: () => void;
   /**
    * 点击正文中的附件（图片、文件引用）：预览时范围已换算为记录原文中的位置，
    * 编辑时为编辑器原文中的位置。按住 Ctrl 点击直接打开，由调用方按 event 判断。
@@ -139,6 +143,8 @@ function TagRow({
   onRemove,
   onRename,
   onToggleExpanded,
+  onEnterExpanded,
+  onInvalid,
 }: {
   tags: string[];
   expanded: boolean;
@@ -148,6 +154,8 @@ function TagRow({
   onRemove: (tag: string) => void;
   onRename: (tag: string, next: string) => void;
   onToggleExpanded: () => void;
+  onEnterExpanded: () => void;
+  onInvalid: () => void;
 }) {
   const [renaming, setRenaming] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -202,13 +210,25 @@ function TagRow({
     }
   }, [renaming]);
 
-  /** 提交重命名；空值或未变化时直接退出。 */
-  const commit = useCallback(() => {
-    if (!renaming) return;
-    const next = draft.trim().replace(/^#/, '');
-    if (next && next !== renaming) onRename(renaming, next);
-    setRenaming(null);
-  }, [draft, renaming, onRename]);
+  /**
+   * 提交重命名；未变化时直接退出。名称不合规时提示（原型 finishTagRename）：按 Enter 时留在输入框里改，
+   * 点到别处时放弃这次修改。
+   */
+  const commit = useCallback(
+    (leaving = false) => {
+      if (!renaming) return;
+      const next = draft.trim().replace(/^#/, '');
+      if (next !== renaming && !isValidTag(next)) {
+        onInvalid();
+        if (leaving) setRenaming(null);
+        else input.current?.focus();
+        return;
+      }
+      if (next !== renaming) onRename(renaming, next);
+      setRenaming(null);
+    },
+    [draft, renaming, onRename, onInvalid],
+  );
 
   return (
     <div ref={row} className={expanded ? 'note-tags tags-expanded' : 'note-tags'}>
@@ -226,7 +246,7 @@ function TagRow({
             aria-label="修改此记录的标签"
             onValueChange={setDraft}
             onClick={(event) => event.stopPropagation()}
-            onBlur={commit}
+            onBlur={() => commit(true)}
             onKeyDown={(event) => {
               if (event.nativeEvent.isComposing) return;
               if (event.key === 'Enter') {
@@ -258,6 +278,8 @@ function TagRow({
                 window.clearTimeout(filterTimer.current);
                 setDraft(tag);
                 setRenaming(tag);
+                // 改名时同时进入整理态，其它卡片的整理态收起（原型 startTagRename）。
+                if (!expanded) onEnterExpanded();
               }}
             >
               <span>{`#${tag}`}</span>
@@ -392,8 +414,9 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
           {note.emoji || '📝'}
         </button>
         <h3 className="note-title">
+          {/* 首行是代码、列表、引用、图片、分隔线或文件路径时整段作为正文，标题写「记录」（首行超过 120 字时仍用短标题）。 */}
           {display.structured ? (
-            title
+            display.firstLine.length > 120 ? title : '记录'
           ) : (
             <MarkdownInline
               text={titleText}
@@ -538,7 +561,7 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
               key={image.id}
               type="button"
               className="note-image-button"
-              aria-label={`图片：${image.name}`}
+              aria-label={`预览图片：${image.name}`}
               data-drag-item="image"
               data-image-id={image.id}
               tabIndex={tabIndex}
@@ -581,6 +604,8 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
             onRemove={props.onRemoveTag}
             onRename={props.onRenameTag}
             onToggleExpanded={props.onToggleTagsExpanded}
+            onEnterExpanded={props.onEnterTagsExpanded}
+            onInvalid={props.onInvalidTag}
           />
         </footer>
       )}
