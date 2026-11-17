@@ -1,43 +1,25 @@
 /**
- * 字体候选的过滤与选用。
+ * 字体的选用（设置页的字体组合框，原型第二版 settings.js 的 fontPicker）。
  *
- * 设置页的字体下拉框按输入过滤候选，回车选用排在第一位的候选：名称完全相同的在前，
- * 其次是以输入开头的，再次是包含输入的，同类之间保持原有顺序（常用字体在前，系统字体按名称）。
- * 没有任何候选时不选用，避免把不存在的字体名写进设置后静默回落到系统默认字体。
- * 候选最前是「跟随主题」（默认，保存为空字符串），最后是「系统默认」。
+ * 候选最前是「跟随主题」（默认，保存为空字符串），最后是「系统默认」。可以从候选中选，也可以输入任意名称：
+ * 名称与候选只差大小写时用候选的写法；不在候选中时，列表末尾多一项「使用“名称”」，回车或点它就用这个名称。
  */
-
-/** 按输入过滤字体，不区分大小写；输入为空时原样返回。 */
-export function matchFonts(families: readonly string[], query: string): string[] {
-  const key = query.trim().toLocaleLowerCase();
-  if (!key) return [...families];
-  const rank = (family: string): number => {
-    const name = family.toLocaleLowerCase();
-    if (name === key) return 0;
-    if (name.startsWith(key)) return 1;
-    return name.includes(key) ? 2 : -1;
-  };
-  return families
-    .map((family, index) => ({ family, index, rank: rank(family) }))
-    .filter((item) => item.rank >= 0)
-    .sort((left, right) => left.rank - right.rank || left.index - right.index)
-    .map((item) => item.family);
-}
 
 /** 字体「跟随主题」的显示文字，保存为空字符串。 */
 export const FOLLOW_THEME_LABEL = '跟随主题';
 /** 字体「系统默认」：Segoe UI 与微软雅黑 UI，按名称保存。 */
 export const SYSTEM_FONT_LABEL = '系统默认';
+/** 保存的字体名最长 120 个字符。 */
+const MAX_FAMILY_LENGTH = 120;
 
 /**
- * 回车时选用的字体：输入为空或是「跟随主题」中的文字时返回空串（跟随主题）；
- * 否则返回排在第一位的候选，「系统默认」也参与匹配；没有候选时返回 null，表示不允许设置。
+ * 输入的字体名。
+ * @returns family 是要保存的值（空输入或「跟随主题」为空字符串）；known 表示是否是候选中已有的一项。
  */
-export function resolveFont(families: readonly string[], typed: string): string | null {
-  const query = typed.trim();
-  const key = query.toLocaleLowerCase();
-  if (!query || FOLLOW_THEME_LABEL.includes(query)) return '';
-  const first = matchFonts(families, query)[0];
-  if (first !== undefined) return first;
-  return SYSTEM_FONT_LABEL.toLocaleLowerCase().includes(key) ? SYSTEM_FONT_LABEL : null;
+export function typedFont(families: readonly string[], typed: string): { family: string; known: boolean } {
+  const value = typed.trim().slice(0, MAX_FAMILY_LENGTH);
+  if (!value || value === FOLLOW_THEME_LABEL) return { family: '', known: true };
+  const key = value.toLocaleLowerCase();
+  const match = [...families, SYSTEM_FONT_LABEL].find((family) => family.toLocaleLowerCase() === key);
+  return { family: match ?? value, known: match !== undefined };
 }

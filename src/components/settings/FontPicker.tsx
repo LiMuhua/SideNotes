@@ -1,18 +1,16 @@
 /**
  * 字体组合框。
  *
- * 对应原型 settings.js 的 fontPicker：展开即列出常用字体与系统已安装的字体，输入时按输入内容
- * 过滤候选，回车选用排在第一位的候选；没有匹配的字体时不更改设置并提示，避免写入不存在的字体名后
- * 静默回落到系统默认字体。列表末尾固定一项「系统默认」。桌面端由后端读取系统字体，
+ * 对应原型第二版 settings.js 的 fontPicker：展开即列出「跟随主题」、常用字体与系统已安装的字体，末尾固定「系统默认」；
+ * 输入时列表不变，输入的名称不在列表中时末尾多一项「使用“名称”」，回车或点它就用这个名称。桌面端由后端读取系统字体，
  * 不再需要网页的字体访问授权；浏览器预览读不到系统字体，只列出常用字体。
  */
 
 import { useEffect, useState } from 'react';
 import * as bridge from '../../core/bridge';
-import { FOLLOW_THEME_LABEL, SYSTEM_FONT_LABEL, matchFonts, resolveFont } from '../../core/fonts';
+import { FOLLOW_THEME_LABEL, SYSTEM_FONT_LABEL, typedFont } from '../../core/fonts';
 import { THEME_FONTS, surfaceSpec } from '../../core/surfaces';
 import type { SurfaceMode } from '../../core/types';
-import { useToast } from '../../hooks/useToast';
 import { Combobox, type ComboOption } from './Combobox';
 
 /** 常见字体与五套主题用到的字体（与原型 settings.js 的 FONTS 相同）。「跟随主题」在最前，「系统默认」固定在列表末尾。 */
@@ -62,7 +60,6 @@ export function FontPicker({
   surface: SurfaceMode;
   onChoose: (family: string) => Promise<boolean>;
 }) {
-  const toast = useToast();
   const saved = value || FOLLOW_THEME_LABEL;
   const [fonts, setFonts] = useState(installedFonts);
 
@@ -85,16 +82,20 @@ export function FontPicker({
     detail: `${surfaceSpec(surface).name} · ${THEME_FONTS[surface]}`,
   };
 
-  /** 输入时只列出匹配的字体（见 matchFonts）；最前是「跟随主题」，末尾固定「系统默认」。 */
-  const options = (typed: string | null): ComboOption[] => [
-    ...(typed && !FOLLOW_THEME_LABEL.includes(typed.trim()) ? [] : [follow]),
-    ...matchFonts(families, typed ?? '').map((family) => ({
+  /** 全部候选：最前是「跟随主题」，末尾固定「系统默认」；输入的名称不在列表中时再加一项「使用“名称”」。 */
+  const all: ComboOption[] = [
+    follow,
+    ...families.map((family) => ({
       value: family,
       label: family,
       fontFamily: `"${family.replace(/["\\]/g, '')}"`,
     })),
     SYSTEM_OPTION,
   ];
+  const options = (typed: string | null): ComboOption[] => {
+    const custom = typed === null ? null : typedFont(families, typed);
+    return custom && !custom.known ? [...all, { value: custom.family, label: `使用“${custom.family}”`, className: 'font-custom-option' }] : all;
+  };
 
   return (
     <Combobox
@@ -104,14 +105,7 @@ export function FontPicker({
       label="字体"
       placeholder="选择或输入字体"
       options={options}
-      onCommit={(raw) => {
-        const family = resolveFont(families, raw);
-        if (family === null) {
-          toast(`没有匹配“${raw.trim()}”的字体，字体未更改`, null, true);
-          return false;
-        }
-        return onChoose(family.slice(0, 120));
-      }}
+      onCommit={(raw) => onChoose(typedFont(families, raw).family)}
     />
   );
 }

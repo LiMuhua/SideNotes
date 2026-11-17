@@ -617,7 +617,6 @@ export function RangeField({
           value={draft ?? String(sliding ?? value)}
           data-setting-key={settingKey}
           aria-label={`${label}数值`}
-          title={`输入 ${min}–${max}，步进 ${step}`}
           onChange={(event) => setDraft(event.target.value)}
           onClick={(event) => event.currentTarget.select()}
           onBlur={() => {

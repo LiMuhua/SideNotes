@@ -1,12 +1,14 @@
 /**
  * 可输入的下拉框。
  *
- * 外观沿用原型字体组合框的类名（font-combobox）：输入框右侧是展开按钮，下方列出候选。
+ * 外观沿用原型字体组合框的类名（font-combobox）：输入框右侧是展开按钮，候选列表挂在 body 下的浮层中
+ * （原型 fontPicker 的 `SideNotesLayer.open`），与输入框同宽，不被下面的设置卡遮住，放不下时翻到上方或在列表里滚动。
  * 可以直接输入，也可以从候选中选择：上下键切换候选，回车选用当前候选或提交输入，
  * Esc 放弃输入并收起列表；没有可收起的内容时 Esc 不做处理，交给设置窗口关闭。
  */
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { Floating } from '../Floating';
 import { ActionButton, classes } from './controls';
 
 /** 一个候选。 */
@@ -45,8 +47,9 @@ export function Combobox({ text, options, selected, label, placeholder, commitOn
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const box = useRef<HTMLDivElement>(null);
+  const field = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
-  const list = useRef<HTMLDivElement>(null);
+  const listId = `${id}-options`;
   // 失焦时读取最新的输入，避免回车提交后紧接着的失焦按旧值再提交一次。
   const latestDraft = useRef<string | null>(null);
   useLayoutEffect(() => {
@@ -56,12 +59,12 @@ export function Combobox({ text, options, selected, label, placeholder, commitOn
 
   // 展开时让已选中的一项可见，键盘切换候选时让当前项保持可见。
   useEffect(() => {
-    if (open) list.current?.querySelector('.is-selected')?.scrollIntoView({ block: 'nearest' });
-  }, [open]);
+    if (open) document.getElementById(listId)?.querySelector('.is-selected')?.scrollIntoView({ block: 'nearest' });
+  }, [open, listId]);
   useEffect(() => {
     if (active < 0) return;
-    list.current?.querySelector('.is-active')?.scrollIntoView({ block: 'nearest' });
-  }, [active]);
+    document.getElementById(listId)?.querySelector('.is-active')?.scrollIntoView({ block: 'nearest' });
+  }, [active, listId]);
 
   const close = (): void => {
     setOpen(false);
@@ -92,7 +95,7 @@ export function Combobox({ text, options, selected, label, placeholder, commitOn
         }, 0);
       }}
     >
-      <div className="font-combobox-field">
+      <div ref={field} className="font-combobox-field">
         <input
           ref={input}
           className="form-control"
@@ -104,7 +107,7 @@ export function Combobox({ text, options, selected, label, placeholder, commitOn
           role="combobox"
           aria-autocomplete="list"
           aria-expanded={open}
-          aria-controls={`${id}-options`}
+          aria-controls={listId}
           aria-activedescendant={open && active >= 0 ? `${id}-option-${active}` : undefined}
           onFocus={() => setOpen(true)}
           onChange={(event) => {
@@ -134,7 +137,7 @@ export function Combobox({ text, options, selected, label, placeholder, commitOn
           }}
         />
         <ActionButton
-          label={`展开${label}候选`}
+          label={`展开${label}列表`}
           icon="chevron-down"
           className="font-combobox-toggle icon-button"
           tabIndex={-1}
@@ -146,13 +149,14 @@ export function Combobox({ text, options, selected, label, placeholder, commitOn
           }}
         />
       </div>
-      <div
-        ref={list}
-        className="font-combobox-list"
-        id={`${id}-options`}
+      <Floating
+        anchor={field}
+        open={open && choices.length > 0}
+        options={{ placement: 'bottom-start', offset: 4, matchWidth: true, scroll: true }}
+        className="font-combobox-list settings-floating"
+        id={listId}
         role="listbox"
         aria-label={`${label}候选`}
-        hidden={!open || !choices.length}
       >
         {choices.map((choice, index) => (
           <ActionButton
@@ -176,7 +180,7 @@ export function Combobox({ text, options, selected, label, placeholder, commitOn
             {choice.detail ? <span className="font-option-detail">{choice.detail}</span> : null}
           </ActionButton>
         ))}
-      </div>
+      </Floating>
     </div>
   );
 }
