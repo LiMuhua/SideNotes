@@ -89,15 +89,34 @@ describe('实时 Markdown 编辑器', () => {
     expect(bullet?.getAttribute('data-md-decoration')).toBe('');
   });
 
-  it('光标在列表项正文开头、行首或空项末尾时放在项头元素之外', () => {
+  it('光标在列表项正文开头或空项末尾时放在项头元素之外；落在项头上时移到正文开头', () => {
     const { editor } = mount('- 内容\n- ');
-    for (const offset of [2, 0, 7]) {
+    for (const offset of [2, 7]) {
       caretAt(editor, offset);
       const anchor = window.getSelection()?.anchorNode ?? null;
       const element = anchor instanceof Element ? anchor : anchor?.parentElement;
       expect(element?.closest('.md-list-marker') ?? null).toBeNull();
       expect(editor.readSelection()).toEqual({ start: offset, end: offset, direction: 'none' });
     }
+    // 项头一直隐藏（原型第二版）：光标落在行首等项头里的位置时，选区变化后移到正文开头。
+    caretAt(editor, 0);
+    editor.selectionChanged();
+    expect(editor.readSelection()).toEqual({ start: 2, end: 2, direction: 'none' });
+    expect(editor.element.querySelector('.md-list-marker')?.hasAttribute('hidden')).toBe(true);
+  });
+
+  it('列表项与待办正文开头按退格删去整个项头，缩进保留，这一行变回普通文字', () => {
+    const { editor } = mount('  - 子项\n- [ ] 待办');
+    caretAt(editor, 4);
+    input(editor, 'deleteContentBackward');
+    expect(editor.getValue()).toBe('  子项\n- [ ] 待办');
+    caretAt(editor, 11);
+    input(editor, 'deleteContentBackward');
+    expect(editor.getValue()).toBe('  子项\n待办');
+    // 正文中间的退格照常只删一个字。
+    caretAt(editor, 3);
+    input(editor, 'deleteContentBackward');
+    expect(editor.getValue()).toBe('  项\n待办');
   });
 
   it('列表项中 Home 回到正文开头，正文开头按 End 到达行尾，按住 Shift 时扩选', () => {
@@ -423,19 +442,19 @@ describe('粘贴截图与本机图片', () => {
     document.body.replaceChildren();
   });
 
-  it('粘贴文件时交给应用保存，返回的引用插在粘贴时的光标处', async () => {
+  it('粘贴文件时交给应用保存，返回的引用按插入规则插在粘贴时的光标处', async () => {
     const host = document.createElement('div');
     document.body.append(host);
     const received: string[] = [];
     const editor = new MarkdownEditor(host, {
-      value: '前后',
+      value: '标题\n前后',
       pasteFiles: async (files) => {
         received.push(...files.map((file) => file.name));
         return '![截图](C:/Data/attachments/1-0/截图.png)';
       },
     });
     editor.element.focus();
-    editor.setSelectionRange(1, 1);
+    editor.setSelectionRange(4, 4);
     const event = new Event('paste', { bubbles: true, cancelable: true });
     const file = new File(['png'], 'image.png', { type: 'image/png' });
     Object.defineProperty(event, 'clipboardData', { value: { files: [file], getData: () => '' } });
@@ -443,7 +462,12 @@ describe('粘贴截图与本机图片', () => {
     expect(event.defaultPrevented).toBe(true);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(received).toEqual(['image.png']);
-    expect(editor.getValue()).toBe('前![截图](C:/Data/attachments/1-0/截图.png)后');
+    expect(editor.getValue()).toBe('标题\n前![截图](C:/Data/attachments/1-0/截图.png)后');
+    // 光标在卡片的标题行上时，附件作为单独一行插在标题之后，标题原样保留（原型第二版）。
+    editor.setSelectionRange(1, 1);
+    editor.element.dispatchEvent(event);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(editor.getValue().split('\n').slice(0, 2)).toEqual(['标题', '![截图](C:/Data/attachments/1-0/截图.png)']);
   });
 
   it('本机图片经换算后的地址预览，没有换算方法时只显示原文', () => {

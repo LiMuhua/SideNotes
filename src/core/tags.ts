@@ -40,6 +40,25 @@ export interface ParsedNote {
 }
 
 /**
+ * 标签行的起点（原型 content.js 的 tagLineStart）：原文末尾只有标签（#a #b）的那一行从哪里开始；没有标签行时为 -1。
+ */
+export function tagLineStart(source: string): number {
+  const match = /(?:^|\n)([\t ]*#[\p{L}\p{N}_-]+(?:[\t ]+#[\p{L}\p{N}_-]+)*[\t ]*)\s*$/u.exec(String(source ?? ''));
+  return match ? match.index + (match[0].startsWith('\n') ? 1 : 0) : -1;
+}
+
+/**
+ * 正文末尾（原型 bodyEnd）：标签行之前最后一个非空字符之后。进入编辑时光标放在这里，接着写正文，而不是落在标签行末尾；
+ * 只有标签、没有正文时放在全文末尾，免得输入的文字并进标签行。
+ */
+export function bodyEnd(source: string): number {
+  const text = String(source ?? '');
+  const tags = tagLineStart(text);
+  const body = (tags < 0 ? text : text.slice(0, tags)).replace(/\s+$/, '');
+  return body ? body.length : text.length;
+}
+
+/**
  * 解析正文末尾或独立行声明的标签。
  *
  * 保留 Markdown 代码块与标题；返回去重后的标签原文（保持用户书写的大小写）。

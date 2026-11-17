@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalize, compose, hasTag, isValidTag, parse, removeTag, tagKey } from './tags';
+import { bodyEnd, canonicalize, compose, hasTag, isValidTag, parse, removeTag, tagKey, tagLineStart } from './tags';
 
 describe('标签解析', () => {
   it('提取行尾标签并移出正文', () => {
@@ -78,5 +78,19 @@ describe('标签解析', () => {
 
   it('CRLF 原文也能正确解析', () => {
     expect(parse('一行\r\n二行 #标签').tags).toEqual(['标签']);
+  });
+});
+
+describe('tagLineStart 与 bodyEnd', () => {
+  it('找到末尾的标签行，正文末尾在标签行之前最后一个非空字符之后', () => {
+    const text = '标题\n正文最后一句\n\n#工作 #会议';
+    expect(tagLineStart(text)).toBe(text.indexOf('#工作'));
+    expect(bodyEnd(text)).toBe(text.indexOf('句') + 1);
+  });
+
+  it('没有标签行时在全文末尾去掉尾部空白；只有标签时在全文末尾', () => {
+    expect(tagLineStart('只有正文')).toBe(-1);
+    expect(bodyEnd('只有正文\n\n')).toBe(4);
+    expect(bodyEnd('#工作 #会议')).toBe('#工作 #会议'.length);
   });
 });

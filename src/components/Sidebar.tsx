@@ -55,14 +55,15 @@ import { knownTags, searchGroups, searchTerms, singleSearchTag, wordTag, SEARCH_
 import { listHits, setSearchHits } from "../core/searchHighlight";
 import { insertAtDisplayLine, moveImage, moveReference } from "../core/transfer";
 import {
-  chooseAndImportFiles,
   importPastedFiles,
   openAttachment,
+  referencesFor,
   replaceReference,
   type AttachmentReference,
   type ReferenceSpan,
 } from "../core/attachments";
-import { parse, removeTag, tagKey, canonicalize, isValidTag, withTag } from "../core/tags";
+import { placeAttachment } from "../core/insert";
+import { bodyEnd, parse, removeTag, tagKey, canonicalize, isValidTag, withTag } from "../core/tags";
 import { WIDTH_RANGE, uiZoom } from "../core/settings";
 import { comboFromEvent, matches } from "../core/shortcuts";
 import type { EditSession, Note, NoteImage, TabKey } from "../core/types";
@@ -1176,7 +1177,7 @@ export function Sidebar() {
       }
       if (target.kind === "editor") {
         target.editor.focus({ preventScroll: true });
-        target.editor.replace(markdown, { start: target.offset, end: target.offset, direction: "none" });
+        target.editor.insertAttachment(markdown, { start: target.offset, end: target.offset, direction: "none" });
         return;
       }
       const note = store.getState().notes.find((item) => item.id === target.noteId);
@@ -1751,9 +1752,6 @@ export function Sidebar() {
   );
 
   /* ==================== 附件 ==================== */
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const fileMode = useRef<"image" | "file">("image");
-  const fileTarget = useRef<"composer" | string>("composer");
 
   // 记录变化（删除记录、清空回收站、更换附件等）一分钟后，清理不再被任何记录引用的附件副本；
   // 启动后半分钟先清理一次。只由侧栏窗口发起，避免三个窗口重复清理；本窗口尚未保存的编辑与
@@ -1788,19 +1786,28 @@ export function Sidebar() {
   }, [state.ready, state.loadFailed]);
 
   /**
-   * 引用文件：用系统对话框选择文件，复制到应用数据目录中维护，在光标处插入引用（图片为内嵌图片）。
-   * 记录只引用副本，原始文件移动或删除后引用仍然有效。
+   * 添加图片与引用文件（原型第二版：两者都写进正文）：用系统对话框选择文件，复制到应用数据目录中维护，
+   * 按插入规则插在光标处（标签行始终在最后，见 core/insert）。记录只引用副本，原始文件移动或删除后引用仍然有效。
    */
   const referenceFiles = useCallback(
-    async (target: "composer" | string) => {
+    async (target: "composer" | string, images = false) => {
       // 系统对话框打开期间侧栏失焦，不保存编辑也不收起；对话框关闭、窗口重新获得焦点后复位。
       choosingFiles.current = true;
-      let markdown: string | null;
+      let markdown: string | null = null;
       try {
-        markdown = await chooseAndImportFiles();
+        const paths = await bridge.chooseFiles({ images });
+        choosingFiles.current = false;
+        if (paths?.length) {
+          store.setPendingAttachments(1);
+          try {
+            markdown = referencesFor(await bridge.importFiles(paths));
+          } finally {
+            store.setPendingAttachments(-1);
+          }
+        }
       } catch (error) {
         const reason = bridge.errorText(error, "请稍后重试");
-        toast(`文件未能引用：${reason}`, null, true);
+        toast(`${images ? "图片" : "文件"}未能插入：${reason}`, null, true);
         return;
       } finally {
         choosingFiles.current = false;
@@ -1810,9 +1817,10 @@ export function Sidebar() {
       if (target !== "composer" && editingRef.current?.id !== target) return;
       if (editor) {
         editor.focus({ preventScroll: true });
-        editor.replace(markdown);
+        editor.insertAttachment(markdown);
       } else if (target === "composer") {
-        setComposerText((current) => current + (current ? "\n" : "") + markdown);
+        const inserted = markdown;
+        setComposerText((current) => placeAttachment(current, inserted, null).text);
       }
     },
     [toast],
@@ -1820,18 +1828,7 @@ export function Sidebar() {
 
   const triggerFileInput = useCallback(
     (mode: "image" | "file", target: "composer" | string) => {
-      if (mode === "file") {
-        void referenceFiles(target);
-        return;
-      }
-      fileMode.current = mode;
-      fileTarget.current = target;
-      if (fileInputRef.current) {
-        fileInputRef.current.accept = "image/*";
-        // 系统对话框打开期间侧栏失焦，不保存编辑也不收起；对话框关闭、窗口重新获得焦点后复位。
-        choosingFiles.current = true;
-        fileInputRef.current.click();
-      }
+      void referenceFiles(target, mode === "image");
     },
     [referenceFiles],
   );
@@ -1956,56 +1953,6 @@ export function Sidebar() {
       setAttachmentDialog({ subject: { kind: "embedded", image }, replaceImage });
     },
     [toast],
-  );
-
-  const handleFileSelected = useCallback(
-    async (event: React.ChangeEvent<HTMLInputElement>) => {
-      choosingFiles.current = false;
-      const files = Array.from(event.target.files ?? []);
-      event.target.value = "";
-      if (!files.length) return;
-
-      if (fileMode.current === "image") {
-        store.setPendingAttachments(files.length);
-        const images: NoteImage[] = [];
-        for (const file of files) {
-          if (!file.type.startsWith("image/")) {
-            toast(`${file.name} 不是图片`, null, true);
-            store.setPendingAttachments(-1);
-            continue;
-          }
-          if (file.size > 2 * 1024 * 1024) {
-            toast(`${file.name} 超过 2 MB 限制`, null, true);
-            store.setPendingAttachments(-1);
-            continue;
-          }
-          await new Promise<void>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-              images.push({
-                id: crypto.randomUUID(),
-                name: file.name,
-                type: file.type,
-                data: String(reader.result),
-              });
-              store.setPendingAttachments(-1);
-              resolve();
-            };
-            reader.onerror = () => {
-              toast(`读取 ${file.name} 失败`, null, true);
-              store.setPendingAttachments(-1);
-              resolve();
-            };
-            reader.readAsDataURL(file);
-          });
-        }
-        if (fileTarget.current === "composer") store.addDraftImages(images);
-        else if (editing?.id === fileTarget.current) {
-          setEditing((prev) => (prev ? { ...prev, images: [...prev.images, ...images] } : prev));
-        }
-      }
-    },
-    [editing, toast],
   );
 
   /* ==================== 标签筛选 ==================== */
@@ -2508,6 +2455,9 @@ export function Sidebar() {
                 onEditChange={(text) => setEditing((prev) => (prev ? { ...prev, text } : prev))}
                 onEditReady={(editor) => {
                   editorRef.current = editor;
+                  // 进入编辑时光标在正文末尾、标签行之前（原型第二版 bodyEnd），接着写正文。
+                  const end = bodyEnd(editor.getValue());
+                  editor.setSelectionRange(end, end);
                 }}
                 onEditBlur={handleEditBlur}
                 onFinishEdit={() => void commitEdit()}
@@ -2620,7 +2570,6 @@ export function Sidebar() {
       </aside>
 
       {/* 隐藏文件选择器 */}
-      <input ref={fileInputRef} type="file" hidden multiple onChange={handleFileSelected} />
 
       {/* 图片预览 */}
       {/* 附件弹窗：查看与修改引用、更换、打开、另存为或删除 */}

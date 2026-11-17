@@ -21,6 +21,7 @@ import { useToast } from '../hooks/useToast';
 import * as store from '../core/store';
 import * as bridge from '../core/bridge';
 import { importPastedFiles, openAttachment, referencesFor, replaceReference } from '../core/attachments';
+import { placeAttachment } from '../core/insert';
 import { caretFromPoint, isFileDrag } from '../hooks/useFileDrop';
 import type { NoteImage } from '../core/types';
 import type { EditorAttachment, MarkdownEditor } from '../core/editor';
@@ -112,7 +113,7 @@ export function Capture() {
       void importPastedFiles(files)
         .then((markdown) => {
           editor.focus({ preventScroll: true });
-          editor.replace(markdown, { start: offset, end: offset, direction: 'none' });
+          editor.insertAttachment(markdown, { start: offset, end: offset, direction: 'none' });
         })
         .catch((error: unknown) =>
           toast(`文件未能插入：${bridge.errorText(error, '请稍后重试')}`, null, true),
@@ -190,9 +191,9 @@ export function Capture() {
     const editor = editorRef.current;
     if (editor) {
       editor.focus({ preventScroll: true });
-      editor.replace(markdown);
+      editor.insertAttachment(markdown);
     } else {
-      setLocalText((prev) => prev + (prev ? '\n' : '') + markdown);
+      setLocalText((prev) => placeAttachment(prev, markdown, null).text);
     }
   }, []);
 

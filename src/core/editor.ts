@@ -21,6 +21,7 @@
  */
 
 import { fileLabel, filePath, isImageName, isLegacyToken } from './files';
+import { placeAttachment } from './insert';
 import {
   codeLanguage,
   continueBlock,
@@ -127,6 +128,9 @@ interface TagSuggestion {
 
 /** 联想最多列出的候选数。 */
 const MAX_TAG_SUGGESTIONS = 9;
+
+/** 列表项或待办的项头：缩进、圆点或序号、空白与待办标记（与原型 clampToContent、removeListPrefix 相同）。 */
+const LIST_PREFIX = /^(\s{0,3})([-+*]|\d+[.)])([\t ]+)(\[[ xX]\][\t ]+)?/;
 
 /** 按行拆分，保留换行符种类。 */
 function splitLines(value: string): LineModel[] {
@@ -394,6 +398,15 @@ export class MarkdownEditor {
     return true;
   }
 
+  /**
+   * 插入附件引用（原型第二版的插入规则，见 core/insert）：标签行始终在最后；落在标题行上时作为单独一行插在标题之后；
+   * 其余插在 `range`（默认当前选区）处。可以撤销。
+   */
+  insertAttachment(markdown: string, range: SourceRange = this.readSelection()): void {
+    const placed = placeAttachment(this.value, markdown, range);
+    this.applyEdit({ value: placed.text, start: placed.caret, end: placed.caret }, range);
+  }
+
   /** 记录当前状态用于撤销。拖放等外部插入在修改前调用。 */
   remember(selection: SourceRange): void {
     this.undoStack.push({ value: this.value, selection: { ...selection } });
@@ -449,12 +462,46 @@ export class MarkdownEditor {
   /** 选区变化时同步状态；仅在标记边界或所在行变化时重排，否则只更新标签联想。 */
   selectionChanged(): void {
     if (this.destroyed || this.rendering || this.composing || !this.hasFocus()) return;
+    const previous = this.selection;
     this.selection = this.readSelection();
+    const clamped = this.clampToContent(this.selection, previous);
+    if (clamped) {
+      this.selection = clamped;
+      this.restoreSelection(clamped);
+    }
     this.activeLine = this.lineAt(
       this.selection.direction === 'backward' ? this.selection.start : this.selection.end,
     );
     if (this.markerKey() !== this.markerState) this.render(this.selection);
     else this.refreshSuggestion();
+  }
+
+  /**
+   * 光标落在列表项或待办的项头上（圆点、序号或复选框之前）时移到正文开头：项头不能编辑，只能整体删去（原型 clampToContent）。
+   * 从正文开头往左移时跳到上一行末尾；选中一段文字时不处理；代码块里的「- 」不是列表。
+   */
+  private clampToContent(next: SourceRange, previous: SourceRange | null): SourceRange | null {
+    if (next.start !== next.end) return null;
+    const lines = splitLines(this.value);
+    const index = this.lineAt(next.end);
+    const line = lines[index];
+    const item = line?.text.match(LIST_PREFIX);
+    if (!line || !item || inCode(this.value, line.start)) return null;
+    const content = line.start + item[0].length;
+    if (next.end >= content) return null;
+    const leaving = Boolean(previous) && previous!.start === previous!.end && previous!.end === content && index > 0;
+    const caret = leaving ? lines[index - 1].end : content;
+    return { start: caret, end: caret, direction: 'none' };
+  }
+
+  /** 光标在列表项或待办的正文开头时，退格删去项头（保留缩进），这一行变回普通文字（原型 removeListPrefix）。 */
+  private removeListPrefix(caret: number): boolean {
+    if (inCode(this.value, caret)) return false;
+    const line = splitLines(this.value)[this.lineAt(caret)];
+    const item = line?.text.match(LIST_PREFIX);
+    if (!line || !item || caret !== line.start + item[0].length) return false;
+    this.replace('', { start: line.start + item[1].length, end: caret, direction: 'none' });
+    return true;
   }
 
   /* ==================== 私有：选区与原文映射 ==================== */
@@ -518,6 +565,16 @@ export class MarkdownEditor {
     let last: { node: Node; offset: number } | null = null;
     while ((node = walker.nextNode())) {
       const text = node as Text;
+      // 列表与待办的项头一直隐藏（原型第二版，data-md-locked），光标不能落在里面：项头两端与中间的位置
+      // 都改放到这个元素之外，中间的位置按正文开头处理（与 clampToContent 一致）。
+      const locked = text.parentElement?.closest<HTMLElement>('[data-md-locked]');
+      if (locked) {
+        if (remaining <= 0) return childPoint(locked, false);
+        if (remaining <= text.length) return childPoint(locked, true);
+        remaining -= text.length;
+        last = childPoint(locked, true);
+        continue;
+      }
       // 显示出来的列表项头是 inline-block（占满悬挂缩进），光标落在它里面时浏览器的 Home、End 只在
       // 项头这一小块内移动，光标也画在项头文字之后而不是正文开头。项头两端的位置改放到这个元素之外。
       const listMarker = text.parentElement?.closest<HTMLElement>('.md-list-marker.is-revealed');
@@ -677,7 +734,7 @@ export class MarkdownEditor {
   private markerKey(): string {
     const caret = this.markerCaret();
     let key = `${this.activeLine}|`;
-    for (const node of Array.from(this.element.querySelectorAll<HTMLElement>('.md-syntax'))) {
+    for (const node of Array.from(this.element.querySelectorAll<HTMLElement>('.md-syntax:not([data-md-locked])'))) {
       const start = Number(node.dataset.mdRevealStart ?? node.dataset.mdStart);
       const end = Number(node.dataset.mdRevealEnd ?? node.dataset.mdEnd);
       if (markerVisible(caret, start, end - start)) key += `${start}:${end};`;
@@ -685,7 +742,10 @@ export class MarkdownEditor {
     return key;
   }
 
-  /** 为原文标记生成可折叠节点；`extra` 为附加类名，供样式区分标记种类。 */
+  /**
+   * 为原文标记生成可折叠节点；`extra` 为附加类名，供样式区分标记种类。
+   * `locked` 的标记一直隐藏、不随光标展开：列表项头与待办标记由圆点、序号与复选框代替（原型第二版）。
+   */
   private syntax(
     parent: HTMLElement,
     text: string,
@@ -693,11 +753,12 @@ export class MarkdownEditor {
     start = 0,
     range: { start: number; end: number } | null = null,
     extra = '',
+    locked = false,
   ): void {
     if (!text) return;
-    const revealed = range
-      ? markerVisible(caret, range.start, range.end - range.start)
-      : markerVisible(caret, start, text.length);
+    const revealed =
+      !locked &&
+      (range ? markerVisible(caret, range.start, range.end - range.start) : markerVisible(caret, start, text.length));
     const node = element('span', `md-syntax ${revealed ? 'is-revealed' : 'is-hidden'}${extra ? ` ${extra}` : ''}`, text);
     node.dataset.mdStart = String(start);
     node.dataset.mdEnd = String(start + text.length);
@@ -707,6 +768,7 @@ export class MarkdownEditor {
       node.dataset.mdGroupStart = String(range.start);
       node.dataset.mdGroupEnd = String(range.end);
     }
+    if (locked) node.dataset.mdLocked = '';
     node.hidden = !revealed;
     if (!revealed) node.setAttribute('aria-hidden', 'true');
     parent.append(node);
@@ -1065,13 +1127,13 @@ export class MarkdownEditor {
           if (item[1].length) line.style.setProperty('--md-list-indent', String(item[1].length));
           const prefix = item[1] + item[2] + item[3];
           const task = item[4].match(/^(\[[ xX]\][\t ]+)(.*)$/);
-          if (!task && !markerVisible(caret, model.start, prefix.length)) {
-            this.decoration(line, 'md-list-bullet', /^\d/.test(item[2]) ? `${item[2]} ` : '• ');
-          }
-          this.syntax(line, prefix, caret, model.start, null, 'md-list-marker');
+          // 列表与待办的项头不随光标显示原文（原型第二版）：一直显示圆点、序号或复选框；
+          // 光标在正文开头按退格删去项头，这一行变回普通文字（见 removeListPrefix），光标也不停在项头之前（clampToContent）。
+          if (!task) this.decoration(line, 'md-list-bullet', /^\d/.test(item[2]) ? `${item[2]} ` : '• ');
+          this.syntax(line, prefix, caret, model.start, null, 'md-list-marker', true);
           if (task) {
             this.renderTask(line, model.start + prefix.length + 1, /[xX]/.test(task[1]));
-            this.syntax(line, task[1], caret, model.start + prefix.length);
+            this.syntax(line, task[1], caret, model.start + prefix.length, null, '', true);
             this.renderInline(task[2], line, caret, model.start + prefix.length + task[1].length);
           } else {
             this.renderInline(item[4], line, caret, model.start + prefix.length);
@@ -1277,6 +1339,7 @@ export class MarkdownEditor {
       // 选中了文字时按所见内容删除：完整选中的格式连同隐藏标记一起删掉，部分选中时保留标记。
       // 退格或删除碰到附件时整个引用一起删除。
       if (range.start !== range.end) this.applyEdit(this.replaceVisible('', range, true), range);
+      else if (type === 'deleteContentBackward' && this.removeListPrefix(range.start)) return;
       else this.replace('', this.atomicRange(this.deletionRange(range, type)));
       return;
     }
@@ -1340,7 +1403,7 @@ export class MarkdownEditor {
       .catch(() => null)
       .then((markdown) => {
         if (!markdown || this.destroyed) return;
-        this.replace(markdown, this.value === before ? range : this.selection);
+        this.insertAttachment(markdown, this.value === before ? range : this.selection);
       });
   }
 
