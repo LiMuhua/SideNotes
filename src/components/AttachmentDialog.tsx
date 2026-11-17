@@ -1,19 +1,22 @@
 /**
- * 附件弹窗。
+ * 附件弹窗（原型第二版，与交互原型 app.js 的 openAttachment 相同）。
  *
- * 点击卡片或编辑面中的图片、文件引用时打开（按住 Ctrl 点击则直接打开文件，由调用方处理）：
- * 显示预览与引用的 Markdown 原文，可以直接修改原文，把新文件拖进弹窗或点「更换」替换，
- * 也可以用系统程序打开、另存为或删除这个引用。以 data URL 保存在记录里的图片附件没有原文，
- * 只提供更换、另存为与删除。
+ * 点击卡片或编辑面中的图片、文件引用时打开（按住 Ctrl 点击则直接打开文件，由调用方处理）。
+ * - 标题是附件名。图片在上方预览；文件不显示预览（文件块看不到内容，只重复了标题中的名称）。
+ * - 正文中的引用下面是 Markdown 原文，完整显示在一个随内容加高的输入框里；修改时上方的预览跟着变，
+ *   点「应用修改」或按 Ctrl+Enter 才写回。以 data URL 保存在记录里的图片附件没有原文。
+ * - 底栏左侧是打开（正文中的引用）、更换、另存为与删除，右侧是「应用修改」，原文没有改动时不可用。
+ * - 桌面端另外可以把新文件拖进弹窗替换（拖动时弹窗描边），不写提示文字。
  *
  * 更换后旧的副本不再被引用，由附件清理在稍后删除（见 bridge.cleanupAttachments），撤销窗口内仍可恢复。
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
+import { Markdown } from './Markdown';
 import { Modal } from './Modal';
 import * as bridge from '../core/bridge';
-import { bytesToDataUrl, dataUrlToBytes, imageMime, openAttachment, referencesFor } from '../core/attachments';
+import { bytesToDataUrl, dataUrlToBytes, imageMime, openAttachment, parseAttachmentSource, referencesFor } from '../core/attachments';
 import { fileLabel, filePath, isLegacyToken } from '../core/files';
 import { MAX_IMAGE_BYTES } from '../core/notes';
 import { useToast } from '../hooks/useToast';
@@ -42,6 +45,45 @@ export interface AttachmentDialogProps {
 
 const direct = <T,>(run: () => Promise<T>): Promise<T> => run();
 
+/** 预览区的内容：图片、取不到的图片或文件块，或原文不再是单个附件时按卡片排版的 Markdown。 */
+type Preview =
+  | { kind: 'image'; src: string; label: string }
+  | { kind: 'missing' | 'file'; label: string }
+  | { kind: 'text'; markdown: string };
+
+/** 本机路径、网络图片与 data 图片可以显示；原型遗留的浏览器文件标识没有可用的地址。 */
+function imageUrl(target: string): string {
+  const path = filePath(target);
+  if (path) return isLegacyToken(path) ? '' : bridge.localFileUrl(path);
+  return /^(?:data:image\/|https?:)/i.test(target) ? target : '';
+}
+
+/** 原文对应的预览（原型 sourcePreview）。 */
+function sourcePreview(markdown: string): Preview {
+  const parsed = parseAttachmentSource(markdown);
+  if (!parsed) return { kind: 'text', markdown };
+  if (parsed.kind === 'file') return { kind: 'file', label: parsed.label || fileLabel(parsed.target) };
+  const src = imageUrl(parsed.target);
+  return src ? { kind: 'image', src, label: parsed.label } : { kind: 'missing', label: parsed.label || '图片' };
+}
+
+function PreviewArea({ preview }: { preview: Preview }) {
+  return (
+    <div className="attachment-preview-area">
+      {preview.kind === 'image' ? (
+        <img className="attachment-preview-image" src={preview.src} alt={preview.label || '图片'} draggable={false} />
+      ) : preview.kind === 'text' ? (
+        <div className="attachment-preview-text markdown-body">{preview.markdown.trim() ? <Markdown text={preview.markdown} /> : null}</div>
+      ) : (
+        <div className={preview.kind === 'missing' ? 'attachment-file is-missing' : 'attachment-file'}>
+          <Icon name={preview.kind === 'missing' ? 'image' : 'file'} />
+          <span>{preview.label}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AttachmentDialog({
   subject,
   editable = true,
@@ -57,9 +99,7 @@ export function AttachmentDialog({
   const rawPath = reference ? filePath(reference.target) : null;
   const path = rawPath && !isLegacyToken(rawPath) ? rawPath : null;
   const isImage = Boolean(embedded) || reference?.kind === 'image';
-  const name = embedded ? embedded.name : path ? fileLabel(path) : reference?.label || reference?.target || '附件';
-  const title = embedded ? embedded.name : reference?.label || name;
-  const imageSource = embedded ? embedded.data : path ? bridge.localFileUrl(path) : reference?.target ?? '';
+  const name = embedded ? embedded.name : reference?.label || (path ? fileLabel(path) : '') || (isImage ? '图片' : '附件');
 
   const [draft, setDraft] = useState(reference?.source ?? '');
   const [busy, setBusy] = useState(false);
@@ -126,7 +166,7 @@ export function AttachmentDialog({
       const saved = embedded
         ? await withSystemDialog(() => bridge.saveBytesAs(dataUrlToBytes(embedded.data), embedded.name))
         : path
-          ? await withSystemDialog(() => bridge.saveAttachmentAs(path, name))
+          ? await withSystemDialog(() => bridge.saveAttachmentAs(path, fileLabel(path)))
           : false;
       if (saved) toast('已另存');
     }, '未能另存');
@@ -137,10 +177,11 @@ export function AttachmentDialog({
       if (removed) onClose();
     }, '未能删除');
 
+  // 与原型相同：原文原样比较、原样写回，不去掉首尾空白。
+  const changed = Boolean(reference) && draft !== reference?.source;
   const apply = (): Promise<void> =>
     run(async () => {
-      const next = draft.trim();
-      if (next === reference?.source || (await onReplaceSource?.(next))) onClose();
+      if (!changed || (await onReplaceSource?.(draft))) onClose();
     }, '未能修改');
 
   /** 用拖进弹窗的文件替换：内容保存为新的附件副本并改写引用，图片附件读成 data URL。 */
@@ -165,29 +206,42 @@ export function AttachmentDialog({
     [embedded, onReplaceImage, onReplaceSource, onClose],
   );
 
-  // 把文件拖进弹窗即替换（WebView2 原生拖放，见 useFileDrop）。
+  // 把文件拖进弹窗即替换（桌面端；WebView2 原生拖放，见 useFileDrop）。拖动经过弹窗时描边，离开或松开后去掉。
   const canDrop = editable && bridge.isDesktop();
-  const isFiles = (event: React.DragEvent): boolean => Array.from(event.dataTransfer.types).includes('Files');
-  const dropHandlers = canDrop
-    ? {
-        onDragOver: (event: React.DragEvent<HTMLDivElement>) => {
-          if (!isFiles(event)) return;
-          event.preventDefault();
-          event.dataTransfer.dropEffect = 'copy';
-          setDragging(true);
-        },
-        onDragLeave: (event: React.DragEvent<HTMLDivElement>) => {
-          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
-        },
-        onDrop: (event: React.DragEvent<HTMLDivElement>) => {
-          if (!isFiles(event)) return;
-          event.preventDefault();
-          setDragging(false);
-          const file = event.dataTransfer.files[0];
-          if (file) void run(() => replaceWithDropped(file), '未能更换');
-        },
+  useEffect(() => {
+    if (!canDrop) return;
+    const over = (event: DragEvent): boolean =>
+      Array.from(event.dataTransfer?.types ?? []).includes('Files') &&
+      event.target instanceof Element &&
+      Boolean(event.target.closest('.attachment-modal'));
+    const handleOver = (event: DragEvent): void => {
+      if (!over(event)) {
+        setDragging(false);
+        return;
       }
-    : {};
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+      setDragging(true);
+    };
+    const handleLeave = (event: DragEvent): void => {
+      if (event.relatedTarget === null) setDragging(false);
+    };
+    const handleDrop = (event: DragEvent): void => {
+      setDragging(false);
+      if (!over(event)) return;
+      event.preventDefault();
+      const file = event.dataTransfer?.files[0];
+      if (file) void run(() => replaceWithDropped(file), '未能更换');
+    };
+    document.addEventListener('dragover', handleOver, true);
+    document.addEventListener('dragleave', handleLeave, true);
+    document.addEventListener('drop', handleDrop, true);
+    return () => {
+      document.removeEventListener('dragover', handleOver, true);
+      document.removeEventListener('dragleave', handleLeave, true);
+      document.removeEventListener('drop', handleDrop, true);
+    };
+  }, [canDrop, run, replaceWithDropped]);
 
   // Esc 只关闭弹窗，不再传给侧栏（否则会顺带取消正在进行的编辑）。
   useEffect(() => {
@@ -203,12 +257,18 @@ export function AttachmentDialog({
 
   const canOpen = Boolean(path) || Boolean(reference && /^https?:/i.test(reference.target));
   const canSave = Boolean(embedded) || Boolean(path);
+  const preview: Preview | null = !isImage
+    ? null
+    : embedded
+      ? { kind: 'image', src: embedded.data, label: name }
+      : sourcePreview(draft);
 
   return (
     <Modal
-      title={title}
+      title={name}
       icon={isImage ? 'image' : 'file'}
-      className="attachment-modal"
+      className={dragging ? 'attachment-modal is-dragging' : 'attachment-modal'}
+      bodyClassName={!preview && !reference ? 'is-empty' : undefined}
       onClose={onClose}
       footer={
         <>
@@ -220,7 +280,7 @@ export function AttachmentDialog({
           ) : null}
           {editable ? (
             <button type="button" className="button secondary" disabled={busy} onClick={() => void chooseReplacement()}>
-              <Icon name="restore" />
+              <Icon name="upload" />
               更换
             </button>
           ) : null}
@@ -231,68 +291,53 @@ export function AttachmentDialog({
             </button>
           ) : null}
           {editable ? (
-            // 侧栏窗口较窄，删除只放图标，与其它按钮排在一行。
             <button
               type="button"
-              className="button secondary danger-text attachment-delete"
+              className="icon-button attachment-delete"
               aria-label="删除这个附件"
-              title="删除这个附件"
               disabled={busy}
               onClick={() => void remove()}
             >
               <Icon name="trash" />
             </button>
           ) : null}
+          {reference && editable ? (
+            <button
+              type="button"
+              className="button primary attachment-apply"
+              disabled={busy || !changed}
+              onClick={() => void apply()}
+            >
+              <Icon name="check" />
+              应用修改
+            </button>
+          ) : null}
         </>
       }
     >
-      <div className={dragging ? 'attachment-dialog is-dragging' : 'attachment-dialog'} {...dropHandlers}>
-        {isImage ? (
-          <img className="attachment-dialog-image" src={imageSource} alt={title} draggable={false} />
-        ) : (
-          <div className="attachment-dialog-file">
-            <Icon name="file" />
-            <span>{name}</span>
-          </div>
-        )}
-        {reference ? (
-          <label className="attachment-dialog-source">
-            <span>Markdown 原文</span>
-            <textarea
-              ref={sourceField}
-              value={draft}
-              rows={4}
-              spellCheck={false}
-              readOnly={!editable}
-              aria-label="附件引用的 Markdown 原文"
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-                  event.preventDefault();
-                  void apply();
-                }
-              }}
-            />
-          </label>
-        ) : null}
-        {editable && (reference || canDrop) ? (
-          <div className="attachment-dialog-actions">
-            <span className="attachment-dialog-hint">
-              {canDrop ? (dragging ? '松开即替换为拖入的文件' : `可把新${embedded ? '图片' : '文件'}拖到这里替换`) : '修改原文后应用'}
-            </span>
-            {reference ? (
-              <button
-                type="button"
-                className="button primary compact"
-                disabled={busy || draft.trim() === reference.source}
-                onClick={() => void apply()}
-              >
-                应用修改
-              </button>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
+      {preview ? <PreviewArea preview={preview} /> : null}
+      {reference ? (
+        <label className="attachment-source">
+          <span className="attachment-source-label">Markdown 原文</span>
+          <textarea
+            ref={sourceField}
+            className="form-control attachment-source-input"
+            value={draft}
+            rows={1}
+            spellCheck={false}
+            readOnly={!editable}
+            aria-label="Markdown 原文"
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                event.preventDefault();
+                event.stopPropagation();
+                if (changed && !busy) void apply();
+              }
+            }}
+          />
+        </label>
+      ) : null}
     </Modal>
   );
 }

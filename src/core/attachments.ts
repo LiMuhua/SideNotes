@@ -46,6 +46,19 @@ export async function chooseAndImportFiles(): Promise<string | null> {
   return referencesFor(await bridge.importFiles(paths));
 }
 
+/**
+ * 附件的 Markdown 原文拆成种类、名称与地址（原型 parseAttachmentMarkdown）：图片 `![名称](地址)`，文件 `[名称](地址)`，
+ * 文件的地址要是本机路径；不是单个附件引用时返回 null。附件弹窗据此让预览跟着原文变。
+ */
+export function parseAttachmentSource(markdown: string): { kind: 'image' | 'file'; label: string; target: string } | null {
+  const match = /^(!?)\[((?:\\.|[^\]\\])*)\]\(\s*<?([^)>]*?)>?\s*\)$/.exec(String(markdown ?? '').trim());
+  if (!match || !match[3]) return null;
+  const label = match[2].replace(/\\([\\[\]])/g, '$1');
+  const target = match[3].trim();
+  if (match[1]) return { kind: 'image', label, target };
+  return filePath(target) ? { kind: 'file', label, target } : null;
+}
+
 /** 原文中的一个附件引用：范围 [start, end) 与当时的原文。 */
 export interface ReferenceSpan {
   start: number;

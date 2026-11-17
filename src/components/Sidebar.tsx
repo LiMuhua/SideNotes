@@ -1889,7 +1889,9 @@ export function Sidebar() {
           toast(SAVE_FAILED_MESSAGE, null, true);
           return false;
         }
-        toast(next ? "已修改附件" : "已删除附件", { label: "撤销", run: () => void store.restoreNotes(undo) });
+        // 与原型相同：删除图片写「已删除图片」，其余写「已删除附件」。
+        const removed = reference.source.trimStart().startsWith("!") ? "已删除图片" : "已删除附件";
+        toast(next ? "已修改附件" : removed, { label: "撤销", run: () => void store.restoreNotes(undo) });
         return true;
       },
     [toast],

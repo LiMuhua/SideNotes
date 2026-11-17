@@ -124,3 +124,15 @@ body[data-window='sidebar'] .sidebar-resizer:focus-visible {
   flex-direction: column;
   min-height: 0;
 }
+
+/* 附件弹窗（桌面端新增的拖入替换）：把文件拖到弹窗上时整个弹窗描一圈虚线，表示松开即替换；不写提示文字。 */
+.attachment-modal.is-dragging {
+  outline: var(--sn-focus-ring-width) dashed var(--sn-color-accent);
+  outline-offset: calc(var(--sn-focus-ring-width) * -1);
+}
+
+/* 附件弹窗显示在侧栏窗口里，比原型页面中的弹窗窄：底栏放不下时折行，「应用修改」仍靠右（已知差异：弹窗宽度随侧栏收窄）。 */
+.attachment-modal .modal-footer {
+  flex-wrap: wrap;
+  row-gap: var(--sn-space-2);
+}

@@ -15,13 +15,15 @@ export interface ModalProps {
   /** 标题前的图标（样式沿用原型的 .modal-header h2 .icon）。 */
   icon?: IconName;
   className?: string;
+  /** 正文区域的附加类名（如附件弹窗没有内容时的 is-empty）。 */
+  bodyClassName?: string;
   children: ReactNode;
   footer?: ReactNode;
   onClose: () => void;
 }
 
 /** 带焦点约束的对话框。 */
-export function Modal({ title, icon, className, children, footer, onClose }: ModalProps) {
+export function Modal({ title, icon, className, bodyClassName, children, footer, onClose }: ModalProps) {
   const modal = useRef<HTMLElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
   const titleId = useId();
@@ -96,7 +98,7 @@ export function Modal({ title, icon, className, children, footer, onClose }: Mod
             <Icon name="x" />
           </button>
         </header>
-        <div className="modal-body">{children}</div>
+        <div className={bodyClassName ? `modal-body ${bodyClassName}` : 'modal-body'}>{children}</div>
         {footer === null ? null : <footer className="modal-footer">{footer}</footer>}
       </section>
     </div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bytesToDataUrl, dataUrlToBytes, imageMime, pastedName, referencesFor, replaceReference } from './attachments';
+import { bytesToDataUrl, dataUrlToBytes, imageMime, parseAttachmentSource, pastedName, referencesFor, replaceReference } from './attachments';
 
 describe('附件副本', () => {
   it('图片写成内嵌图片，其它文件写成文件引用，多个时每个一行', () => {
@@ -40,5 +40,18 @@ describe('附件副本', () => {
     const url = bytesToDataUrl(bytes, 'image/png');
     expect(url.startsWith('data:image/png;base64,')).toBe(true);
     expect(Array.from(dataUrlToBytes(url))).toEqual(Array.from(bytes));
+  });
+});
+
+describe('parseAttachmentSource', () => {
+  it('拆出图片与本机文件的名称和地址，名称中的转义还原', () => {
+    expect(parseAttachmentSource(String.raw`![截图](C:\Users\me\a.png)`)).toEqual({ kind: 'image', label: '截图', target: String.raw`C:\Users\me\a.png` });
+    expect(parseAttachmentSource(String.raw` [报告 \[终版\]](<D:\docs\r.pdf>) `)).toEqual({ kind: 'file', label: '报告 [终版]', target: String.raw`D:\docs\r.pdf` });
+  });
+
+  it('不是单个附件引用时返回 null：网址链接、多段文字、空地址', () => {
+    expect(parseAttachmentSource('[网站](https://example.com)')).toBeNull();
+    expect(parseAttachmentSource(String.raw`![a](C:\a.png) 还有文字`)).toBeNull();
+    expect(parseAttachmentSource('![a]()')).toBeNull();
   });
 });
