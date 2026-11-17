@@ -22,7 +22,8 @@ import { ConfirmOverlay, ConfirmProvider, type ConfirmRequest } from './confirm'
 import { ActionButton, classes } from './controls';
 import { DataPanel } from './DataPanel';
 import { ShortcutsPanel, ShortcutsReset } from './ShortcutsPanel';
-import { TrashPanel, TrashRetention } from './TrashPanel';
+import { TrashPanel } from './TrashPanel';
+import { useSettingsWheel } from './wheel';
 
 type SectionId = 'appearance' | 'shortcuts' | 'data' | 'trash' | 'about';
 
@@ -52,6 +53,9 @@ export function SettingsDialog({ onClose, onMinimize }: SettingsDialogProps) {
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   const [conflicts, setConflicts] = useState<GlobalShortcutId[]>([]);
   const panel = useRef<HTMLDivElement>(null);
+  const dialog = useRef<HTMLElement>(null);
+  // 滑块、数值框与数字组合框的滚轮调整（原型 initializeWheel）。
+  useSettingsWheel(dialog);
   const nav = useRef<HTMLElement>(null);
   // 确认层关闭后把焦点还给触发它的按钮。
   const returnFocus = useRef<Element | null>(null);
@@ -109,6 +113,7 @@ export function SettingsDialog({ onClose, onMinimize }: SettingsDialogProps) {
     <ConfirmProvider value={openConfirm}>
       <IconSprite />
       <section
+        ref={dialog}
         className="modal settings-modal"
         role="dialog"
         aria-modal="true"
@@ -157,7 +162,6 @@ export function SettingsDialog({ onClose, onMinimize }: SettingsDialogProps) {
                     className={classes('settings-nav-button settings-nav-item', active && 'active')}
                     data-action=""
                     aria-label={item.label}
-                    title={item.label}
                     data-section={item.id}
                     role="tab"
                     aria-controls="settings-panel"
@@ -182,7 +186,6 @@ export function SettingsDialog({ onClose, onMinimize }: SettingsDialogProps) {
             >
               <div className="settings-panel-heading settings-content-header">
                 <h3>{current.label}</h3>
-                {section === 'trash' ? <TrashRetention days={settings.trashDays} save={save} /> : null}
                 {section === 'shortcuts' ? (
                   <ShortcutsReset settings={settings} save={save} onConflictsChange={refreshConflicts} />
                 ) : null}
@@ -194,7 +197,7 @@ export function SettingsDialog({ onClose, onMinimize }: SettingsDialogProps) {
               {section === 'data' ? (
                 <DataPanel settings={settings} save={save} saveFailed={saveFailed} loadFailed={loadFailed} />
               ) : null}
-              {section === 'trash' ? <TrashPanel notes={notes} settings={settings} /> : null}
+              {section === 'trash' ? <TrashPanel notes={notes} settings={settings} save={save} /> : null}
               {section === 'about' ? <AboutPanel /> : null}
             </div>
           </div>

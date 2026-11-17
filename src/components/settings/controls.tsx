@@ -10,6 +10,7 @@
 import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ReactNode, type Ref } from 'react';
 import { Icon, type IconName } from '../Icon';
 import { Floating } from '../Floating';
+import { useWheelCommit } from './wheel';
 import { boundedNumber } from '../../core/settings';
 import { useToast } from '../../hooks/useToast';
 import type { Settings } from '../../core/types';
@@ -287,6 +288,152 @@ export function SelectField({
 }
 
 /**
+ * 数字组合框（原型 settings.js 的 combobox）：直接输入数值，也可以从列表中选常用值；回车或失焦提交，Esc 还原。
+ *
+ * 结构是 `span.settings-combobox-wrap > span.settings-combobox > input.settings-combobox-input + 箭头按钮`，后面跟单位。
+ * 点输入框只全选、不展开；Alt+↓ 或点箭头展开常用值（列表挂在浮层中，与组合框同宽）。越界时就近校正并提示
+ * 「已调整为 N 单位」，无法识别时提示范围并还原。滚轮调整见设置窗口的滚轮处理（`data-wheel-step`）。
+ */
+export function NumberCombobox({
+  label,
+  value,
+  options,
+  min,
+  max,
+  step = 1,
+  wheelStep,
+  unit,
+  onCommit,
+}: {
+  label: string;
+  value: number;
+  options: ReadonlyArray<readonly [number, string]>;
+  min: number;
+  max: number;
+  step?: number;
+  /** 滚轮每一格的步长，默认等于 step。 */
+  wheelStep?: number;
+  unit: string;
+  onCommit: (next: number) => boolean | Promise<boolean>;
+}) {
+  const toast = useToast();
+  const listId = `combobox-list-${useId()}`;
+  const field = useRef<HTMLSpanElement>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const skipBlur = useRef(false);
+  const [draft, setDraft] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+
+  const commit = async (raw: string): Promise<void> => {
+    const next = boundedNumber(raw, min, max, step);
+    if (next === null) {
+      setDraft(null);
+      toast(`请输入 ${min} 至 ${max} 的数值`, null, true);
+      return;
+    }
+    if (next !== value && !(await onCommit(next))) {
+      setDraft(null);
+      return;
+    }
+    if (next !== Number(raw)) toast(`已调整为 ${next} ${unit}`);
+    setDraft(null);
+  };
+  // 滚轮调整：途中只改显示的数值，停下 500ms 后提交（见 wheel.ts）。
+  useWheelCommit(input, (raw) => void commit(raw));
+
+  return (
+    <span className="settings-combobox-wrap">
+      <span ref={field} className="settings-combobox">
+        <input
+          ref={input}
+          className="settings-combobox-input"
+          type="number"
+          min={min}
+          max={max}
+          step={wheelStep ?? step}
+          role="combobox"
+          aria-label={label}
+          aria-expanded={open}
+          aria-controls={open ? listId : undefined}
+          data-wheel-step={wheelStep ?? step}
+          value={draft ?? String(value)}
+          onClick={(event) => event.currentTarget.select()}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={(event) => {
+            setOpen(false);
+            if (skipBlur.current) skipBlur.current = false;
+            else if (draft !== null) void commit(event.target.value);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowDown' && event.altKey) {
+              event.preventDefault();
+              setOpen(true);
+              return;
+            }
+            if (event.key !== 'Enter' && event.key !== 'Escape') return;
+            event.preventDefault();
+            event.stopPropagation();
+            if (event.key === 'Escape' && open) {
+              setOpen(false);
+              return;
+            }
+            if (event.key === 'Escape') setDraft(null);
+            else void commit(event.currentTarget.value);
+            setOpen(false);
+            skipBlur.current = true;
+            event.currentTarget.blur();
+          }}
+        />
+        <button
+          type="button"
+          className="settings-combobox-toggle"
+          tabIndex={-1}
+          aria-label={`${label}常用值`}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => {
+            setOpen((shown) => !shown);
+            input.current?.focus();
+          }}
+        >
+          <Icon name="chevron-down" />
+        </button>
+      </span>
+      <span className="settings-unit">{unit}</span>
+      <Floating
+        anchor={field}
+        open={open}
+        options={{ placement: 'bottom-start', offset: 4, matchWidth: true, scroll: true }}
+        id={listId}
+        role="listbox"
+        aria-label={`${label}常用值`}
+        className="select-box-list settings-floating"
+      >
+        {options.map(([optionValue, text]) => {
+          const selected = optionValue === value;
+          return (
+            <div
+              key={optionValue}
+              role="option"
+              aria-selected={selected}
+              className={classes('select-box-option', selected && 'is-selected')}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                setOpen(false);
+                void commit(String(optionValue));
+                input.current?.focus();
+              }}
+            >
+              <span className="select-box-check">{selected ? <Icon name="check" /> : null}</span>
+              <span className="select-box-label">{text}</span>
+            </div>
+          );
+        })}
+      </Floating>
+    </span>
+  );
+}
+
+/**
  * 文本或数字输入框：失焦或回车时提交，提交失败恢复为已保存的值。
  *
  * 编辑中的内容记为草稿；未编辑时直接显示已保存的值，
@@ -312,17 +459,23 @@ export function TextField({
   onCommit: (next: string) => boolean | Promise<boolean>;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
+  const field = useRef<HTMLInputElement>(null);
 
-  const commit = async (): Promise<void> => {
-    if (draft === null) return;
-    const next = draft.trim();
+  const commitValue = async (raw: string): Promise<void> => {
+    const next = raw.trim();
     if (next !== value) await onCommit(next);
     // 成功时显示保存后的值，失败时回到原值。
     setDraft(null);
   };
+  const commit = async (): Promise<void> => {
+    if (draft !== null) await commitValue(draft);
+  };
+  // 数值框的滚轮调整：停下 500ms 后提交（见 wheel.ts）。
+  useWheelCommit(field, (raw) => void commitValue(raw));
 
   return (
     <input
+      ref={field}
       className="form-control"
       type={type}
       value={draft ?? value}
@@ -378,6 +531,7 @@ export function RangeField({
   // 拖动中尚未保存的滑块值；松开时的事件可能早于这次状态更新的重新渲染，同时记在 ref 中读取。
   const [sliding, setSliding] = useState<number | null>(null);
   const slidingRef = useRef<number | null>(null);
+  const rangeInput = useRef<HTMLInputElement>(null);
 
   const release = (): void => {
     const next = slidingRef.current;
@@ -385,6 +539,10 @@ export function RangeField({
     setSliding(null);
     if (next !== null && next !== value) void onSave(next);
   };
+  // 滚轮调整字号这类松开才保存的滑块：滚轮停下 500ms 后保存（见 wheel.ts）；其余滑块随 onChange 已经保存。
+  useWheelCommit(rangeInput, () => {
+    if (commitOnRelease) release();
+  });
 
   const commit = async (): Promise<void> => {
     if (draft === null) return;
@@ -403,6 +561,7 @@ export function RangeField({
   return (
     <div className="settings-range range-control">
       <input
+        ref={rangeInput}
         type="range"
         min={min}
         max={max}

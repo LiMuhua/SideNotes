@@ -14,14 +14,12 @@ import {
   HIDE_DELAY_RANGE,
   HIDE_DELAYS,
   WIDTH_RANGE,
-  parseDelay,
   resolveTheme,
 } from '../../core/settings';
 import { SURFACES, surfaceAttributes } from '../../core/surfaces';
 import type { EdgeSide, Settings, SurfaceMode, ToastPosition, WindowTabsPosition } from '../../core/types';
 import { useToast } from '../../hooks/useToast';
-import { Combobox } from './Combobox';
-import { ActionButton, Group, Help, RangeField, Row, SelectField, TextField, Toggle, classes, type SaveSettings } from './controls';
+import { ActionButton, Group, Help, NumberCombobox, RangeField, Row, SelectField, TextField, Toggle, classes, type SaveSettings } from './controls';
 import { FontPicker } from './FontPicker';
 
 const THEMES: ReadonlyArray<readonly [Settings['theme'], string]> = [
@@ -49,7 +47,8 @@ const WINDOW_TABS_LABELS: ReadonlyArray<readonly [WindowTabsPosition, string]> =
 ];
 
 /** 常用延迟只写数字，单位 ms 固定显示在输入框之后。 */
-const DELAY_OPTIONS = HIDE_DELAYS.map((delay) => ({ value: String(delay), label: String(delay) }));
+/** 「移出后收起」的常用值，与原型相同只写数字，单位 ms 写在组合框后面。 */
+const DELAY_CHOICES: ReadonlyArray<readonly [number, string]> = HIDE_DELAYS.map((delay) => [delay, String(delay)] as const);
 
 interface PanelProps {
   settings: Settings;
@@ -173,39 +172,21 @@ function DisplayGroup({ settings, save }: PanelProps) {
   );
 }
 
-/**
- * 移出后收起：保留常用值的下拉选项，也可以直接输入毫秒数；输入框与选项只显示数字，单位 ms 固定在后面。
- * 失焦或回车时提交，超出范围时就近校正并提示，无法识别时恢复原值。输入时带上「秒」等单位也能识别。
- */
+/** 移出后收起（原型的数字组合框）：100–10000 毫秒，常用值 300、600、1000，滚轮一格 100。 */
 function HideDelayField({ value, save }: { value: number; save: SaveSettings }) {
-  const toast = useToast();
   const { min, max } = HIDE_DELAY_RANGE;
   return (
-    <span className="settings-delay-field">
-      <Combobox
-        className="settings-delay-combobox"
-        text={String(value)}
-        selected={String(value)}
-        label="移出后收起（毫秒）"
-        placeholder={`${min}–${max}`}
-        commitOnBlur
-        options={() => DELAY_OPTIONS}
-        onCommit={async (raw) => {
-          const parsed = parseDelay(raw);
-          if (parsed === null) {
-            toast(`请输入 ${min} 至 ${max} 毫秒`, null, true);
-            return false;
-          }
-          const next = Math.max(min, Math.min(max, parsed));
-          const saved = next === value || (await save({ hideDelay: next }));
-          if (saved && next !== parsed) toast(`已调整为 ${next} 毫秒（${min}–${max}）`);
-          return saved;
-        }}
-      />
-      <span className="settings-runtime-suffix" aria-hidden="true">
-        ms
-      </span>
-    </span>
+    <NumberCombobox
+      label="移出后收起"
+      value={value}
+      options={DELAY_CHOICES}
+      min={min}
+      max={max}
+      step={1}
+      wheelStep={100}
+      unit="ms"
+      onCommit={(hideDelay) => save({ hideDelay })}
+    />
   );
 }
 

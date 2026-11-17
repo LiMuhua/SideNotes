@@ -14,6 +14,7 @@ export type ShortcutId =
   | 'newNote'
   | 'search'
   | 'settings'
+  | 'closeWindows'
   | 'save'
   | 'bold'
   | 'italic'
@@ -51,6 +52,8 @@ export const SHORTCUT_COMMANDS: readonly ShortcutCommand[] = [
   { id: 'search', label: '搜索记录与标签', group: 'app', defaultKeys: 'Ctrl+F' },
   // 原型第二版：打开设置，侧栏获得焦点时响应，编辑中也可用（interactions.md 3.1）。
   { id: 'settings', label: '打开设置', group: 'app', defaultKeys: 'Ctrl+,' },
+  // 原型第二版：关闭全部记录窗口（T83 的记录窗口）。应用内快捷键，不注册系统热键；浏览器占用 Ctrl+Shift+W，原型定为 Alt+Shift+W。
+  { id: 'closeWindows', label: '关闭全部记录窗口', group: 'app', defaultKeys: 'Alt+Shift+W' },
   { id: 'save', label: '保存记录', group: 'app', defaultKeys: 'Ctrl+Enter' },
   { id: 'bold', label: '加粗', group: 'format', defaultKeys: 'Ctrl+B' },
   { id: 'italic', label: '斜体', group: 'format', defaultKeys: 'Ctrl+I' },

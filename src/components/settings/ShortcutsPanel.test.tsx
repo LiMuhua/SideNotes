@@ -64,13 +64,18 @@ describe('快捷键设置', () => {
     await press({ key: 'Control', code: 'ControlLeft', ctrlKey: true });
     expect(bold.textContent).toBe('Ctrl + …');
     await press({ key: 'i', code: 'KeyI', ctrlKey: true });
-    expect(toast).toHaveBeenLastCalledWith('Ctrl + I：与「斜体」冲突', null, true);
+    // 原因写在这一行按键的左侧（原型 shortcut-message），不弹提示条。
+    const message = bold.closest('.shortcut-binding')?.querySelector('.shortcut-message');
+    expect(message?.textContent).toBe('Ctrl + I：与「斜体」冲突');
+    expect(message?.hasAttribute('hidden')).toBe(false);
+    expect(toast).not.toHaveBeenCalled();
     expect(bold.getAttribute('aria-pressed')).toBe('true');
     expect(save).not.toHaveBeenCalled();
     await press({ key: 'B', code: 'KeyB', ctrlKey: true, shiftKey: true });
     expect(save).toHaveBeenCalledWith({ shortcuts: { bold: 'Ctrl+Shift+B' } });
     expect(toast).toHaveBeenLastCalledWith('「加粗」改为 Ctrl + Shift + B');
     expect(bold.getAttribute('aria-pressed')).toBe('false');
+    expect(message?.hasAttribute('hidden')).toBe(true);
   });
 
   it('Esc 取消录入，按键不变', async () => {
@@ -86,7 +91,9 @@ describe('快捷键设置', () => {
     const capture = await record('呼出速记');
     await press({ key: 'n', code: 'KeyN', ctrlKey: true, altKey: true });
     expect(bridge.setGlobalShortcuts).toHaveBeenLastCalledWith({ capture: 'Ctrl+Alt+N' });
-    expect(toast).toHaveBeenLastCalledWith('Ctrl + Alt + N：已被其他程序占用，请换一个', null, true);
+    expect(capture.closest('.shortcut-binding')?.querySelector('.shortcut-message')?.textContent).toBe(
+      'Ctrl + Alt + N：已被其他程序占用，请换一个',
+    );
     expect(save).not.toHaveBeenCalled();
     expect(capture.getAttribute('aria-pressed')).toBe('true');
     await press({ key: 'm', code: 'KeyM', ctrlKey: true, altKey: true });

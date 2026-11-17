@@ -62,6 +62,7 @@ function ShortcutRow({
   recording,
   held,
   failed,
+  message,
   onRecord,
   onCancel,
   onReset,
@@ -73,6 +74,8 @@ function ShortcutRow({
   held: string;
   /** 全局快捷键注册失败（多半被其他程序占用）。 */
   failed: boolean;
+  /** 按下的组合不能用时的原因，写在按键左侧（原型 shortcut-message）；按键不变，可以接着按别的组合。 */
+  message: string;
   onRecord: () => void;
   onCancel: () => void;
   onReset: () => void;
@@ -81,6 +84,9 @@ function ShortcutRow({
   return (
     <Row title={command.label} description={noteOf(command)}>
       <span className="shortcut-binding">
+        <span className="shortcut-message" role="status" hidden={!message}>
+          {message}
+        </span>
         {keys !== command.defaultKeys && !recording ? (
           <ActionButton
             label={`恢复默认 ${displayCombo(command.defaultKeys)}`}
@@ -96,7 +102,6 @@ function ShortcutRow({
             recording ? `正在录入「${command.label}」的快捷键，Esc 取消` : `更换「${command.label}」的快捷键，当前为 ${displayCombo(keys)}`
           }
           aria-pressed={recording}
-          title={recording ? 'Esc 取消' : failed ? '被其他程序占用，点击更换' : '点击更换'}
           onClick={onRecord}
           onBlur={onCancel}
         >
@@ -121,6 +126,8 @@ export function ShortcutsPanel({ settings, save, conflicts, onConflictsChange }:
   const bindings = settings.shortcuts;
   const [recording, setRecording] = useState<ShortcutId | null>(null);
   const [held, setHeld] = useState('');
+  /** 不能用的组合与原因，写在那一行的按键左侧；开始录入别的命令或换成功后清除。 */
+  const [message, setMessage] = useState<{ id: ShortcutId; text: string } | null>(null);
   // 正在注册或保存时不处理新的组合，避免同一次更换提交两遍。
   const busy = useRef(false);
   // 录入回调读取最新的设置与冲突列表；录入本身只随正在录入的命令开始与结束。
@@ -154,7 +161,7 @@ export function ShortcutsPanel({ settings, save, conflicts, onConflictsChange }:
     if (combo === current && !(global && conflicts.includes(global))) return true;
     const problem = shortcutProblem(command.id, combo, bindings);
     if (problem) {
-      toast(`${displayCombo(combo)}：${problem}`, null, true);
+      setMessage({ id: command.id, text: `${displayCombo(combo)}：${problem}` });
       return false;
     }
     if (busy.current) return false;
@@ -164,13 +171,14 @@ export function ShortcutsPanel({ settings, save, conflicts, onConflictsChange }:
         try {
           await registerGlobal(global, combo);
         } catch (error) {
-          toast(`${displayCombo(combo)}：${bridge.errorText(error, '无法设为全局快捷键')}`, null, true);
+          setMessage({ id: command.id, text: `${displayCombo(combo)}：${bridge.errorText(error, '无法设为全局快捷键')}` });
           return false;
         } finally {
           onConflictsChange();
         }
       }
       if (await save({ shortcuts: withBinding(bindings, command.id, combo) })) {
+        setMessage(null);
         toast(`「${command.label}」改为 ${displayCombo(combo)}`);
       } else if (global) {
         // 设置没有保存（已提示）：全局快捷键换回原来的按键，与保存的设置一致。
@@ -246,6 +254,7 @@ export function ShortcutsPanel({ settings, save, conflicts, onConflictsChange }:
 
   const record = (id: ShortcutId): void => {
     setHeld('');
+    setMessage((value) => (value?.id === id ? value : null));
     // 再点一次正在录入的按键即取消。
     setRecording((value) => (value === id ? null : id));
   };
@@ -279,6 +288,7 @@ export function ShortcutsPanel({ settings, save, conflicts, onConflictsChange }:
                   recording={recording === command.id}
                   held={held}
                   failed={isGlobalShortcut(command.id) && conflicts.includes(command.id)}
+                  message={message?.id === command.id ? message.text : ''}
                   onRecord={() => record(command.id)}
                   onCancel={() => setRecording((value) => (value === command.id ? null : value))}
                   onReset={() => reset(command)}
@@ -287,9 +297,7 @@ export function ShortcutsPanel({ settings, save, conflicts, onConflictsChange }:
               {group === 'format'
                 ? FIXED_SHORTCUTS.map((fixed) => (
                     <Row key={fixed.label} title={fixed.label}>
-                      <kbd className="shortcut-fixed" title="固定快捷键，不能更换">
-                        {fixed.display}
-                      </kbd>
+                      <kbd className="shortcut-key is-fixed">{fixed.display}</kbd>
                     </Row>
                   ))
                 : null}
@@ -337,7 +345,6 @@ export function ShortcutsReset({
       label="恢复默认"
       icon="restore"
       disabled={!changed}
-      title={changed ? '全部快捷键改回默认按键' : '快捷键都是默认按键'}
       onClick={() => void resetAll()}
     />
   );
