@@ -1,8 +1,9 @@
 /**
- * 字体的选用（设置页的字体组合框，原型第二版 settings.js 的 fontPicker）。
+ * 字体的选用（设置页的字体组合框）。
  *
- * 候选最前是「跟随主题」（默认，保存为空字符串），最后是「系统默认」。可以从候选中选，也可以输入任意名称：
- * 名称与候选只差大小写时用候选的写法；不在候选中时，列表末尾多一项「使用“名称”」，回车或点它就用这个名称。
+ * 候选最前是「跟随主题」（默认，保存为空字符串），最后是「系统默认」。输入时按名称筛选候选（不分大小写）；
+ * 没有一项对得上时，列表第一项提示这个名称不可用（不能选），第二项是「使用系统默认字体」。
+ * 只能用候选中的字体：本机没有的字体名保存下来也显示不出来（2026-11-18 用户要求，与原型第二版的「使用“名称”」不同）。
  */
 
 /** 字体「跟随主题」的显示文字，保存为空字符串。 */
@@ -11,6 +12,13 @@ export const FOLLOW_THEME_LABEL = '跟随主题';
 export const SYSTEM_FONT_LABEL = '系统默认';
 /** 保存的字体名最长 120 个字符。 */
 const MAX_FAMILY_LENGTH = 120;
+
+/** 筛选字体候选：名称包含输入的文字（不分大小写）；输入为空时全部保留。 */
+export function filterFonts<T extends { label: string }>(choices: readonly T[], typed: string): T[] {
+  const key = typed.trim().toLocaleLowerCase();
+  if (!key) return [...choices];
+  return choices.filter((choice) => choice.label.toLocaleLowerCase().includes(key));
+}
 
 /**
  * 输入的字体名。

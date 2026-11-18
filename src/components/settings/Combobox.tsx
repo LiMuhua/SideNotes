@@ -3,7 +3,7 @@
  *
  * 外观沿用原型字体组合框的类名（font-combobox）：输入框右侧是展开按钮，候选列表挂在 body 下的浮层中
  * （原型 fontPicker 的 `SideNotesLayer.open`），与输入框同宽，不被下面的设置卡遮住，放不下时翻到上方或在列表里滚动。
- * 可以直接输入，也可以从候选中选择：上下键切换候选，回车选用当前候选或提交输入，
+ * 可以直接输入，也可以从候选中选择：上下键切换候选（跳过只作提示、不能选的一项），回车选用当前候选或提交输入，
  * Esc 放弃输入并收起列表；没有可收起的内容时 Esc 不做处理，交给设置窗口关闭。
  */
 
@@ -22,6 +22,8 @@ export interface ComboOption {
   detail?: string;
   /** 候选自己的字体（字体候选用各自的字体显示）。 */
   fontFamily?: string;
+  /** 只作提示、不能选（例如「“名称”不可用」）。 */
+  disabled?: boolean;
 }
 
 export interface ComboboxProps {
@@ -36,12 +38,17 @@ export interface ComboboxProps {
   placeholder?: string;
   /** 失焦时提交输入（数值类设置）；否则放弃输入，恢复为已保存的值。 */
   commitOnBlur?: boolean;
+  /**
+   * 输入了文字、没有用方向键选中候选时，回车提交什么：返回候选的值，或返回 null 表示不提交（列表保持展开）。
+   * 不给时提交输入的文字。
+   */
+  pickOnEnter?: (typed: string, choices: ComboOption[]) => string | null;
   className?: string;
   /** 提交选中的候选值或输入的文字，返回是否已保存；无论成败，输入框都回到保存后的值。 */
   onCommit: (value: string) => Promise<boolean> | boolean;
 }
 
-export function Combobox({ text, options, selected, label, placeholder, commitOnBlur, className, onCommit }: ComboboxProps) {
+export function Combobox({ text, options, selected, label, placeholder, commitOnBlur, className, pickOnEnter, onCommit }: ComboboxProps) {
   const id = useId();
   const [draft, setDraft] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -125,14 +132,31 @@ export function Combobox({ text, options, selected, label, placeholder, commitOn
               close();
             } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
               event.preventDefault();
-              if (!choices.length) return;
-              setOpen(true);
-              const next = active + (event.key === 'ArrowDown' ? 1 : -1);
-              setActive((next + choices.length) % choices.length);
+              const step = event.key === 'ArrowDown' ? 1 : -1;
+              // 跳过不能选的提示项；全都不能选时不动。
+              let next = active;
+              for (let tries = 0; tries < choices.length; tries += 1) {
+                next = (next + step + choices.length) % choices.length;
+                if (!choices[next].disabled) {
+                  setOpen(true);
+                  setActive(next);
+                  return;
+                }
+              }
             } else if (event.key === 'Enter') {
               event.preventDefault();
               const current = open && active >= 0 ? choices[active] : undefined;
-              void commit(current ? current.value : (draft ?? text));
+              if (current) {
+                if (!current.disabled) void commit(current.value);
+                return;
+              }
+              if (draft === null || !pickOnEnter) {
+                void commit(draft ?? text);
+                return;
+              }
+              const picked = pickOnEnter(draft, choices);
+              if (picked !== null) void commit(picked);
+              else setOpen(true);
             }
           }}
         />
@@ -165,16 +189,20 @@ export function Combobox({ text, options, selected, label, placeholder, commitOn
             className={classes(
               'font-combobox-option',
               choice.className,
-              choice.value === selected && 'is-selected',
+              !choice.disabled && choice.value === selected && 'is-selected',
               index === active && 'is-active',
+              choice.disabled && 'is-disabled',
             )}
             id={`${id}-option-${index}`}
             tabIndex={-1}
             role="option"
-            aria-selected={choice.value === selected}
+            aria-selected={!choice.disabled && choice.value === selected}
+            aria-disabled={choice.disabled || undefined}
             style={choice.fontFamily ? { fontFamily: choice.fontFamily } : undefined}
             onMouseDown={(event) => event.preventDefault()}
-            onClick={() => void commit(choice.value)}
+            onClick={() => {
+              if (!choice.disabled) void commit(choice.value);
+            }}
           >
             {choice.label}
             {choice.detail ? <span className="font-option-detail">{choice.detail}</span> : null}

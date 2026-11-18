@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { typedFont } from './fonts';
+import { filterFonts, typedFont } from './fonts';
 
 const FAMILIES = ['Maple Mono NF CN', 'Microsoft YaHei UI', 'Segoe UI', 'Arial'];
 
@@ -9,7 +9,7 @@ describe('输入的字体名', () => {
     expect(typedFont(FAMILIES, '系统默认')).toEqual({ family: '系统默认', known: true });
   });
 
-  it('不在候选中的名称原样使用，标记为新的一项', () => {
+  it('不在候选中的名称标记为不认识（字体框不保存它）', () => {
     expect(typedFont(FAMILIES, 'Maple')).toEqual({ family: 'Maple', known: false });
     expect(typedFont(FAMILIES, '不存在的字体')).toEqual({ family: '不存在的字体', known: false });
     expect(typedFont(FAMILIES, 'x'.repeat(130)).family).toHaveLength(120);
@@ -18,5 +18,20 @@ describe('输入的字体名', () => {
   it('空输入或「跟随主题」保存为空字符串', () => {
     expect(typedFont(FAMILIES, '  ')).toEqual({ family: '', known: true });
     expect(typedFont(FAMILIES, '跟随主题')).toEqual({ family: '', known: true });
+  });
+});
+
+describe('筛选字体候选', () => {
+  const choices = [{ label: '跟随主题' }, ...FAMILIES.map((label) => ({ label })), { label: '系统默认' }];
+
+  it('名称包含输入的文字即保留，不分大小写', () => {
+    expect(filterFonts(choices, 'ui').map((choice) => choice.label)).toEqual(['Microsoft YaHei UI', 'Segoe UI']);
+    expect(filterFonts(choices, ' MAPLE ').map((choice) => choice.label)).toEqual(['Maple Mono NF CN']);
+    expect(filterFonts(choices, '默认').map((choice) => choice.label)).toEqual(['系统默认']);
+  });
+
+  it('输入为空时全部保留，筛不出时为空', () => {
+    expect(filterFonts(choices, '  ')).toHaveLength(choices.length);
+    expect(filterFonts(choices, '不存在的字体')).toEqual([]);
   });
 });

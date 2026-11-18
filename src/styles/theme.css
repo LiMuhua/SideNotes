@@ -6018,6 +6018,16 @@ body.is-dragging-attachment * {
   color: var(--sn-color-accent-text);
 }
 
+/* 筛不出字体时的「“名称”不可用」：只作提示，不能选，悬停也不变色。 */
+.font-combobox-list.floating-panel .font-combobox-option.is-disabled {
+  color: var(--sn-color-text-muted);
+  cursor: default;
+}
+
+.font-combobox-list.floating-panel .font-combobox-option.is-disabled:hover {
+  background: transparent;
+}
+
 .font-combobox-list.floating-panel .font-option-detail {
   margin-left: var(--sn-space-4);
   color: var(--sn-color-text-muted);
