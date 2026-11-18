@@ -4,6 +4,8 @@
  * 仅在开发环境且显式开启调试开关时载入，正式运行不会写到用户数据库。
  * 通过 `pnpm dev` 启动后访问 `?debug-data=1`，或在控制台执行
  * `localStorage.setItem('sidenotes:debug-data', '1')` 后刷新来启用。
+ * `pnpm tauri:dev:sample` 用单独的应用标识启动一份桌面端（数据与正式数据分开），构建时带上 VITE_SIDENOTES_SAMPLE_DATA=1，
+ * 第一次启动就写入全部示例：这里的 24 条、原型与 Playground 共用的 36 条（第六次反馈）与 bulk-notes.ts 的一百多条。
  *
  * 数据覆盖随记、置顶、旧版本的归档（载入时迁移为带 #归档 的普通记录）与回收站，用于直观检查列表密度、
  * 折叠态、标签筛选与回收站保留期等界面表现。
@@ -12,6 +14,11 @@
 import { canonicalize } from '../core/tags';
 import { createId, migrateArchivedNote } from '../core/notes';
 import type { Note, NoteStatus } from '../core/types';
+import { createExtraSampleNotes, SAMPLE_PINNED_TAGS } from '../../docs/design-system/playground/src/model/samples';
+import { createBulkSampleNotes } from './bulk-notes';
+
+/** 示例数据默认固定的标签（与原型、Playground 相同），载入示例时页签栏放不下，可以看到最后一格「N ▾」。 */
+export { SAMPLE_PINNED_TAGS };
 
 /** 调试开关键：出现且值为 `1` 时载入示例数据。 */
 export const DEBUG_DATA_KEY = 'sidenotes:debug-data';
@@ -22,6 +29,7 @@ export const DEBUG_DATA_PARAM = 'debug-data';
 export function shouldLoadSampleData(): boolean {
   if (typeof window === 'undefined') return false;
   // 生产构建下除非显式打开调试开关，否则不载入。
+  if (import.meta.env.VITE_SIDENOTES_SAMPLE_DATA === '1') return true;
   try {
     const params = new URLSearchParams(window.location.search);
     if (params.get(DEBUG_DATA_PARAM) === '1') return true;
@@ -190,8 +198,13 @@ const SAMPLES: SampleSeed[] = [
   },
 ];
 
-/** 构造示例记录数组；每次调用生成新的标识与时间戳。 */
+/** 构造示例记录数组：这里的示例（每次生成新的标识）、原型与 Playground 共用的 36 条，以及一百多条批量生成的记录。 */
 export function createSampleNotes(now = Date.now()): Note[] {
+  return [...createBaseSampleNotes(now), ...createExtraSampleNotes(now), ...createBulkSampleNotes(now)];
+}
+
+/** 这里的 24 条示例；时间按相对天数计算。 */
+function createBaseSampleNotes(now: number): Note[] {
   return SAMPLES.map((sample) => {
     const updatedAt = now - sample.ago;
     return migrateArchivedNote({

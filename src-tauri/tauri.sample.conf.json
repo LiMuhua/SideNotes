@@ -1,0 +1,8 @@
+{
+  "identifier": "com.limuhua.sidenotes.sample",
+  "productName": "SideNotes 示例",
+  "build": {
+    "devUrl": "http://localhost:1450",
+    "beforeDevCommand": "pnpm exec vite --port 1450 --strictPort"
+  }
+}

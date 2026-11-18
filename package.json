@@ -16,6 +16,7 @@
     "test:watch": "vitest",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
+    "tauri:dev:sample": "node scripts/dev-sample.mjs",
     "tauri:build": "tauri build"
   },
   "dependencies": {

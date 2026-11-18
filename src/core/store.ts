@@ -13,7 +13,7 @@ import type { StoreChange } from './bridge';
 import { canonicalize, compose, hasTag, parse, removeTag, tagKey, withTag } from './tags';
 import { compareNoteOrder, createId, createNote, ensureEmoji, MAX_IMAGES_PER_NOTE, suggestTags } from './notes';
 import { DEFAULT_SETTINGS, normalizeSettings } from './settings';
-import { createSampleNotes, shouldLoadSampleData } from '../debug/sample-notes';
+import { createSampleNotes, SAMPLE_PINNED_TAGS, shouldLoadSampleData } from '../debug/sample-notes';
 import type { Draft, Note, NoteImage, NoteStatus, Settings, Snapshot, TabKey, TagUsage } from './types';
 
 /** 仓库状态。 */
@@ -205,9 +205,10 @@ export async function initialize(): Promise<void> {
 
   // 以下均为可选的维护动作，失败不应阻塞界面使用。
   try {
-    // 调试开关打开且库为空时，载入示例数据便于检查界面表现。
+    // 调试开关打开且库为空时，载入示例数据便于检查界面表现；还没有固定的标签时固定示例用的几个，页签栏放不下。
     if (notes.length === 0 && shouldLoadSampleData()) {
-      await persist({ notes: createSampleNotes() });
+      const settings = state.settings.pinnedTags.length ? state.settings : { ...state.settings, pinnedTags: [...SAMPLE_PINNED_TAGS] };
+      await persist({ notes: createSampleNotes(), settings });
       return;
     }
     // 补齐的 Emoji 需要落盘，否则下次启动会重新随机。
