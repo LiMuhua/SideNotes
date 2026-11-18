@@ -32,10 +32,18 @@ import type { Note } from '../core/types';
 const FIT_WIDTH: [number, number] = [280, 560];
 /** 顶部有标签页时按标签页定宽的上限（原型 FIT_TABS_WIDTH）。 */
 const FIT_TABS_WIDTH = 720;
-/** 按内容定高的上限，同时不超过工作区的六成（原型 FIT_HEIGHT）。 */
-const FIT_HEIGHT = 600;
+/**
+ * 按内容定高的上限，同时不超过工作区的七成（原型 FIT_HEIGHT 是 600 与六成；2026-11-18 用户要求加高）。
+ * 下限也比原型的 140 高：一两行的短记录也有个像样的窗口，下面留出空白。
+ */
+const FIT_HEIGHT = 720;
+const FIT_AREA = 0.7;
 const MIN_WIDTH = 320;
-const MIN_HEIGHT = 140;
+const MIN_HEIGHT = 220;
+/** 量出的高度再加一点余量：图片与字体的取整误差会让内容比窗口高一两个像素，出现滚动条。 */
+const FIT_SLACK = 4;
+/** 量尺寸前最多等图片加载这么久（毫秒）：窗口这时还没显示，等一会儿看不出来。 */
+const IMAGE_WAIT = 800;
 const MARGIN = 12;
 const EDGES = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
 const EVENTS = bridge.NOTE_WINDOW_EVENTS;
@@ -473,16 +481,22 @@ export function NoteWindow() {
   /* ==================== 后端事件 ==================== */
 
   // 打开：标签页写好之后量尺寸（宽高都按内容，原型 fitSize），交给后端摆放、播放打开动画并显示。
+  // 先等图片加载出来再量：没加载的图片高度为 0，量出的窗口偏矮，图片出来后正文就出现滚动条。
+  const openToken = useRef(0);
   useLayoutEffect(() => {
     const request = opening;
     const section = sectionRef.current;
     if (!request || !section) return;
     setOpening(null);
-    const size = fitSize(section, stripRef.current, request.area);
-    shownRef.current = true;
-    const snapshot = reducedMotion() ? null : snapshotOf(section);
-    void bridge.presentNoteWindow(size.width, size.height, snapshot).then(() => sync());
-    section.focus({ preventScroll: true });
+    const token = ++openToken.current;
+    void settleImages(section, IMAGE_WAIT).then(() => {
+      if (token !== openToken.current) return;
+      const size = fitSize(section, stripRef.current, request.area);
+      shownRef.current = true;
+      const snapshot = reducedMotion() ? null : snapshotOf(section);
+      void bridge.presentNoteWindow(size.width, size.height, snapshot).then(() => sync());
+      section.focus({ preventScroll: true });
+    });
   }, [opening, sync]);
 
   useEffect(() => {
@@ -1092,7 +1106,8 @@ export function NoteWindow() {
 
 /**
  * 新窗口的大小按内容决定（原型 fitSize）：先按内容的自然宽度排一次，再按这个宽度量高度。
- * 宽 280–560（顶部有标签页时上限 720，竖排的标签栏另加它的宽度）、高不超过 600 与工作区的六成，长文在窗口里滚动。
+ * 宽 280–560（顶部有标签页时上限 720，竖排的标签栏另加它的宽度）、高 220 到 720 与工作区的七成，长文在窗口里滚动。
+ * 高度按内容的滚动高度量（不受当前窗口高度的限制），再加几个像素的余量，避免刚好差一点出现滚动条。
  * `area` 为工作区（物理像素），返回页面像素。窗口已经挪到目标屏幕上，页面像素比与显示时一致。
  */
 function fitSize(section: HTMLElement, strip: HTMLElement | null, area: bridge.PixelRect): { width: number; height: number } {
@@ -1113,13 +1128,28 @@ function fitSize(section: HTMLElement, strip: HTMLElement | null, area: bridge.P
   const width = clamp(Math.ceil(section.getBoundingClientRect().width), Math.min(FIT_WIDTH[0] + extra, maxWidth), maxWidth);
   style.maxWidth = '';
   style.width = `${width}px`;
+  const body = section.querySelector<HTMLElement>('.note-window-body');
+  // 正文区自己会滚动：它的滚动高度比可见高度多出的部分也要算进来，否则长一点的内容按当前窗口高度量，偏矮。
+  const hidden = body ? Math.max(0, body.scrollHeight - body.clientHeight) : 0;
   const height = clamp(
-    Math.ceil(section.getBoundingClientRect().height),
+    Math.ceil(section.getBoundingClientRect().height + hidden) + FIT_SLACK,
     MIN_HEIGHT,
-    Math.max(MIN_HEIGHT, Math.min(view.height * 0.6, FIT_HEIGHT)),
+    Math.max(MIN_HEIGHT, Math.min(view.height * FIT_AREA, FIT_HEIGHT)),
   );
   style.cssText = '';
   return { width, height };
+}
+
+/**
+ * 等窗口里的图片与字体加载好（最多 `timeout` 毫秒）。窗口还没显示，懒加载的图片不会自己加载，先改成立即加载。
+ */
+async function settleImages(root: HTMLElement, timeout: number): Promise<void> {
+  const images = Array.from(root.querySelectorAll('img'));
+  images.forEach((image) => {
+    image.loading = 'eager';
+  });
+  const ready = Promise.all([document.fonts.ready.catch(() => undefined), ...images.map((image) => image.decode().catch(() => undefined))]);
+  await Promise.race([ready, new Promise((resolve) => window.setTimeout(resolve, timeout))]);
 }
 
 /** 窗口的副本：动画层用它播放打开与关闭的动画。去掉缩放手柄与焦点状态，图片立即加载。 */

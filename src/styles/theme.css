@@ -5553,7 +5553,8 @@ body.is-dragging-attachment * {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  padding: var(--sn-space-5) var(--sn-space-6) var(--sn-space-6);
+  /* 四周多留一点白，正文不贴着窗口边缘（2026-11-18 用户要求，原型是 12px、16px、16px）。 */
+  padding: var(--sn-space-6) var(--sn-space-7) var(--sn-space-8);
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--sn-color-border-strong) transparent;
