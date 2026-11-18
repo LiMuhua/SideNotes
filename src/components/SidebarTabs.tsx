@@ -26,6 +26,7 @@ import {
 import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
 import { ContextMenu, type MenuItems } from './ContextMenu';
+import { useLatest } from '../hooks/useLatest';
 import { fitTabs, type TabFit } from '../core/tabLayout';
 import { allTags, findPinned, tabOfTag, tagOfTab } from '../core/tabs';
 import { tagKey } from '../core/tags';
@@ -845,13 +846,15 @@ function TabCreatePanel({
     if (position) input.current?.focus({ preventScroll: true });
   }, [position]);
 
+  // 监听器只挂一次，回调从 useLatest 取（原因见 useLatest）。
+  const closeRef = useLatest(onClose);
   useEffect(() => {
     const outside = (event: PointerEvent) => {
-      if (!panel.current?.contains(event.target as Node)) onClose(false);
+      if (!panel.current?.contains(event.target as Node)) closeRef.current(false);
     };
     document.addEventListener('pointerdown', outside, true);
     return () => document.removeEventListener('pointerdown', outside, true);
-  }, [onClose]);
+  }, [closeRef]);
 
   const choose = (tag: string) => {
     if (tag && onPin(tag)) onClose(false);

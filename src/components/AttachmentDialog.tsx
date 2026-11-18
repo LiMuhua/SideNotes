@@ -19,6 +19,7 @@ import * as bridge from '../core/bridge';
 import { bytesToDataUrl, dataUrlToBytes, imageMime, openAttachment, parseAttachmentSource, referencesFor } from '../core/attachments';
 import { fileLabel, filePath, isLegacyToken } from '../core/files';
 import { MAX_IMAGE_BYTES } from '../core/notes';
+import { useLatest } from '../hooks/useLatest';
 import { useToast } from '../hooks/useToast';
 import type { NoteImage } from '../core/types';
 
@@ -243,17 +244,18 @@ export function AttachmentDialog({
     };
   }, [canDrop, run, replaceWithDropped]);
 
-  // Esc 只关闭弹窗，不再传给侧栏（否则会顺带取消正在进行的编辑）。
+  // Esc 只关闭弹窗，不再传给侧栏（否则会顺带取消正在进行的编辑）。监听器只挂一次（见 useLatest）。
+  const closeRef = useLatest(onClose);
   useEffect(() => {
     const handler = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape' || event.isComposing) return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      onClose();
+      closeRef.current();
     };
     window.addEventListener('keydown', handler, true);
     return () => window.removeEventListener('keydown', handler, true);
-  }, [onClose]);
+  }, [closeRef]);
 
   const canOpen = Boolean(path) || Boolean(reference && /^https?:/i.test(reference.target));
   const canSave = Boolean(embedded) || Boolean(path);

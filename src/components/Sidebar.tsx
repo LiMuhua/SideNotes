@@ -1351,6 +1351,25 @@ export function Sidebar() {
   }, [listNotes, interactions.selected, currentId, toast, handleCopyNotes]);
 
   /* ==================== 键盘快捷键 ==================== */
+  // 指针在侧栏里的位置：Shift+F10 与菜单键把菜单开在这里；指针离开窗口后为空，菜单开在高亮的卡片旁。
+  const pointerRef = useRef<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    const track = (event: PointerEvent): void => {
+      pointerRef.current = { x: event.clientX, y: event.clientY };
+    };
+    const leave = (event: PointerEvent): void => {
+      if (!event.relatedTarget) pointerRef.current = null;
+    };
+    document.addEventListener("pointermove", track, true);
+    document.addEventListener("pointerdown", track, true);
+    document.addEventListener("pointerout", leave, true);
+    return () => {
+      document.removeEventListener("pointermove", track, true);
+      document.removeEventListener("pointerdown", track, true);
+      document.removeEventListener("pointerout", leave, true);
+    };
+  }, []);
+
   useEffect(() => {
     const handler = (event: KeyboardEvent): void => {
       // 拖动调宽时按 Esc：取消，宽度回到开始拖动前（原型 finishSidebarResize(false)）。
@@ -1492,6 +1511,36 @@ export function Sidebar() {
             const cards = Array.from(listRef.current?.querySelectorAll<HTMLElement>(".note-card") ?? []);
             const index = cards.indexOf(card);
             focusCard(cards[event.key === "ArrowDown" ? Math.min(cards.length - 1, index + 1) : Math.max(0, index - 1)]?.dataset.noteId);
+          }
+          return;
+        }
+      }
+      // Shift+F10 与菜单键：有高亮的卡片时开卡片菜单，否则开侧栏菜单；指针在侧栏里时开在指针处，
+      // 否则开在卡片（或焦点所在元素）左上角附近。输入框、编辑区与对话框里保留它们自己的菜单。
+      if (
+        (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.metaKey &&
+        !dialogOpen
+      ) {
+        const target = event.target instanceof Element ? event.target : null;
+        if (!target?.closest('input, textarea, select, [contenteditable="true"], [role="menu"], .modal')) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          const focusedCard = target?.closest<HTMLElement>(".note-card[data-note-id]") ?? null;
+          const card =
+            focusedCard ??
+            (currentId ? listRef.current?.querySelector<HTMLElement>(`.note-card[data-note-id="${CSS.escape(currentId)}"]`) : null) ??
+            null;
+          const note = card ? store.getState().notes.find((item) => item.id === card.dataset.noteId) : undefined;
+          const box = (card ?? target ?? document.body).getBoundingClientRect();
+          const anchor = pointerRef.current ?? { x: box.left + 24, y: box.top + 32 };
+          if (note) {
+            setCurrentId(note.id);
+            openNoteMenu(note, anchor);
+          } else {
+            openSidebarMenu(anchor);
           }
           return;
         }
@@ -1676,7 +1725,7 @@ export function Sidebar() {
 
   /**
    * 卡片的键盘操作（interactions.md 3.2）：↑ ↓ 移动并高亮，Home、End 到两端，Enter 编辑，
-   * Delete 移入回收站（不确认，可以撤销），Shift+F10 或菜单键在卡片左上角附近打开卡片菜单。
+   * Delete 移入回收站（不确认，可以撤销）。Shift+F10 与菜单键在文档级的按键处理里打开菜单。
    * 只处理焦点落在卡片本身的按键，卡片内的按钮与编辑区各自处理。
    */
   const handleListKeyDown = useCallback(
@@ -1719,14 +1768,8 @@ export function Sidebar() {
         });
         return;
       }
-      if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
-        event.preventDefault();
-        setCurrentId(note.id);
-        const box = target.getBoundingClientRect();
-        openNoteMenu(note, { x: box.left + 24, y: box.top + 32 });
-      }
     },
-    [beginEdit, focusCard, moveToTrash, openNoteMenu, interactions],
+    [beginEdit, focusCard, moveToTrash, interactions],
   );
 
   const handleMenuCommand = useCallback(

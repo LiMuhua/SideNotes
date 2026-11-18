@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { Icon, type IconName } from './Icon';
+import { useLatest } from '../hooks/useLatest';
 
 /** 菜单锚点：按钮元素或鼠标位置。 */
 export type MenuAnchor = HTMLElement | { x: number; y: number };
@@ -99,24 +100,27 @@ export function ContextMenu<C extends string>({
 
   // 点击外部、窗口尺寸变化或列表滚动都收起菜单。点到侧栏窗口之外时页面收不到按下事件，
   // 只会失焦，因此窗口失焦也关闭；否则菜单一直开着，侧栏也会因此不再自动收起。
+  // 监听器只挂一次，回调从 useLatest 取：随 onClose 重新订阅时，按在卡片上的那一下会丢掉（见 useLatest）。
+  const closeRef = useLatest(onClose);
   useEffect(() => {
+    const close = (): void => closeRef.current();
     const handlePointer = (event: PointerEvent): void => {
-      if (menu.current && !menu.current.contains(event.target as Node)) onClose();
+      if (menu.current && !menu.current.contains(event.target as Node)) close();
     };
     const handleScroll = (event: Event): void => {
-      if (menu.current && !menu.current.contains(event.target as Node)) onClose();
+      if (menu.current && !menu.current.contains(event.target as Node)) close();
     };
     document.addEventListener('pointerdown', handlePointer, true);
-    window.addEventListener('resize', onClose);
-    window.addEventListener('blur', onClose);
+    window.addEventListener('resize', close);
+    window.addEventListener('blur', close);
     document.addEventListener('scroll', handleScroll, true);
     return () => {
       document.removeEventListener('pointerdown', handlePointer, true);
-      window.removeEventListener('resize', onClose);
-      window.removeEventListener('blur', onClose);
+      window.removeEventListener('resize', close);
+      window.removeEventListener('blur', close);
       document.removeEventListener('scroll', handleScroll, true);
     };
-  }, [onClose]);
+  }, [closeRef]);
 
   /** 在菜单项之间移动焦点。 */
   const moveFocus = useCallback((direction: number | 'first' | 'last') => {
