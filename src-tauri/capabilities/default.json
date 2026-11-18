@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "SideNotes 侧栏、速记、设置、记录窗口与动画层所需的最小权限集合",
-  "windows": ["main", "capture", "settings", "overlay", "note-*"],
+  "description": "SideNotes 侧栏、速记、设置、弹窗、记录窗口与动画层所需的最小权限集合",
+  "windows": ["main", "capture", "settings", "dialog", "overlay", "note-*"],
   "permissions": [
     "core:default",
     "core:window:allow-show",

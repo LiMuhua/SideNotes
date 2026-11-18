@@ -25,8 +25,8 @@ import './styles/desktop.css';
 import './styles/theme.css';
 import './styles/window.css';
 
-/** 当前窗口承担的角色：记录窗口（标签 note-1、note-2…）与动画层见 T83。 */
-export type WindowRole = 'sidebar' | 'capture' | 'settings' | 'note' | 'overlay';
+/** 当前窗口承担的角色：记录窗口（标签 note-1、note-2…）与动画层见 T83，弹窗窗口见 T99。 */
+export type WindowRole = 'sidebar' | 'capture' | 'settings' | 'note' | 'overlay' | 'dialog';
 
 /** 读取窗口角色；浏览器预览可用 `?window=capture|settings` 指定，默认显示侧栏。 */
 function resolveRole(): WindowRole {
@@ -39,6 +39,7 @@ function resolveRole(): WindowRole {
     if (label === 'capture') return 'capture';
     if (label === 'settings') return 'settings';
     if (label === 'overlay') return 'overlay';
+    if (label === 'dialog') return 'dialog';
     if (label.startsWith('note-')) return 'note';
     return 'sidebar';
   } catch {

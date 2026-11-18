@@ -72,6 +72,25 @@
         "focus": true
       },
       {
+        "label": "dialog",
+        "dragDropEnabled": false,
+        "create": false,
+        "title": "SideNotes 弹窗",
+        "url": "index.html",
+        "width": 880,
+        "height": 640,
+        "decorations": false,
+        "transparent": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "visible": false,
+        "shadow": true,
+        "focus": true
+      },
+      {
         "label": "overlay",
         "dragDropEnabled": false,
         "create": false,

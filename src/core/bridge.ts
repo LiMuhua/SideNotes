@@ -766,6 +766,71 @@ export async function isWindowVisible(): Promise<boolean> {
   }
 }
 
+/* ==================== 弹窗窗口（T99） ==================== */
+
+/** 弹窗窗口的标签：合并成一条与附件弹窗在这个独立的窗口里显示。 */
+export const DIALOG_LABEL = 'dialog';
+
+/** 弹窗窗口与打开者之间的事件。 */
+export const DIALOG_EVENTS = {
+  /** 后端转给弹窗窗口的打开请求。 */
+  open: 'sidenotes://dialog-open',
+  /** 后端发给打开者与弹窗窗口：弹窗已关闭，载荷为请求的编号。 */
+  closed: 'sidenotes://dialog-closed',
+  /** 弹窗发给打开者的操作。 */
+  result: 'sidenotes://dialog-result',
+  /** 打开者回复弹窗：操作是否完成。 */
+  ack: 'sidenotes://dialog-ack',
+} as const;
+
+/** 一次打开请求：编号、打开者的窗口标签、种类与内容。 */
+export interface DialogRequest<P = unknown> {
+  id: number;
+  opener: string;
+  kind: string;
+  payload: P;
+}
+
+/** 弹窗发回的一次操作；`seq` 用来对上打开者的回复。 */
+export interface DialogResult {
+  id: number;
+  seq: number;
+  action: string;
+  data: unknown;
+}
+
+/** 打开者对一次操作的回复。 */
+export interface DialogAck {
+  id: number;
+  seq: number;
+  ok: boolean;
+}
+
+/** 打开弹窗窗口，返回请求的编号；浏览器预览没有弹窗窗口，返回 0。 */
+export function openDialogWindow(kind: string, payload: unknown): Promise<number> {
+  return call<number>('open_dialog', { kind, payload }, 0);
+}
+
+/** 弹窗窗口启动：取等着它的请求（页面晚于事件加载时）。 */
+export function dialogInit<P = unknown>(): Promise<DialogRequest<P> | null> {
+  return call<DialogRequest<P> | null>('dialog_init', undefined, null);
+}
+
+/**
+ * 按内容的尺寸（页面像素）显示弹窗窗口：`center` 为真时在打开者所在屏幕居中，否则保持当前的中心。
+ * 换算成物理像素再交给后端：页面像素比含 Windows 的文本缩放与字号的界面缩放，后端算不出来。
+ * `id` 不是当前的请求（弹窗已关闭或被替换）时后端不做任何事。
+ */
+export function presentDialog(id: number, width: number, height: number, center: boolean): Promise<void> {
+  const ratio = window.devicePixelRatio;
+  return call<void>('present_dialog', { id, width: width * ratio, height: height * ratio, center }, undefined as unknown as void);
+}
+
+/** 关闭弹窗窗口：隐藏、通知打开者，焦点回到打开者。给出 `id` 时只在当前的弹窗还是这一个时关闭。 */
+export function closeDialogWindow(id?: number): Promise<void> {
+  return call<void>('close_dialog', { id: id ?? null }, undefined as unknown as void);
+}
+
 /** 记录窗口启动：取等着它的打开请求（备用窗口没有时为 null，之后用事件送达）。 */
 export function noteWindowInit(): Promise<NoteWindowOpen | null> {
   return call<NoteWindowOpen | null>('note_window_init', undefined, null);

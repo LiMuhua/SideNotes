@@ -27,7 +27,7 @@ const LEGACY = ['prototype.css', 'desktop.css'];
 const TOKEN_NAMES = new Set(TOKENS.map((token) => token.name));
 /**
  * 脚本写在元素上的运行时变量：App.tsx 的侧栏宽度与卡片高度，Sidebar 量出的列表滚动条宽度，
- * 以及原型脚本写的整页缩放、出入动画与搜索框收起宽度（桌面端不设时按回退值计算）。
+ * DialogWindow 量出的屏幕高度，以及原型脚本写的整页缩放、出入动画与搜索框收起宽度（桌面端不设时按回退值计算）。
  */
 const RUNTIME_VARIABLES = new Set([
   '--app-zoom',
@@ -39,6 +39,7 @@ const RUNTIME_VARIABLES = new Set([
   '--note-list-gutter',
   '--sidebar-anim-duration',
   '--sidebar-hide-offset',
+  '--screen-height',
 ]);
 
 const referenced = (css: string): string[] => [...css.matchAll(/var\(\s*(--[\w-]+)/g)].map((match) => match[1]);

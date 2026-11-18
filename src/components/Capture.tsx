@@ -13,6 +13,8 @@ import { Floating, comboKeys } from './Floating';
 import { LiveEditor } from './LiveEditor';
 import { ToastRegion } from './Modal';
 import { AttachmentDialog, type AttachmentSubject } from './AttachmentDialog';
+import type { AttachmentPayload } from './DialogWindow';
+import { useDialogWindow } from '../hooks/useDialogWindow';
 import { useStore } from '../hooks/useStore';
 import { useShortcut } from '../hooks/useShortcut';
 import { matches } from '../core/shortcuts';
@@ -79,6 +81,38 @@ export function Capture() {
       },
     });
   }, []);
+
+  // 附件弹窗交给弹窗窗口（T99，桌面端），与侧栏相同：修改发回这里写入，弹窗关闭后清空状态。
+  const dialogWindow = useDialogWindow();
+  useEffect(() => {
+    if (!attachmentDialog || !bridge.isDesktop()) return;
+    const dialog = attachmentDialog;
+    const payload: AttachmentPayload = {
+      subject: dialog.subject,
+      canReplaceSource: Boolean(dialog.replaceSource),
+      canReplaceImage: Boolean(dialog.replaceImage),
+    };
+    let id = 0;
+    let alive = true;
+    void dialogWindow
+      .open(
+        'attachment',
+        payload,
+        {
+          'replace-source': (data: { source: string }) => (dialog.replaceSource ? dialog.replaceSource(data.source) : false),
+          'replace-image': (data: { image: NoteImage | null }) => (dialog.replaceImage ? dialog.replaceImage(data.image) : false),
+        },
+        () => setAttachmentDialog((current) => (current === dialog ? null : current)),
+      )
+      .then((opened) => {
+        id = opened;
+        if (!alive) dialogWindow.close(opened);
+      });
+    return () => {
+      alive = false;
+      if (id) dialogWindow.close(id);
+    };
+  }, [attachmentDialog, dialogWindow]);
 
   // 从资源管理器拖入文件：保存为附件副本，插在指针所指的位置（指针不在文字上时接在末尾）。
   // 附件弹窗开着时交给弹窗处理。文件放到正获得焦点的编辑面上时 WebView2 不派发 drop 事件，
@@ -330,7 +364,7 @@ export function Capture() {
         <ToastRegion className="capture-toast-region" />
       </section>
 
-      {attachmentDialog ? (
+      {attachmentDialog && !bridge.isDesktop() ? (
         <AttachmentDialog
           subject={attachmentDialog.subject}
           onReplaceSource={attachmentDialog.replaceSource}

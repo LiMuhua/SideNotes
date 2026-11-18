@@ -590,13 +590,17 @@ fn resize_settings(settings: &WebviewWindow, zoom: f64) -> AppResult<()> {
     let area = work_area(&monitor);
     let geometry = place_settings(area, text_scale, zoom);
     let scale = settings.scale_factor()?;
-    let position = settings.outer_position()?.to_logical::<f64>(scale);
-    let size = settings.outer_size()?.to_logical::<f64>(scale);
+    // 中心按内容区算；set_bounds 的位置是窗口外框（含系统留的不可见缩放边），换算时补上两者的偏移，
+    // 否则每改一次字号窗口都往右下挪一点。
+    let outer = settings.outer_position()?.to_logical::<f64>(scale);
+    let position = settings.inner_position()?.to_logical::<f64>(scale);
+    let size = settings.inner_size()?.to_logical::<f64>(scale);
+    let (offset_x, offset_y) = (position.x - outer.x, position.y - outer.y);
     let (center_x, center_y) = (position.x + size.width / 2.0, position.y + size.height / 2.0);
     let (area_x, area_y, area_width, area_height) = area;
     let x = (center_x - geometry.width / 2.0).clamp(area_x, (area_x + area_width - geometry.width).max(area_x));
     let y = (center_y - geometry.height / 2.0).clamp(area_y, (area_y + area_height - geometry.height).max(area_y));
-    set_bounds(settings, x, y, geometry.width, geometry.height)
+    set_bounds(settings, x - offset_x, y - offset_y, geometry.width, geometry.height)
 }
 
 /// 显示设置窗口。

@@ -26,6 +26,9 @@ import { ChangelogDialog } from "./ChangelogDialog";
 import { UsageGuide } from "./UsageGuide";
 import { Modal, ToastRegion } from "./Modal";
 import { AttachmentDialog, type AttachmentSubject } from "./AttachmentDialog";
+import type { AttachmentPayload, MergePayload } from "./DialogWindow";
+import { useDialogWindow } from "../hooks/useDialogWindow";
+import { useLatest } from "../hooks/useLatest";
 import { useStore } from "../hooks/useStore";
 import { useShortcut } from "../hooks/useShortcut";
 import { useToast } from "../hooks/useToast";
@@ -227,6 +230,14 @@ export function Sidebar() {
   const dialogOpen = Boolean(
     managingTag || attachmentDialog || emojiTarget || changelogOpen || guideVisible || mergeRequest || infoNote,
   );
+  /**
+   * 合并与附件弹窗在独立的弹窗窗口里（T99，桌面端）：状态仍记在这里，打开期间侧栏保持展开，
+   * 固定按钮与设置窗口打开时一样显示为临时固定。浏览器预览没有弹窗窗口，仍画在页面里。
+   */
+  const windowDialogs = bridge.isDesktop();
+  const windowDialogOpen = windowDialogs && Boolean(mergeRequest || attachmentDialog);
+  const windowDialogOpenRef = useLatest(windowDialogOpen);
+  const dialogWindow = useDialogWindow();
 
   /** 关闭「记录信息」：焦点回到打开它的卡片（原型第二版）。 */
   const closeInfo = useCallback(() => {
@@ -817,6 +828,7 @@ export function Sidebar() {
   // 不在这里提前返回，否则菜单随失焦关闭后就再没有机会收起。
   // 整个侧栏失去焦点时，正在编辑的卡片先保存并回到预览，与在侧栏内点到别处一致；
   // 选择附件的对话框打开期间、附件还在读取时、附件弹窗等对话框开着时不算离开。
+  // 弹窗窗口（T99）打开时焦点移到它上面，也不算离开：附件弹窗的修改要写回仍在编辑的卡片。
   // 重新获得焦点（选完附件、很快又点回侧栏）时取消尚未执行的收起。
   useEffect(() => {
     const handleBlur = (): void => {
@@ -824,7 +836,8 @@ export function Sidebar() {
         editingRef.current &&
         !choosingFiles.current &&
         store.getState().pendingAttachments === 0 &&
-        !document.querySelector(".modal-backdrop")
+        !document.querySelector(".modal-backdrop") &&
+        !windowDialogOpenRef.current
       ) {
         void commitEdit();
       }
@@ -840,7 +853,7 @@ export function Sidebar() {
       window.removeEventListener("blur", handleBlur);
       window.removeEventListener("focus", handleFocus);
     };
-  }, [scheduleHide, cancelHide, commitEdit]);
+  }, [scheduleHide, cancelHide, commitEdit, windowDialogOpenRef]);
 
   /* ==================== 设置窗口联动 ==================== */
   // 设置窗口打开期间侧栏保持展开（见 scheduleHide）。切到别的窗口时侧栏看起来像卡住不收，
@@ -1225,6 +1238,34 @@ export function Sidebar() {
     },
     [interactions, tab, switchTab, toast, cancelEdit, beginEdit],
   );
+
+  // 合并的弹窗交给弹窗窗口（T99）：「合并」发回这里写入；弹窗关闭后清空状态，这边先清空时关掉弹窗。
+  const commitMergeRef = useLatest(commitMerge);
+  useEffect(() => {
+    if (!mergeRequest || !windowDialogs) return;
+    const request = mergeRequest;
+    const payload: MergePayload = { notes: request.notes, target: request.target, tag: request.tag };
+    let id = 0;
+    let alive = true;
+    void dialogWindow
+      .open(
+        "merge",
+        payload,
+        {
+          merge: (data: { text: string; images: NoteImage[]; keep: boolean }) =>
+            commitMergeRef.current(request, data.text, data.images, data.keep),
+        },
+        () => setMergeRequest((current) => (current === request ? null : current)),
+      )
+      .then((opened) => {
+        id = opened;
+        if (!alive) dialogWindow.close(opened);
+      });
+    return () => {
+      alive = false;
+      if (id) dialogWindow.close(id);
+    };
+  }, [mergeRequest, windowDialogs, dialogWindow, commitMergeRef]);
 
   /* ==================== 从资源管理器拖入文件 ==================== */
 
@@ -2092,6 +2133,37 @@ export function Sidebar() {
     [toast],
   );
 
+  // 附件弹窗交给弹窗窗口（T99）：更换、删除与应用修改发回这里，按打开时确定的写回位置写入。
+  useEffect(() => {
+    if (!attachmentDialog || !windowDialogs) return;
+    const dialog = attachmentDialog;
+    const payload: AttachmentPayload = {
+      subject: dialog.subject,
+      canReplaceSource: Boolean(dialog.replaceSource),
+      canReplaceImage: Boolean(dialog.replaceImage),
+    };
+    let id = 0;
+    let alive = true;
+    void dialogWindow
+      .open(
+        "attachment",
+        payload,
+        {
+          "replace-source": (data: { source: string }) => (dialog.replaceSource ? dialog.replaceSource(data.source) : false),
+          "replace-image": (data: { image: NoteImage | null }) => (dialog.replaceImage ? dialog.replaceImage(data.image) : false),
+        },
+        () => setAttachmentDialog((current) => (current === dialog ? null : current)),
+      )
+      .then((opened) => {
+        id = opened;
+        if (!alive) dialogWindow.close(opened);
+      });
+    return () => {
+      alive = false;
+      if (id) dialogWindow.close(id);
+    };
+  }, [attachmentDialog, windowDialogs, dialogWindow]);
+
   /* ==================== 标签筛选 ==================== */
   // 对应原型 selectTag：先结束正在进行的编辑，筛选后清空搜索，并记录访问作为菜单评分依据。
   const selectTag = useCallback(
@@ -2321,9 +2393,9 @@ export function Sidebar() {
             <button
               id="sidebar-lock"
               type="button"
-              className={`icon-button${pinned ? " is-pinned" : ""}${settingsOpen && !pinned ? " is-linked" : ""}`}
+              className={`icon-button${pinned ? " is-pinned" : ""}${(settingsOpen || windowDialogOpen) && !pinned ? " is-linked" : ""}`}
               data-action="lock-sidebar"
-              aria-pressed={pinned || settingsOpen}
+              aria-pressed={pinned || settingsOpen || windowDialogOpen}
               aria-label={pinned ? "取消固定侧栏" : "固定侧栏"}
               onClick={togglePinned}
             >
@@ -2825,7 +2897,7 @@ export function Sidebar() {
 
       {/* 图片预览 */}
       {/* 附件弹窗：查看与修改引用、更换、打开、另存为或删除 */}
-      {attachmentDialog ? (
+      {attachmentDialog && !windowDialogs ? (
         <AttachmentDialog
           subject={attachmentDialog.subject}
           onReplaceSource={attachmentDialog.replaceSource}
@@ -2924,7 +2996,7 @@ export function Sidebar() {
       {guideVisible ? <UsageGuide onClose={closeGuide} /> : null}
 
       {/* 标签管理：重命名或合并、全局移除 */}
-      {mergeRequest ? (
+      {mergeRequest && !windowDialogs ? (
         <MergeDialog
           notes={mergeRequest.notes}
           target={mergeRequest.target}

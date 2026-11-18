@@ -5,6 +5,7 @@ mod attachments;
 mod backup;
 mod commands;
 mod diag;
+mod dialogs;
 mod edge;
 mod error;
 mod fonts;
@@ -141,6 +142,11 @@ pub fn run() {
                 WindowEvent::Focused(true) if note_windows::is_note(window.label()) => {
                     note_windows::touch(window.label());
                 }
+                // 弹窗窗口的 Alt+F4：按关闭弹窗处理，通知打开者（T99）。
+                WindowEvent::CloseRequested { api, .. } if window.label() == dialogs::DIALOG_LABEL => {
+                    api.prevent_close();
+                    let _ = dialogs::close_dialog(window.app_handle().clone(), None);
+                }
                 // 关闭按钮只隐藏窗口；退出统一走托盘菜单，避免误关导致后台驻留消失。
                 WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
@@ -173,6 +179,10 @@ pub fn run() {
             commands::hide_capture,
             commands::show_settings,
             commands::hide_settings,
+            dialogs::open_dialog,
+            dialogs::dialog_init,
+            dialogs::present_dialog,
+            dialogs::close_dialog,
             commands::set_ui_zoom,
             commands::set_window_material,
             commands::sidebar_holds_cursor,

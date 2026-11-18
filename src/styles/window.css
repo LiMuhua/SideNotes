@@ -33,6 +33,69 @@ body[data-window='settings'] .settings-modal.modal {
   animation: none;
 }
 
+/* ==================== 弹窗窗口（T99） ====================
+ * 合并成一条与附件弹窗在独立的不透明窗口里：弹窗铺满窗口，外圈圆角与投影由系统窗口提供，背后不再有遮罩。
+ * 量尺寸时（body.is-measuring，见 DialogWindow 的 measure）弹窗按自己的宽度排版、高度随内容，不受窗口当前大小的限制；
+ * 窗口比内容矮（内容超过屏幕）时正文区滚动。 */
+body[data-window='dialog'] .modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: block;
+  padding: 0;
+  background: transparent;
+  animation: none;
+}
+
+body[data-window='dialog']:not(.is-measuring) .modal {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  animation: none;
+}
+
+body[data-window='dialog'].is-measuring .modal {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+  height: auto;
+  max-height: none;
+}
+
+/* 附件弹窗的宽度原本取「1.3 倍弹窗宽度」与视口宽度中较小的一个，量尺寸时只按前者。 */
+body[data-window='dialog'].is-measuring .modal.attachment-modal {
+  width: calc(var(--sn-dialog-width) * 1.3);
+}
+
+body[data-window='dialog'] .modal .modal-body {
+  flex: 1;
+}
+
+/* 合并预览最高为屏幕高度的一半：原型按页面高度（50dvh）算，弹窗窗口的高度跟着内容变，改按屏幕算。 */
+body[data-window='dialog'] .merge-modal .merge-preview-box {
+  max-height: calc(var(--screen-height, 100dvh) * 0.5);
+}
+
+/* 弹窗窗口的提示条：在窗口上部正中。 */
+body[data-window='dialog'] .toast-region.dialog-toast-region {
+  position: fixed;
+  z-index: var(--sn-z-popover);
+  top: var(--sn-space-6);
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sn-space-3);
+  width: max-content;
+  max-width: calc(100% - var(--sn-space-8) * 2);
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
 /* ==================== 窗口材质（T84，技术决策第 40 条） ====================
  * 侧栏与速记浮窗是透明窗口，App.tsx 按主题在根节点写 data-sn-window（core/surfaces 的 windowMaterial）：
  * - acrylic（Windows 11、磨砂玻璃）：系统给窗口加亚克力，并画圆角、细边框与投影。侧栏窗口本身离开屏幕边缘
