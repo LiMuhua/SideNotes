@@ -171,6 +171,12 @@ export function NoteWindow() {
   const many = tabs.length > 1;
   const side = settings.windowTabs === 'side' && many;
   const note = notes.find((item) => item.id === active);
+  const windowTitle = note ? noteTitle(note) : '';
+
+  // 记录窗口有自己的任务栏按钮，按钮与 Alt+Tab 里写当前标签页的标题。
+  useEffect(() => {
+    void bridge.setWindowTitle(windowTitle ? `${windowTitle} - SideNotes` : 'SideNotes 记录');
+  }, [windowTitle]);
 
   /* ==================== 与后端同步 ==================== */
 

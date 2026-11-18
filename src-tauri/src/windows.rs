@@ -371,6 +371,9 @@ pub fn disable_transitions(window: &WebviewWindow) {
 /// Alt+Tab 与 Win+Tab 中。tao 每次显示、隐藏还会按自己的标志重写扩展样式，事后加的 WS_EX_TOOLWINDOW 留不住。
 /// 被拥有的窗口不出现在任务栏、Alt+Tab 与 Win+Tab 中；所有者从不显示、也不会最小化，被拥有的窗口照常显示。
 /// 在主线程上创建，随进程退出销毁。
+///
+/// 交给它的窗口必须一直置顶：系统把「取消置顶」连带到所有者及其所有被拥有的窗口，
+/// 其中一个取消置顶，侧栏也跟着不再置顶（固定侧栏后会被别的窗口盖住）。
 #[cfg(windows)]
 pub fn create_owner_window() -> Option<::windows::Win32::Foundation::HWND> {
     use ::windows::core::w;
@@ -413,12 +416,17 @@ pub fn show_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
     };
 
     sidebar.set_size(LogicalSize::new(geometry.width, geometry.height))?;
+    // 侧栏始终置顶；万一被别处连带取消（见 create_owner_window），显示时补回来。
+    let _ = sidebar.set_always_on_top(true);
     if !visible {
         // 先摆到屏幕外再显示，避免出现一帧停在最终位置再跳回去。
         sidebar.set_position(LogicalPosition::new(start_x, geometry.y))?;
         sidebar.show()?;
     }
-    sidebar.set_focus()?;
+    // 拿不到焦点（系统不让后台程序抢前台）不影响滑入；在这里返回错误的话，窗口会显示着停在屏幕外。
+    if let Err(error) = sidebar.set_focus() {
+        crate::diag::log(format!("侧栏获取焦点失败：{error}"));
+    }
 
     let duration = layout.duration();
     if duration == 0 || (start_x - geometry.final_x).abs() < 0.5 {
@@ -488,6 +496,7 @@ pub fn toggle_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<bool
 pub fn show_capture(app: &AppHandle) -> AppResult<()> {
     let capture = window(app, CAPTURE_LABEL)?;
     capture.center()?;
+    let _ = capture.set_always_on_top(true);
     capture.show()?;
     capture.set_focus()?;
     Ok(())

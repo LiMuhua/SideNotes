@@ -205,24 +205,6 @@ pub fn is_note(label: &str) -> bool {
     label.starts_with(NOTE_PREFIX)
 }
 
-/* ==================== 所有者窗口 ==================== */
-
-/// 隐藏的所有者窗口（windows::create_owner_window）：记录窗口与动画层也交给它，不出现在任务栏与 Alt+Tab 中。
-static OWNER: Mutex<Option<isize>> = Mutex::new(None);
-
-/// 记下所有者窗口，之后新建的记录窗口都交给它。
-#[cfg(windows)]
-pub fn set_owner(owner: ::windows::Win32::Foundation::HWND) {
-    if let Ok(mut slot) = OWNER.lock() {
-        *slot = Some(owner.0 as isize);
-    }
-}
-
-#[cfg(windows)]
-fn owner() -> Option<::windows::Win32::Foundation::HWND> {
-    OWNER.lock().ok().and_then(|slot| *slot).map(|raw| ::windows::Win32::Foundation::HWND(raw as *mut _))
-}
-
 /* ==================== 几何 ==================== */
 
 /// 内容区在屏幕上的矩形。
@@ -358,13 +340,18 @@ fn maximized(area: Rect, sidebar: Option<Rect>, right_edge: bool, unit: f64) -> 
 /* ==================== 窗口的创建与显示 ==================== */
 
 /// 新建一个隐藏的记录窗口。建窗口要回到主线程，调用方在别的线程上调用。
+///
+/// 记录窗口是独立的普通窗口：有任务栏按钮、出现在 Alt+Tab 中，不交给侧栏的隐藏所有者窗口。
+/// 交给它时有两个问题：激活侧栏会把同一所有者的窗口一起提到前面，取消置顶又被别的窗口盖住后，
+/// 记录窗口只能跟着侧栏出现；而且系统会把「取消置顶」连带到所有者及其它被拥有的窗口，
+/// 取消一个记录窗口的置顶，侧栏与速记浮窗也不再置顶。
 fn build(app: &AppHandle, label: &str) -> AppResult<WebviewWindow> {
-    let builder = WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
+    let builder =WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
         .title("SideNotes 记录")
         .decorations(false)
         .transparent(true)
         .shadow(true)
-        .skip_taskbar(true)
+        .skip_taskbar(false)
         .resizable(true)
         .maximizable(false)
         .minimizable(false)
@@ -372,11 +359,6 @@ fn build(app: &AppHandle, label: &str) -> AppResult<WebviewWindow> {
         .focused(false)
         .inner_size(420.0, 320.0)
         .disable_drag_drop_handler();
-    #[cfg(windows)]
-    let builder = match owner() {
-        Some(owner) => builder.owner_raw(owner),
-        None => builder,
-    };
     let window = builder.build()?;
     // 出入由页面与动画层负责，不要系统的淡入淡出：交接给窗口时会叠出一层半透明。
     windows::disable_transitions(&window);

@@ -369,6 +369,19 @@ export async function isSettingsVisible(): Promise<boolean> {
   }
 }
 
+/** 改当前窗口的标题（任务栏按钮与 Alt+Tab 中显示）；浏览器预览下改页面标题。 */
+export async function setWindowTitle(title: string): Promise<void> {
+  if (!isDesktop()) {
+    document.title = title;
+    return;
+  }
+  try {
+    await getCurrentWindow().setTitle(title);
+  } catch {
+    // 标题只影响任务栏上的文字，改不了不影响使用。
+  }
+}
+
 /** 最小化当前窗口；浏览器预览下无操作。 */
 export async function minimizeWindow(): Promise<void> {
   if (!isDesktop()) return;

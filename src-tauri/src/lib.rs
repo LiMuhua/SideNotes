@@ -96,14 +96,10 @@ pub fn run() {
             // 窗口在状态就绪后才创建。配置中的窗口默认先于 setup 创建，页面会在
             // manage 之前调用 load_snapshot 而失败，以空列表启动；此后的整体写入
             // 会覆盖数据库中的其它记录。配置里的窗口均设为 create: false，统一在此创建。
-            // 侧栏、速记浮窗、记录窗口与动画层交给一个隐藏的所有者窗口，不出现在任务栏、Alt+Tab 与 Win+Tab 中
-            // （见 windows::create_owner_window）。
+            // 侧栏、速记浮窗与动画层交给一个隐藏的所有者窗口，不出现在任务栏、Alt+Tab 与 Win+Tab 中
+            // （见 windows::create_owner_window）；记录窗口是独立的普通窗口，不交给它（见 note_windows::build）。
             #[cfg(windows)]
             let owner = windows::create_owner_window();
-            #[cfg(windows)]
-            if let Some(owner) = owner {
-                note_windows::set_owner(owner);
-            }
             for config in handle.config().app.windows.iter().filter(|config| !config.create) {
                 let builder = WebviewWindowBuilder::from_config(&handle, config)?;
                 #[cfg(windows)]
