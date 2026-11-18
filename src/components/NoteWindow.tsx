@@ -855,6 +855,7 @@ export function NoteWindow() {
             // 与卡片编辑一致，光标放在正文末尾（标签行之前）。
             const end = bodyEnd(editor.getValue());
             editor.setSelectionRange(end, end);
+            window.requestAnimationFrame(() => editor.revealCaret());
           }}
           onAttachment={(reference) => openReference(reference.target)}
         />

@@ -2686,9 +2686,11 @@ export function Sidebar() {
                 onEditChange={(text) => setEditing((prev) => (prev ? { ...prev, text } : prev))}
                 onEditReady={(editor) => {
                   editorRef.current = editor;
-                  // 进入编辑时光标在正文末尾、标签行之前（原型第二版 bodyEnd），接着写正文。
+                  // 进入编辑时光标在正文末尾、标签行之前（原型第二版 bodyEnd），接着写正文；
+                  // 编辑区有滚动条时滚到光标处（排好版之后再滚）。
                   const end = bodyEnd(editor.getValue());
                   editor.setSelectionRange(end, end);
+                  window.requestAnimationFrame(() => editor.revealCaret());
                 }}
                 onEditBlur={handleEditBlur}
                 onFinishEdit={() => void commitEdit()}

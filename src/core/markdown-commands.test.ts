@@ -14,8 +14,10 @@ import {
   toggleInline,
   toggleLink,
   toggleList,
+  taskShorthand,
   toggleQuote,
   toggleTag,
+  toggleTask,
   wrapCodeBlock,
   type EditResult,
 } from './markdown-commands';
@@ -188,6 +190,29 @@ describe('块级格式', () => {
     expect(run(wrapCodeBlock, '> |')).toBe('> ```\n> |\n> ```');
     // 不是列表项头的写法照常放进代码块。
     expect(run(wrapCodeBlock, '«-5 度»')).toBe('```\n«-5 度»\n```');
+  });
+
+  it('切换待办列表：普通行加上项头与待办框，列表项补上待办框，都是待办时去掉', () => {
+    expect(run(toggleTask, '«甲\n乙»')).toBe('- [ ] «甲\n- [ ] 乙»');
+    expect(run(toggleTask, '«- 甲\n1. 乙»')).toBe('«- [ ] 甲\n1. [ ] 乙»');
+    expect(run(toggleTask, '«- [ ] 甲\n- [x] 乙»')).toBe('«甲\n乙»');
+    expect(run(toggleTask, '写|字')).toBe('- [ ] 写|字');
+  });
+
+  it('待办的简写：行首的 [] 或【】后按空格换成待办项', () => {
+    const shorthand = (marked: string, text = ' '): string | null => {
+      const { value, start, end } = parse(marked);
+      return show(taskShorthand(value, start, end, text));
+    };
+    expect(shorthand('[]|')).toBe('- [ ] |');
+    expect(shorthand('甲\n【】|')).toBe('甲\n- [ ] |');
+    expect(shorthand('  [x]|')).toBe('  - [x] |');
+    expect(shorthand('- [ ]|')).toBe('- [ ] |');
+    expect(shorthand('[]|', '\u3000')).toBe('- [ ] |');
+    // 不在行首、不是空格、在代码中时照常输入。
+    expect(shorthand('甲[]|')).toBeNull();
+    expect(shorthand('[]|', 'a')).toBeNull();
+    expect(shorthand('```\n[]|\n```')).toBeNull();
   });
 
   it('代码块：空行插入一对围栏，选中多行时包进围栏', () => {

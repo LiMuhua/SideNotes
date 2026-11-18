@@ -25,7 +25,8 @@ export type ShortcutId =
   | 'codeBlock'
   | 'quote'
   | 'orderedList'
-  | 'bulletList';
+  | 'bulletList'
+  | 'taskList';
 
 /** 全局快捷键：在任何程序中都能呼出 SideNotes。 */
 export type GlobalShortcutId = Extract<ShortcutId, 'capture' | 'sidebar'>;
@@ -65,6 +66,8 @@ export const SHORTCUT_COMMANDS: readonly ShortcutCommand[] = [
   { id: 'quote', label: '引用', group: 'format', defaultKeys: 'Ctrl+Shift+Q' },
   { id: 'orderedList', label: '有序列表', group: 'format', defaultKeys: 'Ctrl+Shift+[' },
   { id: 'bulletList', label: '无序列表', group: 'format', defaultKeys: 'Ctrl+Shift+]' },
+  // 2026-11-18 用户要求：「- [ ] 」不好敲，给待办列表一个格式快捷键（原型没有这一项）。
+  { id: 'taskList', label: '待办列表', group: 'format', defaultKeys: 'Ctrl+Shift+\\' },
 ];
 
 /** 不能更换、只在设置页列出的快捷键，以及它们占用的按键。 */

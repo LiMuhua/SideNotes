@@ -7,7 +7,8 @@
  * 快捷键参照 Typora：Ctrl+B 加粗、Ctrl+I 斜体、Ctrl+U 下划线（写作 `<u>…</u>`）、
  * Ctrl+K 链接（剪贴板中是网址时直接用作地址）、Ctrl+Shift+` 或 Alt+C 行内代码、
  * Alt+S 或 Alt+Shift+5 删除线、Ctrl+1–6 标题、Ctrl+0 正文、Ctrl+Shift+Q 引用、
- * Ctrl+Shift+[ 有序列表、Ctrl+Shift+] 无序列表、Ctrl+Shift+K 代码块；列表与引用中回车自动续写，空项回车结束。
+ * Ctrl+Shift+[ 有序列表、Ctrl+Shift+] 无序列表、Ctrl+Shift+\ 待办列表、Ctrl+Shift+K 代码块；列表与引用中回车自动续写，空项回车结束。
+ * 行首输入 [] 或【】再按空格，换成待办项（见 taskShorthand）。
  */
 
 import { escapeLabel, filePath } from './files';
@@ -481,6 +482,44 @@ export function toggleList(value: string, start: number, end: number, ordered: b
     return { at: line.start + indent, remove: 0, insert: ordered ? `${number++}. ` : '- ' };
   });
   return applyEdits(value, edits, start, end);
+}
+
+/**
+ * 切换待办列表：所选各行都已是待办项时去掉项头与待办框，否则统一换成待办项：
+ * 已是列表项的保留项头、补上待办框，其余行加上「- [ ] 」。
+ */
+export function toggleTask(value: string, start: number, end: number): EditResult {
+  const lines = contentLines(value, start, end).filter((line) => !RULE.test(line.text));
+  const items = lines.map((line) => line.text.match(LIST_ITEM));
+  const all = items.length > 0 && items.every((item) => item?.[4]);
+  const edits = lines.map((line, index) => {
+    const item = items[index];
+    if (item) {
+      const head = line.start + item[1].length;
+      if (all) return { at: head, remove: item[2].length + item[3].length + (item[4]?.length ?? 0), insert: '' };
+      return { at: head + item[2].length + item[3].length, remove: 0, insert: item[4] ? '' : '[ ] ' };
+    }
+    const indent = (line.text.match(/^ {0,3}/) ?? [''])[0].length;
+    return { at: line.start + indent, remove: 0, insert: '- [ ] ' };
+  });
+  return applyEdits(value, edits, start, end);
+}
+
+/** 行首（缩进、可选的无序项头之后）手写的待办框：[]、[ ]、[x]，以及中文输入法打出的【】、【 】、【x】。 */
+const TASK_SHORTHAND = /^( {0,3})(?:[-+*][ \t]+)?(\[ ?\]|\[[xX]\]|【 ?】|【[xX]】)$/;
+
+/**
+ * 待办的简写：光标前这一行只有 [] 或【】（可以带缩进与无序项头）时按空格，换成「- [ ] 」（[x] 换成已完成）。
+ * 不在代码中；有选中的文字或不是空格时返回 null，照常输入。
+ */
+export function taskShorthand(value: string, start: number, end: number, text: string): EditResult | null {
+  if (start !== end || (text !== ' ' && text !== '\u3000') || inCode(value, start)) return null;
+  const lineStart = Math.max(value.lastIndexOf('\n', start - 1), value.lastIndexOf('\r', start - 1)) + 1;
+  const match = TASK_SHORTHAND.exec(value.slice(lineStart, start));
+  if (!match) return null;
+  const checked = /[xX]/.test(match[2]);
+  const head = `${match[1]}- [${checked ? 'x' : ' '}] `;
+  return { value: value.slice(0, lineStart) + head + value.slice(start), start: lineStart + head.length, end: lineStart + head.length };
 }
 
 /** 行首的引用标记（可多层）。 */

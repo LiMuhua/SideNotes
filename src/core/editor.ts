@@ -30,11 +30,13 @@ import {
   linkWithAddress,
   setHeading,
   smartPaste,
+  taskShorthand,
   toggleInline,
   toggleLink,
   toggleList,
   toggleQuote,
   toggleTag,
+  toggleTask,
   wrapCodeBlock,
   type EditResult,
 } from './markdown-commands';
@@ -362,6 +364,23 @@ export class MarkdownEditor {
     if (this.destroyed) return;
     this.element.focus(options);
     this.setSelectionRange(this.selection.start, this.selection.end, this.selection.direction);
+  }
+
+  /**
+   * 让光标出现在可见范围内：从编辑区往外，每一层可以滚动的容器都滚到光标那一行，上下留一点余量。
+   * 进入编辑时光标放在正文末尾，正文长、编辑区出现滚动条时要滚过去，否则看不到光标在哪。
+   */
+  revealCaret(): void {
+    if (this.destroyed) return;
+    for (let node: HTMLElement | null = this.element; node; node = node.parentElement) {
+      if (node.scrollHeight <= node.clientHeight || !/(auto|scroll)/.test(getComputedStyle(node).overflowY)) continue;
+      const caret = this.caretRect(this.selection.end);
+      if (!caret) return;
+      const box = node.getBoundingClientRect();
+      const margin = Math.min(caret.height * 1.5, node.clientHeight / 4);
+      if (caret.top < box.top + margin) node.scrollTop -= box.top + margin - caret.top;
+      else if (caret.top + caret.height > box.bottom - margin) node.scrollTop += caret.top + caret.height - (box.bottom - margin);
+    }
   }
 
   /** 取消焦点。 */
@@ -1333,9 +1352,15 @@ export class MarkdownEditor {
     flush();
   }
 
-  /** 生成可点击的待办复选框，装饰不参与原文映射。 */
+  /**
+   * 生成可点击的待办复选框，装饰不参与原文映射。
+   *
+   * 看得见的方框是里面的 md-task-box，按钮本身右边多出一段透明的间距：光标停在待办项开头时，
+   * 浏览器把它画在按钮的边框外沿，外边距不算，间距放在按钮之内光标才不贴着方框。
+   */
   private renderTask(line: HTMLElement, offset: number, checked: boolean): void {
-    const checkbox = element('button', 'md-task-checkbox md-task-toggle', checked ? '✓' : '');
+    const checkbox = element('button', 'md-task-checkbox md-task-toggle');
+    checkbox.append(element('span', 'md-task-box', checked ? '✓' : ''));
     checkbox.type = 'button';
     checkbox.dataset.mdDecoration = '';
     checkbox.dataset.mdTask = String(offset);
@@ -1651,7 +1676,10 @@ export class MarkdownEditor {
       event.preventDefault();
       const text =
         event.data !== null ? event.data : (event.dataTransfer?.getData('text/plain') ?? '');
-      this.insertText(text || '', this.readSelection());
+      const range = this.readSelection();
+      // 行首的 [] 或【】后按空格换成待办项（见 taskShorthand）。
+      if (type === 'insertText' && this.applyEdit(taskShorthand(this.value, range.start, range.end, text || ''), range)) return;
+      this.insertText(text || '', range);
       return;
     }
     // 富文本格式化命令一律拒绝，原文由 Markdown 标记表达。
@@ -2038,6 +2066,7 @@ export class MarkdownEditor {
       quote: toggleQuote,
       orderedList: (value, start, end) => toggleList(value, start, end, true),
       bulletList: (value, start, end) => toggleList(value, start, end, false),
+      taskList: toggleTask,
     };
     if (bound && commands[bound]) return commands[bound] ?? null;
     const combo = comboFromEvent(key);

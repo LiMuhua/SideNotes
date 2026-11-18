@@ -2231,22 +2231,25 @@ img.is-thumbnail-pending {
   background: var(--sn-color-border);
 }
 
-/* 编辑区里的待办方框（编辑区的根元素同时带 markdown-body，选择器写到编辑区之内，才能盖过正文中待办按钮的样式）。 */
+/* 编辑区里的待办方框（编辑区的根元素同时带 markdown-body，选择器写到编辑区之内，才能盖过正文中待办按钮的样式）。
+ * 按钮是透明的一格：左边是看得见的方框（.md-task-box），右边是到正文的间距。光标停在待办项开头时画在按钮的外沿，
+ * 间距写成外边距的话光标会贴着方框（2026-11-18 用户反馈）。只有方框接收点击，间距不算。 */
 .live-markdown-editor .md-task-checkbox {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: var(--sn-icon-size-sm);
+  justify-content: flex-start;
+  width: calc(var(--sn-icon-size-sm) + var(--sn-space-4));
   height: var(--sn-icon-size-sm);
-  margin-right: var(--sn-space-3);
-  padding: 0;
-  border: var(--sn-border-width) solid var(--sn-color-border-strong);
-  border-radius: var(--sn-radius-xs);
+  margin: 0;
+  padding: 0 var(--sn-space-4) 0 0;
+  border: 0;
+  border-radius: 0;
   background: transparent;
   color: var(--sn-color-accent-text);
   font-size: 0.8em;
   line-height: 1;
   text-indent: 0;
+  pointer-events: none;
   /* 居中对齐（middle）与方框里有没有勾无关，勾选前后不上下跳；字体的 x 高度偏小，再上移一点，
    * 与卡片中的待办方框一样对齐文字的中线，不比文字低。 */
   position: relative;
@@ -2254,7 +2257,28 @@ img.is-thumbnail-pending {
   vertical-align: middle;
 }
 
-.live-markdown-editor .md-task-checkbox[aria-checked='true'] {
+.live-markdown-editor .md-task-checkbox:hover {
+  background: transparent;
+}
+
+.live-markdown-editor .md-task-checkbox > .md-task-box {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  border: var(--sn-border-width) solid var(--sn-color-border-strong);
+  border-radius: var(--sn-radius-xs);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.live-markdown-editor .md-task-checkbox:hover > .md-task-box {
+  border-color: var(--sn-color-accent);
+}
+
+.live-markdown-editor .md-task-checkbox[aria-checked='true'] > .md-task-box {
   border-color: var(--sn-color-accent);
   background: var(--sn-color-accent-subtle);
 }
