@@ -194,7 +194,8 @@ body[data-window='sidebar'] .sidebar-resizer:focus-visible {
   outline-offset: calc(var(--sn-focus-ring-width) * -1);
 }
 
-/* 附件弹窗显示在侧栏窗口里，比原型页面中的弹窗窄：底栏放不下时折行，「应用修改」仍靠右（已知差异：弹窗宽度随侧栏收窄）。 */
+/* 附件弹窗的底栏放不下时折行，「应用修改」仍靠右：浏览器预览里弹窗画在侧栏页面中，宽度随侧栏收窄
+ * （桌面端在独立的弹窗窗口里，宽度足够，见 T99）。 */
 .attachment-modal .modal-footer {
   flex-wrap: wrap;
   row-gap: var(--sn-space-2);
