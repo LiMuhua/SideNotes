@@ -4,6 +4,7 @@ mod app_icon;
 mod attachments;
 mod backup;
 mod commands;
+mod diag;
 mod edge;
 mod error;
 mod fonts;
@@ -45,6 +46,9 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let handle = app.handle().clone();
+            if let Ok(dir) = handle.path().app_log_dir() {
+                diag::init(&dir);
+            }
 
             // 数据默认落在系统应用数据目录；在设置中更换过存储位置时，按其中记下的目录打开（见 location）。
             // 目录是软链接时一律用实际位置（见 paths），比较、迁移与清理都按实际目录进行。

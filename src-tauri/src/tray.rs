@@ -31,7 +31,9 @@ pub fn setup(app: &AppHandle) -> AppResult<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "tray-sidebar" => {
-                let _ = crate::windows::show_sidebar(app, &crate::windows::last_layout());
+                if let Err(error) = crate::windows::show_sidebar(app, &crate::windows::last_layout()) {
+                    crate::diag::log(format!("托盘菜单显示侧栏失败：{error}"));
+                }
             }
             "tray-capture" => {
                 let _ = crate::windows::show_capture(app);
@@ -52,7 +54,9 @@ pub fn setup(app: &AppHandle) -> AppResult<()> {
                 ..
             } = event
             {
-                let _ = crate::windows::show_sidebar(tray.app_handle(), &crate::windows::last_layout());
+                if let Err(error) = crate::windows::show_sidebar(tray.app_handle(), &crate::windows::last_layout()) {
+                    crate::diag::log(format!("单击托盘显示侧栏失败：{error}"));
+                }
             }
         })
         .build(app)?;

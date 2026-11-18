@@ -100,10 +100,14 @@ fn configured(settings: &serde_json::Value) -> Vec<(&'static str, String)> {
 
 /// 按下全局快捷键：切换速记浮窗或侧栏（侧栏用前端最近一次给出的布局）。
 fn trigger(app: &AppHandle, id: &str) {
-    let _ = match id {
+    let result = match id {
         "capture" => crate::windows::toggle_capture(app),
         _ => crate::windows::toggle_sidebar(app, &crate::windows::last_layout()),
     };
+    match result {
+        Ok(shown) => crate::diag::log(format!("快捷键 {id}：{}", if shown { "显示" } else { "收起" })),
+        Err(error) => crate::diag::log(format!("快捷键 {id} 失败：{error}")),
+    }
 }
 
 /// 注册编号为 `id` 的全局快捷键。

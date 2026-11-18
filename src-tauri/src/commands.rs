@@ -221,13 +221,13 @@ pub fn stop_shortcut_recording(session: u64) {
 /// 显示侧栏。
 #[tauri::command]
 pub fn show_sidebar(app: AppHandle, layout: SidebarLayout) -> AppResult<()> {
-    windows::show_sidebar(&app, &layout)
+    windows::show_sidebar(&app, &layout).inspect_err(|error| crate::diag::log(format!("显示侧栏失败：{error}")))
 }
 
 /// 隐藏侧栏；传入布局以支持滑出动画。
 #[tauri::command]
 pub fn hide_sidebar(app: AppHandle, layout: SidebarLayout) -> AppResult<()> {
-    windows::hide_sidebar(&app, &layout)
+    windows::hide_sidebar(&app, &layout).inspect_err(|error| crate::diag::log(format!("收起侧栏失败：{error}")))
 }
 
 /// 按设置重新对齐侧栏，用于宽度或边缘变更。

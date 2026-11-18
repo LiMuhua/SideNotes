@@ -38,6 +38,25 @@ pub const SETTINGS_VISIBILITY_EVENT: &str = "sidenotes://settings-visibility";
 /// 避免快速移入移出时两段动画互相拉扯。
 static SIDEBAR_ANIMATION: AtomicU64 = AtomicU64::new(0);
 
+/// 当前的动画代次：贴边轮询据此判断侧栏停在屏幕外期间有没有新的显示或收起。
+pub fn animation_generation() -> u64 {
+    SIDEBAR_ANIMATION.load(Ordering::SeqCst)
+}
+
+/// 窗口是否整个在所有屏幕之外（显示着却看不见）。
+pub fn is_offscreen(window: &WebviewWindow) -> bool {
+    let (Ok(position), Ok(size)) = (window.outer_position(), window.outer_size()) else {
+        return false;
+    };
+    let rect: Rect = (position.x, position.y, position.x + size.width as i32, position.y + size.height as i32);
+    let monitors = window.available_monitors().unwrap_or_default();
+    !monitors.is_empty()
+        && !monitors
+            .iter()
+            .map(bounds)
+            .any(|(left, top, right, bottom)| rect.0 < right && rect.2 > left && rect.1 < bottom && rect.3 > top)
+}
+
 /// 最近一次由前端给出的侧栏布局（显示、收起、切换与按设置对齐时都会带上）。
 ///
 /// 贴边、托盘与全局快捷键直接在这里显示或切换侧栏，不再绕经侧栏页面的脚本：页面卡住、崩溃，

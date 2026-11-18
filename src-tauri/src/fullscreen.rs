@@ -8,7 +8,9 @@
 //! - 系统的用户通知状态（`SHQueryUserNotificationState`）：独占全屏的 Direct3D 程序与演示模式。
 //!   这两种状态不区分显示器，出现时所有屏幕的边缘都不唤出（独占全屏时切走焦点就会让游戏退回桌面）。
 //! - 前台窗口盖住所在显示器的整个矩形（无边框全屏的游戏、浏览器与播放器的全屏）：只挡住这块屏幕的边缘。
-//!   桌面与任务栏等外壳窗口、本应用自己的窗口不算；最大化的窗口在任务栏自动隐藏时也会盖住整块屏幕，同样不算。
+//!   桌面与任务栏等外壳窗口、本应用自己的窗口不算；最大化的窗口在任务栏自动隐藏时也会盖住整块屏幕，同样不算；
+//!   带标题栏或可以拖边调大小的窗口也不算：有的程序自己画标题栏，「最大化」只是把窗口铺满工作区，
+//!   系统不认为它最大化，任务栏自动隐藏时就会被误当成全屏，这块屏幕的贴边一直唤不出。真正的全屏窗口两样都去掉了。
 
 /// 窗口或显示器的矩形：左、上、右、下（物理像素）。
 pub type Rect = (i32, i32, i32, i32);
@@ -23,15 +25,15 @@ pub fn is_shell_class(class: &str) -> bool {
     matches!(class, "Progman" | "WorkerW" | "Shell_TrayWnd" | "Shell_SecondaryTrayWnd")
 }
 
-/// 前台窗口是否按全屏程序对待：盖住整块屏幕、不是外壳窗口，也不是最大化的普通窗口。
-pub fn is_fullscreen_window(covers: bool, shell: bool, zoomed: bool) -> bool {
-    covers && !shell && !zoomed
+/// 前台窗口是否按全屏程序对待：盖住整块屏幕、不是外壳窗口、不是最大化的普通窗口，也没有标题栏与可拖动的边框。
+pub fn is_fullscreen_window(covers: bool, shell: bool, zoomed: bool, framed: bool) -> bool {
+    covers && !shell && !zoomed && !framed
 }
 
-/// 指针所在的屏幕是否被全屏程序占用，占用时贴边不唤出侧栏。
+/// 指针所在的屏幕是否被全屏程序占用，占用时贴边不唤出侧栏，返回挡住的原因（写进诊断日志）。
 /// `x`、`y` 是指针的物理坐标（与 `GetCursorPos` 相同）。读取失败时按「没有全屏程序」处理，不挡住贴边唤出。
 #[cfg(windows)]
-pub fn blocks_edge(x: f64, y: f64) -> bool {
+pub fn edge_blocker(x: f64, y: f64) -> Option<String> {
     use windows::Win32::Foundation::{POINT, RECT};
     use windows::Win32::Graphics::Gdi::{
         GetMonitorInfoW, MonitorFromPoint, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTONULL,
@@ -39,25 +41,29 @@ pub fn blocks_edge(x: f64, y: f64) -> bool {
     use windows::Win32::System::Threading::GetCurrentProcessId;
     use windows::Win32::UI::Shell::{SHQueryUserNotificationState, QUNS_PRESENTATION_MODE, QUNS_RUNNING_D3D_FULL_SCREEN};
     use windows::Win32::UI::WindowsAndMessaging::{
-        GetClassNameW, GetForegroundWindow, GetWindowRect, GetWindowThreadProcessId, IsZoomed,
+        GetClassNameW, GetForegroundWindow, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId, IsZoomed, GWL_STYLE,
+        WS_CAPTION, WS_THICKFRAME,
     };
 
     // SAFETY: 以下均为只读查询，传入的句柄来自系统调用，缓冲区与结构体都在栈上并给出了正确的大小。
     unsafe {
         if let Ok(state) = SHQueryUserNotificationState() {
-            if state == QUNS_RUNNING_D3D_FULL_SCREEN || state == QUNS_PRESENTATION_MODE {
-                return true;
+            if state == QUNS_RUNNING_D3D_FULL_SCREEN {
+                return Some("独占全屏的 Direct3D 程序".into());
+            }
+            if state == QUNS_PRESENTATION_MODE {
+                return Some("演示模式".into());
             }
         }
 
         let foreground = GetForegroundWindow();
         if foreground.is_invalid() {
-            return false;
+            return None;
         }
         let mut process = 0u32;
         GetWindowThreadProcessId(foreground, Some(&mut process));
         if process == GetCurrentProcessId() {
-            return false;
+            return None;
         }
         let mut buffer = [0u16; 64];
         let length = GetClassNameW(foreground, &mut buffer).max(0) as usize;
@@ -65,34 +71,36 @@ pub fn blocks_edge(x: f64, y: f64) -> bool {
 
         let mut window = RECT::default();
         if GetWindowRect(foreground, &mut window).is_err() {
-            return false;
+            return None;
         }
         let monitor = MonitorFromWindow(foreground, MONITOR_DEFAULTTONULL);
         if monitor.is_invalid() {
-            return false;
+            return None;
         }
         let mut info = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
         if !GetMonitorInfoW(monitor, &mut info).as_bool() {
-            return false;
+            return None;
         }
         let bounds = info.rcMonitor;
         let covers = covers_monitor(
             (window.left, window.top, window.right, window.bottom),
             (bounds.left, bounds.top, bounds.right, bounds.bottom),
         );
-        if !is_fullscreen_window(covers, is_shell_class(&class), IsZoomed(foreground).as_bool()) {
-            return false;
+        let style = GetWindowLongPtrW(foreground, GWL_STYLE) as u32;
+        let framed = style & (WS_CAPTION.0 | WS_THICKFRAME.0) != 0;
+        if !is_fullscreen_window(covers, is_shell_class(&class), IsZoomed(foreground).as_bool(), framed) {
+            return None;
         }
         // 只挡住全屏程序所在的那块屏幕：另一块屏幕的外沿照常唤出。
         let cursor = MonitorFromPoint(POINT { x: x.round() as i32, y: y.round() as i32 }, MONITOR_DEFAULTTONEAREST);
-        cursor == monitor
+        (cursor == monitor).then(|| format!("前台全屏窗口（{class}）"))
     }
 }
 
 /// 非 Windows 平台没有贴边唤出的全屏判断，一律不挡。
 #[cfg(not(windows))]
-pub fn blocks_edge(_x: f64, _y: f64) -> bool {
-    false
+pub fn edge_blocker(_x: f64, _y: f64) -> Option<String> {
+    None
 }
 
 #[cfg(test)]
@@ -122,11 +130,13 @@ mod tests {
         assert!(is_shell_class("WorkerW"));
         assert!(is_shell_class("Shell_TrayWnd"));
         assert!(!is_shell_class("Chrome_WidgetWin_1"));
-        assert!(is_fullscreen_window(true, false, false));
+        assert!(is_fullscreen_window(true, false, false, false));
         // 桌面获得焦点时铺满屏幕，不算。
-        assert!(!is_fullscreen_window(true, true, false));
+        assert!(!is_fullscreen_window(true, true, false, false));
         // 任务栏自动隐藏时最大化的窗口也盖住整块屏幕，不算。
-        assert!(!is_fullscreen_window(true, false, true));
-        assert!(!is_fullscreen_window(false, false, false));
+        assert!(!is_fullscreen_window(true, false, true, false));
+        // 自己画标题栏的程序把窗口铺满工作区（系统不认为它最大化），仍带着可拖动的边框，不算。
+        assert!(!is_fullscreen_window(true, false, false, true));
+        assert!(!is_fullscreen_window(false, false, false, false));
     }
 }
