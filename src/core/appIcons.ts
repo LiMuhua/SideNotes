@@ -18,8 +18,14 @@ export interface BuiltinIcon {
   name: string;
 }
 
+/**
+ * 桌面端不提供的内置图标：清单里的第二个「门缝平视 · 靛蓝」与第四个「门缝平视 · 暖」（2026-11-18 用户要求去掉）。
+ * 清单、资源与原型、Playground 共用，由设计分支决定是否删除；这里只是不列出，选过它们的设置按默认图标处理。
+ */
+const HIDDEN_ICONS: ReadonlySet<string> = new Set(['door-plain-indigo', 'door-plain-warm']);
+
 /** 内置图标，按清单顺序排列，默认图标在最前。 */
-export const BUILTIN_ICONS: readonly BuiltinIcon[] = manifest.icons;
+export const BUILTIN_ICONS: readonly BuiltinIcon[] = manifest.icons.filter((icon) => !HIDDEN_ICONS.has(icon.id));
 
 /** 默认图标：211「门缝浅笑 · 靛蓝」。 */
 export const DEFAULT_APP_ICON: string = manifest.default;
