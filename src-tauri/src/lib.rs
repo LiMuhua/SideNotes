@@ -10,6 +10,7 @@ mod edge;
 mod error;
 mod fonts;
 mod fullscreen;
+mod glass;
 mod location;
 mod migration;
 mod models;

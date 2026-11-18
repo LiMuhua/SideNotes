@@ -82,7 +82,7 @@ pub fn last_layout() -> SidebarLayout {
         .lock()
         .ok()
         .and_then(|slot| slot.clone())
-        .unwrap_or_else(|| SidebarLayout { edge: "right".into(), width: 400.0, anim_duration: 260.0, gap: 0.0 })
+        .unwrap_or_else(|| SidebarLayout { edge: "right".into(), width: 400.0, anim_duration: 260.0, gap: 0.0, backdrop: None })
 }
 
 /// 侧栏几何配置，由前端设置驱动。
@@ -101,6 +101,9 @@ pub struct SidebarLayout {
     /// `width` 仍是包括留白在内的宽度，面板在屏幕上占的位置与贴边时相同。其余主题为 0。
     #[serde(default)]
     pub gap: f64,
+    /// 磨砂玻璃的侧栏（T101）：窗口全透明，背后的屏幕由 glass.rs 截下、模糊后交给页面；其余主题为空。
+    #[serde(default)]
+    pub backdrop: Option<crate::glass::Backdrop>,
 }
 
 impl SidebarLayout {
@@ -311,7 +314,12 @@ pub fn align_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
     // 可见时跟随侧栏所在屏幕；隐藏时按鼠标所在屏幕预先摆好。
     let visible = sidebar.is_visible().unwrap_or(false);
     let geometry = sidebar_geometry(&sidebar, layout, !visible)?;
-    set_bounds(&sidebar, geometry.final_x, geometry.y, geometry.width, geometry.height)
+    set_bounds(&sidebar, geometry.final_x, geometry.y, geometry.width, geometry.height)?;
+    // 显示着的磨砂玻璃侧栏换了主题或改了宽度：停下来之后重截背景（T101）。
+    if visible {
+        crate::glass::keep_fresh(app, crate::glass::SETTLE_DELAY);
+    }
+    Ok(())
 }
 
 /// 同时设置窗口位置与内容区尺寸。
@@ -444,6 +452,8 @@ pub fn show_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
     sidebar.set_size(LogicalSize::new(geometry.width, geometry.height))?;
     // 侧栏始终置顶；万一被别处连带取消（见 create_owner_window），显示时补回来。
     let _ = sidebar.set_always_on_top(true);
+    // 磨砂玻璃：窗口出来之前，按它将要停的位置截下背后的屏幕（T101）。
+    crate::glass::before_show(app, &sidebar, geometry.final_x, geometry.y, geometry.width, geometry.height);
     if !visible {
         // 先摆到屏幕外再显示，避免出现一帧停在最终位置再跳回去。
         sidebar.set_position(LogicalPosition::new(start_x, geometry.y))?;

@@ -21,7 +21,10 @@ import { useStoreSlice } from './hooks/useStore';
 import * as store from './core/store';
 import * as bridge from './core/bridge';
 import { resolveTheme, resolveFontFamily, uiZoom } from './core/settings';
-import { applySurface, windowMaterial } from './core/surfaces';
+import { applySurface, isGlassBlocks, sidebarMaterial, windowMaterial } from './core/surfaces';
+
+/** 后端送来的磨砂玻璃侧栏背景（src-tauri/src/glass.rs 的 BACKDROP_EVENT）。 */
+const GLASS_BACKDROP_EVENT = 'sidenotes://glass-backdrop';
 import { appIconFolder, appIconSource } from './core/appIcons';
 import { useCustomAppIcon } from './hooks/useAppIcon';
 import type { WindowRole } from './main';
@@ -97,13 +100,33 @@ export function App({ role }: AppProps) {
   // 侧栏、速记浮窗与记录窗口是透明窗口：按主题加亚克力（Windows 11、磨砂玻璃）、只透明（杂志）或铺满不透明的底色。
   // 根节点的 data-sn-window 供 window.css 去掉对应的留白、圆角与投影；设置窗口与弹窗窗口一律不透明，不写。
   // 动画层（T83）始终全透明、不要系统投影。
+  // 分块的磨砂玻璃侧栏窗口全透明，各块的磨砂背景是后端截下的背后屏幕（T101，sidebarMaterial 与 glass.rs）。
   const { surface } = settings;
   useEffect(() => {
     if (role === 'settings' || role === 'dialog') return;
-    const material = role === 'overlay' ? 'clear' : windowMaterial(surface);
+    const material = role === 'overlay' ? 'clear' : role === 'sidebar' ? sidebarMaterial(surface) : windowMaterial(surface);
     document.documentElement.dataset.snWindow = material;
     void bridge.setWindowMaterial(material);
   }, [role, surface]);
+
+  // 磨砂玻璃侧栏的背景：后端截下侧栏背后的屏幕、模糊后送来，写到根节点的 --glass-backdrop，各块用它作背景（window.css）。
+  // 换成别的主题时去掉，等下次送来再用。
+  const glassSidebar = role === 'sidebar' && isGlassBlocks(surface);
+  useEffect(() => {
+    if (!glassSidebar) return;
+    const root = document.documentElement;
+    const unsubscribe = bridge.subscribeAll([
+      bridge.onWindowEvent<string>(GLASS_BACKDROP_EVENT, (url) => {
+        root.style.setProperty('--glass-backdrop', `url("${url}")`);
+        root.dataset.glassBackdrop = '';
+      }),
+    ]);
+    return () => {
+      unsubscribe();
+      root.style.removeProperty('--glass-backdrop');
+      delete root.dataset.glassBackdrop;
+    };
+  }, [glassSidebar]);
 
   /* ==================== 应用图标（T85） ==================== */
   // 品牌标记由各组件按设置显示（hooks/useAppIcon）；这里更换网页图标，并由侧栏请后端更换各窗口与托盘的图标，

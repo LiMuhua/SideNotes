@@ -271,6 +271,58 @@ body[data-window='overlay'] .overlay-connector {
   transform: rotate(180deg);
 }
 
+/* ==================== 磨砂玻璃的侧栏（T101，技术决策第 46 条） ====================
+ * 分块的磨砂玻璃侧栏窗口全透明，块与块之间透出桌面。各块的磨砂是后端截下的背后屏幕（已模糊、加了饱和度，--glass-backdrop），
+ * 按窗口铺满并固定（fixed，与屏幕对齐，列表滚动时不跟着走），上面盖一层块的底色（--local-base）与顶部光泽。
+ * 页面里的 backdrop-filter 背后是透明的，没有东西可模糊，去掉。背景图送来之前（data-glass-backdrop 未写）照原样画。 */
+:root[data-glass-backdrop] .sidebar > :is(.sidebar-header, .sidebar-navigation, .list-topline, .workspace-nudge, .sync-warning, .sidebar-footer),
+:root[data-glass-backdrop] .sidebar > #quick-composer.sidebar-composer {
+  --local-base: var(--sn-color-card);
+  background-color: transparent;
+  background-image:
+    linear-gradient(to bottom, var(--sn-color-sheen), transparent var(--sn-space-9)),
+    linear-gradient(var(--local-base), var(--local-base)),
+    var(--glass-backdrop);
+  background-size: auto, auto, 100vw 100vh;
+  background-attachment: scroll, scroll, fixed;
+  backdrop-filter: none;
+}
+
+:root[data-glass-backdrop] .sidebar > #quick-composer.sidebar-composer:focus-within {
+  --local-base: var(--sn-color-editing);
+}
+
+:root[data-glass-backdrop] .note-list .note-card {
+  --local-base: var(--sn-color-card);
+  background-color: transparent;
+  background-image:
+    linear-gradient(var(--local-overlay), var(--local-overlay)),
+    linear-gradient(to bottom, var(--sn-color-sheen), transparent var(--sn-space-9)),
+    linear-gradient(var(--local-base), var(--local-base)),
+    var(--glass-backdrop);
+  background-size: auto, auto, auto, 100vw 100vh;
+  background-attachment: scroll, scroll, scroll, fixed;
+  backdrop-filter: none;
+}
+
+:root[data-glass-backdrop] .note-list .note-card.is-editing {
+  --local-base: var(--sn-color-editing);
+}
+
+/* 编辑时其余卡片变淡：整张卡片半透明会透出背后清晰的桌面（窗口是透明的），改为只让卡片里的内容变淡，磨砂底保留。 */
+:root[data-glass-backdrop] .note-list:has(.note-card.is-editing) .note-card:not(.is-editing) {
+  opacity: 1;
+}
+
+:root[data-glass-backdrop] .note-list:has(.note-card.is-editing) .note-card:not(.is-editing) > * {
+  opacity: var(--sn-opacity-disabled);
+  transition: opacity var(--sn-duration-normal) var(--sn-ease-standard);
+}
+
+:root[data-glass-backdrop] .note-list:has(.note-card.is-editing) .note-card:not(.is-editing):hover > * {
+  opacity: 1;
+}
+
 /* ==================== 与原型第二版不同的地方（2026-11-18 用户要求） ==================== */
 
 /* 卡片标题最多一行（原型两行），放不下时末尾省略。 */

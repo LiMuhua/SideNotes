@@ -100,11 +100,37 @@ export function windowMaterial(surface: SurfaceMode): WindowMaterial {
 }
 
 /**
- * 侧栏窗口与屏幕边缘之间的留白（未缩放的 CSS 像素）：只有窗口本身就是面板的 `acrylic` 主题才有，取自令牌
- * `--sn-panel-inset`（Windows 11 12px、磨砂玻璃 10px）。读取的是根节点当前的令牌，要在写入主题属性之后调用。
+ * 磨砂玻璃的分块侧栏（T101，技术决策第 46 条）：各块各自磨砂，块与块之间透出桌面。系统的亚克力只能加在整个窗口上，
+ * 所以这种侧栏的窗口是全透明的（`clear`），背后的屏幕由后端截下、模糊后交给页面当各块的背景。
+ */
+export function isGlassBlocks(surface: SurfaceMode): boolean {
+  const item = surfaceSpec(surface);
+  return item.translucent && item.dock === 'blocks';
+}
+
+/** 侧栏窗口的材质：分块的磨砂玻璃全透明，其余与 windowMaterial 相同（速记浮窗与记录窗口仍是一整块，照常用亚克力）。 */
+export function sidebarMaterial(surface: SurfaceMode): WindowMaterial {
+  return isGlassBlocks(surface) ? 'clear' : windowMaterial(surface);
+}
+
+/**
+ * 分块磨砂玻璃侧栏的背景处理参数：模糊半径（页面像素）与饱和度，取自令牌 `--sn-panel-blur`、`--sn-panel-saturate`；
+ * 其余主题为 null。读取的是根节点当前的令牌，要在写入主题属性之后调用。
+ */
+export function glassBackdrop(surface: SurfaceMode): { blur: number; saturate: number } | null {
+  if (!isGlassBlocks(surface) || typeof document === 'undefined') return null;
+  const style = getComputedStyle(document.documentElement);
+  const blur = parseFloat(style.getPropertyValue('--sn-panel-blur'));
+  const saturate = parseFloat(style.getPropertyValue('--sn-panel-saturate'));
+  return { blur: Number.isFinite(blur) && blur > 0 ? blur : 0, saturate: Number.isFinite(saturate) && saturate > 0 ? saturate : 1 };
+}
+
+/**
+ * 侧栏窗口与屏幕边缘之间的留白（未缩放的 CSS 像素）：只有窗口本身就是面板的 `acrylic` 主题（Windows 11）才有，取自令牌
+ * `--sn-panel-inset`。分块的磨砂玻璃窗口全透明，留白画在页面里。读取的是根节点当前的令牌，要在写入主题属性之后调用。
  */
 export function windowGap(surface: SurfaceMode): number {
-  if (windowMaterial(surface) !== 'acrylic' || typeof document === 'undefined') return 0;
+  if (sidebarMaterial(surface) !== 'acrylic' || typeof document === 'undefined') return 0;
   const value = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sn-panel-inset'));
   return Number.isFinite(value) && value > 0 ? value : 0;
 }

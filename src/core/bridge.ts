@@ -33,7 +33,7 @@ import type {
 } from './types';
 import { normalizeDraft, normalizeNote } from './notes';
 import { normalizeSettings, sidebarWindowWidth, uiZoom } from './settings';
-import { windowGap, type WindowMaterial } from './surfaces';
+import { glassBackdrop, windowGap, type WindowMaterial } from './surfaces';
 import type { GlobalShortcutId } from './shortcuts';
 
 /** 侧栏几何参数。 */
@@ -44,6 +44,8 @@ export interface SidebarLayout {
   animDuration?: number;
   /** 面板与屏幕边缘之间的留白（逻辑像素，已乘界面缩放）；窗口本身就是面板的主题才有（core/surfaces 的 windowGap）。 */
   gap?: number;
+  /** 分块的磨砂玻璃（T101）：后端截下侧栏背后的屏幕时用的模糊半径（物理像素）与饱和度；其余主题为 null。 */
+  backdrop?: { blur: number; saturate: number } | null;
 }
 
 /** 后端事件名。 */
@@ -274,11 +276,13 @@ export async function recordShortcut(handler: (keys: RecordedKeys) => void): Pro
 export function sidebarLayout(
   settings: Pick<Settings, 'edge' | 'width' | 'fontSize' | 'animDuration' | 'surface'>,
 ): SidebarLayout {
+  const glass = glassBackdrop(settings.surface);
   return {
     edge: settings.edge,
     width: sidebarWindowWidth(settings.width, settings.fontSize),
     animDuration: settings.animDuration,
     gap: Math.round(windowGap(settings.surface) * uiZoom(settings.fontSize) * 100) / 100,
+    backdrop: glass ? { blur: glass.blur * (typeof window === 'undefined' ? 1 : window.devicePixelRatio), saturate: glass.saturate } : null,
   };
 }
 
