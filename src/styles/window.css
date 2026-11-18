@@ -174,3 +174,64 @@ body[data-window='overlay'] .overlay-layer {
   position: fixed;
   pointer-events: none;
 }
+
+/* ==================== 与原型第二版不同的地方（2026-11-18 用户要求） ==================== */
+
+/* 卡片标题最多一行（原型两行），放不下时末尾省略。 */
+.note-card .note-title {
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+}
+
+/* 列表末尾留出一段空白：卡片排满时空白处只剩卡片之间的缝，右键菜单与框选很难按到。
+ * 滚到底时最后一张卡片下面有约四分之一屏的空白可以按。 */
+.sidebar > .note-list {
+  padding-bottom: max(var(--sn-space-6), 25vh); /* 固定：四分之一个列表高度，留给右键与框选 */
+}
+
+/* 拖动卡片时的回收站：底栏位置的一整条投放区（原型是右下角 35px 的小方块，不够显眼，容易忘了能拖进去）。
+ * 开始拖动时从底部滑上来，图标与「移入回收站」一直显示；拖到上面时换成实心的危险色，松开即移入。 */
+.sidebar .drag-trash-zone {
+  right: var(--sn-panel-padding);
+  bottom: var(--sn-space-3);
+  left: var(--sn-panel-padding);
+  gap: var(--sn-space-3);
+  width: auto;
+  height: max(var(--sn-footer-height), var(--sn-space-10));
+  border: var(--sn-border-width) dashed var(--sn-color-danger);
+  border-radius: var(--sn-radius-control);
+  /* 危险色的浅底是半透明的，垫一层不透明的表面，盖住下面的卡片文字。 */
+  background: linear-gradient(var(--sn-color-danger-subtle), var(--sn-color-danger-subtle)), var(--sn-color-surface-raised);
+  box-shadow: var(--sn-shadow-md);
+  color: var(--sn-color-danger);
+  font-size: var(--sn-font-size-sm);
+  transform: translateY(calc(100% + var(--sn-space-3)));
+  transition:
+    transform var(--sn-duration-normal) var(--sn-ease-enter),
+    opacity var(--sn-duration-fast) var(--sn-ease-standard),
+    visibility var(--sn-duration-fast) var(--sn-ease-standard),
+    background-color var(--sn-duration-fast) var(--sn-ease-standard),
+    color var(--sn-duration-fast) var(--sn-ease-standard);
+}
+
+body.is-sorting-cards .sidebar .drag-trash-zone {
+  transform: none;
+}
+
+.sidebar .drag-trash-zone .drag-trash-label {
+  position: static;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  opacity: 1;
+  transform: none;
+}
+
+.sidebar .drag-trash-zone.is-target {
+  border-style: solid;
+  background: var(--sn-color-danger);
+  box-shadow: var(--sn-shadow-lg);
+  color: var(--sn-color-on-accent);
+  transform: none;
+}
