@@ -42,6 +42,10 @@ const MIN_WIDTH = 320;
 const MIN_HEIGHT = 220;
 /** 量出的高度再加一点余量：图片与字体的取整误差会让内容比窗口高一两个像素，出现滚动条。 */
 const FIT_SLACK = 4;
+/** 全文浮窗失去焦点后等这么久（毫秒）再收回：隐藏的备用窗口加载时会短暂抢走焦点，后端随即还回来。 */
+const PEEK_BLUR_DELAY = 200;
+/** 量高度时比窗口窄这么多（页面像素）：内容区换算成物理像素后可能窄一两个像素，见 fitSize。 */
+const FIT_WRAP_SLACK = 2;
 /** 量尺寸前最多等图片加载这么久（毫秒）：窗口这时还没显示，等一会儿看不出来。 */
 const IMAGE_WAIT = 800;
 const MARGIN = 12;
@@ -143,6 +147,8 @@ export function NoteWindow() {
   const [tabs, setTabs] = useState<string[]>([]);
   const [active, setActive] = useState('');
   const [pinned, setPinned] = useState(false);
+  /** 附着在卡片旁的全文浮窗（T100）：点到别处收回，不显示置顶按钮；拖动标题栏后成为独立窗口。 */
+  const [attached, setAttached] = useState(false);
   const [editing, setEditing] = useState<WindowEdit | null>(null);
   const [front, setFront] = useState(() => document.hasFocus());
   const [merge, setMerge] = useState(false);
@@ -159,6 +165,7 @@ export function NoteWindow() {
   const tabsRef = useRef<string[]>([]);
   const activeRef = useRef('');
   const pinnedRef = useRef(false);
+  const attachedRef = useRef(false);
   const originRef = useRef<'drag' | 'expand'>('drag');
   const closingRef = useRef(false);
   const shownRef = useRef(false);
@@ -168,6 +175,7 @@ export function NoteWindow() {
   const tipTimer = useRef(0);
   const sideWidth = useRef(0);
   const scrollKeep = useRef<{ id: string; top: number }>({ id: '', top: 0 });
+  const blurTimer = useRef(0);
 
   useLayoutEffect(() => {
     tabsRef.current = tabs;
@@ -505,9 +513,11 @@ export function NoteWindow() {
       tabsRef.current = request.tabs;
       activeRef.current = request.active;
       pinnedRef.current = request.pinned;
+      attachedRef.current = request.attached;
       setTabs(request.tabs);
       setActive(request.active);
       setPinned(request.pinned);
+      setAttached(request.attached);
       if (request.kind === 'restore') {
         shownRef.current = true;
         return;
@@ -540,6 +550,10 @@ export function NoteWindow() {
         void bridge.dragIndicator(drop?.rect ?? null, drop?.horizontal ?? false);
       }),
       bridge.onWindowEvent(EVENTS.close, () => void closeWindow()),
+      bridge.onWindowEvent(EVENTS.detach, () => {
+        attachedRef.current = false;
+        setAttached(false);
+      }),
     ]);
     // 先订阅打开事件，再取等着的打开请求，备用窗口不会漏掉请求。
     void opened.then(() => bridge.noteWindowInit()).then((request) => {
@@ -555,22 +569,32 @@ export function NoteWindow() {
   // 获得焦点的窗口边框带一点强调色：透明窗口由样式（:focus-within）画，系统画边框的窗口改 DWM 的边框颜色。
   useEffect(() => {
     const onFocus = (): void => {
+      window.clearTimeout(blurTimer.current);
       setFront(true);
       if (document.activeElement === document.body) sectionRef.current?.focus({ preventScroll: true });
     };
     const onBlur = (): void => {
       setFront(false);
       hideTip();
+      // 全文浮窗点到别处就收回（T100），编辑中的内容在关闭流程里先保存。焦点很快又回来（被备用窗口短暂抢走）时不收回。
+      if (attachedRef.current && shownRef.current && !closingRef.current && !gestureRef.current) {
+        window.clearTimeout(blurTimer.current);
+        blurTimer.current = window.setTimeout(() => {
+          if (!document.hasFocus() && attachedRef.current && !closingRef.current) void closeWindow();
+        }, PEEK_BLUR_DELAY);
+        return;
+      }
       // 点到窗口外保存（原型 focusout）。
       if (editingRef.current && !document.querySelector('.modal-backdrop')) void finishEditing(true);
     };
     window.addEventListener('focus', onFocus);
     window.addEventListener('blur', onBlur);
     return () => {
+      window.clearTimeout(blurTimer.current);
       window.removeEventListener('focus', onFocus);
       window.removeEventListener('blur', onBlur);
     };
-  }, [finishEditing]);
+  }, [finishEditing, closeWindow]);
 
   useEffect(() => {
     if (document.documentElement.dataset.snWindow === 'clear') return;
@@ -686,6 +710,9 @@ export function NoteWindow() {
     hideTip();
     if (gesture.mode === 'move') {
       setMoving(true);
+      // 拖动全文浮窗的标题栏：手动拖出来，成为独立的记录窗口（后端在开始拖动时处理）。
+      attachedRef.current = false;
+      setAttached(false);
       void bridge.dragBegin({ kind: 'move', ids: tabsRef.current });
       return;
     }
@@ -991,6 +1018,7 @@ export function NoteWindow() {
     side ? 'is-side-tabs' : '',
     editing ? 'is-editing' : '',
     pinned ? 'is-pinned' : '',
+    attached ? 'is-attached' : '',
     front ? 'is-front' : '',
     merge ? 'is-merge-target' : '',
     moving ? 'is-moving' : '',
@@ -1044,18 +1072,21 @@ export function NoteWindow() {
           >
             <Icon name={side ? 'panel-top' : 'panel-left'} />
           </button>
-          <button
-            type="button"
-            className="icon-button note-window-pin"
-            aria-pressed={pinned}
-            aria-label={pinned ? '取消置顶窗口' : '置顶窗口'}
-            onClick={() => {
-              pinnedRef.current = !pinned;
-              setPinned(!pinned);
-            }}
-          >
-            <Icon name="pin" />
-          </button>
+          {/* 全文浮窗附着在卡片旁、一直在最前，不显示置顶按钮；拖出来成为独立窗口后才有。 */}
+          {attached ? null : (
+            <button
+              type="button"
+              className="icon-button note-window-pin"
+              aria-pressed={pinned}
+              aria-label={pinned ? '取消置顶窗口' : '置顶窗口'}
+              onClick={() => {
+                pinnedRef.current = !pinned;
+                setPinned(!pinned);
+              }}
+            >
+              <Icon name="pin" />
+            </button>
+          )}
           <button
             type="button"
             className="icon-button"
@@ -1127,8 +1158,12 @@ function fitSize(section: HTMLElement, strip: HTMLElement | null, area: bridge.P
   style.height = 'auto';
   const width = clamp(Math.ceil(section.getBoundingClientRect().width), Math.min(FIT_WIDTH[0] + extra, maxWidth), maxWidth);
   style.maxWidth = '';
-  style.width = `${width}px`;
+  // 高度按留出滚动条、再窄一点的宽度量。排满的中文行宽度少一点就多折一行：窗口还小的时候正文出现过滚动条，
+  // 变到量好的尺寸后，有滚动条时正文窄、行多，正好需要滚动条，没有时又放得下，浏览器保留原来的滚动条。
+  // 按有滚动条的宽度量，两种情况都放得下，滚动条就会去掉。
+  style.width = `${width - FIT_WRAP_SLACK}px`;
   const body = section.querySelector<HTMLElement>('.note-window-body');
+  if (body) body.style.overflowY = 'scroll';
   // 正文区自己会滚动：它的滚动高度比可见高度多出的部分也要算进来，否则长一点的内容按当前窗口高度量，偏矮。
   const hidden = body ? Math.max(0, body.scrollHeight - body.clientHeight) : 0;
   const height = clamp(
@@ -1136,6 +1171,7 @@ function fitSize(section: HTMLElement, strip: HTMLElement | null, area: bridge.P
     MIN_HEIGHT,
     Math.max(MIN_HEIGHT, Math.min(view.height * FIT_AREA, FIT_HEIGHT)),
   );
+  if (body) body.style.overflowY = '';
   style.cssText = '';
   return { width, height };
 }

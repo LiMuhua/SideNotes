@@ -473,13 +473,14 @@ pub fn show_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
     Ok(())
 }
 
-/// 隐藏侧栏：先平滑滑出屏幕，再真正隐藏窗口。
+/// 隐藏侧栏：先平滑滑出屏幕，再真正隐藏窗口。附着在卡片旁的全文浮窗一起收回（T100）。
 pub fn hide_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
     remember_layout(layout);
     let sidebar = window(app, SIDEBAR_LABEL)?;
     if !sidebar.is_visible().unwrap_or(false) {
         return Ok(());
     }
+    crate::note_windows::close_attached(app);
     let generation = SIDEBAR_ANIMATION.fetch_add(1, Ordering::SeqCst) + 1;
     // 收起时以侧栏当前所在屏幕为准，鼠标可能已经移到别的屏幕。
     let geometry = sidebar_geometry(&sidebar, layout, false)?;

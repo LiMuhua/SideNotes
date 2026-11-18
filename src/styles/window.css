@@ -238,6 +238,39 @@ body[data-window='overlay'] .overlay-layer {
   pointer-events: none;
 }
 
+/* 全文浮窗的连线（T100）：从卡片的边连到浮窗的边，一条强调色的虚线，两端各一个小圆点，像批注的引线。 */
+body[data-window='overlay'] .overlay-connector {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  animation: fade-in var(--sn-duration-fast) var(--sn-ease-enter);
+}
+
+.overlay-connector path {
+  fill: none;
+  stroke: var(--sn-color-accent);
+  stroke-width: calc(var(--sn-border-width) * 1.5);
+  stroke-dasharray: var(--sn-space-2) var(--sn-space-2);
+  stroke-linecap: round;
+}
+
+.overlay-connector circle {
+  r: calc(var(--sn-space-1) * 1.5);
+  fill: var(--sn-color-accent);
+}
+
+/* 全文浮窗附着的卡片：一圈强调色边框，与连线对上；按钮是「收起全文」，箭头朝上。 */
+.note-list .note-card.is-peeking:not(.is-editing) {
+  border-color: var(--sn-color-accent);
+}
+
+.note-card.is-peeking .note-expand .icon {
+  transform: rotate(180deg);
+}
+
 /* ==================== 与原型第二版不同的地方（2026-11-18 用户要求） ==================== */
 
 /* 卡片标题最多一行（原型两行），放不下时末尾省略。 */

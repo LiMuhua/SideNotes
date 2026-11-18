@@ -112,6 +112,8 @@ export function Sidebar() {
   const [pinned, setPinned] = useState(false);
   /** 设置窗口正在显示：侧栏随之保持展开，固定按钮显示为按下以作提示。 */
   const [settingsOpen, setSettingsOpen] = useState(false);
+  /** 全文浮窗正附着在哪张卡片旁（T100，后端的 peek 事件）：卡片的按钮显示「收起全文」，侧栏保持展开。 */
+  const [peekId, setPeekId] = useState<string | null>(null);
 
   /* ==================== 编辑事务 ==================== */
   const [editing, setEditing] = useState<EditSession | null>(null);
@@ -1350,6 +1352,7 @@ export function Sidebar() {
   const hold = Boolean(
     pinned ||
       dialogOpen ||
+      peekId ||
       contextMenu ||
       moveMenu ||
       sidebarMenu ||
@@ -2266,8 +2269,36 @@ export function Sidebar() {
         filterByTagRef.current(tag);
         void bridge.showSidebar(currentLayoutRef.current());
       }),
+      bridge.onWindowEvent<string | null>(EVENTS.peek, (id) => setPeekId(id)),
     ]);
   }, []);
+
+  // 全文浮窗开着时，每一帧看一下它所附着的卡片在哪里（列表滚动、卡片变高、侧栏改宽都会挪动卡片），
+  // 变了才告诉后端，连线跟着卡片走；卡片滚出列表时报告看不见，连线收起。
+  useEffect(() => {
+    if (!peekId || !bridge.isDesktop()) return;
+    let frame = 0;
+    let last = "";
+    const tick = (): void => {
+      frame = window.requestAnimationFrame(tick);
+      const list = listRef.current;
+      const card = list?.querySelector<HTMLElement>(`.note-card[data-note-id="${CSS.escape(peekId)}"]`);
+      let rect: bridge.PixelRect | null = null;
+      if (list && card) {
+        const box = card.getBoundingClientRect();
+        const bounds = list.getBoundingClientRect();
+        const top = Math.max(box.top, bounds.top);
+        const bottom = Math.min(box.bottom, bounds.bottom);
+        if (box.width && bottom - top > 1) rect = { x: box.left, y: top, width: box.width, height: bottom - top };
+      }
+      const key = rect ? `${Math.round(rect.x)},${Math.round(rect.y)},${Math.round(rect.width)},${Math.round(rect.height)}` : "none";
+      if (key === last) return;
+      last = key;
+      void bridge.reportPeekCard(rect);
+    };
+    tick();
+    return () => window.cancelAnimationFrame(frame);
+  }, [peekId]);
 
   const clearTagFilter = useCallback(() => {
     setSelectedTag("");
@@ -2807,7 +2838,12 @@ export function Sidebar() {
                 onAttachment={(reference, event) => handleNoteAttachment(note, reference, event)}
                 onEmbeddedImage={(image) => handleEmbeddedImage(note, image)}
                 onTaskToggle={(offset, checked) => void handleTaskToggle(note.id, offset, checked)}
-                onExpand={(card) => {
+                peeked={peekId === note.id}
+                onExpand={(card, collapse) => {
+                  if (collapse) {
+                    void bridge.collapsePeek(note.id);
+                    return;
+                  }
                   void bridge.openNoteWindow([note.id], card.getBoundingClientRect()).catch((error: unknown) => {
                     toast(`未能打开窗口：${bridge.errorText(error)}`, null, true);
                   });

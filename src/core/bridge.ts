@@ -692,6 +692,8 @@ export interface NoteWindowOpen {
   kind: 'expand' | 'drop' | 'detach' | 'restore';
   /** 目标屏幕的工作区（物理像素）。 */
   area: PixelRect;
+  /** 附着在卡片旁的全文浮窗（T100）：点到别处收回，不显示置顶按钮；拖出来后成为独立窗口。 */
+  attached: boolean;
 }
 
 /** 记录窗口、动画层与侧栏之间的事件（后端 note_windows::events）。 */
@@ -713,6 +715,12 @@ export const NOTE_WINDOW_EVENTS = {
   cardRect: 'sidenotes://card-rect',
   /** 记录窗口里点了标签：侧栏按这个标签筛选，载荷为标签名。 */
   filterTag: 'sidenotes://filter-tag',
+  /** 侧栏：全文浮窗开着的记录，载荷为记录标识或 null（T100）。 */
+  peek: 'sidenotes://peek',
+  /** 记录窗口：全文浮窗成为独立的窗口（T100）。 */
+  detach: 'sidenotes://note-window/detach',
+  /** 动画层：全文浮窗与卡片之间的连线，载荷 { from, to }（物理像素）或 null（T100）。 */
+  connector: 'sidenotes://overlay/connector',
 } as const;
 
 /** 页面矩形（DOMRect）取出可以序列化的四个值。 */
@@ -843,6 +851,16 @@ export function openNoteWindow(ids: string[], from: DOMRect | null): Promise<voi
     { ids, from: from ? rectOf(from) : null, dpr: window.devicePixelRatio },
     undefined as unknown as void,
   );
+}
+
+/** 全文浮窗所附着的卡片现在的矩形（页面像素，看不见时为 null），连线跟着卡片走（T100）。 */
+export function reportPeekCard(rect: PixelRect | null): Promise<void> {
+  return call<void>('peek_card', { rect, dpr: window.devicePixelRatio }, undefined as unknown as void);
+}
+
+/** 收回这条记录的全文浮窗（卡片上的「收起全文」）。 */
+export function collapsePeek(id: string): Promise<void> {
+  return call<void>('collapse_peek', { id }, undefined as unknown as void);
 }
 
 /**

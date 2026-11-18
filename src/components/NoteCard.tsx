@@ -85,8 +85,12 @@ export interface NoteCardProps {
   /** 点击以 data URL 保存在记录里的图片附件。 */
   onEmbeddedImage: (image: NoteImage) => void;
   onTaskToggle: (offset: number, checked: boolean) => void;
-  /** 「展开全文」：在记录窗口中打开，从这张卡片的位置展开（T83）。 */
-  onExpand: (card: HTMLElement) => void;
+  /** 这条记录的全文浮窗正附着在卡片旁（T100）：按钮换成「收起全文」，卡片带强调色边框，连线连到这里。 */
+  peeked?: boolean;
+  /**
+   * 「展开全文」：在卡片旁打开全文浮窗，从这张卡片的位置展开（T83、T100）；`collapse` 为真时是「收起全文」。
+   */
+  onExpand: (card: HTMLElement, collapse: boolean) => void;
 }
 
 /** 卡片内的图片附件列表。 */
@@ -351,6 +355,8 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
   }, [note.text, note.images.length, isEditing, note.collapsed]);
 
   const tabIndex = props.current ? 0 : -1;
+  /** 按下「展开全文」时全文浮窗是否开着（见按钮的说明）；键盘触发时没有按下，为 null。 */
+  const peekedOnPress = useRef<boolean | null>(null);
   const title = noteTitle(note);
   // 首行若是结构化内容（代码、列表、引用、图片等），标题不复用该行文本，正文从头显示。
   const display = noteDisplay(note.text);
@@ -377,6 +383,7 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
     props.dropHint === 'before' ? 'drop-before' : '',
     props.dropHint === 'after' ? 'drop-after' : '',
     truncated && !note.collapsed ? 'is-truncated' : '',
+    props.peeked ? 'is-peeking' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -573,23 +580,30 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
         </div>
       )}
 
-      {/* 正文超出卡片高度时出现「展开全文」（原型 note-expand），收起的卡片不显示。 */}
+      {/* 正文超出卡片高度时出现「展开全文」（原型 note-expand），收起的卡片不显示；全文浮窗开着时是「收起全文」（T100）。
+       * 按下时就记住要做哪一样：按下会让全文浮窗失去焦点而自己收回，松开时按钮可能已经换回「展开全文」。 */}
       {isEditing || single ? null : (
         <button
           type="button"
           className="note-expand"
           data-action="open-note"
-          aria-label="展开全文"
+          aria-label={props.peeked ? '收起全文' : '展开全文'}
+          aria-expanded={Boolean(props.peeked)}
           hidden={!truncated}
           tabIndex={tabIndex}
+          onPointerDown={() => {
+            peekedOnPress.current = Boolean(props.peeked);
+          }}
           onClick={(event) => {
             event.stopPropagation();
+            const collapse = peekedOnPress.current ?? Boolean(props.peeked);
+            peekedOnPress.current = null;
             const card = event.currentTarget.closest<HTMLElement>('.note-card');
-            if (card) props.onExpand(card);
+            if (card) props.onExpand(card, collapse);
           }}
         >
           <Icon name="chevron-down" />
-          展开全文
+          {props.peeked ? '收起全文' : '展开全文'}
         </button>
       )}
 

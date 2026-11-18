@@ -137,10 +137,15 @@ pub fn run() {
                     let _ = window.emit_to(window.label(), note_windows::events::CLOSE, ());
                 }
                 WindowEvent::Destroyed if note_windows::is_note(window.label()) => {
-                    note_windows::forget(window.label());
+                    note_windows::forget(window.app_handle(), window.label());
                 }
                 WindowEvent::Focused(true) if note_windows::is_note(window.label()) => {
                     note_windows::touch(window.label());
+                    note_windows::refresh_connector(window.app_handle(), window.label());
+                }
+                // 全文浮窗被拖边改了大小：连线跟着窗口的边走（T100）。
+                WindowEvent::Resized(_) if note_windows::is_note(window.label()) => {
+                    note_windows::refresh_connector(window.app_handle(), window.label());
                 }
                 // 弹窗窗口的 Alt+F4：按关闭弹窗处理，通知打开者（T99）。
                 WindowEvent::CloseRequested { api, .. } if window.label() == dialogs::DIALOG_LABEL => {
@@ -219,6 +224,8 @@ pub fn run() {
             note_windows::overlay_ready,
             note_windows::overlay_done,
             note_windows::set_window_border_color,
+            note_windows::peek_card,
+            note_windows::collapse_peek,
             app_icon::apply_app_icon,
             app_icon::custom_app_icon,
             app_icon::save_custom_app_icon,

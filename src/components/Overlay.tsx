@@ -6,6 +6,7 @@
  * - 插入线：拖动经过别的记录窗口时，那个窗口算出的插入线画在这里，叠在拖影与正在拖动的窗口之上。
  * - 形变动画：记录窗口打开时，窗口的副本从拖影或卡片展开到窗口的位置，结束后交给真正的窗口；
  *   关闭时真正的窗口先藏起来，副本缩回卡片（或原地提起淡出）。帧与时长照搬原型 note-window.js 的 morph 与 closeEntry。
+ * - 连线（T100）：附着在卡片旁的全文浮窗开着时，一条从卡片的边连到浮窗的边的引线，像批注一样。
  * 位置由后端给出（相对本窗口内容区的物理像素），除以页面像素比得到页面像素；副本的大小与来源窗口相同（同样的界面缩放）。
  */
 
@@ -26,6 +27,20 @@ interface GhostPayload {
   visible: boolean;
   /** 卡片拖出了侧栏（拖影放大一点），或标签页拖到窗口外将拆成新窗口。 */
   outside: boolean;
+}
+
+/** 连线的两端（物理像素）：卡片一端与全文浮窗一端。 */
+interface ConnectorPayload {
+  from: [number, number];
+  to: [number, number];
+}
+
+const SVG = 'http://www.w3.org/2000/svg';
+
+/** 连线：两端水平出发的一段三次曲线，两端同高时是直线。 */
+function connectorPath(from: [number, number], to: [number, number]): string {
+  const middle = (from[0] + to[0]) / 2;
+  return `M ${from[0]} ${from[1]} C ${middle} ${from[1]}, ${middle} ${to[1]}, ${to[0]} ${to[1]}`;
 }
 
 interface MorphPayload {
@@ -223,11 +238,35 @@ export function Overlay() {
       copies.delete(id);
     };
 
+    let connector: SVGSVGElement | null = null;
+    const onConnector = (payload: ConnectorPayload | null): void => {
+      if (!payload) {
+        connector?.remove();
+        connector = null;
+        return;
+      }
+      if (!connector) {
+        connector = document.createElementNS(SVG, 'svg');
+        connector.setAttribute('class', 'overlay-connector');
+        connector.append(document.createElementNS(SVG, 'path'), document.createElementNS(SVG, 'circle'), document.createElementNS(SVG, 'circle'));
+        layer.append(connector);
+      }
+      const from: [number, number] = [payload.from[0] / ratio(), payload.from[1] / ratio()];
+      const to: [number, number] = [payload.to[0] / ratio(), payload.to[1] / ratio()];
+      const [path, start, end] = Array.from(connector.children);
+      path.setAttribute('d', connectorPath(from, to));
+      start.setAttribute('cx', `${from[0]}`);
+      start.setAttribute('cy', `${from[1]}`);
+      end.setAttribute('cx', `${to[0]}`);
+      end.setAttribute('cy', `${to[1]}`);
+    };
+
     return bridge.subscribeAll([
       bridge.onWindowEvent<GhostPayload>(EVENTS.ghost, onGhost),
       bridge.onWindowEvent<{ rect: bridge.PixelRect; horizontal: boolean } | null>(EVENTS.indicator, onIndicator),
       bridge.onWindowEvent<MorphPayload>(EVENTS.morph, onMorph),
       bridge.onWindowEvent<number>(EVENTS.clear, onClear),
+      bridge.onWindowEvent<ConnectorPayload | null>(EVENTS.connector, onConnector),
     ]);
   }, []);
 

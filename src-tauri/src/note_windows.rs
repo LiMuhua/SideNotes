@@ -10,13 +10,15 @@
 //! - 动画层：一个盖住当前屏幕工作区、点击穿透的透明窗口（overlay），画跨窗口的拖影、标签栏里的插入线，
 //!   以及打开与关闭时的形变动画。一个窗口画不到自己的范围之外，原型里从卡片展开、缩回卡片的动画只能在这一层画。
 //! - 备用窗口：新建一个 WebView 要几百毫秒，提前建好一个隐藏的记录窗口，打开时直接用，用掉后再补一个。
+//! - 全文浮窗（T100）：「展开全文」打开的窗口先附着在卡片旁，不进任务栏与 Alt+Tab，一直置顶，点到别处就收回；
+//!   动画层画一条连到卡片的线。拖动标题栏（或有别的记录并进来、双击放大）后才成为独立的记录窗口。
 //!
 //! 坐标一律是屏幕的物理像素。页面给出的矩形是页面像素，乘以页面像素比换算；页面像素比是屏幕缩放、
 //! Windows 的文本缩放与界面缩放（字号）三者之积，只有页面知道，所以尺寸都由页面换算好再交过来。
 //! 命令也定义在这里，都是本模块的薄封装。
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
@@ -43,6 +45,8 @@ const MIN_SIZE: (f64, f64) = (320.0, 140.0);
 const ANIMATION_TIMEOUT: Duration = Duration::from_millis(2500);
 /// 新窗口显示之后，动画层上的副本再留多久：等窗口画出第一帧，交接时不闪。
 const HANDOFF_DELAY: Duration = Duration::from_millis(160);
+/// 连线在全文浮窗一端离上下边至少这么远（按 13px 字号计），不落在圆角上。
+const CONNECTOR_INSET: f64 = 16.0;
 
 /// 后端发给页面的事件。
 pub mod events {
@@ -68,6 +72,12 @@ pub mod events {
     pub const CLEAR: &str = "sidenotes://overlay/clear";
     /// 侧栏：窗口缩回了这张卡片，卡片轻轻一顿，载荷为记录标识。
     pub const LAND: &str = "sidenotes://card-land";
+    /// 侧栏：附着在卡片旁的全文浮窗开着的记录（T100），载荷为记录标识或 null；卡片的按钮据此显示「收起全文」。
+    pub const PEEK: &str = "sidenotes://peek";
+    /// 全文浮窗成为独立的记录窗口（拖动标题栏、有别的记录并进来、双击放大），载荷为空。
+    pub const DETACH: &str = "sidenotes://note-window/detach";
+    /// 动画层：全文浮窗与卡片之间的连线，载荷见 ConnectorPayload，null 时收起。
+    pub const CONNECTOR: &str = "sidenotes://overlay/connector";
 }
 
 /// 矩形：屏幕或窗口内的物理像素，或页面像素（由用途决定）。
@@ -124,6 +134,8 @@ pub struct OpenPayload {
     pub kind: String,
     /// 目标屏幕的工作区（物理像素），页面除以页面像素比，限制按内容定的尺寸。
     pub area: Rect,
+    /// 附着在卡片旁的全文浮窗（T100）：点到别处收回，不显示置顶按钮。
+    pub attached: bool,
 }
 
 /// 窗口的生命阶段。
@@ -158,6 +170,8 @@ struct Entry {
     active: String,
     pinned: bool,
     origin: String,
+    /// 附着在卡片旁的全文浮窗（T100）。同一时间最多一个。
+    attached: bool,
     /// 标题栏与竖排标签栏，相对内容区左上角的物理像素；标签页与窗口拖到这里时合并。
     bands: Vec<Rect>,
     /// 最近获得焦点的次序，近似窗口的前后关系（置顶的窗口总在前面）。
@@ -177,6 +191,7 @@ impl Entry {
             active: String::new(),
             pinned: false,
             origin: String::new(),
+            attached: false,
             bands: Vec::new(),
             order: 0,
             pending: None,
@@ -199,6 +214,17 @@ fn with_registry<T>(action: impl FnOnce(&mut HashMap<String, Entry>) -> T) -> T 
 static SEQUENCE: AtomicU32 = AtomicU32::new(0);
 static ORDER: AtomicU64 = AtomicU64::new(0);
 static ANIMATION: AtomicU64 = AtomicU64::new(0);
+
+/// 全文浮窗所附着的卡片：卡片在屏幕上的矩形（物理像素，卡片看不见时为空）与侧栏的页面像素比。
+#[derive(Debug, Clone, Copy)]
+struct PeekAnchor {
+    card: Option<Rect>,
+    unit: f64,
+}
+
+static PEEK_ANCHOR: Mutex<Option<PeekAnchor>> = Mutex::new(None);
+/// 连线正画在动画层上：这时动画层不收起。
+static CONNECTOR_SHOWN: AtomicBool = AtomicBool::new(false);
 
 /// 标签是否属于记录窗口。
 pub fn is_note(label: &str) -> bool {
@@ -386,11 +412,45 @@ pub fn ensure_spare(app: &AppHandle) {
     });
 }
 
+/// 正在等着补备用窗口（只留一个等待的线程）。
+static SPARE_PENDING: AtomicBool = AtomicBool::new(false);
+
+/// 前台窗口是否属于本应用。
+fn app_in_foreground() -> bool {
+    #[cfg(windows)]
+    {
+        use ::windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+        // SAFETY：只读取前台窗口与它所属的进程，参数都是本函数内的值。
+        unsafe {
+            let hwnd = GetForegroundWindow();
+            if hwnd.0.is_null() {
+                return false;
+            }
+            let mut pid = 0u32;
+            GetWindowThreadProcessId(hwnd, Some(&mut pid));
+            pid == std::process::id()
+        }
+    }
+    #[cfg(not(windows))]
+    false
+}
+
 /// 稍后补一个备用窗口，不和启动或正在打开的窗口抢资源。
+///
+/// 新建的 WebView 加载时会让本应用当前的窗口失去焦点（窗口本身并不显示）：全文浮窗因此收回，
+/// 正在记录窗口或侧栏里输入的内容也会被打断。所以等本应用的窗口都不在前台时再建（T100）；
+/// 一直在用时不建，下次打开记录窗口时现建，慢一点。
 pub fn ensure_spare_later(app: &AppHandle, delay: Duration) {
+    if SPARE_PENDING.swap(true, Ordering::SeqCst) {
+        return;
+    }
     let app = app.clone();
     std::thread::spawn(move || {
         std::thread::sleep(delay);
+        while app_in_foreground() {
+            std::thread::sleep(Duration::from_secs(1));
+        }
+        SPARE_PENDING.store(false, Ordering::SeqCst);
         ensure_spare(&app);
     });
 }
@@ -426,7 +486,7 @@ fn remove_from_others(app: &AppHandle, ids: &[String], except: Option<&str>) {
 
 /// 打开记录窗口（原型 open 与 openFromDrag）。`kind` 为 expand、drop 或 detach；
 /// `point` 为松开处，`from` 为出场动画的起点（卡片或拖影），都是屏幕物理像素。
-fn open(app: &AppHandle, ids: Vec<String>, kind: &str, pinned: bool, point: Option<(f64, f64)>, from: Option<Rect>) -> AppResult<()> {
+fn open(app: &AppHandle, ids: Vec<String>, kind: &str, pinned: bool, point: Option<(f64, f64)>, from: Option<Rect>, peek_unit: f64) -> AppResult<()> {
     let tabs = unique(ids);
     let Some(first) = tabs.first().cloned() else { return Ok(()) };
 
@@ -444,12 +504,28 @@ fn open(app: &AppHandle, ids: Vec<String>, kind: &str, pinned: bool, point: Opti
         }
     }
     remove_from_others(app, &tabs, None);
+    let attached = kind == "expand";
+    if attached {
+        // 同一时间只有一个全文浮窗：旧的先不算附着（它关闭时不会清掉新浮窗的状态），再请它收回。
+        let previous: Vec<String> = with_registry(|map| {
+            map.iter_mut()
+                .filter(|(_, entry)| entry.attached)
+                .map(|(label, entry)| {
+                    entry.attached = false;
+                    label.clone()
+                })
+                .collect()
+        });
+        for label in previous {
+            let _ = app.emit_to(label.as_str(), events::CLOSE, ());
+        }
+    }
 
     let anchor = point.or_else(|| from.map(|rect| rect.center())).unwrap_or_else(|| cursor(app));
     let monitor = monitor_at(app, anchor.0, anchor.1).ok_or_else(|| AppError::Other("未能获取显示器信息".into()))?;
     let area = work_rect(&monitor);
     let origin = if kind == "expand" { "expand" } else { "drag" };
-    let payload = OpenPayload { tabs: tabs.clone(), active: first, pinned, origin: origin.into(), kind: kind.into(), area };
+    let payload = OpenPayload { tabs: tabs.clone(), active: first.clone(), pinned, origin: origin.into(), kind: kind.into(), area, attached };
     let placement = Placement { point, from, area };
 
     // 取备用窗口；没有时现建一个（第一次打开或连续打开时）。备用窗口还在建或页面还没启动时，
@@ -471,6 +547,7 @@ fn open(app: &AppHandle, ids: Vec<String>, kind: &str, pinned: bool, point: Opti
         entry.active = payload.active.clone();
         entry.pinned = pinned;
         entry.origin = origin.into();
+        entry.attached = attached;
         entry.placement = Some(placement);
         entry.restore = None;
         if entry.ready {
@@ -499,6 +576,12 @@ fn open(app: &AppHandle, ids: Vec<String>, kind: &str, pinned: bool, point: Opti
         if let Some(payload) = deliver {
             let _ = app.emit_to(label.as_str(), events::OPEN, payload);
         }
+    }
+    if attached {
+        if let Ok(mut slot) = PEEK_ANCHOR.lock() {
+            *slot = Some(PeekAnchor { card: from, unit: peek_unit });
+        }
+        let _ = app.emit_to(SIDEBAR_LABEL, events::PEEK, Some(first));
     }
     ensure_spare_later(app, Duration::from_millis(1200));
     Ok(())
@@ -558,9 +641,9 @@ fn overlay_cover(app: &AppHandle, x: f64, y: f64) -> Option<(f64, f64)> {
     client_rect(&overlay).map(|rect| (rect.x, rect.y)).or(Some((area.x, area.y)))
 }
 
-/// 动画层空闲时（没有拖动与动画）收起。
+/// 动画层空闲时（没有拖动、动画与连线）收起。
 fn overlay_release(app: &AppHandle) {
-    if drag_active() || with_animations(|map| !map.is_empty()) {
+    if drag_active() || with_animations(|map| !map.is_empty()) || CONNECTOR_SHOWN.load(Ordering::SeqCst) {
         return;
     }
     if let Some(overlay) = app.get_webview_window(OVERLAY_LABEL) {
@@ -636,6 +719,7 @@ fn finish_animation(app: &AppHandle, id: u64) {
     match animation {
         Animation::Open { label } => {
             show_note(app, &label);
+            after_show(app, &label);
             let app = app.clone();
             std::thread::spawn(move || {
                 std::thread::sleep(HANDOFF_DELAY);
@@ -655,15 +739,209 @@ fn finish_animation(app: &AppHandle, id: u64) {
 }
 
 fn destroy(app: &AppHandle, label: &str) {
-    with_registry(|map| map.remove(label));
+    let entry = with_registry(|map| map.remove(label));
+    if entry.is_some_and(|entry| entry.attached) {
+        release_peek(app);
+    }
     if let Some(window) = app.get_webview_window(label) {
         let _ = window.destroy();
     }
 }
 
 /// 窗口销毁后从登记表中去掉（页面崩溃、开发时整页重载之外的正常关闭已经先去掉了）。
-pub fn forget(label: &str) {
-    with_registry(|map| map.remove(label));
+pub fn forget(app: &AppHandle, label: &str) {
+    let entry = with_registry(|map| map.remove(label));
+    if entry.is_some_and(|entry| entry.attached) {
+        release_peek(app);
+    }
+}
+
+/* ==================== 全文浮窗（T100） ==================== */
+
+/// 连线的两端：从卡片朝向浮窗的一边的中点，连到浮窗朝向侧栏的一边；浮窗一端与卡片同高，
+/// 超出浮窗时停在离上下边 `inset` 处。`right_edge` 为侧栏贴右边（浮窗在侧栏左边）。
+fn connector_ends(card: Rect, panel: Rect, right_edge: bool, inset: f64) -> ((f64, f64), (f64, f64)) {
+    let y = card.y + card.height / 2.0;
+    let from = (if right_edge { card.x } else { card.right() }, y);
+    let low = panel.y + inset;
+    let high = (panel.bottom() - inset).max(low);
+    let to = (if right_edge { panel.right() } else { panel.x }, y.clamp(low, high));
+    (from, to)
+}
+
+/// 连线的载荷：两端相对动画层内容区的物理像素。
+#[derive(Debug, Clone, Serialize)]
+struct ConnectorPayload {
+    from: (f64, f64),
+    to: (f64, f64),
+}
+
+/// 按全文浮窗与卡片现在的位置画连线，动画层提到最前（它不接收指针，盖在上面不碍事）；
+/// 没有附着的浮窗、浮窗还没显示、侧栏收起或卡片看不见时收起连线。
+fn update_connector(app: &AppHandle) {
+    let anchor = PEEK_ANCHOR.lock().ok().and_then(|slot| *slot).filter(|_| sidebar_rect(app).is_some());
+    let label = with_registry(|map| {
+        map.iter().find(|(_, entry)| entry.attached && entry.phase == Phase::Open).map(|(label, _)| label.clone())
+    });
+    let ends = match (anchor, label) {
+        (Some(PeekAnchor { card: Some(card), unit }), Some(label)) => app
+            .get_webview_window(&label)
+            .filter(|window| window.is_visible().unwrap_or(false))
+            .and_then(|window| client_rect(&window))
+            .map(|panel| connector_ends(card, panel, windows::last_layout().edge != "left", CONNECTOR_INSET * unit)),
+        _ => None,
+    };
+    if let Some((from, to)) = ends {
+        if let Some(origin) = overlay_cover(app, (from.0 + to.0) / 2.0, (from.1 + to.1) / 2.0) {
+            CONNECTOR_SHOWN.store(true, Ordering::SeqCst);
+            let payload = ConnectorPayload { from: (from.0 - origin.0, from.1 - origin.1), to: (to.0 - origin.0, to.1 - origin.1) };
+            let _ = app.emit_to(OVERLAY_LABEL, events::CONNECTOR, payload);
+            return;
+        }
+    }
+    if CONNECTOR_SHOWN.swap(false, Ordering::SeqCst) {
+        let _ = app.emit_to(OVERLAY_LABEL, events::CONNECTOR, serde_json::Value::Null);
+        overlay_release(app);
+    }
+}
+
+/// 全文浮窗附着期间不进任务栏与 Alt+Tab：去掉 WS_EX_APPWINDOW、加上 WS_EX_TOOLWINDOW，并删掉任务栏按钮；
+/// 成为独立窗口时反过来。没有所有者的窗口，tao 在显示、隐藏或改置顶时按自己的标志重写扩展样式（总带 WS_EX_APPWINDOW），
+/// 所以在显示之后设置，窗口获得焦点时再补一次。工具窗口不一定有系统圆角，一并请系统画圆角。
+fn set_tool_window(window: &WebviewWindow, tool: bool) {
+    #[cfg(windows)]
+    if let Ok(hwnd) = window.hwnd() {
+        use ::windows::Win32::Graphics::Dwm::{
+            DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND, DWM_WINDOW_CORNER_PREFERENCE,
+        };
+        use ::windows::Win32::UI::WindowsAndMessaging::{
+            GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE,
+            SWP_NOOWNERZORDER, SWP_NOSIZE, SWP_NOZORDER, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
+        };
+        let (tool_bit, app_bit) = (WS_EX_TOOLWINDOW.0 as isize, WS_EX_APPWINDOW.0 as isize);
+        // SAFETY：hwnd 来自仍然存在的 Tauri 窗口；圆角偏好的指针指向本函数内的值，大小与之匹配。
+        unsafe {
+            let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+            let next = if tool { (style | tool_bit) & !app_bit } else { (style & !tool_bit) | app_bit };
+            if next != style {
+                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next);
+                let _ = SetWindowPos(
+                    hwnd,
+                    None,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_FRAMECHANGED,
+                );
+            }
+            if tool {
+                let corner: DWM_WINDOW_CORNER_PREFERENCE = DWMWCP_ROUND;
+                let _ = DwmSetWindowAttribute(
+                    hwnd,
+                    DWMWA_WINDOW_CORNER_PREFERENCE,
+                    (&corner as *const DWM_WINDOW_CORNER_PREFERENCE).cast(),
+                    std::mem::size_of_val(&corner) as u32,
+                );
+            }
+        }
+    }
+    let _ = window.set_skip_taskbar(tool);
+}
+
+/// 显示之后：是全文浮窗时换成工具窗口（不进任务栏与 Alt+Tab），并画连线。
+fn after_show(app: &AppHandle, label: &str) {
+    if with_registry(|map| map.get(label).is_some_and(|entry| entry.attached)) {
+        if let Some(window) = app.get_webview_window(label) {
+            set_tool_window(&window, true);
+        }
+    }
+    update_connector(app);
+}
+
+/// 全文浮窗不再附着（收回或成为独立窗口）：侧栏的按钮换回「展开全文」，收起连线。
+fn release_peek(app: &AppHandle) {
+    if let Ok(mut slot) = PEEK_ANCHOR.lock() {
+        *slot = None;
+    }
+    let _ = app.emit_to(SIDEBAR_LABEL, events::PEEK, None::<String>);
+    update_connector(app);
+}
+
+/// 全文浮窗成为独立的记录窗口：进任务栏与 Alt+Tab，置顶按窗口自己的设置（默认不置顶），去掉连线。
+fn detach(app: &AppHandle, label: &str) {
+    let pinned = with_registry(|map| {
+        let entry = map.get_mut(label)?;
+        if !entry.attached {
+            return None;
+        }
+        entry.attached = false;
+        Some(entry.pinned)
+    });
+    let Some(pinned) = pinned else { return };
+    if let Some(window) = app.get_webview_window(label) {
+        set_tool_window(&window, false);
+        let _ = window.set_always_on_top(pinned);
+    }
+    let _ = app.emit_to(label, events::DETACH, ());
+    release_peek(app);
+}
+
+/// 收回附着在卡片旁的全文浮窗（侧栏收起时）：交给页面按关闭流程处理，先保存编辑再缩回卡片。
+pub fn close_attached(app: &AppHandle) {
+    let labels: Vec<String> = with_registry(|map| {
+        map.iter()
+            .filter(|(_, entry)| entry.attached && matches!(entry.phase, Phase::Opening | Phase::Open))
+            .map(|(label, _)| label.clone())
+            .collect()
+    });
+    for label in labels {
+        let _ = app.emit_to(label.as_str(), events::CLOSE, ());
+    }
+}
+
+/// 记录窗口获得焦点或改了大小：是全文浮窗时重画连线（获得焦点的窗口会盖住动画层，把它提回最前），
+/// 并补上工具窗口的样式。
+pub fn refresh_connector(app: &AppHandle, label: &str) {
+    if with_registry(|map| map.get(label).is_some_and(|entry| entry.attached && entry.phase == Phase::Open)) {
+        after_show(app, label);
+    }
+}
+
+/// 侧栏报告全文浮窗所附着的卡片在侧栏中的矩形（页面像素，卡片看不见时为空），连线跟着卡片走。
+#[tauri::command]
+pub fn peek_card(app: AppHandle, window: WebviewWindow, rect: Option<Rect>, dpr: f64) -> AppResult<()> {
+    let unit = sane_dpr(dpr);
+    let origin = client_rect(&window).map(|client| (client.x, client.y)).unwrap_or((0.0, 0.0));
+    let changed = {
+        let mut slot = PEEK_ANCHOR.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        match slot.as_mut() {
+            Some(anchor) => {
+                anchor.card = rect.map(|rect| rect.to_screen(origin, unit));
+                anchor.unit = unit;
+                true
+            }
+            None => false,
+        }
+    };
+    if changed {
+        update_connector(&app);
+    }
+    Ok(())
+}
+
+/// 侧栏上点「收起全文」：收回这条记录的全文浮窗。
+#[tauri::command]
+pub fn collapse_peek(app: AppHandle, id: String) -> AppResult<()> {
+    let label = with_registry(|map| {
+        map.iter()
+            .find(|(_, entry)| entry.attached && matches!(entry.phase, Phase::Opening | Phase::Open) && entry.tabs.contains(&id))
+            .map(|(label, _)| label.clone())
+    });
+    if let Some(label) = label {
+        let _ = app.emit_to(label.as_str(), events::CLOSE, ());
+    }
+    Ok(())
 }
 
 /// 窗口获得焦点：记下前后次序。
@@ -787,6 +1065,10 @@ fn set_hint(app: &AppHandle, session: &mut DragSession, target: Option<&(String,
 #[tauri::command]
 pub fn drag_begin(app: AppHandle, window: WebviewWindow, request: DragBegin) -> AppResult<()> {
     let dpr = sane_dpr(request.dpr);
+    // 拖动全文浮窗的标题栏：手动拖出来，成为独立的记录窗口（T100）。
+    if request.kind == DragKind::Move {
+        detach(&app, window.label());
+    }
     let point = cursor(&app);
     let offset = match window.outer_position() {
         Ok(position) => (point.0 - f64::from(position.x), point.1 - f64::from(position.y)),
@@ -911,7 +1193,7 @@ pub fn drag_end(app: AppHandle, window: WebviewWindow, drop: bool, outside: bool
     } else if drop && outside && (session.kind == DragKind::Cards || (session.kind == DragKind::Tab && detach.unwrap_or(false))) {
         let ghost = session.ghost.map(|(width, height)| Rect { x: point.0 - session.grab.0, y: point.1 - session.grab.1, width, height });
         let kind = if session.kind == DragKind::Cards { "drop" } else { "detach" };
-        open(&app, ids, kind, true, Some(point), ghost)?;
+        open(&app, ids, kind, true, Some(point), ghost, session.unit)?;
         result.opened = true;
     }
     // 新开窗口时拖影留在松开处，直到窗口的打开动画接手（动画层收到形变动画时去掉拖影）。
@@ -940,6 +1222,8 @@ fn transfer(app: &AppHandle, target: &str, ids: Vec<String>, x: f64, y: f64) {
         return;
     }
     remove_from_others(app, &ids, Some(target));
+    // 有别的记录并进全文浮窗：它成了放几条记录的窗口，不再附着在卡片旁。
+    detach(app, target);
     let _ = app.emit_to(target, events::ADD, serde_json::json!({ "ids": ids, "x": x, "y": y }));
     show_note(app, target);
 }
@@ -982,6 +1266,7 @@ pub fn note_window_init(window: WebviewWindow) -> Option<OpenPayload> {
             origin: entry.origin.clone(),
             kind: "restore".into(),
             area: Rect::default(),
+            attached: entry.attached,
         })
     })
 }
@@ -991,7 +1276,7 @@ pub fn note_window_init(window: WebviewWindow) -> Option<OpenPayload> {
 pub async fn open_note_window(app: AppHandle, window: WebviewWindow, ids: Vec<String>, from: Option<Rect>, dpr: f64) -> AppResult<()> {
     let origin = client_rect(&window).map(|rect| (rect.x, rect.y)).unwrap_or((0.0, 0.0));
     let from = from.map(|rect| rect.to_screen(origin, sane_dpr(dpr)));
-    open(&app, ids, "expand", false, None, from)
+    open(&app, ids, "expand", false, None, from, sane_dpr(dpr))
 }
 
 /// 页面量好了尺寸（物理像素）：摆好位置，播放打开动画后显示。`dpr` 为页面像素比，换算原型中按页面像素给的留白；
@@ -999,18 +1284,20 @@ pub async fn open_note_window(app: AppHandle, window: WebviewWindow, ids: Vec<St
 #[tauri::command]
 pub fn note_window_present(app: AppHandle, window: WebviewWindow, width: f64, height: f64, dpr: f64, snapshot: Option<String>) -> AppResult<()> {
     let label = window.label().to_string();
-    let (placement, pinned, kind_drag) = with_registry(|map| {
+    let (placement, pinned, kind_drag, attached) = with_registry(|map| {
         let entry = map.get_mut(&label)?;
         entry.phase = Phase::Open;
         entry.order = ORDER.fetch_add(1, Ordering::SeqCst) + 1;
-        Some((entry.placement.take(), entry.pinned, entry.origin == "drag"))
+        Some((entry.placement.take(), entry.pinned, entry.origin == "drag", entry.attached))
     })
     .ok_or_else(|| AppError::Other("记录窗口不存在".into()))?;
     let unit = sane_dpr(dpr);
     window.set_min_size(Some(PhysicalSize::new(MIN_SIZE.0 * unit, MIN_SIZE.1 * unit)))?;
-    window.set_always_on_top(pinned)?;
+    // 全文浮窗附着在卡片旁，像侧栏的一部分：一直置顶，显示之后换成不进任务栏与 Alt+Tab 的工具窗口（T100）。
+    window.set_always_on_top(pinned || attached)?;
     let Some(placement) = placement else {
         show_note(&app, &label);
+        after_show(&app, &label);
         return Ok(());
     };
     let size = (width, height);
@@ -1028,7 +1315,10 @@ pub fn note_window_present(app: AppHandle, window: WebviewWindow, width: f64, he
     place_client(&window, rect)?;
     match (snapshot, placement.from) {
         (Some(html), Some(from)) => play_open(&app, &label, html, from, rect, if kind_drag { "open-drag" } else { "open-expand" }),
-        _ => show_note(&app, &label),
+        _ => {
+            show_note(&app, &label);
+            after_show(&app, &label);
+        }
     }
     Ok(())
 }
@@ -1047,7 +1337,8 @@ pub fn note_window_sync(window: WebviewWindow, tabs: Vec<String>, active: String
         Some(changed)
     });
     if changed_pin == Some(true) {
-        window.set_always_on_top(pinned)?;
+        let attached = with_registry(|map| map.get(window.label()).is_some_and(|entry| entry.attached));
+        window.set_always_on_top(pinned || attached)?;
     }
     Ok(())
 }
@@ -1057,11 +1348,17 @@ pub fn note_window_sync(window: WebviewWindow, tabs: Vec<String>, active: String
 #[tauri::command]
 pub fn note_window_close(app: AppHandle, window: WebviewWindow, snapshot: Option<String>, to: Option<Rect>) -> AppResult<()> {
     let label = window.label().to_string();
+    let mut was_attached = false;
     let info = with_registry(|map| {
         let entry = map.get_mut(&label)?;
         entry.phase = Phase::Closing;
+        was_attached = std::mem::take(&mut entry.attached);
         Some((entry.active.clone(), entry.origin == "drag"))
     });
+    // 全文浮窗开始收回：侧栏的按钮换回「展开全文」，连线先收起。
+    if was_attached {
+        release_peek(&app);
+    }
     let (Some((note, dragged)), Some(html), Some(from)) = (info, snapshot, client_rect(&window)) else {
         destroy(&app, &label);
         return Ok(());
@@ -1095,6 +1392,8 @@ pub fn note_window_destroy(app: AppHandle, window: WebviewWindow) {
 #[tauri::command]
 pub fn note_window_maximize(app: AppHandle, window: WebviewWindow, dpr: f64) -> AppResult<()> {
     let label = window.label().to_string();
+    // 双击全文浮窗的标题栏放大：成为独立的记录窗口（T100）。
+    detach(&app, &label);
     let Some(current) = client_rect(&window) else { return Ok(()) };
     let restore = with_registry(|map| map.get_mut(&label).and_then(|entry| entry.restore.take()));
     if let Some(restore) = restore {
@@ -1233,6 +1532,29 @@ mod tests {
         let first = Rect { x: 800.0, y: 480.0, width: 400.0, height: 300.0 };
         let rect = position(&placement(Some((1000.0, 500.0)), None), (400.0, 300.0), 1.0, None, true, &[first]);
         assert_eq!((rect.x, rect.y), (824.0, 504.0));
+    }
+
+    #[test]
+    fn connector_runs_from_the_card_edge_to_the_facing_edge_of_the_peek() {
+        let card = Rect { x: 2170.0, y: 600.0, width: 380.0, height: 120.0 };
+        let panel = Rect { x: 1600.0, y: 560.0, width: 500.0, height: 400.0 };
+        // 侧栏贴右边：卡片左边的中点连到浮窗的右边，同高。
+        assert_eq!(connector_ends(card, panel, true, 16.0), ((2170.0, 660.0), (2100.0, 660.0)));
+        // 贴左边：卡片右边连到浮窗的左边。
+        let card = Rect { x: 10.0, ..card };
+        let panel = Rect { x: 450.0, ..panel };
+        assert_eq!(connector_ends(card, panel, false, 16.0), ((390.0, 660.0), (450.0, 660.0)));
+    }
+
+    #[test]
+    fn connector_end_stays_off_the_rounded_corners_of_the_peek() {
+        let panel = Rect { x: 1600.0, y: 560.0, width: 500.0, height: 400.0 };
+        // 卡片在浮窗下面（浮窗被工作区推上去）：浮窗一端停在离底边 16 处。
+        let low = Rect { x: 2170.0, y: 1100.0, width: 380.0, height: 100.0 };
+        assert_eq!(connector_ends(low, panel, true, 16.0).1, (2100.0, 944.0));
+        // 卡片在浮窗上面：停在离顶边 16 处。
+        let high = Rect { y: 400.0, ..low };
+        assert_eq!(connector_ends(high, panel, true, 16.0).1, (2100.0, 576.0));
     }
 
     #[test]
