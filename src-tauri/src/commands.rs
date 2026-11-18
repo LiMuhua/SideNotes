@@ -248,10 +248,10 @@ pub fn hide_capture(app: AppHandle) -> AppResult<()> {
     windows::hide_capture(&app)
 }
 
-/// 显示设置窗口。`text_scale` 为系统文本缩放比例，用于把设置窗口的设计尺寸换算为窗口尺寸。
+/// 显示设置窗口。`text_scale` 为系统文本缩放比例，`zoom` 为字号对应的界面缩放，用于把设置窗口的设计尺寸换算为窗口尺寸。
 #[tauri::command]
-pub fn show_settings(app: AppHandle, text_scale: Option<f64>) -> AppResult<()> {
-    windows::show_settings(&app, text_scale.unwrap_or(1.0))
+pub fn show_settings(app: AppHandle, text_scale: Option<f64>, zoom: Option<f64>) -> AppResult<()> {
+    windows::show_settings(&app, text_scale.unwrap_or(1.0), zoom.unwrap_or(12.0 / 13.0))
 }
 
 /// 隐藏设置窗口。

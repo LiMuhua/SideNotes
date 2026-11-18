@@ -313,12 +313,13 @@ async function textScale(): Promise<number> {
 }
 
 /**
- * 显示设置窗口；带上系统的文本缩放比例，窗口按原型的 880 × 560 换算为逻辑尺寸。
- * 比例按调用方窗口测得，其中包含字号对应的界面缩放 `zoom`（各窗口相同），这里除去：设置窗口不随字号变化。
+ * 显示设置窗口；带上系统的文本缩放比例与字号对应的界面缩放 `zoom`，后端据此换算窗口尺寸（随字号缩放，有上下限）。
+ * 文本缩放按调用方窗口测得，其中包含界面缩放（各窗口相同），这里除去。
  */
 export async function showSettings(zoom = 1): Promise<void> {
   if (!isDesktop()) return;
-  await invoke('show_settings', { textScale: (await textScale()) / (zoom > 0 ? zoom : 1) });
+  const ui = zoom > 0 ? zoom : 1;
+  await invoke('show_settings', { textScale: (await textScale()) / ui, zoom: ui });
 }
 
 /**
