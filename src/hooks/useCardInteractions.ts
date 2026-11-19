@@ -894,7 +894,11 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
       // 按在列表滚动条上时交给系统滚动。
       const listBounds = list.getBoundingClientRect();
       if (event.clientX >= listBounds.left + list.clientLeft + list.clientWidth) return;
-      const card = draggable ? itemCard : target.closest<HTMLElement>('.note-card');
+      const found = draggable ? itemCard : target.closest<HTMLElement>('.note-card');
+      // 按住 Ctrl 拖动（T111，试验）：在卡片上按下也是框选，不长按拖动；不移动时仍是 Ctrl+单击多选。
+      // 卡片排得紧凑，卡片之间的缝很难按中。编辑中的卡片按在编辑区里（上面已经返回），照常选文字。
+      const frameOnCard = Boolean(found && !draggable && (event.ctrlKey || event.metaKey));
+      const card = frameOnCard ? null : found;
       const pointer = event as PointerEvent;
       const gesture: Gesture = {
         kind: draggable ? 'item' : card ? 'sort' : 'frame',

@@ -33,7 +33,8 @@ function guideSections(keys: { save: string; search: string }): ReadonlyArray<{ 
     tips: [
       '鼠标移到屏幕边缘呼出侧栏，移开后自动收起；固定按钮可以让它保持展开。',
       `${keys.search} 搜索，输入 # 按标签查找。`,
-      '空白处右键打开侧栏菜单，双击空白处收起或展开全部卡片。',
+      '空白处右键打开侧栏菜单，按住 Ctrl 右键在卡片上也可以，Shift+F10 也能打开；双击空白处收起或展开全部卡片。',
+      '在空白处拖动框选卡片；按住 Ctrl 拖动时从卡片上开始也是框选。',
     ],
   },
   ];

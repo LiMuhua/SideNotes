@@ -1559,8 +1559,8 @@ export function Sidebar() {
           return;
         }
       }
-      // Shift+F10 与菜单键：有高亮的卡片时开卡片菜单，否则开侧栏菜单；指针在侧栏里时开在指针处，
-      // 否则开在卡片（或焦点所在元素）左上角附近。输入框、编辑区与对话框里保留它们自己的菜单。
+      // Shift+F10 一律打开空白处的侧栏菜单（T111，试验）；菜单键在有高亮的卡片时开卡片菜单，否则开侧栏菜单。
+      // 指针在侧栏里时开在指针处，否则开在卡片（或焦点所在元素）左上角附近。输入框、编辑区与对话框里保留它们自己的菜单。
       if (
         (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) &&
         !event.ctrlKey &&
@@ -1577,8 +1577,9 @@ export function Sidebar() {
             focusedCard ??
             (currentId ? listRef.current?.querySelector<HTMLElement>(`.note-card[data-note-id="${CSS.escape(currentId)}"]`) : null) ??
             null;
-          const note = card ? store.getState().notes.find((item) => item.id === card.dataset.noteId) : undefined;
-          const box = (card ?? target ?? document.body).getBoundingClientRect();
+          const blankMenu = event.key === "F10";
+          const note = card && !blankMenu ? store.getState().notes.find((item) => item.id === card.dataset.noteId) : undefined;
+          const box = ((blankMenu ? listRef.current : card) ?? target ?? document.body).getBoundingClientRect();
           const anchor = pointerRef.current ?? { x: box.left + 24, y: box.top + 32 };
           if (note) {
             setCurrentId(note.id);
@@ -1690,6 +1691,8 @@ export function Sidebar() {
   /** 卡片右键打开记录菜单，对应原型 note-menu.js 的 handleContextMenu；编辑区保留系统菜单。 */
   const handleListContextMenu = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
+      // 按住 Ctrl 右键：在卡片上也打开空白处的侧栏菜单（T111，试验），交给侧栏的右键处理。
+      if (event.ctrlKey || event.metaKey) return;
       const target = event.target as HTMLElement;
       const card = target.closest<HTMLElement>(".note-card");
       if (!card || target.closest('input,textarea,[contenteditable="true"]')) return;
@@ -1743,12 +1746,16 @@ export function Sidebar() {
     [],
   );
 
-  /** 侧栏空白处右键：打开侧栏菜单，替代系统窗口菜单与浏览器菜单；输入框与编辑区保留系统菜单。 */
+  /**
+   * 侧栏空白处右键：打开侧栏菜单，替代系统窗口菜单与浏览器菜单；输入框与编辑区保留系统菜单。
+   * 按住 Ctrl 右键时在卡片上也打开侧栏菜单（T111，试验）：卡片排得紧凑，卡片之间的缝很难右键点中。
+   */
   const handleSidebarContextMenu = useCallback(
     (event: React.MouseEvent<HTMLElement>) => {
       if (event.defaultPrevented) return;
       const target = event.target as HTMLElement;
-      if (target.closest('input,textarea,[contenteditable="true"],.note-card')) return;
+      if (target.closest('input,textarea,[contenteditable="true"]')) return;
+      if (!(event.ctrlKey || event.metaKey) && target.closest(".note-card")) return;
       event.preventDefault();
       if (dialogOpen) return;
       openSidebarMenu({ x: event.clientX, y: event.clientY });
