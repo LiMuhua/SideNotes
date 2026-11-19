@@ -8,6 +8,7 @@
  *   关闭时真正的窗口先藏起来，副本缩回卡片（或原地提起淡出）。帧与时长照搬原型 note-window.js 的 morph 与 closeEntry。
  * - 连接带（T100、T114）：附着在卡片旁的全文浮窗开着时，卡片的边与浮窗的边之间一块由窄到宽的强调色渐变带，
  *   像把卡片投影放大成浮窗；出现时从卡片一边展开，收回时原路收拢。
+ * - 虚线框（T105）：按住 Ctrl 拖动时，被别的程序挡住的记录窗口各画一个半透明的虚线框；指针移上去，窗口提到最前，框换成真正的窗口。
  * 位置由后端给出（相对本窗口内容区的物理像素），除以页面像素比得到页面像素；副本的大小与来源窗口相同（同样的界面缩放）。
  */
 
@@ -235,6 +236,32 @@ export function Overlay() {
       copies.delete(id);
     };
 
+    // 虚线框按顺序复用：拖动中每一步都会送来，不必每次重建；多出来的淡出后去掉（出现时淡入，见 window.css）。
+    const boxes: HTMLElement[] = [];
+    const onReveal = (rects: bridge.PixelRect[] | null): void => {
+      const list = rects ?? [];
+      list.forEach((rect, index) => {
+        let box = boxes[index];
+        if (!box) {
+          box = document.createElement('div');
+          box.className = 'overlay-reveal';
+          layer.append(box);
+          boxes[index] = box;
+        }
+        const page = toPage(rect);
+        Object.assign(box.style, { left: `${page.x}px`, top: `${page.y}px`, width: `${page.width}px`, height: `${page.height}px` });
+      });
+      boxes.splice(list.length).forEach((box) => {
+        if (reducedMotion() || typeof box.animate !== 'function') {
+          box.remove();
+          return;
+        }
+        const fade = box.animate([{ opacity: 1 }, { opacity: 0 }], { duration: duration('--sn-duration-fast'), easing: easing('--sn-ease-exit') });
+        const done = (): void => box.remove();
+        fade.finished.then(done, done);
+      });
+    };
+
     // 连接带：一块梯形，从卡片一边（较浓）渐变到浮窗一边（较淡），上下两条斜边描一道细线。
     // 出现时从卡片那一边横向展开，收回时原路收拢后去掉（关闭是打开的倒放）。
     let connector: SVGSVGElement | null = null;
@@ -317,6 +344,7 @@ export function Overlay() {
       bridge.onWindowEvent<MorphPayload>(EVENTS.morph, onMorph),
       bridge.onWindowEvent<number>(EVENTS.clear, onClear),
       bridge.onWindowEvent<ConnectorPayload | null>(EVENTS.connector, onConnector),
+      bridge.onWindowEvent<bridge.PixelRect[] | null>(EVENTS.reveal, onReveal),
     ]);
   }, []);
 

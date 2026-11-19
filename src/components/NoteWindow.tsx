@@ -75,6 +75,8 @@ interface Gesture {
   frame: number;
   x: number;
   y: number;
+  /** 按住了 Ctrl：可以并进被别的程序挡住的记录窗口（T105）。 */
+  ctrl: boolean;
 }
 
 function reducedMotion(): boolean {
@@ -559,9 +561,14 @@ export function NoteWindow() {
     const opened = bridge.onWindowEvent<bridge.NoteWindowOpen>(EVENTS.open, begin);
     const dispose = bridge.subscribeAll([
       opened,
-      bridge.onWindowEvent<{ ids: string[]; x: number; y: number }>(EVENTS.add, (payload) => {
+      bridge.onWindowEvent<{ ids: string[]; x: number; y: number; pin?: boolean }>(EVENTS.add, (payload) => {
         const point = { x: payload.x / window.devicePixelRatio, y: payload.y / window.devicePixelRatio };
         setMerge(false);
+        // 收下合并进来的记录后改回置顶（T105）：这是正要用的窗口。
+        if (payload.pin) {
+          pinnedRef.current = true;
+          setPinned(true);
+        }
         void addTabs(payload.ids, tabIndexAt(point)).then(() => {
           pulse();
           sectionRef.current?.focus({ preventScroll: true });
@@ -678,7 +685,7 @@ export function NoteWindow() {
           void bridge.dragEnd(false, false);
           return;
         }
-        void bridge.dragEnd(true, false);
+        void bridge.dragEnd(true, false, false, event.ctrlKey);
         return;
       }
       const own = inTabBand(point);
@@ -702,7 +709,7 @@ export function NoteWindow() {
         void bridge.dragEnd(false, false);
         return;
       }
-      void bridge.dragEnd(true, true, detach);
+      void bridge.dragEnd(true, true, detach, event.ctrlKey);
     },
     [finishEditing],
   );
@@ -714,7 +721,7 @@ export function NoteWindow() {
     gesture.frame = 0;
     const point = { x: gesture.x, y: gesture.y };
     if (gesture.mode === 'move') {
-      void bridge.dragUpdate(false).then((target) => {
+      void bridge.dragUpdate(false, gesture.ctrl).then((target) => {
         if (gestureRef.current === gesture) gesture.merge = target;
       });
       return;
@@ -728,7 +735,7 @@ export function NoteWindow() {
     }
     const own = inTabBand(point);
     showOwnDrop(own && !gesture.merge ? tabDropRect(point, gesture.tab) : null);
-    void bridge.dragUpdate(outsideWindow).then((target) => {
+    void bridge.dragUpdate(outsideWindow, gesture.ctrl).then((target) => {
       if (gestureRef.current !== gesture) return;
       gesture.merge = target;
       gesture.ghost?.classList.toggle('is-detaching', !target && !own && tabsRef.current.length > 1);
@@ -786,6 +793,7 @@ export function NoteWindow() {
       frame: 0,
       x: event.clientX,
       y: event.clientY,
+      ctrl: event.ctrlKey,
     };
     try {
       target.setPointerCapture(event.pointerId);
@@ -799,6 +807,7 @@ export function NoteWindow() {
     if (!gesture || event.pointerId !== gesture.pointerId) return;
     gesture.x = event.clientX;
     gesture.y = event.clientY;
+    gesture.ctrl = event.ctrlKey;
     if (!gesture.active) {
       if (Math.hypot(gesture.x - gesture.startX, gesture.y - gesture.startY) < 4) return;
       activateGesture(gesture);
@@ -806,18 +815,28 @@ export function NoteWindow() {
     if (!gesture.frame) gesture.frame = window.requestAnimationFrame(paintGesture);
   };
 
-  // Esc 取消拖动。
+  // Esc 取消拖动；按下或松开 Ctrl 时不等指针再动，马上标出或收起被挡住的记录窗口（T105）。
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent): void => {
       const gesture = gestureRef.current;
-      if (event.key !== 'Escape' || !gesture?.active) return;
+      if (!gesture?.active) return;
+      if (event.key === 'Control') {
+        gesture.ctrl = event.type === 'keydown';
+        if (!gesture.frame) gesture.frame = window.requestAnimationFrame(paintGesture);
+        return;
+      }
+      if (event.key !== 'Escape' || event.type !== 'keydown') return;
       event.preventDefault();
       event.stopPropagation();
       void endGesture({ pointerId: gesture.pointerId, clientX: gesture.x, clientY: gesture.y } as globalThis.PointerEvent, true);
     };
     window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [endGesture]);
+    window.addEventListener('keyup', onKey, true);
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('keyup', onKey, true);
+    };
+  }, [endGesture, paintGesture]);
 
   // 标签页放不下时横向滚动：滚轮的上下滚动换成左右。
   useEffect(() => {

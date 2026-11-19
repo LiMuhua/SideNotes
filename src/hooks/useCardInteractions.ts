@@ -156,6 +156,10 @@ interface Gesture {
   outside: boolean;
   /** 已经通知后端开始跨窗口拖动，结束时要通知它。 */
   session: boolean;
+  /** 按住了 Ctrl：可以拖进被别的程序挡住的记录窗口（T105）。 */
+  ctrl: boolean;
+  /** 指针还在侧栏里，拖影却超出了侧栏窗口：拖影画在动画层上（T117）。 */
+  floating: boolean;
   /** 读屏用的说明文字（不放进页面，与原型相同）。 */
   label: HTMLElement | null;
   guide: HTMLElement | null;
@@ -170,6 +174,13 @@ interface Gesture {
 }
 
 const now = (): number => performance.now();
+
+/** 元素（含倾斜后的外框）是否超出了窗口：超出的部分画不出来，会被窗口的边截掉。 */
+function clipped(node: HTMLElement): boolean {
+  const box = node.getBoundingClientRect();
+  const view = document.documentElement;
+  return box.left < 0 || box.top < 0 || box.right > view.clientWidth || box.bottom > view.clientHeight;
+}
 
 function targetOf(event: Event): Element | null {
   const target = event.target;
@@ -677,14 +688,20 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
       if (t.gesture !== gesture || !gesture.active) return;
       if (gesture.kind === 'sort') {
         // 拖影贴着抓点（原型 paintGesture）；拖出侧栏后拖影画在动画层上，这里的藏起来（窗口外画不出来）。
+        // 指针还在侧栏里、拖影却超出了侧栏窗口（抓着卡片右边往左拖到侧栏边上）时也交给动画层，
+        // 否则拖影越过窗口边的部分被截掉（T117）。
         const wasOutside = gesture.outside;
+        const wasFloating = gesture.floating;
         if (gesture.ghost) {
           gesture.ghost.style.left = `${gesture.x - gesture.grabX}px`;
           gesture.ghost.style.top = `${gesture.y - gesture.grabY}px`;
         }
         updateDropTarget(gesture);
-        if (gesture.ghost) gesture.ghost.style.visibility = gesture.outside ? 'hidden' : '';
-        if (gesture.session && (gesture.outside || wasOutside)) void bridge.dragUpdate(gesture.outside);
+        gesture.floating = gesture.session && !gesture.outside && Boolean(gesture.ghost && clipped(gesture.ghost));
+        if (gesture.ghost) gesture.ghost.style.visibility = gesture.outside || gesture.floating ? 'hidden' : '';
+        if (gesture.session && (gesture.outside || wasOutside || gesture.floating || wasFloating)) {
+          void bridge.dragUpdate(gesture.outside, gesture.ctrl, gesture.floating);
+        }
       } else if (gesture.kind === 'item') {
         if (gesture.ghost) gesture.ghost.style.transform = `translate(${gesture.x + 12}px,${gesture.y + 12}px)`;
         updateItemTarget(gesture);
@@ -930,6 +947,8 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
         grabY: 0,
         outside: false,
         session: false,
+        ctrl: false,
+        floating: false,
         label: null,
         guide: null,
         guideLabel: null,
@@ -971,6 +990,7 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
       const gesture = t.gesture as Gesture;
       gesture.x = event.clientX;
       gesture.y = event.clientY;
+      gesture.ctrl = event.ctrlKey;
       const distance = Math.hypot(gesture.x - gesture.startX, gesture.y - gesture.startY);
       if (!gesture.active) {
         if (gesture.kind === 'frame' && distance >= 4) activateFrame(gesture);
@@ -1004,7 +1024,7 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
       // 拖出侧栏松开：后端在松开处新开记录窗口（拖出的窗口默认置顶），落在已开的窗口上时并进它的标签页。
       if (active && kind === 'sort' && targetMode === 'window' && gesture.session) {
         gesture.session = false;
-        void bridge.dragEnd(true, true).then((result) => {
+        void bridge.dragEnd(true, true, false, event.ctrlKey).then((result) => {
           if (result.target || result.opened) clearSelection();
         });
       }
@@ -1091,6 +1111,10 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
         cancelGesture();
         return;
       }
+      if (event.key === 'Control') {
+        control(event);
+        return;
+      }
       const target = targetOf(event);
       if (
         hasSelection() &&
@@ -1102,6 +1126,14 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
         visibleIds().forEach((id) => t.selected.add(id));
         commitSelection();
       }
+    };
+
+    /** 卡片拖出侧栏后按下或松开 Ctrl：不等指针再动，马上标出或收起被挡住的记录窗口（T105）。 */
+    const control = (event: KeyboardEvent): void => {
+      const gesture = t.gesture;
+      if (event.key !== 'Control' || !gesture?.active || gesture.kind !== 'sort' || !gesture.session) return;
+      gesture.ctrl = event.type === 'keydown';
+      if (gesture.outside) void bridge.dragUpdate(true, gesture.ctrl);
     };
 
     const keepDragPriority = (event: Event): void => {
@@ -1126,6 +1158,7 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
     document.addEventListener('dblclick', captureDoubleClick, true);
     document.addEventListener('contextmenu', keepDragPriority, true);
     document.addEventListener('keydown', keyboard, true);
+    document.addEventListener('keyup', control, true);
     document.addEventListener('selectstart', noSelection, true);
     return () => {
       cancelGesture();
@@ -1141,6 +1174,7 @@ export function useCardInteractions(options: CardInteractionOptions): CardIntera
       document.removeEventListener('dblclick', captureDoubleClick, true);
       document.removeEventListener('contextmenu', keepDragPriority, true);
       document.removeEventListener('keydown', keyboard, true);
+      document.removeEventListener('keyup', control, true);
       document.removeEventListener('selectstart', noSelection, true);
     };
   }, [clearSelection, commitSelection]);

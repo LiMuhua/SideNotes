@@ -723,6 +723,8 @@ export const NOTE_WINDOW_EVENTS = {
   peek: 'sidenotes://peek',
   /** 记录窗口：全文浮窗成为独立的窗口（T100）。 */
   detach: 'sidenotes://note-window/detach',
+  /** 动画层：按住 Ctrl 拖动时被挡住的记录窗口，载荷为矩形列表（物理像素），空列表时收起（T105）。 */
+  reveal: 'sidenotes://overlay/reveal',
   /** 动画层：全文浮窗与卡片之间的连线，载荷 { from, to }（物理像素）或 null（T100）。 */
   connector: 'sidenotes://overlay/connector',
 } as const;
@@ -933,14 +935,18 @@ export function dragBegin(request: {
   );
 }
 
-/** 拖动的一步：`outside` 为指针离开了来源（侧栏或窗口）。返回指针下可以合并的窗口。 */
-export function dragUpdate(outside: boolean): Promise<string | null> {
-  return call<string | null>('drag_update', { outside }, null);
+/**
+ * 拖动的一步：`outside` 为指针离开了来源（侧栏或窗口）。返回指针下可以合并的窗口。
+ * `ctrl` 为按住了 Ctrl：被别的程序挡住的记录窗口用虚线框标出，指针移上去就提到最前、可以合并（T105）。
+ * `float` 为卡片还在侧栏里、拖影却超出了侧栏窗口：拖影改画在动画层上，不被窗口的边截掉（T117）。
+ */
+export function dragUpdate(outside: boolean, ctrl = false, float = false): Promise<string | null> {
+  return call<string | null>('drag_update', { outside, ctrl, float }, null);
 }
 
 /** 结束拖动：`drop` 为假时取消；`detach` 为标签页拖到窗口外时可以拆成新窗口（窗口不止一个标签页）。 */
-export function dragEnd(drop: boolean, outside: boolean, detach = false): Promise<{ target: string | null; opened: boolean }> {
-  return call('drag_end', { drop, outside, detach }, { target: null, opened: false });
+export function dragEnd(drop: boolean, outside: boolean, detach = false, ctrl = false): Promise<{ target: string | null; opened: boolean }> {
+  return call('drag_end', { drop, outside, detach, ctrl }, { target: null, opened: false });
 }
 
 /** 拖动经过本窗口时算出的插入线（页面像素），由动画层画在最上面；null 时收起。 */

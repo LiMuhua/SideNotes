@@ -80,6 +80,8 @@ pub mod events {
     pub const DETACH: &str = "sidenotes://note-window/detach";
     /// 动画层：全文浮窗与卡片之间的连接带，载荷见 ConnectorPayload，null 时收起。
     pub const CONNECTOR: &str = "sidenotes://overlay/connector";
+    /// 动画层：按住 Ctrl 拖动时被挡住的记录窗口，载荷为矩形列表（相对动画层内容区的物理像素），空列表时收起（T105）。
+    pub const REVEAL: &str = "sidenotes://overlay/reveal";
 }
 
 /// 矩形：屏幕或窗口内的物理像素，或页面像素（由用途决定）。
@@ -1005,26 +1007,243 @@ pub fn touch(label: &str) {
 
 /* ==================== 命中 ==================== */
 
-/// 指针下最前面的记录窗口（排除 `except`），返回标签与指针相对它内容区的位置。
+/// 指针下可以合并的记录窗口（排除 `except`），返回标签与指针相对它内容区的位置。
 /// `bands_only` 时只认标题栏与竖排的标签栏（标签页与窗口的合并），否则整个窗口（卡片拖进来）。
-fn window_at(app: &AppHandle, point: (f64, f64), except: Option<&str>, bands_only: bool) -> Option<(String, f64, f64)> {
-    let mut candidates: Vec<(String, bool, u64, Vec<Rect>)> = with_registry(|map| {
+///
+/// 只认看得见的窗口（T105）：从最前面往后找第一个盖住指针的窗口，是候选的记录窗口才算；被别的程序挡住的记录窗口
+/// 不响应（原来按登记表找，压在别的程序下面的窗口也会标出插入线）。`reveal`（按住 Ctrl）时越过别的程序的窗口，
+/// 找到下面的记录窗口就把它提到最前（不抢焦点），之后照常合并；本应用的其它窗口（侧栏、弹窗）挡住时一律不算。
+/// `moving` 为正在拖动的窗口（跟着指针走，不算遮挡）。
+fn window_at(app: &AppHandle, point: (f64, f64), except: Option<&str>, bands_only: bool, reveal: bool, moving: Option<&str>) -> Option<(String, f64, f64)> {
+    let candidates: Vec<(String, Vec<Rect>)> = with_registry(|map| {
         map.iter()
             .filter(|(label, entry)| entry.phase == Phase::Open && Some(label.as_str()) != except)
-            .map(|(label, entry)| (label.clone(), entry.pinned, entry.order, entry.bands.clone()))
+            .map(|(label, entry)| (label.clone(), entry.bands.clone()))
             .collect()
     });
-    candidates.sort_by(|a, b| (b.1, b.2).cmp(&(a.1, a.2)));
-    candidates.into_iter().find_map(|(label, _, _, bands)| {
-        let window = app.get_webview_window(&label)?;
-        if !window.is_visible().unwrap_or(false) {
-            return None;
-        }
-        let rect = client_rect(&window)?;
+    let hit = |window: &WebviewWindow, bands: &[Rect]| -> Option<(f64, f64)> {
+        let rect = client_rect(window)?;
         let (x, y) = (point.0 - rect.x, point.1 - rect.y);
         let inside = if bands_only { bands.iter().any(|band| band.contains(x, y)) } else { rect.contains(point.0, point.1) };
-        inside.then_some((label, x, y))
+        inside.then_some((x, y))
+    };
+    #[cfg(windows)]
+    {
+        let windows: Vec<(isize, String, Vec<Rect>, WebviewWindow)> = candidates
+            .into_iter()
+            .filter_map(|(label, bands)| {
+                let window = app.get_webview_window(&label)?;
+                let hwnd = window.hwnd().ok()?.0 as isize;
+                Some((hwnd, label, bands, window))
+            })
+            .collect();
+        let skip = skip_handles(app, moving);
+        let mut covered = false;
+        for layer in zorder::layers() {
+            if skip.contains(&layer.hwnd) || !layer.contains(point) {
+                continue;
+            }
+            if let Some((_, label, bands, window)) = windows.iter().find(|(hwnd, ..)| *hwnd == layer.hwnd) {
+                // 虚线框整块都算：指针一进框就把窗口提到最前（T105），合并照旧只认标题栏与标签栏。
+                if covered {
+                    raise_window(app, window);
+                }
+                let (x, y) = hit(window, bands)?;
+                return Some((label.clone(), x, y));
+            }
+            if !reveal || layer.own {
+                return None;
+            }
+            covered = true;
+        }
+        None
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (reveal, moving);
+        candidates.into_iter().find_map(|(label, bands)| {
+            let window = app.get_webview_window(&label)?;
+            if !window.is_visible().unwrap_or(false) {
+                return None;
+            }
+            hit(&window, &bands).map(|(x, y)| (label, x, y))
+        })
+    }
+}
+
+/// 遮挡判断里跳过的窗口：动画层（点击穿透、盖住整块屏幕）与正在拖动的窗口。
+#[cfg(windows)]
+fn skip_handles(app: &AppHandle, moving: Option<&str>) -> Vec<isize> {
+    [Some(OVERLAY_LABEL), moving]
+        .into_iter()
+        .flatten()
+        .filter_map(|label| app.get_webview_window(label).and_then(|window| window.hwnd().ok()).map(|hwnd| hwnd.0 as isize))
+        .collect()
+}
+
+/// 不激活地把窗口提到最前（置顶的窗口提到置顶一层的最前），动画层仍在它上面（拖影与插入线要盖住窗口）。
+/// 被 Win+D 收走的窗口先还原。
+fn raise_window(app: &AppHandle, window: &WebviewWindow) {
+    crate::topmost::restore_if_minimized(window);
+    #[cfg(windows)]
+    if let Ok(hwnd) = window.hwnd() {
+        use ::windows::Win32::UI::WindowsAndMessaging::{
+            SetWindowPos, HWND_TOP, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOOWNERZORDER, SWP_NOSIZE,
+        };
+        // SAFETY：hwnd 来自仍然存在的 Tauri 窗口，其余参数都是按值传入的常量。
+        let _ = unsafe { SetWindowPos(hwnd, Some(HWND_TOP), 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_NOOWNERZORDER) };
+    }
+    if let Some(overlay) = app.get_webview_window(OVERLAY_LABEL) {
+        if overlay.is_visible().unwrap_or(false) {
+            show_without_focus(&overlay);
+        }
+    }
+}
+
+/// 卡片第一次拖出侧栏：已经打开的记录窗口全部提到最前（被别的程序盖住、被 Win+D 收走的也是），不抢焦点，
+/// 拖动不断，方便拖进去合并（T104）。按现在的前后次序从后往前提，提完之后它们之间的次序不变。
+fn raise_note_windows(app: &AppHandle) {
+    #[allow(unused_mut)]
+    let mut windows: Vec<WebviewWindow> = with_registry(|map| {
+        map.iter().filter(|(_, entry)| entry.phase == Phase::Open).map(|(label, _)| label.clone()).collect::<Vec<_>>()
     })
+    .iter()
+    .filter_map(|label| app.get_webview_window(label))
+    .collect();
+    #[cfg(windows)]
+    {
+        let order: Vec<isize> = zorder::layers().iter().map(|layer| layer.hwnd).collect();
+        let rank = |window: &WebviewWindow| {
+            window.hwnd().ok().and_then(|hwnd| order.iter().position(|item| *item == hwnd.0 as isize)).unwrap_or(usize::MAX)
+        };
+        windows.sort_by_key(|window| std::cmp::Reverse(rank(window)));
+    }
+    for window in &windows {
+        raise_window(app, window);
+    }
+}
+
+/// 按住 Ctrl 拖动时更新动画层上的虚线框：被别的程序挡住的记录窗口（不含 `except`）各画一个（T105）。
+/// 指针移到框上时 window_at 把那个窗口提到最前，它不再被挡住，框随之消失、换成真正的窗口。
+fn update_reveal(app: &AppHandle, session: &mut DragSession, active: bool, point: (f64, f64), except: Option<&str>) {
+    #[cfg(windows)]
+    if active {
+        let skip = skip_handles(app, None);
+        let hidden: Vec<Rect> = with_registry(|map| {
+            map.iter()
+                .filter(|(label, entry)| entry.phase == Phase::Open && Some(label.as_str()) != except)
+                .map(|(label, _)| label.clone())
+                .collect::<Vec<_>>()
+        })
+        .iter()
+        .filter_map(|label| app.get_webview_window(label))
+        .filter(|window| window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false))
+        .filter(|window| window.hwnd().is_ok_and(|hwnd| zorder::covered(hwnd.0 as isize, &skip)))
+        .filter_map(|window| client_rect(&window))
+        .collect();
+        if let Some(origin) = overlay_cover(app, point.0, point.1) {
+            let rects: Vec<Rect> = hidden.into_iter().map(|rect| rect.relative_to(origin)).collect();
+            session.revealed = !rects.is_empty();
+            let _ = app.emit_to(OVERLAY_LABEL, events::REVEAL, rects);
+        }
+        return;
+    }
+    let _ = (point, except);
+    if std::mem::take(&mut session.revealed) {
+        let _ = app.emit_to(OVERLAY_LABEL, events::REVEAL, Vec::<Rect>::new());
+    }
+}
+
+/// 屏幕上窗口的前后次序（Windows）：遮挡判断用。
+#[cfg(windows)]
+mod zorder {
+    use ::windows::Win32::Foundation::{HWND, RECT};
+    use ::windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS};
+    use ::windows::Win32::UI::WindowsAndMessaging::{
+        GetTopWindow, GetWindow, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
+        GWL_EXSTYLE, GW_HWNDNEXT, WS_EX_TRANSPARENT,
+    };
+
+    /// 一个挡得住别的窗口的顶层窗口。
+    pub struct Layer {
+        pub hwnd: isize,
+        /// 看得见的矩形（物理像素）：可调大小的窗口四周系统留的不可见边框不算。
+        pub rect: RECT,
+        /// 属于本应用。
+        pub own: bool,
+    }
+
+    impl Layer {
+        pub fn contains(&self, point: (f64, f64)) -> bool {
+            point.0 >= f64::from(self.rect.left)
+                && point.0 < f64::from(self.rect.right)
+                && point.1 >= f64::from(self.rect.top)
+                && point.1 < f64::from(self.rect.bottom)
+        }
+
+        fn intersects(&self, other: &RECT) -> bool {
+            self.rect.left < other.right && self.rect.right > other.left && self.rect.top < other.bottom && self.rect.bottom > other.top
+        }
+    }
+
+    /// 窗口是否挡得住别的窗口：显示着、没有最小化、没有被系统隐去（别的虚拟桌面上的窗口等），也不点击穿透。
+    fn blocks(hwnd: HWND) -> bool {
+        // SAFETY：只读查询；DWM 属性写进本函数内大小匹配的变量。
+        unsafe {
+            if !IsWindowVisible(hwnd).as_bool() || IsIconic(hwnd).as_bool() {
+                return false;
+            }
+            if GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_TRANSPARENT.0 as isize != 0 {
+                return false;
+            }
+            let mut cloaked = 0u32;
+            let _ = DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, (&mut cloaked as *mut u32).cast(), 4);
+            cloaked == 0
+        }
+    }
+
+    fn frame(hwnd: HWND) -> Option<RECT> {
+        let mut rect = RECT::default();
+        // SAFETY：矩形写进本函数内的变量，大小与之匹配。
+        let extended = unsafe {
+            DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, (&mut rect as *mut RECT).cast(), std::mem::size_of::<RECT>() as u32)
+        };
+        if extended.is_err() {
+            // SAFETY：同上。
+            unsafe { GetWindowRect(hwnd, &mut rect) }.ok()?;
+        }
+        (rect.right > rect.left && rect.bottom > rect.top).then_some(rect)
+    }
+
+    /// 从最前面往后，依次给出挡得住别的窗口的顶层窗口。
+    pub fn layers() -> Vec<Layer> {
+        let pid = std::process::id();
+        let mut list = Vec::new();
+        // SAFETY：只读地按前后次序遍历顶层窗口；窗口可能在遍历中消失，取不到下一个时结束。
+        let mut next = unsafe { GetTopWindow(None) }.ok();
+        for _ in 0..8192 {
+            let Some(hwnd) = next else { break };
+            if blocks(hwnd) {
+                if let Some(rect) = frame(hwnd) {
+                    let mut owner = 0u32;
+                    // SAFETY：只读查询窗口所属的进程。
+                    unsafe { GetWindowThreadProcessId(hwnd, Some(&mut owner)) };
+                    list.push(Layer { hwnd: hwnd.0 as isize, rect, own: owner == pid });
+                }
+            }
+            // SAFETY：同上。
+            next = unsafe { GetWindow(hwnd, GW_HWNDNEXT) }.ok();
+        }
+        list
+    }
+
+    /// 窗口是否被别的程序的窗口挡住了一部分（跳过 `skip`）。
+    pub fn covered(hwnd: isize, skip: &[isize]) -> bool {
+        let list = layers();
+        let Some(index) = list.iter().position(|layer| layer.hwnd == hwnd) else { return false };
+        let target = list[index].rect;
+        list[..index].iter().any(|layer| !layer.own && !skip.contains(&layer.hwnd) && layer.intersects(&target))
+    }
 }
 
 /* ==================== 拖动 ==================== */
@@ -1074,6 +1293,10 @@ struct DragSession {
     ghost_shown: bool,
     /// 最近一步的指针位置：松开时按它判断落点，松开之后指针再动也不影响。
     last: Option<(f64, f64)>,
+    /// 卡片拖出侧栏时已经把记录窗口提到了最前（每次拖动只提一次，T104）。
+    raised: bool,
+    /// 动画层上正画着被挡住窗口的虚线框（T105）。
+    revealed: bool,
 }
 
 static DRAG: Mutex<Option<DragSession>> = Mutex::new(None);
@@ -1135,6 +1358,8 @@ pub fn drag_begin(app: AppHandle, window: WebviewWindow, request: DragBegin) -> 
         hint: None,
         ghost_shown: false,
         last: Some(point),
+        raised: false,
+        revealed: false,
     };
     if let Some(origin) = overlay_cover(&app, point.0, point.1) {
         let payload = GhostPayload {
@@ -1154,9 +1379,10 @@ pub fn drag_begin(app: AppHandle, window: WebviewWindow, request: DragBegin) -> 
 }
 
 /// 拖动的一步：`outside` 为指针是否离开了来源（卡片离开侧栏、标签页离开窗口），此时拖影画在动画层上。
-/// 拖动窗口时把窗口移到指针处。返回指针下可以合并的窗口。
+/// 拖动窗口时把窗口移到指针处。返回指针下可以合并的窗口。`ctrl` 为按住了 Ctrl：显示并可以拖进被挡住的记录窗口（T105）。
+/// `float` 为卡片还在侧栏里、拖影却超出了侧栏窗口：拖影同样画在动画层上，免得被窗口的边截掉（T117）。
 #[tauri::command]
-pub fn drag_update(app: AppHandle, window: WebviewWindow, outside: bool) -> AppResult<Option<String>> {
+pub fn drag_update(app: AppHandle, window: WebviewWindow, outside: bool, ctrl: Option<bool>, float: Option<bool>) -> AppResult<Option<String>> {
     let Some(mut session) = DRAG.lock().ok().and_then(|slot| slot.clone()) else { return Ok(None) };
     let point = cursor(&app);
     session.last = Some(point);
@@ -1178,14 +1404,19 @@ pub fn drag_update(app: AppHandle, window: WebviewWindow, outside: bool) -> AppR
             }
         });
     }
-    let target = match session.kind {
-        DragKind::Cards if outside => window_at(&app, point, None, false),
-        DragKind::Cards => None,
-        DragKind::Tab | DragKind::Move => window_at(&app, point, Some(&session.source), true),
-    };
+    let reveal = ctrl.unwrap_or(false);
+    // 卡片第一次拖出侧栏：已经打开的记录窗口全部提到最前，不抢焦点（T104）。
+    if session.kind == DragKind::Cards && outside && !session.raised {
+        session.raised = true;
+        raise_note_windows(&app);
+    }
+    let target = drop_target(&app, &session, point, outside, reveal);
     set_hint(&app, &mut session, target.as_ref());
-    // 拖影：卡片在侧栏外、标签页在窗口外时画在动画层上；动画层跟着指针换屏幕。
-    let show_ghost = session.kind != DragKind::Move && outside;
+    let except = (session.kind != DragKind::Cards).then(|| session.source.clone());
+    let reveal_now = reveal && (session.kind != DragKind::Cards || outside);
+    update_reveal(&app, &mut session, reveal_now, point, except.as_deref());
+    // 拖影：卡片在侧栏外、标签页在窗口外时画在动画层上，卡片拖影超出侧栏时也是；动画层跟着指针换屏幕。
+    let show_ghost = session.kind != DragKind::Move && (outside || float.unwrap_or(false));
     if show_ghost || session.ghost_shown {
         if let Some(origin) = overlay_cover(&app, point.0, point.1) {
             let payload = GhostPayload { html: None, grab: (0.0, 0.0), x: point.0 - origin.0, y: point.1 - origin.1, visible: show_ghost, outside };
@@ -1212,25 +1443,28 @@ pub struct DropResult {
     pub opened: bool,
 }
 
+/// 指针下可以合并的窗口：卡片在侧栏外时整个窗口都算，标签页与窗口只认标题栏与竖排的标签栏。
+fn drop_target(app: &AppHandle, session: &DragSession, point: (f64, f64), outside: bool, reveal: bool) -> Option<(String, f64, f64)> {
+    match session.kind {
+        DragKind::Cards if outside => window_at(app, point, None, false, reveal, None),
+        DragKind::Cards => None,
+        DragKind::Tab => window_at(app, point, Some(&session.source), true, reveal, None),
+        DragKind::Move => window_at(app, point, Some(&session.source), true, reveal, Some(&session.source)),
+    }
+}
+
 /// 结束拖动。`drop` 为假时取消。卡片与标签页落在别的窗口上时合并进去；
 /// 卡片在侧栏外、标签页在窗口外（`detach`：窗口不止一个标签页）松开时新开一个窗口，从拖影展开，默认置顶。
 /// 拖动窗口落在别的窗口的标题栏上时，整个窗口并进去。
 #[tauri::command]
-pub fn drag_end(app: AppHandle, window: WebviewWindow, drop: bool, outside: bool, detach: Option<bool>) -> AppResult<DropResult> {
+pub fn drag_end(app: AppHandle, window: WebviewWindow, drop: bool, outside: bool, detach: Option<bool>, ctrl: Option<bool>) -> AppResult<DropResult> {
     let Some(mut session) = DRAG.lock().ok().and_then(|mut slot| slot.take()) else {
         return Ok(DropResult { target: None, opened: false });
     };
     let point = session.last.unwrap_or_else(|| cursor(&app));
-    let target = if !drop {
-        None
-    } else {
-        match session.kind {
-            DragKind::Cards if outside => window_at(&app, point, None, false),
-            DragKind::Cards => None,
-            DragKind::Tab | DragKind::Move => window_at(&app, point, Some(&session.source), true),
-        }
-    };
+    let target = if drop { drop_target(&app, &session, point, outside, ctrl.unwrap_or(false)) } else { None };
     set_hint(&app, &mut session, None);
+    update_reveal(&app, &mut session, false, point, None);
     let _ = app.emit_to(OVERLAY_LABEL, events::INDICATOR, serde_json::Value::Null);
     let ids = match session.kind {
         DragKind::Move => with_registry(|map| map.get(window.label()).map(|entry| entry.tabs.clone()).unwrap_or_default()),
@@ -1266,6 +1500,7 @@ pub fn drag_end(app: AppHandle, window: WebviewWindow, drop: bool, outside: bool
 }
 
 /// 把记录放进 `target` 窗口：先从别的窗口拿走（来源窗口因此可能空掉而关闭），再交给目标窗口按落点插入。
+/// 目标窗口收下之后改回置顶（`pin`，T105：合并进来的窗口正要用，不该再被别的程序盖住）。
 fn transfer(app: &AppHandle, target: &str, ids: Vec<String>, x: f64, y: f64) {
     let ids = unique(ids);
     if ids.is_empty() {
@@ -1274,7 +1509,7 @@ fn transfer(app: &AppHandle, target: &str, ids: Vec<String>, x: f64, y: f64) {
     remove_from_others(app, &ids, Some(target));
     // 有别的记录并进全文浮窗：它成了放几条记录的窗口，不再附着在卡片旁。
     detach(app, target);
-    let _ = app.emit_to(target, events::ADD, serde_json::json!({ "ids": ids, "x": x, "y": y }));
+    let _ = app.emit_to(target, events::ADD, serde_json::json!({ "ids": ids, "x": x, "y": y, "pin": true }));
     show_note(app, target);
 }
 

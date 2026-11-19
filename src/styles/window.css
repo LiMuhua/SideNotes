@@ -282,6 +282,18 @@ body[data-window='overlay'] .overlay-connector {
   pointer-events: auto;
 }
 
+/* 按住 Ctrl 拖动时被别的程序挡住的记录窗口（T105）：窗口所在处一个半透明的虚线框，淡入淡出；
+ * 指针移上去，窗口提到最前，框换成真正的窗口。不写提示文字，Ctrl 的用法放在使用说明里。 */
+body[data-window='overlay'] .overlay-reveal {
+  position: fixed;
+  border: var(--sn-focus-ring-width) dashed var(--sn-color-accent);
+  border-radius: var(--sn-radius-lg);
+  background: var(--sn-color-accent-subtle);
+  opacity: 0.6;
+  pointer-events: none;
+  animation: fade-in var(--sn-duration-fast) var(--sn-ease-enter);
+}
+
 /* 全文浮窗附着的卡片：一圈强调色边框，与连线对上；按钮是「收起全文」，箭头朝上。 */
 .note-list .note-card.is-peeking:not(.is-editing) {
   border-color: var(--sn-color-accent);
