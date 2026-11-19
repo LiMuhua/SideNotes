@@ -1841,6 +1841,8 @@ dependencies = [
  "num-traits",
  "png",
  "tiff",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]
@@ -3452,6 +3454,7 @@ name = "sidenotes"
 version = "0.7.3"
 dependencies = [
  "dunce",
+ "image",
  "rusqlite",
  "serde",
  "serde_json",

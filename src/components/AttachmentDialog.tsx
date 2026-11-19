@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { AttachmentImage } from './AttachmentImage';
 import { Icon } from './Icon';
 import { Markdown } from './Markdown';
 import { Modal } from './Modal';
@@ -48,7 +49,7 @@ const direct = <T,>(run: () => Promise<T>): Promise<T> => run();
 
 /** 预览区的内容：图片、取不到的图片或文件块，或原文不再是单个附件时按卡片排版的 Markdown。 */
 type Preview =
-  | { kind: 'image'; src: string; label: string }
+  | { kind: 'image'; src: string; target: string; label: string }
   | { kind: 'missing' | 'file'; label: string }
   | { kind: 'text'; markdown: string };
 
@@ -65,14 +66,14 @@ function sourcePreview(markdown: string): Preview {
   if (!parsed) return { kind: 'text', markdown };
   if (parsed.kind === 'file') return { kind: 'file', label: parsed.label || fileLabel(parsed.target) };
   const src = imageUrl(parsed.target);
-  return src ? { kind: 'image', src, label: parsed.label } : { kind: 'missing', label: parsed.label || '图片' };
+  return src ? { kind: 'image', src, target: parsed.target, label: parsed.label } : { kind: 'missing', label: parsed.label || '图片' };
 }
 
 function PreviewArea({ preview }: { preview: Preview }) {
   return (
     <div className="attachment-preview-area">
       {preview.kind === 'image' ? (
-        <img className="attachment-preview-image" src={preview.src} alt={preview.label || '图片'} draggable={false} />
+        <AttachmentImage className="attachment-preview-image" src={preview.target} alt={preview.label || '图片'} />
       ) : preview.kind === 'text' ? (
         <div className="attachment-preview-text markdown-body">{preview.markdown.trim() ? <Markdown text={preview.markdown} /> : null}</div>
       ) : (
@@ -262,7 +263,7 @@ export function AttachmentDialog({
   const preview: Preview | null = !isImage
     ? null
     : embedded
-      ? { kind: 'image', src: embedded.data, label: name }
+      ? { kind: 'image', src: embedded.data, target: embedded.data, label: name }
       : sourcePreview(draft);
 
   return (

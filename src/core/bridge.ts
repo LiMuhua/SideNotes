@@ -529,6 +529,21 @@ export function localFileUrl(path: string): string {
   return isDesktop() ? convertFileSrc(path) : path;
 }
 
+/** 显示图片用的路径（大图的缩小副本或原图）与像素尺寸（T115）。 */
+export interface DisplayImage {
+  path: string;
+  width: number;
+  height: number;
+}
+
+/**
+ * 附件文件夹里的图片显示用的路径与尺寸：比这一档大的换成缩小的副本（没有就由后端生成）；
+ * 不是附件文件夹里的 PNG、JPEG 时为 null，照原样显示。`tier` 为 card（侧栏卡片）或 window（记录窗口与弹窗）。
+ */
+export function displayImage(path: string, tier: 'card' | 'window'): Promise<DisplayImage | null> {
+  return call<DisplayImage | null>('display_image', { path, tier }, null);
+}
+
 /** 校验文件引用是否仍然可用。 */
 export function inspectFile(path: string): Promise<FileStatus> {
   return call<FileStatus>('inspect_file', { path }, { exists: false, size: 0, isDirectory: false });

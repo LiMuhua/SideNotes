@@ -4,13 +4,15 @@
  * 由 `core/markdown` 解析出的 AST 渲染为 React 元素：不使用
  * `dangerouslySetInnerHTML`，原生 HTML 一律作为文字输出。
  * 打开 `sourceMap` 时为顶层块标出所占的行、为图片与文件引用标出原文位置，
- * 供卡片之间拖动引用时定位落点与来源。本机图片（应用数据目录中的附件副本）经本地文件协议显示。
+ * 供卡片之间拖动引用时定位落点与来源。本机图片（应用数据目录中的附件副本）经本地文件协议显示，
+ * 大图显示缩小的副本、滚出视野闲置后释放（AttachmentImage，T115）。
  */
 
 import { Fragment, type CSSProperties, type ReactNode } from 'react';
 import { parseBlocks, type BlockNode, type InlineNode, type SourceSpan } from '../core/markdown';
 import { fileLabel, filePath } from '../core/files';
 import { localFileUrl } from '../core/bridge';
+import { AttachmentImage } from './AttachmentImage';
 import { Icon } from './Icon';
 
 /** 预览中被点击的附件：图片或文件引用在解析输入中的范围、地址与显示文字。 */
@@ -85,7 +87,7 @@ function renderInline(nodes: InlineNode[], handlers: MarkdownHandlers, keyPrefix
               }
             }}
           >
-            <img className="markdown-image" src={imageSource(node.src)} alt={node.alt} loading="lazy" draggable={false} />
+            <AttachmentImage className="markdown-image" src={node.src} alt={node.alt} />
           </button>
         );
       case 'file':

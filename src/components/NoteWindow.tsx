@@ -197,7 +197,9 @@ export function NoteWindow() {
   const side = settings.windowTabs === 'side' && many;
   const note = notes.find((item) => item.id === active);
   const windowTitle = note ? noteTitle(note) : '';
-  const fitKey = `${active}|${tabs.join(',')}|${side ? 'side' : 'top'}`;
+  /** 图片的地址与尺寸后来才出来时加一（大图的副本要先生成，T115）：按内容定的大小跟着重新量。 */
+  const [imageVersion, setImageVersion] = useState(0);
+  const fitKey = `${active}|${tabs.join(',')}|${side ? 'side' : 'top'}|${imageVersion}`;
   fitKeyRef.current = fitKey;
 
   // 记录窗口有自己的任务栏按钮，按钮与 Alt+Tab 里写当前标签页的标题。
@@ -496,6 +498,17 @@ export function NoteWindow() {
     line.style.height = drop.horizontal ? '' : `${drop.rect.height}px`;
     if (!line.isConnected) document.body.append(line);
   };
+
+  // 正文里的图片地址与尺寸出来了（打开时还在生成副本、量尺寸时没等到）：再量一次（T115）。
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!body) return;
+    const onReady = (): void => {
+      if (shownRef.current && !manualSize.current) setImageVersion((value) => value + 1);
+    };
+    body.addEventListener('sidenotes:image-ready', onReady);
+    return () => body.removeEventListener('sidenotes:image-ready', onReady);
+  }, []);
 
   // 合并、切换或关掉标签页之后，窗口按当前这一页的内容重新定大小（T110）：内容在上限之内时不出滚动条。
   // 编辑中不变（打字时窗口跟着跳）；手动拖过边框或放大过的窗口保持用户的大小。
@@ -1234,12 +1247,17 @@ function fitSize(section: HTMLElement, strip: HTMLElement | null, area: bridge.P
  * 等窗口里的图片与字体加载好（最多 `timeout` 毫秒）。窗口还没显示，懒加载的图片不会自己加载，先改成立即加载。
  */
 async function settleImages(root: HTMLElement, timeout: number): Promise<void> {
+  const deadline = Date.now() + timeout;
+  // 大图的副本地址还没出来的图片（data-image-pending，T115）先等它有地址，再等它解码。
+  while (root.querySelector('img[data-image-pending]') && Date.now() < deadline) {
+    await new Promise((resolve) => window.setTimeout(resolve, 30));
+  }
   const images = Array.from(root.querySelectorAll('img'));
   images.forEach((image) => {
     image.loading = 'eager';
   });
   const ready = Promise.all([document.fonts.ready.catch(() => undefined), ...images.map((image) => image.decode().catch(() => undefined))]);
-  await Promise.race([ready, new Promise((resolve) => window.setTimeout(resolve, timeout))]);
+  await Promise.race([ready, new Promise((resolve) => window.setTimeout(resolve, Math.max(0, deadline - Date.now())))]);
 }
 
 /** 窗口的副本：动画层用它播放打开与关闭的动画。去掉缩放手柄与焦点状态，图片立即加载。 */

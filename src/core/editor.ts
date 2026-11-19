@@ -103,6 +103,8 @@ export interface EditorOptions {
   pasteFiles?: (files: File[]) => Promise<string | null>;
   /** 把本机图片路径换算为可显示的地址；未提供时本机图片只显示原文。 */
   resolveImage?: (path: string) => string;
+  /** 给编辑器里的图片设显示地址（大图的副本与闲置释放，T115）；不给时直接用 resolveImage 的地址。 */
+  displayImage?: (image: HTMLImageElement, target: string) => void;
   /** 设置中改过的快捷键，按键时读取，改动立即生效；未提供时全部使用默认按键（见 core/shortcuts）。 */
   shortcuts?: () => ShortcutBindings;
 }
@@ -900,7 +902,8 @@ export class MarkdownEditor {
       chip.dataset.mdPreview = address;
       chip.setAttribute('aria-label', `图片：${attachment.label || '图片'}`);
       const picture = element('img', 'markdown-image');
-      picture.src = address;
+      if (this.options.displayImage) this.options.displayImage(picture, attachment.target);
+      else picture.src = address;
       picture.alt = attachment.label;
       picture.loading = 'lazy';
       picture.draggable = false;

@@ -29,6 +29,8 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 thiserror = "2"
 # 解析软链接与目录联接后去掉 Windows 路径的 \\?\ 前缀（Tauri 已依赖同一版本）。
 dunce = "1"
+# 大图的显示副本（T115）：读 PNG、JPEG 的尺寸，缩小后另存（Tauri 已依赖同一版本，这里加上 JPEG 的编解码）。
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-global-shortcut = "2"

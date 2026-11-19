@@ -349,6 +349,24 @@ pub fn open_attachment(app: AppHandle, state: State<'_, AppState>, path: String)
         .map_err(|error| AppError::Other(format!("无法打开文件：{error}")))
 }
 
+/// 显示图片用的路径与尺寸（T115）：附件文件夹里的大图换成缩小的副本（没有就生成），`tier` 为 card 或 window；
+/// 不是附件文件夹里的 PNG、JPEG 时返回 None，页面显示原图。生成副本要读整张原图，放到后台线程里做。
+#[tauri::command]
+pub async fn display_image(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    path: String,
+    tier: String,
+) -> AppResult<Option<crate::thumbnails::DisplayImage>> {
+    let root = state.store.directory().join(attachments::ATTACHMENTS_DIR);
+    // 与启动时开放给本地文件协议的路径一致（解析过链接的实际路径），否则副本会被拒绝加载。
+    let cache = crate::paths::resolve(&app.path().app_cache_dir()?).join(crate::thumbnails::THUMBNAILS_DIR);
+    let edge = crate::thumbnails::edge_for(&tier);
+    tauri::async_runtime::spawn_blocking(move || crate::thumbnails::display_image(&root, &cache, std::path::Path::new(&path), edge))
+        .await
+        .map_err(|error| AppError::Other(format!("图片副本生成中断：{error}")))?
+}
+
 /// 把附件副本另存到用户在系统对话框中选择的位置。
 ///
 /// 只导出附件文件夹中的文件，与打开附件同样按实际路径校验；目标路径来自保存对话框。

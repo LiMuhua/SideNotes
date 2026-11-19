@@ -21,6 +21,7 @@ mod recorder;
 mod shortcuts;
 mod snapshots;
 mod store;
+mod thumbnails;
 mod topmost;
 mod tray;
 mod windows;
@@ -79,6 +80,16 @@ pub fn run() {
             let icon_dir = app_icon::custom_dir(&default_dir);
             std::fs::create_dir_all(&icon_dir)?;
             app.asset_protocol_scope().allow_directory(&icon_dir, false)?;
+            // 大图的显示副本在系统缓存目录（T115，见 thumbnails），同样按实际路径开放；很久没用的副本在后台删掉。
+            let thumbnails_dir = paths::resolve(&handle.path().app_cache_dir()?).join(thumbnails::THUMBNAILS_DIR);
+            std::fs::create_dir_all(&thumbnails_dir)?;
+            app.asset_protocol_scope().allow_directory(&thumbnails_dir, false)?;
+            std::thread::spawn(move || {
+                let removed = thumbnails::prune(&thumbnails_dir, std::time::SystemTime::now());
+                if removed > 0 {
+                    diag::log(format!("删掉了 {removed} 个很久没用的图片副本"));
+                }
+            });
 
             let watcher = Arc::new(EdgeWatcher::new());
 
@@ -206,6 +217,7 @@ pub fn run() {
             commands::import_attachment,
             commands::import_files,
             commands::open_attachment,
+            commands::display_image,
             commands::export_attachment,
             commands::cleanup_attachments,
             commands::migrate_storage,

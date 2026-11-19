@@ -1987,7 +1987,8 @@ mark {
   box-shadow: 0 0 0 var(--sn-focus-ring-width) var(--sn-color-accent-subtle);
 }
 
-/* 缩略图：整张图都看得见（按比例缩小，不裁切），高度上限与现有应用一致；显示的是缩小的副本，点开附件弹窗才加载原图（本次提出）。 */
+/* 缩略图：整张图都看得见（按比例缩小，不裁切），高度上限与现有应用一致（本次提出）。附件图片显示的是缩小的副本：
+   卡片用长边 1024 的，记录窗口、全文浮窗与附件弹窗用长边 2048 的，原图不超过时直接用原图（决策 48）。 */
 :is(.markdown-image-button, .md-editor-image) .markdown-image,
 .markdown-body .note-image-button .note-image,
 .note-window-content .note-image-button .note-image {

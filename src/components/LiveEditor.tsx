@@ -10,6 +10,7 @@ import { useEffect, useLayoutEffect, useRef } from 'react';
 import { MarkdownEditor, type EditorAttachment } from '../core/editor';
 import { importPastedFiles } from '../core/attachments';
 import * as bridge from '../core/bridge';
+import { showImage } from '../core/images';
 import * as store from '../core/store';
 import { useToast } from '../hooks/useToast';
 
@@ -73,6 +74,7 @@ export function LiveEditor({
       tagSuggestions: (prefix, text) => callbacks.current.tagSuggestions?.(prefix, text) ?? [],
       readClipboard: bridge.readClipboardText,
       resolveImage: bridge.localFileUrl,
+      displayImage: showImage,
       shortcuts: () => store.getState().settings.shortcuts,
       pasteFiles: async (files) => {
         try {
