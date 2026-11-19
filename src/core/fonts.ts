@@ -13,11 +13,33 @@ export const SYSTEM_FONT_LABEL = '系统默认';
 /** 保存的字体名最长 120 个字符。 */
 const MAX_FAMILY_LENGTH = 120;
 
-/** 筛选字体候选：名称包含输入的文字（不分大小写）；输入为空时全部保留。 */
-export function filterFonts<T extends { label: string }>(choices: readonly T[], typed: string): T[] {
+/**
+ * 名称与输入对得上的程度（T112）：0 完全相同，1 名称开头，2 某个单词开头（如 Cambria Math 的 Math），
+ * 3 中间包含（如 Bookman 里的 man），-1 对不上。不分大小写。
+ */
+export function fontMatchRank(label: string, typed: string): number {
   const key = typed.trim().toLocaleLowerCase();
+  const name = label.toLocaleLowerCase();
+  if (!key) return 0;
+  if (name === key) return 0;
+  if (name.startsWith(key)) return 1;
+  if (name.split(/[\s\-_]+/).some((word) => word.startsWith(key))) return 2;
+  return name.includes(key) ? 3 : -1;
+}
+
+/**
+ * 筛选字体候选：名称包含输入的文字（不分大小写）；输入为空时全部保留。
+ * 对得更上的排在前面（T112，2026-11-19 用户要求：输入 ma 时 Magneto、Malgun Gothic 排在 Bookman Old Style 前面），
+ * 同一级按名称的字母顺序。
+ */
+export function filterFonts<T extends { label: string }>(choices: readonly T[], typed: string): T[] {
+  const key = typed.trim();
   if (!key) return [...choices];
-  return choices.filter((choice) => choice.label.toLocaleLowerCase().includes(key));
+  return choices
+    .map((choice) => ({ choice, rank: fontMatchRank(choice.label, key) }))
+    .filter((item) => item.rank >= 0)
+    .sort((a, b) => a.rank - b.rank || a.choice.label.localeCompare(b.choice.label, 'en', { sensitivity: 'base' }))
+    .map((item) => item.choice);
 }
 
 /**

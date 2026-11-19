@@ -44,11 +44,13 @@ export interface ComboboxProps {
    */
   pickOnEnter?: (typed: string, choices: ComboOption[]) => string | null;
   className?: string;
+  /** 候选列表只放在输入框下方、不翻到上方（字体候选，T112）。 */
+  stayBelow?: boolean;
   /** 提交选中的候选值或输入的文字，返回是否已保存；无论成败，输入框都回到保存后的值。 */
   onCommit: (value: string) => Promise<boolean> | boolean;
 }
 
-export function Combobox({ text, options, selected, label, placeholder, commitOnBlur, className, pickOnEnter, onCommit }: ComboboxProps) {
+export function Combobox({ text, options, selected, label, placeholder, commitOnBlur, className, pickOnEnter, stayBelow, onCommit }: ComboboxProps) {
   const id = useId();
   const [draft, setDraft] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -176,7 +178,7 @@ export function Combobox({ text, options, selected, label, placeholder, commitOn
       <Floating
         anchor={field}
         open={open && choices.length > 0}
-        options={{ placement: 'bottom-start', offset: 4, matchWidth: true, scroll: true }}
+        options={{ placement: 'bottom-start', offset: 4, matchWidth: true, scroll: true, stayBelow }}
         className="font-combobox-list settings-floating"
         id={listId}
         role="listbox"

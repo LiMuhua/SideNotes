@@ -5,6 +5,7 @@
  * 输入时按名称筛选；没有对得上的字体时，第一项提示「“名称”不可用」，第二项是「使用系统默认字体」
  * （2026-11-18 用户要求，原型输入时列表不变、末尾多一项「使用“名称”」）。回车选用筛出的第一项；
  * 没有对得上的字体时回车不提交。桌面端由后端读取系统字体；浏览器预览读不到系统字体，只列出常用字体。
+ * 筛出的候选按对得上的程度排序（名称开头的在前，见 core/fonts 的 filterFonts）；列表始终在输入框下方（T112）。
  */
 
 import { useEffect, useState } from 'react';
@@ -121,6 +122,7 @@ export function FontPicker({
       placeholder="选择或输入字体"
       options={options}
       pickOnEnter={pickOnEnter}
+      stayBelow
       onCommit={(raw) => {
         const chosen = typedFont(families, raw);
         // 列表之外的名称不保存，输入框回到已保存的字体。

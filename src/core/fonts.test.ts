@@ -30,6 +30,19 @@ describe('筛选字体候选', () => {
     expect(filterFonts(choices, '默认').map((choice) => choice.label)).toEqual(['系统默认']);
   });
 
+  it('对得更上的排在前面：完全相同、名称开头、单词开头、中间包含，同一级按字母顺序（T112）', () => {
+    const fonts = ['Bookman Old Style', 'Cambria Math', 'Ebrima', 'Malgun Gothic', 'Maiandra GD', 'Magneto', 'Ma'].map((label) => ({ label }));
+    expect(filterFonts(fonts, 'ma').map((choice) => choice.label)).toEqual([
+      'Ma',
+      'Magneto',
+      'Maiandra GD',
+      'Malgun Gothic',
+      'Cambria Math',
+      'Bookman Old Style',
+      'Ebrima',
+    ]);
+  });
+
   it('输入为空时全部保留，筛不出时为空', () => {
     expect(filterFonts(choices, '  ')).toHaveLength(choices.length);
     expect(filterFonts(choices, '不存在的字体')).toEqual([]);
