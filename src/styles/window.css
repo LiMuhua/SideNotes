@@ -270,7 +270,7 @@ body[data-window='overlay'] .overlay-layer {
   pointer-events: none;
 }
 
-/* 全文浮窗与卡片之间的连接带（T100、T114）：铺满动画层的一张图，出现与收回的动画由 Overlay.tsx 播放。 */
+/* 全文浮窗与卡片之间的连接带（T100、T114、T122）：铺满动画层的一张图，出现与收回的动画由 Overlay.tsx 播放。 */
 body[data-window='overlay'] .overlay-connector {
   position: fixed;
   inset: 0;
@@ -280,21 +280,16 @@ body[data-window='overlay'] .overlay-connector {
   pointer-events: none;
 }
 
-/* 连接带（T114）：卡片一边较浓、浮窗一边较淡的强调色渐变，上下两条斜边一道细线，像卡片投在浮窗上的光。 */
+/* 连接带（T122，2026-11-19 用户选方案 B）：浮窗一边较浓、往卡片一边渐淡到没有，不描边。上一轮（T114）卡片一边最浓，
+ * 像卡片把光投到浮窗上，看着卡片在上、浮窗在下，抢了浮窗的重点。 */
 .overlay-beam-near {
   stop-color: var(--sn-color-accent);
-  stop-opacity: 0.34;
+  stop-opacity: 0;
 }
 
 .overlay-beam-far {
   stop-color: var(--sn-color-accent);
-  stop-opacity: 0.08;
-}
-
-.overlay-beam-edge {
-  stroke: var(--sn-color-accent);
-  stroke-opacity: 0.55;
-  stroke-width: var(--sn-border-width);
+  stop-opacity: 0.22;
 }
 
 /* 预览里的待办勾选框可以直接点（T108）：旧样式层让正文里的勾选框不接收指针（prototype.css 的 .markdown-body input），
@@ -316,8 +311,15 @@ body[data-window='overlay'] .overlay-reveal {
   animation: fade-in var(--sn-duration-fast) var(--sn-ease-enter);
 }
 
-/* 全文浮窗附着的卡片：一圈强调色边框，与连线对上；按钮是「收起全文」，箭头朝上。 */
-.note-list .note-card.is-peeking:not(.is-editing) {
+/* 全文浮窗附着的卡片（T122）：只留一道淡淡的强调色细边，高亮与悬停也不加强调色外圈，重点落在浮窗上；
+ * 按钮是「收起全文」，箭头朝上。 */
+.note-list .note-card.is-peeking:where(:not(.is-editing)) {
+  --local-shadow: var(--sn-shadow-sm);
+  border-color: color-mix(in srgb, var(--sn-color-accent) 45%, var(--sn-color-border));
+}
+
+/* 附着在卡片旁的全文浮窗（T122）：强调色描边。亚克力与不透明的窗口边框由系统画，NoteWindow.tsx 把它设成强调色。 */
+body[data-window='note'] .note-window.is-attached {
   border-color: var(--sn-color-accent);
 }
 

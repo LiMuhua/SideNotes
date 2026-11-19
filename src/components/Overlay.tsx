@@ -6,8 +6,8 @@
  * - 插入线：拖动经过别的记录窗口时，那个窗口算出的插入线画在这里，叠在拖影与正在拖动的窗口之上。
  * - 形变动画：记录窗口打开时，窗口的副本从拖影或卡片展开到窗口的位置，结束后交给真正的窗口；
  *   关闭时真正的窗口先藏起来，副本缩回卡片（或原地提起淡出）。帧与时长照搬原型 note-window.js 的 morph 与 closeEntry。
- * - 连接带（T100、T114）：附着在卡片旁的全文浮窗开着时，卡片的边与浮窗的边之间一块由窄到宽的强调色渐变带，
- *   像把卡片投影放大成浮窗；出现时从卡片一边展开，收回时原路收拢。
+ * - 连接带（T100、T114、T122）：附着在卡片旁的全文浮窗开着时，卡片的边与浮窗的边之间一块强调色渐变带，
+ *   浮窗一边较浓、往卡片渐淡，重点落在浮窗上；出现时从卡片一边展开，收回时原路收拢。
  * - 虚线框（T105）：按住 Ctrl 拖动时，被别的程序挡住的记录窗口各画一个半透明的虚线框；指针移上去，窗口提到最前，框换成真正的窗口。
  * 位置由后端给出（相对本窗口内容区的物理像素），除以页面像素比得到页面像素；副本的大小与来源窗口相同（同样的界面缩放）。
  */
@@ -262,7 +262,7 @@ export function Overlay() {
       });
     };
 
-    // 连接带：一块梯形，从卡片一边（较浓）渐变到浮窗一边（较淡），上下两条斜边描一道细线。
+    // 连接带：一块梯形，浮窗一边较浓、往卡片一边渐淡到没有（T122，方案 B：重点落在浮窗上），不描边。
     // 出现时从卡片那一边横向展开，收回时原路收拢后去掉（关闭是打开的倒放）。
     let connector: SVGSVGElement | null = null;
     let leaving: Animation | null = null;
@@ -312,11 +312,7 @@ export function Overlay() {
         const body = document.createElementNS(SVG, 'polygon');
         body.setAttribute('class', 'overlay-beam');
         body.setAttribute('fill', `url(#${BEAM_GRADIENT})`);
-        const upper = document.createElementNS(SVG, 'line');
-        const lower = document.createElementNS(SVG, 'line');
-        upper.setAttribute('class', 'overlay-beam-edge');
-        lower.setAttribute('class', 'overlay-beam-edge');
-        connector.append(defs, body, upper, lower);
+        connector.append(defs, body);
         layer.append(connector);
         if (!reducedMotion() && typeof connector.animate === 'function') {
           connector.animate(beamFrames(cardX), { duration: duration('--sn-duration-normal'), easing: easing('--sn-ease-enter') });
@@ -326,16 +322,8 @@ export function Overlay() {
       const gradient = connector.querySelector('linearGradient');
       gradient?.setAttribute('x1', `${cardX}`);
       gradient?.setAttribute('x2', `${panelX}`);
-      const [body, upper, lower] = Array.from(connector.children).slice(1);
-      body.setAttribute('points', `${cardX},${cardTop} ${panelX},${panelTop} ${panelX},${panelBottom} ${cardX},${cardBottom}`);
-      upper.setAttribute('x1', `${cardX}`);
-      upper.setAttribute('y1', `${cardTop}`);
-      upper.setAttribute('x2', `${panelX}`);
-      upper.setAttribute('y2', `${panelTop}`);
-      lower.setAttribute('x1', `${cardX}`);
-      lower.setAttribute('y1', `${cardBottom}`);
-      lower.setAttribute('x2', `${panelX}`);
-      lower.setAttribute('y2', `${panelBottom}`);
+      const body = connector.querySelector('polygon');
+      body?.setAttribute('points', `${cardX},${cardTop} ${panelX},${panelTop} ${panelX},${panelBottom} ${cardX},${cardBottom}`);
     };
 
     return bridge.subscribeAll([

@@ -671,11 +671,16 @@ export function NoteWindow() {
     };
   }, [finishEditing, closeWindow]);
 
+  // 附着在卡片旁的全文浮窗一直描强调色边框（T122，方案 B：重点落在浮窗上，卡片只留淡淡的细边）。
   useEffect(() => {
     if (document.documentElement.dataset.snWindow === 'clear') return;
-    const color = front ? hexColor('color-mix(in srgb, var(--sn-color-accent) 40%, var(--sn-color-border))') : null;
+    const color = attached
+      ? hexColor('var(--sn-color-accent)')
+      : front
+        ? hexColor('color-mix(in srgb, var(--sn-color-accent) 40%, var(--sn-color-border))')
+        : null;
     void bridge.setWindowBorderColor(color);
-  }, [front, settings.surface, settings.theme]);
+  }, [front, attached, settings.surface, settings.theme]);
 
   /* ==================== 标签页的位置 ==================== */
 
