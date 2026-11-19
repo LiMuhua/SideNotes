@@ -1457,6 +1457,49 @@ pub fn note_window_widen(app: AppHandle, window: WebviewWindow, delta: f64, dpr:
     place_client(&window, Rect { x, width, ..rect })
 }
 
+/// 按内容重新定大小（合并、切换或关掉标签页之后，T110）：`width`、`height` 为物理像素。左上角尽量不动，
+/// 超出工作区时挪回来（放不下时缩到工作区之内）；变宽后压到侧栏上时挪开（侧栏置顶，会盖住窗口）。
+#[tauri::command]
+pub fn note_window_fit(app: AppHandle, window: WebviewWindow, width: f64, height: f64, dpr: f64) -> AppResult<()> {
+    let Some(rect) = client_rect(&window) else { return Ok(()) };
+    if (rect.width - width).abs() <= 2.0 && (rect.height - height).abs() <= 2.0 {
+        return Ok(());
+    }
+    let Some(monitor) = monitor_at(&app, rect.center().0, rect.center().1) else { return Ok(()) };
+    let area = work_rect(&monitor);
+    let margin = MARGIN * sane_dpr(dpr);
+    let target = refit(rect, (width, height), area, margin, sidebar_rect(&app), windows::last_layout().edge != "left");
+    with_registry(|map| {
+        if let Some(entry) = map.get_mut(window.label()) {
+            entry.restore = None;
+        }
+    });
+    place_client(&window, target)
+}
+
+/// 重新定大小后的矩形：左上角不动；超出工作区的一边挪回来（留 `margin`），比工作区还大时缩小；
+/// 变宽后压到侧栏上（原来在侧栏外）时挪到侧栏外侧。
+fn refit(rect: Rect, size: (f64, f64), area: Rect, margin: f64, sidebar: Option<Rect>, right_edge: bool) -> Rect {
+    let width = size.0.min(area.width - margin * 2.0).max(1.0);
+    let height = size.1.min(area.height - margin * 2.0).max(1.0);
+    let mut x = rect.x;
+    if let Some(bar) = sidebar {
+        if right_edge && x + width > bar.x - margin && rect.x < bar.x {
+            x = bar.x - margin - width;
+        } else if !right_edge && x < bar.right() + margin && rect.right() > bar.right() {
+            x = bar.right() + margin;
+        }
+    }
+    if x + width > area.right() {
+        x = area.right() - margin - width;
+    }
+    let mut y = rect.y;
+    if y + height > area.bottom() {
+        y = area.bottom() - margin - height;
+    }
+    Rect { x: x.max(area.x), y: y.max(area.y), width, height }
+}
+
 /// 关闭全部记录窗口（快捷键「关闭全部记录窗口」），返回是否有窗口。各窗口按自己的关闭流程先保存。
 #[tauri::command]
 pub fn close_all_note_windows(app: AppHandle) -> bool {
@@ -1574,6 +1617,21 @@ mod tests {
         // 卡片在浮窗上面：停在离顶边 16 处。
         let high = Rect { y: 400.0, ..low };
         assert_eq!(connector_ends(high, panel, true, 16.0).1, (2100.0, 576.0));
+    }
+
+    #[test]
+    fn refit_keeps_the_top_left_and_stays_inside_the_work_area() {
+        let rect = Rect { x: 400.0, y: 300.0, width: 400.0, height: 300.0 };
+        // 放得下：左上角不动，只改大小。
+        assert_eq!(refit(rect, (560.0, 500.0), AREA, 12.0, Some(SIDEBAR), true), Rect { width: 560.0, height: 500.0, ..rect });
+        // 下面放不下：往上挪到离底边 12 处。
+        let low = Rect { y: 1200.0, ..rect };
+        assert_eq!(refit(low, (400.0, 600.0), AREA, 12.0, None, true).y, 1400.0 - 12.0 - 600.0);
+        // 变宽后压到侧栏上：挪到侧栏左边 12 处。
+        let near = Rect { x: 1700.0, ..rect };
+        assert_eq!(refit(near, (560.0, 300.0), AREA, 12.0, Some(SIDEBAR), true).x, 2160.0 - 12.0 - 560.0);
+        // 比工作区还高：缩到工作区之内。
+        assert_eq!(refit(rect, (400.0, 2000.0), AREA, 12.0, None, true).height, 1400.0 - 24.0);
     }
 
     #[test]

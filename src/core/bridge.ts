@@ -901,6 +901,15 @@ export function widenNoteWindow(delta: number): Promise<void> {
   return call<void>('note_window_widen', { delta, dpr: window.devicePixelRatio }, undefined as unknown as void);
 }
 
+/**
+ * 合并、切换或关掉标签页之后按内容重新定大小（页面像素，T110）：左上角尽量不动，放不下时挪回工作区。
+ * 与 presentNoteWindow 一样换算成物理像素再交给后端。
+ */
+export function fitNoteWindow(width: number, height: number): Promise<void> {
+  const ratio = window.devicePixelRatio;
+  return call<void>('note_window_fit', { width: width * ratio, height: height * ratio, dpr: ratio }, undefined as unknown as void);
+}
+
 /** 关闭全部记录窗口，返回是否有窗口。 */
 export function closeAllNoteWindows(): Promise<boolean> {
   return call<boolean>('close_all_note_windows', undefined, false);

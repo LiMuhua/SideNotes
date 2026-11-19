@@ -176,6 +176,13 @@ export function NoteWindow() {
   const sideWidth = useRef(0);
   const scrollKeep = useRef<{ id: string; top: number }>({ id: '', top: 0 });
   const blurTimer = useRef(0);
+  /** 窗口所在屏幕的工作区（物理像素，打开时给出），重新定大小时按它限制上限。 */
+  const areaRef = useRef<bridge.PixelRect | null>(null);
+  /** 手动拖过边框或放大过：之后不再按内容自动改大小（T110）。 */
+  const manualSize = useRef(false);
+  /** 上一次按内容定大小时的当前页、标签页与标签栏位置，变了才重新定（见下方 fitKey）。 */
+  const fittedKey = useRef('');
+  const fitKeyRef = useRef('');
 
   useLayoutEffect(() => {
     tabsRef.current = tabs;
@@ -188,6 +195,8 @@ export function NoteWindow() {
   const side = settings.windowTabs === 'side' && many;
   const note = notes.find((item) => item.id === active);
   const windowTitle = note ? noteTitle(note) : '';
+  const fitKey = `${active}|${tabs.join(',')}|${side ? 'side' : 'top'}`;
+  fitKeyRef.current = fitKey;
 
   // 记录窗口有自己的任务栏按钮，按钮与 Alt+Tab 里写当前标签页的标题。
   useEffect(() => {
@@ -486,6 +495,25 @@ export function NoteWindow() {
     if (!line.isConnected) document.body.append(line);
   };
 
+  // 合并、切换或关掉标签页之后，窗口按当前这一页的内容重新定大小（T110）：内容在上限之内时不出滚动条。
+  // 编辑中不变（打字时窗口跟着跳）；手动拖过边框或放大过的窗口保持用户的大小。
+  useEffect(() => {
+    const section = sectionRef.current;
+    const area = areaRef.current;
+    if (!section || !area || !shownRef.current || closingRef.current || editing || manualSize.current) return;
+    if (fittedKey.current === fitKey) return;
+    let cancelled = false;
+    void settleImages(section, IMAGE_WAIT).then(() => {
+      if (cancelled || closingRef.current || editingRef.current || manualSize.current) return;
+      fittedKey.current = fitKey;
+      const size = fitSize(section, stripRef.current, area);
+      void bridge.fitNoteWindow(size.width, size.height);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fitKey, editing]);
+
   /* ==================== 后端事件 ==================== */
 
   // 打开：标签页写好之后量尺寸（宽高都按内容，原型 fitSize），交给后端摆放、播放打开动画并显示。
@@ -497,9 +525,11 @@ export function NoteWindow() {
     if (!request || !section) return;
     setOpening(null);
     const token = ++openToken.current;
+    areaRef.current = request.area;
     void settleImages(section, IMAGE_WAIT).then(() => {
       if (token !== openToken.current) return;
       const size = fitSize(section, stripRef.current, request.area);
+      fittedKey.current = fitKeyRef.current;
       shownRef.current = true;
       const snapshot = reducedMotion() ? null : snapshotOf(section);
       void bridge.presentNoteWindow(size.width, size.height, snapshot).then(() => sync());
@@ -519,6 +549,8 @@ export function NoteWindow() {
       setPinned(request.pinned);
       setAttached(request.attached);
       if (request.kind === 'restore') {
+        // 开发时整页重载：窗口保持原来的大小，不按内容重新定。
+        manualSize.current = true;
         shownRef.current = true;
         return;
       }
@@ -1048,7 +1080,9 @@ export function NoteWindow() {
         onPointerUp={(event) => void endGesture(event)}
         onPointerCancel={(event) => void endGesture(event, true)}
         onDoubleClick={(event) => {
-          if (!(event.target as Element).closest('button,.note-window-tab')) void bridge.maximizeNoteWindow();
+          if ((event.target as Element).closest('button,.note-window-tab')) return;
+          manualSize.current = true;
+          void bridge.maximizeNoteWindow();
         }}
       >
         <span className="note-window-emoji" aria-hidden="true">
@@ -1126,6 +1160,7 @@ export function NoteWindow() {
           onPointerDown={(event) => {
             if (event.button !== 0) return;
             event.preventDefault();
+            manualSize.current = true;
             void bridge.startResizeDragging(edge);
           }}
         />

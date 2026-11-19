@@ -188,6 +188,15 @@ body[data-window='sidebar'] .sidebar-resizer:focus-visible {
   min-height: 0;
 }
 
+/* 记录窗口编辑时同样多一层 .live-editor-host：它不参与纵向排布时，编辑器按内容撑高，正文区又不滚动（编辑时 overflow: hidden），
+ * 长标题或长记录下面的内容看不到、也没有滚动条，只能靠移动光标带着走（T109）。 */
+body[data-window='note'] .note-window.is-editing .live-editor-host {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
 /* 附件弹窗（桌面端新增的拖入替换）：把文件拖到弹窗上时整个弹窗描一圈虚线，表示松开即替换；不写提示文字。 */
 .attachment-modal.is-dragging {
   outline: var(--sn-focus-ring-width) dashed var(--sn-color-accent);
@@ -261,6 +270,13 @@ body[data-window='overlay'] .overlay-connector {
 .overlay-connector circle {
   r: calc(var(--sn-space-1) * 1.5);
   fill: var(--sn-color-accent);
+}
+
+/* 预览里的待办勾选框可以直接点（T108）：旧样式层让正文里的勾选框不接收指针（prototype.css 的 .markdown-body input），
+ * 卡片、全文浮窗与记录窗口里都点不动。能切换的（有处理函数、没有禁用）恢复接收指针。 */
+.markdown-body .md-task-toggle:not(:disabled) {
+  cursor: pointer;
+  pointer-events: auto;
 }
 
 /* 全文浮窗附着的卡片：一圈强调色边框，与连线对上；按钮是「收起全文」，箭头朝上。 */
