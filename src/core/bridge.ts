@@ -764,6 +764,10 @@ export const NOTE_WINDOW_EVENTS = {
   peek: 'sidenotes://peek',
   /** 记录窗口：全文浮窗成为独立的窗口（T100）。 */
   detach: 'sidenotes://note-window/detach',
+  /** 记录窗口：要被提到最前了，页面先整页透明，好了调用 noteWindowSurfaceReady（浮现的第一步，T119）。 */
+  surface: 'sidenotes://note-window/surface',
+  /** 记录窗口：已经提到最前，页面淡入、轻轻上浮（浮现的第二步）。 */
+  surfaced: 'sidenotes://note-window/surfaced',
   /** 动画层：按住 Ctrl 拖动时被挡住的记录窗口，载荷为矩形列表（物理像素），空列表时收起（T105）。 */
   reveal: 'sidenotes://overlay/reveal',
   /** 动画层：全文浮窗与卡片之间的连线，载荷 { from, to }（物理像素）或 null（T100）。 */
@@ -942,6 +946,11 @@ export function maximizeNoteWindow(): Promise<void> {
 /** 窗口加宽 `delta`（页面像素，负数为减窄）：标签页换到左侧或顶部时，正文宽度不变。 */
 export function widenNoteWindow(delta: number): Promise<void> {
   return call<void>('note_window_widen', { delta, dpr: window.devicePixelRatio }, undefined as unknown as void);
+}
+
+/** 页面已经整页透明，可以把窗口提到最前了（浮现的第一步，T119）。 */
+export function noteWindowSurfaceReady(): Promise<void> {
+  return call<void>('note_window_surface_ready', undefined, undefined as unknown as void);
 }
 
 /**

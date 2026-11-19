@@ -48,6 +48,8 @@ const PEEK_BLUR_DELAY = 200;
 const FIT_WRAP_SLACK = 2;
 /** 量尺寸前最多等图片加载这么久（毫秒）：窗口这时还没显示，等一会儿看不出来。 */
 const IMAGE_WAIT = 800;
+/** 浮现的淡入最长这么久（毫秒）就算结束，收不到动画结束的事件时也不会一直透明（T119）。 */
+const SURFACE_FALLBACK = 1000;
 const MARGIN = 12;
 const EDGES = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
 const EVENTS = bridge.NOTE_WINDOW_EVENTS;
@@ -602,6 +604,27 @@ export function NoteWindow() {
         void bridge.dragIndicator(drop?.rect ?? null, drop?.horizontal ?? false);
       }),
       bridge.onWindowEvent(EVENTS.close, () => void closeWindow()),
+      // 被提到最前时浮现（T119）：先整页透明（窗口这时还被别的程序挡着），排好两帧确定已经画出透明的一帧，
+      // 再请后端提到最前；提好之后淡入、轻轻上浮（window.css 的 data-surfacing）。减少动态效果时直接提。
+      bridge.onWindowEvent(EVENTS.surface, () => {
+        const root = document.documentElement;
+        if (reducedMotion()) {
+          void bridge.noteWindowSurfaceReady();
+          return;
+        }
+        root.dataset.surfacing = 'hidden';
+        window.requestAnimationFrame(() => window.requestAnimationFrame(() => void bridge.noteWindowSurfaceReady()));
+      }),
+      bridge.onWindowEvent(EVENTS.surfaced, () => {
+        const root = document.documentElement;
+        if (root.dataset.surfacing !== 'hidden') return;
+        root.dataset.surfacing = 'in';
+        const done = (): void => {
+          if (root.dataset.surfacing === 'in') delete root.dataset.surfacing;
+        };
+        sectionRef.current?.addEventListener('animationend', done, { once: true });
+        window.setTimeout(done, SURFACE_FALLBACK);
+      }),
       bridge.onWindowEvent(EVENTS.detach, () => {
         attachedRef.current = false;
         setAttached(false);

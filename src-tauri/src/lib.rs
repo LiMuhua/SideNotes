@@ -235,6 +235,7 @@ pub fn run() {
             note_windows::note_window_maximize,
             note_windows::note_window_widen,
             note_windows::note_window_fit,
+            note_windows::note_window_surface_ready,
             note_windows::close_all_note_windows,
             note_windows::drag_begin,
             note_windows::drag_update,

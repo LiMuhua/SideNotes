@@ -20,7 +20,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use tauri::{
@@ -82,6 +82,10 @@ pub mod events {
     pub const CONNECTOR: &str = "sidenotes://overlay/connector";
     /// 动画层：按住 Ctrl 拖动时被挡住的记录窗口，载荷为矩形列表（相对动画层内容区的物理像素），空列表时收起（T105）。
     pub const REVEAL: &str = "sidenotes://overlay/reveal";
+    /// 记录窗口：要提到最前了，页面先整页透明，好了调用 note_window_surface_ready（浮现的第一步，T119）。
+    pub const SURFACE: &str = "sidenotes://note-window/surface";
+    /// 记录窗口：已经提到最前，页面淡入、轻轻上浮（浮现的第二步）。
+    pub const SURFACED: &str = "sidenotes://note-window/surfaced";
 }
 
 /// 矩形：屏幕或窗口内的物理像素，或页面像素（由用途决定）。
@@ -1004,9 +1008,9 @@ fn window_at(app: &AppHandle, point: (f64, f64), except: Option<&str>, bands_onl
                 continue;
             }
             if let Some((_, label, bands, window)) = windows.iter().find(|(hwnd, ..)| *hwnd == layer.hwnd) {
-                // 虚线框整块都算：指针一进框就把窗口提到最前（T105），合并照旧只认标题栏与标签栏。
+                // 虚线框整块都算：指针一进框就把窗口提到最前（T105），带浮现动画（T119）；合并照旧只认标题栏与标签栏。
                 if covered {
-                    raise_window(app, window);
+                    surface_windows(app, vec![window.clone()]);
                 }
                 let (x, y) = hit(window, bands)?;
                 return Some((label.clone(), x, y));
@@ -1060,8 +1064,8 @@ fn raise_window(app: &AppHandle, window: &WebviewWindow) {
     }
 }
 
-/// 卡片第一次拖出侧栏：已经打开的记录窗口全部提到最前（被别的程序盖住、被 Win+D 收走的也是），不抢焦点，
-/// 拖动不断，方便拖进去合并（T104）。按现在的前后次序从后往前提，提完之后它们之间的次序不变。
+/// 卡片第一次拖出侧栏：被别的程序盖住、被 Win+D 收走的记录窗口全部提到最前，不抢焦点，拖动不断，
+/// 方便拖进去合并（T104）；带浮现动画（T119）。按现在的前后次序从后往前提，提完之后它们之间的次序不变。
 fn raise_note_windows(app: &AppHandle) {
     #[allow(unused_mut)]
     let mut windows: Vec<WebviewWindow> = with_registry(|map| {
@@ -1077,9 +1081,78 @@ fn raise_note_windows(app: &AppHandle) {
             window.hwnd().ok().and_then(|hwnd| order.iter().position(|item| *item == hwnd.0 as isize)).unwrap_or(usize::MAX)
         };
         windows.sort_by_key(|window| std::cmp::Reverse(rank(window)));
+        // 只提被别的程序挡住（或被收起）的：露在最前的窗口不动，免得它也淡出再淡入。
+        let skip = skip_handles(app, None);
+        windows.retain(|window| {
+            window.is_minimized().unwrap_or(false) || window.hwnd().is_ok_and(|hwnd| zorder::covered(hwnd.0 as isize, &skip))
+        });
     }
-    for window in &windows {
-        raise_window(app, window);
+    surface_windows(app, windows);
+}
+
+/// 等页面准备好浮现（整页透明）最多这么久（T119）：到时还没回话（页面忙）也照样提到最前。
+const SURFACE_WAIT: Duration = Duration::from_millis(150);
+
+/// 正在浮现的窗口：标签与页面是否已经整页透明。
+static SURFACING: Mutex<Vec<(String, bool)>> = Mutex::new(Vec::new());
+
+/// 不激活地把这些窗口按给出的先后提到最前，带浮现动画（T119，2026-11-19 用户要求，不再突然闪现）：
+/// 先让各窗口的页面整页透明（它们这时被别的程序挡着，看不出来），都好了（或等满 SURFACE_WAIT）再一起提到最前，
+/// 然后页面淡入、轻轻上浮。已经在浮现的窗口跳过（拖动中每一步都可能要求提起同一个窗口）。
+fn surface_windows(app: &AppHandle, windows: Vec<WebviewWindow>) {
+    let labels: Vec<String> = {
+        let Ok(mut pending) = SURFACING.lock() else { return };
+        let fresh: Vec<String> = windows
+            .iter()
+            .map(|window| window.label().to_string())
+            .filter(|label| !pending.iter().any(|(item, _)| item == label))
+            .collect();
+        pending.extend(fresh.iter().map(|label| (label.clone(), false)));
+        fresh
+    };
+    if labels.is_empty() {
+        return;
+    }
+    for label in &labels {
+        let _ = app.emit_to(label.as_str(), events::SURFACE, ());
+    }
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let deadline = Instant::now() + SURFACE_WAIT;
+        while Instant::now() < deadline {
+            let ready = SURFACING
+                .lock()
+                .map(|pending| labels.iter().all(|label| pending.iter().any(|(item, ok)| item == label && *ok)))
+                .unwrap_or(true);
+            if ready {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let handle = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            for label in &labels {
+                if let Some(window) = handle.get_webview_window(label) {
+                    raise_window(&handle, &window);
+                }
+            }
+            if let Ok(mut pending) = SURFACING.lock() {
+                pending.retain(|(item, _)| !labels.contains(item));
+            }
+            for label in &labels {
+                let _ = handle.emit_to(label.as_str(), events::SURFACED, ());
+            }
+        });
+    });
+}
+
+/// 页面已经整页透明，可以提到最前了（浮现的第一步，见 surface_windows）。
+#[tauri::command]
+pub fn note_window_surface_ready(window: WebviewWindow) {
+    if let Ok(mut pending) = SURFACING.lock() {
+        if let Some(item) = pending.iter_mut().find(|(label, _)| label == window.label()) {
+            item.1 = true;
+        }
     }
 }
 
