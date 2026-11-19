@@ -50,6 +50,10 @@ const FIT_WRAP_SLACK = 2;
 const IMAGE_WAIT = 800;
 /** 浮现的淡入最长这么久（毫秒）就算结束，收不到动画结束的事件时也不会一直透明（T119）。 */
 const SURFACE_FALLBACK = 1000;
+/** 双击放大或还原后等这么久（毫秒）再读窗口的大小，记作手动的大小（T123）。 */
+const MAXIMIZE_SETTLE = 120;
+/** 拖边框改大小后，最后一次大小变化过了这么久（毫秒）还没有指针回到窗口里，也算拖完（T123）。 */
+const RESIZE_SETTLE = 3000;
 const MARGIN = 12;
 const EDGES = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
 const EVENTS = bridge.NOTE_WINDOW_EVENTS;
@@ -182,8 +186,13 @@ export function NoteWindow() {
   const blurTimer = useRef(0);
   /** 窗口所在屏幕的工作区（物理像素，打开时给出），重新定大小时按它限制上限。 */
   const areaRef = useRef<bridge.PixelRect | null>(null);
-  /** 手动拖过边框或放大过：之后不再按内容自动改大小（T110）。 */
-  const manualSize = useRef(false);
+  /** 手动拖过边框（或双击放大、还原）后的窗口大小（页面像素）：之后以它为准，宽度不变，内容放得下就不动，
+   *  放不下才长高（T123）。没有手动改过时为 null，宽高都按内容定。 */
+  const manualSize = useRef<{ width: number; height: number } | null>(null);
+  /** 正在拖边框（或放大、还原）改大小：期间窗口的大小变化都记作手动的大小，也不按内容改。 */
+  const resizing = useRef(false);
+  const resizeTimer = useRef(0);
+  const refitFrame = useRef(0);
   /** 上一次按内容定大小时的当前页、标签页与标签栏位置，变了才重新定（见下方 fitKey）。 */
   const fittedKey = useRef('');
   const fitKeyRef = useRef('');
@@ -201,7 +210,7 @@ export function NoteWindow() {
   const windowTitle = note ? noteTitle(note) : '';
   /** 图片的地址与尺寸后来才出来时加一（大图的副本要先生成，T115）：按内容定的大小跟着重新量。 */
   const [imageVersion, setImageVersion] = useState(0);
-  const fitKey = `${active}|${tabs.join(',')}|${side ? 'side' : 'top'}|${imageVersion}`;
+  const fitKey = `${active}|${tabs.join(',')}|${side ? 'side' : 'top'}|${imageVersion}|${editing ? 'edit' : 'view'}`;
   fitKeyRef.current = fitKey;
 
   // 记录窗口有自己的任务栏按钮，按钮与 Alt+Tab 里写当前标签页的标题。
@@ -506,30 +515,81 @@ export function NoteWindow() {
     const body = bodyRef.current;
     if (!body) return;
     const onReady = (): void => {
-      if (shownRef.current && !manualSize.current) setImageVersion((value) => value + 1);
+      if (shownRef.current) setImageVersion((value) => value + 1);
     };
     body.addEventListener('sidenotes:image-ready', onReady);
     return () => body.removeEventListener('sidenotes:image-ready', onReady);
   }, []);
 
-  // 合并、切换或关掉标签页之后，窗口按当前这一页的内容重新定大小（T110）：内容在上限之内时不出滚动条。
-  // 编辑中不变（打字时窗口跟着跳）；手动拖过边框或放大过的窗口保持用户的大小。
-  useEffect(() => {
+  // 按当前这一页的内容重新定大小（T110、T123），内容在上限之内时不出滚动条：合并、切换或关掉标签页，
+  // 进入、退出编辑，编辑中内容变了。没手动改过大小的窗口宽高都按内容定，编辑中宽度不变（免得每打一个字整段重排）；
+  // 手动改过的以手动的大小为准：宽度不变，内容放得下就不动，放不下才长高（最高到上限），内容变少时缩回，最小回到手动的大小。
+  // 长高时左上角不动，碰到工作区的底边整体往上挪（后端 note_window_fit）。
+  const refit = useCallback((): void => {
     const section = sectionRef.current;
     const area = areaRef.current;
-    if (!section || !area || !shownRef.current || closingRef.current || editing || manualSize.current) return;
+    if (!section || !area || !shownRef.current || closingRef.current || resizing.current) return;
+    const manual = manualSize.current;
+    const width = manual ? manual.width : editingRef.current ? section.getBoundingClientRect().width : null;
+    const size = fitSize(section, stripRef.current, area, width);
+    void bridge.fitNoteWindow(size.width, manual ? Math.max(manual.height, size.height) : size.height);
+  }, []);
+
+  /** 编辑中内容变了：下一帧（排版好之后）重新量，同一帧里的多次变化只量一次。 */
+  const requestRefit = useCallback((): void => {
+    if (refitFrame.current) return;
+    refitFrame.current = window.requestAnimationFrame(() => {
+      refitFrame.current = 0;
+      refit();
+    });
+  }, [refit]);
+
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!section || !shownRef.current || closingRef.current) return;
     if (fittedKey.current === fitKey) return;
     let cancelled = false;
     void settleImages(section, IMAGE_WAIT).then(() => {
-      if (cancelled || closingRef.current || editingRef.current || manualSize.current) return;
+      if (cancelled || closingRef.current) return;
       fittedKey.current = fitKey;
-      const size = fitSize(section, stripRef.current, area);
-      void bridge.fitNoteWindow(size.width, size.height);
+      refit();
     });
     return () => {
       cancelled = true;
     };
-  }, [fitKey, editing]);
+  }, [fitKey, refit]);
+
+  // 拖边框（或双击放大、还原）期间窗口的大小记作手动的大小。拖边框是系统的拉伸，页面收不到指针事件，
+  // 开始与结束由后端告诉（EVENTS.sizing，见下方的后端事件）；双击放大、还原之后指针第一次在窗口里移动就算结束，
+  // 一直不动时 RESIZE_SETTLE 之后也算结束。
+  const endResizing = useCallback((): void => {
+    window.clearTimeout(resizeTimer.current);
+    resizing.current = false;
+  }, []);
+  const beginResizing = useCallback((): void => {
+    resizing.current = true;
+    window.clearTimeout(resizeTimer.current);
+    resizeTimer.current = window.setTimeout(endResizing, RESIZE_SETTLE);
+  }, [endResizing]);
+  useEffect(() => {
+    const onResize = (): void => {
+      if (!resizing.current) return;
+      manualSize.current = { width: window.innerWidth, height: window.innerHeight };
+      window.clearTimeout(resizeTimer.current);
+      resizeTimer.current = window.setTimeout(endResizing, RESIZE_SETTLE);
+    };
+    const onPointer = (): void => {
+      if (resizing.current) endResizing();
+    };
+    window.addEventListener('resize', onResize);
+    window.addEventListener('pointermove', onPointer, true);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('pointermove', onPointer, true);
+      window.clearTimeout(resizeTimer.current);
+      window.cancelAnimationFrame(refitFrame.current);
+    };
+  }, [endResizing]);
 
   /* ==================== 后端事件 ==================== */
 
@@ -566,8 +626,8 @@ export function NoteWindow() {
       setPinned(request.pinned);
       setAttached(request.attached);
       if (request.kind === 'restore') {
-        // 开发时整页重载：窗口保持原来的大小，不按内容重新定。
-        manualSize.current = true;
+        // 开发时整页重载：窗口保持原来的大小，当作手动定的大小。
+        manualSize.current = { width: window.innerWidth, height: window.innerHeight };
         shownRef.current = true;
         return;
       }
@@ -625,6 +685,15 @@ export function NoteWindow() {
         sectionRef.current?.addEventListener('animationend', done, { once: true });
         window.setTimeout(done, SURFACE_FALLBACK);
       }),
+      // 用户拖边框改大小（T123）：开始时停下按内容定大小，结束时记下手动的大小。
+      bridge.onWindowEvent<boolean>(EVENTS.sizing, (active) => {
+        if (active) {
+          beginResizing();
+          return;
+        }
+        manualSize.current = { width: window.innerWidth, height: window.innerHeight };
+        endResizing();
+      }),
       bridge.onWindowEvent(EVENTS.detach, () => {
         attachedRef.current = false;
         setAttached(false);
@@ -669,7 +738,7 @@ export function NoteWindow() {
       window.removeEventListener('focus', onFocus);
       window.removeEventListener('blur', onBlur);
     };
-  }, [finishEditing, closeWindow]);
+  }, [finishEditing, closeWindow, beginResizing, endResizing]);
 
   // 附着在卡片旁的全文浮窗一直描强调色边框（T122，方案 B：重点落在浮窗上，卡片只留淡淡的细边）。
   useEffect(() => {
@@ -692,7 +761,11 @@ export function NoteWindow() {
     if (layoutSetting.current !== settings.windowTabs) {
       layoutSetting.current = settings.windowTabs;
       const delta = width - sideWidth.current;
-      if (shownRef.current && Math.abs(delta) > 0.5) void bridge.widenNoteWindow(delta);
+      if (shownRef.current && Math.abs(delta) > 0.5) {
+        // 手动定的宽度跟着加宽或减窄这一列，正文宽度不变。
+        if (manualSize.current) manualSize.current = { ...manualSize.current, width: manualSize.current.width + delta };
+        void bridge.widenNoteWindow(delta);
+      }
     }
     sideWidth.current = width;
   });
@@ -982,9 +1055,11 @@ export function NoteWindow() {
           autoFocus
           onChange={(text) => {
             if (editingRef.current) editingRef.current.text = text;
+            requestRefit();
           }}
           onReady={(editor) => {
             editorRef.current = editor;
+            requestRefit();
             // 与卡片编辑一致，光标放在正文末尾（标签行之前）。
             const end = bodyEnd(editor.getValue());
             editor.setSelectionRange(end, end);
@@ -1141,8 +1216,13 @@ export function NoteWindow() {
         onPointerCancel={(event) => void endGesture(event, true)}
         onDoubleClick={(event) => {
           if ((event.target as Element).closest('button,.note-window-tab')) return;
-          manualSize.current = true;
-          void bridge.maximizeNoteWindow();
+          beginResizing();
+          // 放大或还原后的大小记作手动的大小（指针可能在窗口改大小之前就动了，不能只靠大小变化的事件）。
+          void bridge.maximizeNoteWindow().then(() =>
+            window.setTimeout(() => {
+              manualSize.current = { width: window.innerWidth, height: window.innerHeight };
+            }, MAXIMIZE_SETTLE),
+          );
         }}
       >
         <span className="note-window-emoji" aria-hidden="true">
@@ -1220,7 +1300,7 @@ export function NoteWindow() {
           onPointerDown={(event) => {
             if (event.button !== 0) return;
             event.preventDefault();
-            manualSize.current = true;
+            beginResizing();
             void bridge.startResizeDragging(edge);
           }}
         />
@@ -1235,24 +1315,37 @@ export function NoteWindow() {
  * 宽 280–560（顶部有标签页时上限 720，竖排的标签栏另加它的宽度）、高 220 到 720 与工作区的七成，长文在窗口里滚动。
  * 高度按内容的滚动高度量（不受当前窗口高度的限制），再加几个像素的余量，避免刚好差一点出现滚动条。
  * `area` 为工作区（物理像素），返回页面像素。窗口已经挪到目标屏幕上，页面像素比与显示时一致。
+ * 给了 `fixedWidth`（编辑中、手动定过大小，T123）时宽度就用它，只按这个宽度量高度。
  */
-function fitSize(section: HTMLElement, strip: HTMLElement | null, area: bridge.PixelRect): { width: number; height: number } {
+function fitSize(
+  section: HTMLElement,
+  strip: HTMLElement | null,
+  area: bridge.PixelRect,
+  fixedWidth: number | null = null,
+): { width: number; height: number } {
   const ratio = window.devicePixelRatio || 1;
   const view = { width: area.width / ratio, height: area.height / ratio };
   const side = section.classList.contains('is-side-tabs');
   const extra = side && strip ? strip.getBoundingClientRect().width : 0;
   const cap = section.classList.contains('has-tabs') && !side ? FIT_TABS_WIDTH : FIT_WIDTH[1];
   const maxWidth = Math.max(Math.min(MIN_WIDTH, view.width - MARGIN * 2), Math.min(cap + extra, view.width - MARGIN * 2));
+  // 量的时候窗口按内容撑高，滚动区的滚动位置会被清零：先记下，量完放回（编辑中打字时光标不跳）。
+  const scrolled = Array.from(section.querySelectorAll<HTMLElement>('.note-window-body, .live-markdown-editor')).map(
+    (element) => [element, element.scrollTop] as const,
+  );
   const style = section.style;
   style.position = 'absolute';
   style.inset = 'auto';
   style.left = '0';
   style.top = '0';
-  style.width = 'max-content';
-  style.maxWidth = `${maxWidth}px`;
   style.height = 'auto';
-  const width = clamp(Math.ceil(section.getBoundingClientRect().width), Math.min(FIT_WIDTH[0] + extra, maxWidth), maxWidth);
-  style.maxWidth = '';
+  let width = fixedWidth === null ? 0 : Math.round(fixedWidth);
+  if (fixedWidth === null) {
+    style.width = 'max-content';
+    style.maxWidth = `${maxWidth}px`;
+    width = clamp(Math.ceil(section.getBoundingClientRect().width), Math.min(FIT_WIDTH[0] + extra, maxWidth), maxWidth);
+    style.maxWidth = '';
+  }
   // 高度按留出滚动条、再窄一点的宽度量。排满的中文行宽度少一点就多折一行：窗口还小的时候正文出现过滚动条，
   // 变到量好的尺寸后，有滚动条时正文窄、行多，正好需要滚动条，没有时又放得下，浏览器保留原来的滚动条。
   // 按有滚动条的宽度量，两种情况都放得下，滚动条就会去掉。
@@ -1268,6 +1361,9 @@ function fitSize(section: HTMLElement, strip: HTMLElement | null, area: bridge.P
   );
   if (body) body.style.overflowY = '';
   style.cssText = '';
+  scrolled.forEach(([element, top]) => {
+    element.scrollTop = top;
+  });
   return { width, height };
 }
 

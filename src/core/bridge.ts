@@ -768,6 +768,8 @@ export const NOTE_WINDOW_EVENTS = {
   surface: 'sidenotes://note-window/surface',
   /** 记录窗口：已经提到最前，页面淡入、轻轻上浮（浮现的第二步）。 */
   surfaced: 'sidenotes://note-window/surfaced',
+  /** 记录窗口：用户开始（true）或结束（false）拖边框改大小。这是系统的拉伸，页面收不到指针事件（T123）。 */
+  sizing: 'sidenotes://note-window/sizing',
   /** 动画层：按住 Ctrl 拖动时被挡住的记录窗口，载荷为矩形列表（物理像素），空列表时收起（T105）。 */
   reveal: 'sidenotes://overlay/reveal',
   /** 动画层：全文浮窗与卡片之间的连线，载荷 { from, to }（物理像素）或 null（T100）。 */

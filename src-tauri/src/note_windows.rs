@@ -86,6 +86,8 @@ pub mod events {
     pub const SURFACE: &str = "sidenotes://note-window/surface";
     /// 记录窗口：已经提到最前，页面淡入、轻轻上浮（浮现的第二步）。
     pub const SURFACED: &str = "sidenotes://note-window/surfaced";
+    /// 记录窗口：用户开始（true）或结束（false）拖边框改大小（系统的拉伸，页面收不到指针事件，T123，见 watch_sizing）。
+    pub const SIZING: &str = "sidenotes://note-window/sizing";
 }
 
 /// 矩形：屏幕或窗口内的物理像素，或页面像素（由用途决定）。
@@ -262,10 +264,20 @@ fn place_client(window: &WebviewWindow, rect: Rect) -> AppResult<()> {
         let (width, height) = (rect.width.round().max(1.0) as i32, rect.height.round().max(1.0) as i32);
         #[cfg(windows)]
         {
-            use ::windows::Win32::UI::WindowsAndMessaging::{SetWindowPos, SWP_NOACTIVATE, SWP_NOOWNERZORDER, SWP_NOZORDER};
+            use ::windows::Win32::Foundation::RECT;
+            use ::windows::Win32::UI::WindowsAndMessaging::{GetWindowRect, SetWindowPos, SWP_NOACTIVATE, SWP_NOOWNERZORDER, SWP_NOZORDER};
             let hwnd = window.hwnd()?;
+            // 宽（或高）与现在差不到 2 像素时，外框的宽（或高）照现在的不动：按内容区加边框换算出的外框会差一两个像素，
+            // 编辑时每打一个字都按内容重新定一次大小（T123），每次多出一点，窗口越来越宽。
+            let mut frame = RECT::default();
+            // SAFETY：hwnd 来自仍然存在的 Tauri 窗口，只读外框。
+            let framed = unsafe { GetWindowRect(hwnd, &mut frame) }.is_ok();
+            let keep_width = framed && (width - inner_size.width as i32).abs() <= 2;
+            let keep_height = framed && (height - inner_size.height as i32).abs() <= 2;
+            let outer_width = if keep_width { frame.right - frame.left } else { width + extra.0 };
+            let outer_height = if keep_height { frame.bottom - frame.top } else { height + extra.1 };
             // SAFETY：hwnd 来自仍然存在的 Tauri 窗口，其余参数都是按值传入的整数。
-            unsafe { SetWindowPos(hwnd, None, x, y, width + extra.0, height + extra.1, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER) }
+            unsafe { SetWindowPos(hwnd, None, x, y, outer_width, outer_height, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER) }
                 .map_err(|error| AppError::Other(format!("窗口操作失败：{error}")))?;
         }
         #[cfg(not(windows))]
@@ -411,7 +423,90 @@ fn build(app: &AppHandle, label: &str) -> AppResult<WebviewWindow> {
     // 出入由页面与动画层负责，不要系统的淡入淡出：交接给窗口时会叠出一层半透明。
     windows::disable_transitions(&window);
     crate::app_icon::apply_current(&window);
+    watch_sizing(&window);
     Ok(window)
+}
+
+/// 用户拖边框改大小时告诉页面（T123）：带阴影的无边框窗口拉伸用的是阴影里看不见的一圈边框，由系统处理，
+/// 页面收不到指针事件，分不出这是手动改的大小。挂一个子类：系统的拉伸第一次改大小（WM_SIZING）时发 true，
+/// 拉伸结束（WM_EXITSIZEMOVE）时发 false，页面结束时记下手动的大小。子类要在窗口所在的主线程上挂。
+fn watch_sizing(window: &WebviewWindow) {
+    #[cfg(windows)]
+    if let Ok(hwnd) = window.hwnd() {
+        let value = hwnd.0 as isize;
+        sizing::remember(window.app_handle(), value, window.label());
+        let _ = window.run_on_main_thread(move || sizing::attach(value));
+    }
+    #[cfg(not(windows))]
+    let _ = window;
+}
+
+#[cfg(windows)]
+mod sizing {
+    use std::sync::{Mutex, OnceLock};
+
+    use ::windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
+    use ::windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
+    use ::windows::Win32::UI::WindowsAndMessaging::{WM_EXITSIZEMOVE, WM_SIZING};
+    use tauri::{AppHandle, Emitter};
+
+    /// 子类的标识（与 tao、面板的子类区分开）。
+    const ID: usize = 0x534E_535A;
+    static APP: OnceLock<AppHandle> = OnceLock::new();
+    /// 记录窗口的句柄与标签（窗口一直留着当备用，标签不变）。
+    static LABELS: Mutex<Vec<(isize, String)>> = Mutex::new(Vec::new());
+    /// 正在被系统拉伸的窗口。
+    static ACTIVE: Mutex<Vec<isize>> = Mutex::new(Vec::new());
+
+    pub fn remember(app: &AppHandle, hwnd: isize, label: &str) {
+        APP.get_or_init(|| app.clone());
+        if let Ok(mut list) = LABELS.lock() {
+            list.retain(|(item, _)| *item != hwnd);
+            list.push((hwnd, label.to_string()));
+        }
+    }
+
+    pub fn attach(hwnd: isize) {
+        // SAFETY：hwnd 是本应用在主线程上创建的窗口，子类过程是本模块里的函数，在窗口所在的线程上挂。
+        let attached = unsafe { SetWindowSubclass(HWND(hwnd as *mut core::ffi::c_void), Some(procedure), ID, 0) }.as_bool();
+        if !attached {
+            crate::diag::log("记录窗口的子类挂接失败，拖边框改的大小不会记作手动的大小");
+        }
+    }
+
+    unsafe extern "system" fn procedure(window: HWND, message: u32, wparam: WPARAM, lparam: LPARAM, _id: usize, _data: usize) -> LRESULT {
+        let value = window.0 as isize;
+        if message == WM_SIZING {
+            let started = ACTIVE.lock().is_ok_and(|mut list| {
+                let fresh = !list.contains(&value);
+                if fresh {
+                    list.push(value);
+                }
+                fresh
+            });
+            if started {
+                notify(value, true);
+            }
+        } else if message == WM_EXITSIZEMOVE {
+            let ended = ACTIVE.lock().is_ok_and(|mut list| {
+                let had = list.contains(&value);
+                list.retain(|item| *item != value);
+                had
+            });
+            if ended {
+                notify(value, false);
+            }
+        }
+        // SAFETY：照常交给下一层窗口过程。
+        unsafe { DefSubclassProc(window, message, wparam, lparam) }
+    }
+
+    fn notify(hwnd: isize, active: bool) {
+        let label = LABELS.lock().ok().and_then(|list| list.iter().find(|(item, _)| *item == hwnd).map(|(_, label)| label.clone()));
+        if let (Some(app), Some(label)) = (APP.get(), label) {
+            let _ = app.emit_to(label.as_str(), super::events::SIZING, active);
+        }
+    }
 }
 
 /// 补一个备用窗口（已经有了就不补）。
