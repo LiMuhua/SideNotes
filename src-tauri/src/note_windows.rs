@@ -45,8 +45,10 @@ const MIN_SIZE: (f64, f64) = (320.0, 140.0);
 const ANIMATION_TIMEOUT: Duration = Duration::from_millis(2500);
 /// 新窗口显示之后，动画层上的副本再留多久：等窗口画出第一帧，交接时不闪。
 const HANDOFF_DELAY: Duration = Duration::from_millis(160);
-/// 连线在全文浮窗一端离上下边至少这么远（按 13px 字号计），不落在圆角上。
+/// 连接带在全文浮窗一端让开上下的圆角（按 13px 字号计）。
 const CONNECTOR_INSET: f64 = 16.0;
+/// 连接带在卡片一端让开上下的圆角（按 13px 字号计）。
+const CONNECTOR_CARD_INSET: f64 = 6.0;
 
 /// 后端发给页面的事件。
 pub mod events {
@@ -76,7 +78,7 @@ pub mod events {
     pub const PEEK: &str = "sidenotes://peek";
     /// 全文浮窗成为独立的记录窗口（拖动标题栏、有别的记录并进来、双击放大），载荷为空。
     pub const DETACH: &str = "sidenotes://note-window/detach";
-    /// 动画层：全文浮窗与卡片之间的连线，载荷见 ConnectorPayload，null 时收起。
+    /// 动画层：全文浮窗与卡片之间的连接带，载荷见 ConnectorPayload，null 时收起。
     pub const CONNECTOR: &str = "sidenotes://overlay/connector";
 }
 
@@ -302,7 +304,20 @@ fn cursor(app: &AppHandle) -> (f64, f64) {
     app.cursor_position().map(|point| (point.x, point.y)).unwrap_or((0.0, 0.0))
 }
 
-/// 新窗口的位置（原型 position）：拖出时标题栏在松开处；展开全文时放在侧栏旁边、比卡片高一点。
+/// 全文浮窗的纵向位置（T114，2026-11-19 用户要求）：优先与卡片顶边对齐；顶边对齐会被工作区底边推上去超过
+/// 两倍留白（卡片靠下或浮窗很高）时，对齐已经看不出来，改为与卡片垂直居中；居中也放不下时贴着工作区的边。
+/// 推上去不多时仍算对齐，不换成居中。`margin` 为离工作区边缘的留白（物理像素）。
+fn peek_top(card: Rect, height: f64, area: Rect, margin: f64) -> f64 {
+    let low = area.y + margin;
+    let high = (area.bottom() - margin - height).max(low);
+    let aligned = card.y.clamp(low, high);
+    if (aligned - card.y).abs() <= margin * 2.0 {
+        return aligned;
+    }
+    (card.y + card.height / 2.0 - height / 2.0).clamp(low, high)
+}
+
+/// 新窗口的位置（原型 position）：拖出时标题栏在松开处；展开全文时放在侧栏旁边，纵向见 peek_top。
 /// 尽量不压住侧栏，与已开的窗口左上角太近时错开，最后限制在工作区内。`unit` 为页面像素换算到物理像素的比例。
 fn position(placement: &Placement, size: (f64, f64), unit: f64, sidebar: Option<Rect>, right_edge: bool, others: &[Rect]) -> Rect {
     let (width, height) = size;
@@ -311,13 +326,16 @@ fn position(placement: &Placement, size: (f64, f64), unit: f64, sidebar: Option<
     let (mut x, mut y) = match placement.point {
         Some((px, py)) => (px - width / 2.0, py - 20.0 * unit),
         None => {
-            let top = placement.from.map(|from| from.y).unwrap_or(area.y + area.height / 4.0);
+            let y = match placement.from {
+                Some(card) => peek_top(card, height, area, margin),
+                None => area.y + area.height / 4.0,
+            };
             let x = match sidebar {
                 Some(bar) if right_edge => bar.x - width - margin * 2.0,
                 Some(bar) => bar.right() + margin * 2.0,
                 None => area.x + (area.width - width) / 2.0,
             };
-            (x, top - margin * 3.0)
+            (x, y)
         }
     };
     if let Some(bar) = sidebar {
@@ -777,22 +795,32 @@ pub fn forget(app: &AppHandle, label: &str) {
 
 /* ==================== 全文浮窗（T100） ==================== */
 
-/// 连线的两端：从卡片朝向浮窗的一边的中点，连到浮窗朝向侧栏的一边；浮窗一端与卡片同高，
-/// 超出浮窗时停在离上下边 `inset` 处。`right_edge` 为侧栏贴右边（浮窗在侧栏左边）。
-fn connector_ends(card: Rect, panel: Rect, right_edge: bool, inset: f64) -> ((f64, f64), (f64, f64)) {
-    let y = card.y + card.height / 2.0;
-    let from = (if right_edge { card.x } else { card.right() }, y);
-    let low = panel.y + inset;
-    let high = (panel.bottom() - inset).max(low);
-    let to = (if right_edge { panel.right() } else { panel.x }, y.clamp(low, high));
-    (from, to)
+/// 卡片与浮窗之间的连接带（T114，2026-11-19 用户要求换掉单调的虚线）：卡片朝向浮窗的一边与浮窗朝向侧栏的一边
+/// 围成的一块梯形，像把卡片投影放大成浮窗。各取一条竖边：横坐标、上端、下端，上下各让开圆角（卡片 `card_inset`，
+/// 浮窗 `panel_inset`，不超过边长的四分之一）。`right_edge` 为侧栏贴右边（浮窗在侧栏左边）。
+fn connector_beam(card: Rect, panel: Rect, right_edge: bool, card_inset: f64, panel_inset: f64) -> ConnectorPayload {
+    let side = |rect: Rect, x: f64, inset: f64| {
+        let inset = inset.min(rect.height / 4.0);
+        (x, rect.y + inset, rect.bottom() - inset)
+    };
+    ConnectorPayload {
+        card: side(card, if right_edge { card.x } else { card.right() }, card_inset),
+        panel: side(panel, if right_edge { panel.right() } else { panel.x }, panel_inset),
+    }
 }
 
-/// 连线的载荷：两端相对动画层内容区的物理像素。
-#[derive(Debug, Clone, Serialize)]
+/// 连接带的载荷：卡片一端与浮窗一端的竖边（横坐标、上端、下端），相对动画层内容区的物理像素。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 struct ConnectorPayload {
-    from: (f64, f64),
-    to: (f64, f64),
+    card: (f64, f64, f64),
+    panel: (f64, f64, f64),
+}
+
+impl ConnectorPayload {
+    fn relative_to(self, origin: (f64, f64)) -> Self {
+        let shift = |(x, top, bottom): (f64, f64, f64)| (x - origin.0, top - origin.1, bottom - origin.1);
+        ConnectorPayload { card: shift(self.card), panel: shift(self.panel) }
+    }
 }
 
 /// 按全文浮窗与卡片现在的位置画连线，动画层提到最前（它不接收指针，盖在上面不碍事）；
@@ -807,14 +835,17 @@ fn update_connector(app: &AppHandle) {
             .get_webview_window(&label)
             .filter(|window| window.is_visible().unwrap_or(false))
             .and_then(|window| client_rect(&window))
-            .map(|panel| connector_ends(card, panel, windows::last_layout().edge != "left", CONNECTOR_INSET * unit)),
+            .map(|panel| {
+                let right_edge = windows::last_layout().edge != "left";
+                connector_beam(card, panel, right_edge, CONNECTOR_CARD_INSET * unit, CONNECTOR_INSET * unit)
+            }),
         _ => None,
     };
-    if let Some((from, to)) = ends {
-        if let Some(origin) = overlay_cover(app, (from.0 + to.0) / 2.0, (from.1 + to.1) / 2.0) {
+    if let Some(beam) = ends {
+        let middle = ((beam.card.0 + beam.panel.0) / 2.0, (beam.card.1 + beam.card.2) / 2.0);
+        if let Some(origin) = overlay_cover(app, middle.0, middle.1) {
             CONNECTOR_SHOWN.store(true, Ordering::SeqCst);
-            let payload = ConnectorPayload { from: (from.0 - origin.0, from.1 - origin.1), to: (to.0 - origin.0, to.1 - origin.1) };
-            let _ = app.emit_to(OVERLAY_LABEL, events::CONNECTOR, payload);
+            let _ = app.emit_to(OVERLAY_LABEL, events::CONNECTOR, beam.relative_to(origin));
             return;
         }
     }
@@ -1578,11 +1609,11 @@ mod tests {
     }
 
     #[test]
-    fn expanded_window_opens_beside_the_sidebar_above_the_card() {
+    fn expanded_window_opens_beside_the_sidebar_level_with_the_card() {
         let card = Rect { x: 2170.0, y: 600.0, width: 380.0, height: 120.0 };
         let rect = position(&placement(None, Some(card)), (500.0, 400.0), 1.0, Some(SIDEBAR), true, &[]);
         assert_eq!(rect.x, 2160.0 - 500.0 - 24.0);
-        assert_eq!(rect.y, 600.0 - 36.0);
+        assert_eq!(rect.y, 600.0);
         // 贴左边的侧栏：窗口放在侧栏右边。
         let left = Rect { x: 0.0, ..SIDEBAR };
         let rect = position(&placement(None, Some(Rect { x: 10.0, ..card })), (500.0, 400.0), 1.0, Some(left), false, &[]);
@@ -1597,26 +1628,34 @@ mod tests {
     }
 
     #[test]
-    fn connector_runs_from_the_card_edge_to_the_facing_edge_of_the_peek() {
+    fn beam_spans_the_card_edge_and_the_facing_edge_of_the_peek() {
         let card = Rect { x: 2170.0, y: 600.0, width: 380.0, height: 120.0 };
-        let panel = Rect { x: 1600.0, y: 560.0, width: 500.0, height: 400.0 };
-        // 侧栏贴右边：卡片左边的中点连到浮窗的右边，同高。
-        assert_eq!(connector_ends(card, panel, true, 16.0), ((2170.0, 660.0), (2100.0, 660.0)));
+        let panel = Rect { x: 1600.0, y: 600.0, width: 500.0, height: 400.0 };
+        // 侧栏贴右边：卡片的左边连到浮窗的右边，两边各让开圆角。
+        let beam = connector_beam(card, panel, true, 6.0, 16.0);
+        assert_eq!(beam, ConnectorPayload { card: (2170.0, 606.0, 714.0), panel: (2100.0, 616.0, 984.0) });
         // 贴左边：卡片右边连到浮窗的左边。
-        let card = Rect { x: 10.0, ..card };
-        let panel = Rect { x: 450.0, ..panel };
-        assert_eq!(connector_ends(card, panel, false, 16.0), ((390.0, 660.0), (450.0, 660.0)));
+        let beam = connector_beam(Rect { x: 10.0, ..card }, Rect { x: 450.0, ..panel }, false, 6.0, 16.0);
+        assert_eq!((beam.card.0, beam.panel.0), (390.0, 450.0));
+        // 很矮的卡片（只露出一点）：让开的圆角不超过边长的四分之一。
+        let sliver = Rect { height: 8.0, ..card };
+        assert_eq!(connector_beam(sliver, panel, true, 6.0, 16.0).card, (2170.0, 602.0, 606.0));
     }
 
     #[test]
-    fn connector_end_stays_off_the_rounded_corners_of_the_peek() {
-        let panel = Rect { x: 1600.0, y: 560.0, width: 500.0, height: 400.0 };
-        // 卡片在浮窗下面（浮窗被工作区推上去）：浮窗一端停在离底边 16 处。
-        let low = Rect { x: 2170.0, y: 1100.0, width: 380.0, height: 100.0 };
-        assert_eq!(connector_ends(low, panel, true, 16.0).1, (2100.0, 944.0));
-        // 卡片在浮窗上面：停在离顶边 16 处。
-        let high = Rect { y: 400.0, ..low };
-        assert_eq!(connector_ends(high, panel, true, 16.0).1, (2100.0, 576.0));
+    fn peek_prefers_the_card_top_and_centres_when_pushed_far() {
+        let area = Rect { x: 0.0, y: 0.0, width: 2560.0, height: 1400.0 };
+        let card = Rect { x: 2170.0, y: 300.0, width: 380.0, height: 200.0 };
+        // 放得下：顶边对齐。
+        assert_eq!(peek_top(card, 600.0, area, 12.0), 300.0);
+        // 卡片靠下，顶边对齐要被推上去很多：与卡片垂直居中（中心 1100，浮窗高 500）。
+        let low = Rect { y: 1000.0, ..card };
+        assert_eq!(peek_top(low, 500.0, area, 12.0), 850.0);
+        // 只推上去一点（不超过两倍留白）：仍按顶边对齐，贴住工作区底边。
+        let near = Rect { y: 900.0, ..card };
+        assert_eq!(peek_top(near, 500.0, area, 12.0), 1400.0 - 12.0 - 500.0);
+        // 居中也放不下：贴着工作区的边。
+        assert_eq!(peek_top(low, 1300.0, area, 12.0), 1400.0 - 12.0 - 1300.0);
     }
 
     #[test]

@@ -248,7 +248,7 @@ body[data-window='overlay'] .overlay-layer {
   pointer-events: none;
 }
 
-/* 全文浮窗的连线（T100）：从卡片的边连到浮窗的边，一条强调色的虚线，两端各一个小圆点，像批注的引线。 */
+/* 全文浮窗与卡片之间的连接带（T100、T114）：铺满动画层的一张图，出现与收回的动画由 Overlay.tsx 播放。 */
 body[data-window='overlay'] .overlay-connector {
   position: fixed;
   inset: 0;
@@ -256,20 +256,23 @@ body[data-window='overlay'] .overlay-connector {
   height: 100%;
   overflow: visible;
   pointer-events: none;
-  animation: fade-in var(--sn-duration-fast) var(--sn-ease-enter);
 }
 
-.overlay-connector path {
-  fill: none;
+/* 连接带（T114）：卡片一边较浓、浮窗一边较淡的强调色渐变，上下两条斜边一道细线，像卡片投在浮窗上的光。 */
+.overlay-beam-near {
+  stop-color: var(--sn-color-accent);
+  stop-opacity: 0.34;
+}
+
+.overlay-beam-far {
+  stop-color: var(--sn-color-accent);
+  stop-opacity: 0.08;
+}
+
+.overlay-beam-edge {
   stroke: var(--sn-color-accent);
-  stroke-width: calc(var(--sn-border-width) * 1.5);
-  stroke-dasharray: var(--sn-space-2) var(--sn-space-2);
-  stroke-linecap: round;
-}
-
-.overlay-connector circle {
-  r: calc(var(--sn-space-1) * 1.5);
-  fill: var(--sn-color-accent);
+  stroke-opacity: 0.55;
+  stroke-width: var(--sn-border-width);
 }
 
 /* 预览里的待办勾选框可以直接点（T108）：旧样式层让正文里的勾选框不接收指针（prototype.css 的 .markdown-body input），

@@ -6,7 +6,8 @@
  * - 插入线：拖动经过别的记录窗口时，那个窗口算出的插入线画在这里，叠在拖影与正在拖动的窗口之上。
  * - 形变动画：记录窗口打开时，窗口的副本从拖影或卡片展开到窗口的位置，结束后交给真正的窗口；
  *   关闭时真正的窗口先藏起来，副本缩回卡片（或原地提起淡出）。帧与时长照搬原型 note-window.js 的 morph 与 closeEntry。
- * - 连线（T100）：附着在卡片旁的全文浮窗开着时，一条从卡片的边连到浮窗的边的引线，像批注一样。
+ * - 连接带（T100、T114）：附着在卡片旁的全文浮窗开着时，卡片的边与浮窗的边之间一块由窄到宽的强调色渐变带，
+ *   像把卡片投影放大成浮窗；出现时从卡片一边展开，收回时原路收拢。
  * 位置由后端给出（相对本窗口内容区的物理像素），除以页面像素比得到页面像素；副本的大小与来源窗口相同（同样的界面缩放）。
  */
 
@@ -29,19 +30,15 @@ interface GhostPayload {
   outside: boolean;
 }
 
-/** 连线的两端（物理像素）：卡片一端与全文浮窗一端。 */
+/** 连接带两端的竖边（物理像素）：横坐标、上端、下端；卡片一端与全文浮窗一端。 */
 interface ConnectorPayload {
-  from: [number, number];
-  to: [number, number];
+  card: [number, number, number];
+  panel: [number, number, number];
 }
 
 const SVG = 'http://www.w3.org/2000/svg';
-
-/** 连线：两端水平出发的一段三次曲线，两端同高时是直线。 */
-function connectorPath(from: [number, number], to: [number, number]): string {
-  const middle = (from[0] + to[0]) / 2;
-  return `M ${from[0]} ${from[1]} C ${middle} ${from[1]}, ${middle} ${to[1]}, ${to[0]} ${to[1]}`;
-}
+/** 连接带渐变的标识（动画层里只有一条连接带）。 */
+const BEAM_GRADIENT = 'overlay-beam-fill';
 
 interface MorphPayload {
   id: number;
@@ -238,27 +235,80 @@ export function Overlay() {
       copies.delete(id);
     };
 
+    // 连接带：一块梯形，从卡片一边（较浓）渐变到浮窗一边（较淡），上下两条斜边描一道细线。
+    // 出现时从卡片那一边横向展开，收回时原路收拢后去掉（关闭是打开的倒放）。
     let connector: SVGSVGElement | null = null;
+    let leaving: Animation | null = null;
+    const beamFrames = (cardX: number): Keyframe[] => [
+      { transformOrigin: `${cardX}px 50%`, transform: 'scaleX(0)', opacity: 0 },
+      { transformOrigin: `${cardX}px 50%`, transform: 'none', opacity: 1 },
+    ];
     const onConnector = (payload: ConnectorPayload | null): void => {
       if (!payload) {
-        connector?.remove();
+        const node = connector;
         connector = null;
+        if (!node) return;
+        const cardX = Number(node.dataset.cardX) || 0;
+        if (reducedMotion() || typeof node.animate !== 'function') {
+          node.remove();
+          return;
+        }
+        leaving = node.animate([...beamFrames(cardX)].reverse(), {
+          duration: duration('--sn-duration-normal'),
+          easing: easing('--sn-ease-exit'),
+          fill: 'forwards',
+        });
+        const done = (): void => node.remove();
+        leaving.finished.then(done, done);
         return;
       }
+      const [cardX, cardTop, cardBottom] = payload.card.map((value) => value / ratio());
+      const [panelX, panelTop, panelBottom] = payload.panel.map((value) => value / ratio());
       if (!connector) {
+        // 正在收拢的旧连接带直接去掉，换成新的。
+        leaving?.cancel();
+        layer.querySelectorAll('.overlay-connector').forEach((node) => node.remove());
         connector = document.createElementNS(SVG, 'svg');
         connector.setAttribute('class', 'overlay-connector');
-        connector.append(document.createElementNS(SVG, 'path'), document.createElementNS(SVG, 'circle'), document.createElementNS(SVG, 'circle'));
+        const defs = document.createElementNS(SVG, 'defs');
+        const gradient = document.createElementNS(SVG, 'linearGradient');
+        gradient.setAttribute('id', BEAM_GRADIENT);
+        gradient.setAttribute('gradientUnits', 'userSpaceOnUse');
+        const near = document.createElementNS(SVG, 'stop');
+        near.setAttribute('class', 'overlay-beam-near');
+        near.setAttribute('offset', '0');
+        const far = document.createElementNS(SVG, 'stop');
+        far.setAttribute('class', 'overlay-beam-far');
+        far.setAttribute('offset', '1');
+        gradient.append(near, far);
+        defs.append(gradient);
+        const body = document.createElementNS(SVG, 'polygon');
+        body.setAttribute('class', 'overlay-beam');
+        body.setAttribute('fill', `url(#${BEAM_GRADIENT})`);
+        const upper = document.createElementNS(SVG, 'line');
+        const lower = document.createElementNS(SVG, 'line');
+        upper.setAttribute('class', 'overlay-beam-edge');
+        lower.setAttribute('class', 'overlay-beam-edge');
+        connector.append(defs, body, upper, lower);
         layer.append(connector);
+        if (!reducedMotion() && typeof connector.animate === 'function') {
+          connector.animate(beamFrames(cardX), { duration: duration('--sn-duration-normal'), easing: easing('--sn-ease-enter') });
+        }
       }
-      const from: [number, number] = [payload.from[0] / ratio(), payload.from[1] / ratio()];
-      const to: [number, number] = [payload.to[0] / ratio(), payload.to[1] / ratio()];
-      const [path, start, end] = Array.from(connector.children);
-      path.setAttribute('d', connectorPath(from, to));
-      start.setAttribute('cx', `${from[0]}`);
-      start.setAttribute('cy', `${from[1]}`);
-      end.setAttribute('cx', `${to[0]}`);
-      end.setAttribute('cy', `${to[1]}`);
+      connector.dataset.cardX = String(cardX);
+      const gradient = connector.querySelector('linearGradient');
+      gradient?.setAttribute('x1', `${cardX}`);
+      gradient?.setAttribute('x2', `${panelX}`);
+      const [body, upper, lower] = Array.from(connector.children).slice(1);
+      body.setAttribute('points', `${cardX},${cardTop} ${panelX},${panelTop} ${panelX},${panelBottom} ${cardX},${cardBottom}`);
+      upper.setAttribute('x1', `${cardX}`);
+      upper.setAttribute('y1', `${cardTop}`);
+      upper.setAttribute('x2', `${panelX}`);
+      upper.setAttribute('y2', `${panelTop}`);
+      lower.setAttribute('x1', `${cardX}`);
+      lower.setAttribute('y1', `${cardBottom}`);
+      lower.setAttribute('x2', `${panelX}`);
+      lower.setAttribute('y2', `${panelBottom}`);
     };
 
     return bridge.subscribeAll([
