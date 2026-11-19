@@ -52,13 +52,21 @@ windows = { version = "0.62", features = [
   "Win32_System_WinRT_Composition",
   "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",
-  # 磨砂玻璃的实时模糊（T118）：侧栏窗口上挂合成树，用宿主背景画刷画背后的画面。
+  # 磨砂玻璃的实时模糊（T118）：侧栏窗口上挂合成树，用宿主背景画刷画背后的画面；
+  # 再叠一层高斯模糊与饱和度（T124，合成器的效果，按 Direct2D 效果的编号与参数描述）。
+  "Foundation",
+  "Graphics_Effects",
   "System",
   "UI_Composition",
   "UI_Composition_Desktop",
+  "Win32_Graphics_Direct2D",
+  "Win32_Graphics_Direct2D_Common",
+  "Win32_System_WinRT_Graphics_Direct2D",
 ] }
 # 合成接口的向量参数（与 windows 0.62 用的同一版本）。
 windows-numerics = "0.3"
+# 交给合成器的效果要实现 WinRT 接口（#[implement]，与 windows 0.62 用的同一版本）。
+windows-core = "0.62"
 
 [profile.release]
 # 发布包优先体积与启动速度。

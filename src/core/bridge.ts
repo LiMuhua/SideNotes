@@ -303,8 +303,14 @@ export interface GlassLayout {
 }
 
 /** 打开或关掉磨砂玻璃的实时模糊（Windows 11），返回是否能用；不能用时照截图的做法画（T118）。 */
-export function glassLive(enable: boolean): Promise<boolean> {
-  return call<boolean>('glass_live', { enable }, false);
+export function glassLive(enable: boolean, frost: GlassFrost | null = null): Promise<boolean> {
+  return call<boolean>('glass_live', { enable, frost }, false);
+}
+
+/** 叠在实时模糊上的效果（T124）：再模糊的标准差（物理像素）与饱和度（1 为不变），由令牌换算。 */
+export interface GlassFrost {
+  blur: number;
+  saturate: number;
 }
 
 /** 报告各块的位置，后端跟着摆实时模糊的圆角矩形。 */

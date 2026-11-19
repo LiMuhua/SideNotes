@@ -128,7 +128,13 @@ export function App({ role }: AppProps) {
         root.dataset.glassBackdrop = '';
       }),
     ]);
-    void bridge.glassLive(true).then((ok) => {
+    // 系统模糊之上再叠的模糊与饱和度取磨砂玻璃的令牌（T124，参考 Glance）：模糊换算成物理像素。
+    const tokens = getComputedStyle(root);
+    const frost = {
+      blur: (parseFloat(tokens.getPropertyValue('--sn-panel-blur')) || 0) * window.devicePixelRatio,
+      saturate: parseFloat(tokens.getPropertyValue('--sn-panel-saturate')) || 1,
+    };
+    void bridge.glassLive(true, frost).then((ok) => {
       if (disposed || !ok) return;
       live = true;
       root.style.setProperty('--glass-backdrop', 'linear-gradient(transparent, transparent)');
