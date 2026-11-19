@@ -411,6 +411,19 @@ body.is-sorting-cards .sidebar .drag-trash-zone:not(.is-target) > .icon {
   animation: trash-breathe calc(var(--sn-duration-slow) * 5) var(--sn-ease-standard) infinite;
 }
 
+/* 回收站放大一倍（T121，2026-11-19 用户要求）：原型是 35 × 35、图标 15，改为两倍；以右下角为准往左上长，位置不变。
+ * 光环按元素的大小画，跟着放大；扩散的倍数相应减小，扩出去的距离与原来相近。 */
+.sidebar .drag-trash-zone {
+  width: 70px; /* 固定：原型 35px 的两倍（用户要求） */
+  height: 70px; /* 固定：同上 */
+  border-radius: 18px; /* 固定：原型 9px 的两倍 */
+}
+
+.sidebar .drag-trash-zone > .icon {
+  width: 30px; /* 固定：原型图标 15px 的两倍 */
+  height: 30px; /* 固定：同上 */
+}
+
 @keyframes trash-ripple {
   from {
     opacity: 0.8;
@@ -420,7 +433,7 @@ body.is-sorting-cards .sidebar .drag-trash-zone:not(.is-target) > .icon {
   60%,
   to {
     opacity: 0;
-    transform: scale(1.7);
+    transform: scale(1.35);
   }
 }
 
