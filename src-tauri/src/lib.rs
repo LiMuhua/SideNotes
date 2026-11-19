@@ -11,6 +11,7 @@ mod error;
 mod fonts;
 mod fullscreen;
 mod glass;
+mod glass_live;
 mod location;
 mod migration;
 mod models;
@@ -247,6 +248,8 @@ pub fn run() {
             note_windows::overlay_done,
             note_windows::set_window_border_color,
             note_windows::peek_card,
+            glass_live::glass_live,
+            glass_live::glass_blocks,
             note_windows::collapse_peek,
             app_icon::apply_app_icon,
             app_icon::custom_app_icon,

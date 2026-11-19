@@ -286,6 +286,32 @@ export function sidebarLayout(
   };
 }
 
+/** 磨砂玻璃实时模糊的一块：相对侧栏内容区的物理像素与圆角半径（T118）。 */
+export interface GlassBlock {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  radius: number;
+}
+
+/** 各块的位置：列表之外的块、列表里的卡片与列表的可见范围（卡片按它裁剪）。 */
+export interface GlassLayout {
+  blocks: GlassBlock[];
+  cards: GlassBlock[];
+  viewport: GlassBlock | null;
+}
+
+/** 打开或关掉磨砂玻璃的实时模糊（Windows 11），返回是否能用；不能用时照截图的做法画（T118）。 */
+export function glassLive(enable: boolean): Promise<boolean> {
+  return call<boolean>('glass_live', { enable }, false);
+}
+
+/** 报告各块的位置，后端跟着摆实时模糊的圆角矩形。 */
+export function glassBlocks(layout: GlassLayout): Promise<void> {
+  return call<void>('glass_blocks', { layout }, undefined as unknown as void);
+}
+
 /** 显示侧栏。 */
 export function showSidebar(layout: SidebarLayout): Promise<void> {
   return call<void>('show_sidebar', { layout }, undefined as unknown as void);

@@ -8,6 +8,8 @@
 //! 截图是静止的：侧栏显示前截一次（窗口还没出来），显示期间每隔两秒再截一次。显示期间截图时，
 //! 只在截图的一瞬间把侧栏排除在截图之外（WDA_EXCLUDEFROMCAPTURE），不影响用户自己截图；排除失败时不截，
 //! 免得把侧栏自己截进去。
+//!
+//! Windows 11 上改用系统合成的实时模糊（glass_live.rs，T118），这里只在它用不了时（Windows 10 等）退而求其次。
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -267,6 +269,9 @@ fn deliver(app: &AppHandle, url: Option<String>) {
 /// 侧栏显示之前（窗口还没出来）：按它将要停的位置截一次背景，之后显示期间定时重截。
 /// `x`、`y` 为外框将要停的位置，`width`、`height` 为内容区尺寸（逻辑像素，与 windows.rs 的几何相同）。
 pub fn before_show(app: &AppHandle, sidebar: &WebviewWindow, x: f64, y: f64, width: f64, height: f64) {
+    if crate::glass_live::active() {
+        return;
+    }
     let Some(backdrop) = windows::last_layout().backdrop else { return };
     if let (Ok(scale), Ok(inner), Ok(outer)) = (sidebar.scale_factor(), sidebar.inner_position(), sidebar.outer_position()) {
         let rect = (
@@ -284,7 +289,7 @@ pub fn before_show(app: &AppHandle, sidebar: &WebviewWindow, x: f64, y: f64, wid
 /// 侧栏显示期间重截背景：等 `first` 之后截一次，之后每隔 REFRESH_INTERVAL 再截；侧栏收起或换掉磨砂玻璃后停止。
 /// 再次调用时换成新的一轮（拖动调宽时连续调用，只在停下来之后截）。
 pub fn keep_fresh(app: &AppHandle, first: Duration) {
-    if windows::last_layout().backdrop.is_none() {
+    if windows::last_layout().backdrop.is_none() || crate::glass_live::active() {
         return;
     }
     let generation = REFRESH.fetch_add(1, Ordering::SeqCst) + 1;
@@ -294,7 +299,7 @@ pub fn keep_fresh(app: &AppHandle, first: Duration) {
         loop {
             std::thread::sleep(wait);
             wait = REFRESH_INTERVAL;
-            if REFRESH.load(Ordering::SeqCst) != generation {
+            if REFRESH.load(Ordering::SeqCst) != generation || crate::glass_live::active() {
                 return;
             }
             let Some(backdrop) = windows::last_layout().backdrop else { return };

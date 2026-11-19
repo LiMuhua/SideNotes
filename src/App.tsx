@@ -27,6 +27,7 @@ import { applySurface, isGlassBlocks, sidebarMaterial, windowMaterial } from './
 const GLASS_BACKDROP_EVENT = 'sidenotes://glass-backdrop';
 import { appIconFolder, appIconSource } from './core/appIcons';
 import { useCustomAppIcon } from './hooks/useAppIcon';
+import { useLiveGlass } from './hooks/useLiveGlass';
 import type { WindowRole } from './main';
 
 export interface AppProps {
@@ -109,24 +110,41 @@ export function App({ role }: AppProps) {
     void bridge.setWindowMaterial(material);
   }, [role, surface]);
 
-  // 磨砂玻璃侧栏的背景：后端截下侧栏背后的屏幕、模糊后送来，写到根节点的 --glass-backdrop，各块用它作背景（window.css）。
-  // 换成别的主题时去掉，等下次送来再用。
+  // 磨砂玻璃侧栏的背景：Windows 11 上由系统实时模糊背后的画面（T118，glass_live.rs）：后端在窗口的合成树里给每一块
+  // 摆一个模糊的圆角矩形（各块的位置由 useLiveGlass 报告），--glass-backdrop 换成透明，各块半透明的底色盖在上面。
+  // 用不了时（Windows 10 等）退回截图：后端截下侧栏背后的屏幕、模糊后送来，写到 --glass-backdrop（T101）。
+  // 两种做法都写 data-glass-backdrop，各块的样式相同（window.css）。换成别的主题时去掉，等下次再用。
   const glassSidebar = role === 'sidebar' && isGlassBlocks(surface);
+  const [liveGlass, setLiveGlass] = useState(false);
   useEffect(() => {
     if (!glassSidebar) return;
     const root = document.documentElement;
+    let disposed = false;
+    let live = false;
     const unsubscribe = bridge.subscribeAll([
       bridge.onWindowEvent<string>(GLASS_BACKDROP_EVENT, (url) => {
+        if (live) return;
         root.style.setProperty('--glass-backdrop', `url("${url}")`);
         root.dataset.glassBackdrop = '';
       }),
     ]);
+    void bridge.glassLive(true).then((ok) => {
+      if (disposed || !ok) return;
+      live = true;
+      root.style.setProperty('--glass-backdrop', 'linear-gradient(transparent, transparent)');
+      root.dataset.glassBackdrop = '';
+      setLiveGlass(true);
+    });
     return () => {
+      disposed = true;
       unsubscribe();
+      if (live) void bridge.glassLive(false);
+      setLiveGlass(false);
       root.style.removeProperty('--glass-backdrop');
       delete root.dataset.glassBackdrop;
     };
   }, [glassSidebar]);
+  useLiveGlass(glassSidebar && liveGlass);
 
   /* ==================== 应用图标（T85） ==================== */
   // 品牌标记由各组件按设置显示（hooks/useAppIcon）；这里更换网页图标，并由侧栏请后端更换各窗口与托盘的图标，
