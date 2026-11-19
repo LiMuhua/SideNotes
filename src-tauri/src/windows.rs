@@ -441,6 +441,13 @@ pub fn show_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
     remember_layout(layout);
     let sidebar = window(app, SIDEBAR_LABEL)?;
     let generation = SIDEBAR_ANIMATION.fetch_add(1, Ordering::SeqCst) + 1;
+    // 被最小化了（Win+D 防护没拦住）：tao 不知道，只挪位置不会还原，侧栏一直唤不出来。先不激活地还原，
+    // 再让 tao 记下「显示着」（还原后窗口是显示的），从当前位置滑到贴边处（见 topmost）。
+    if crate::topmost::restore_if_minimized(&sidebar) {
+        crate::topmost::show(&sidebar);
+    }
+    // 记下想让它显示着：显示期间别人（显示桌面）藏不了它（见 topmost）。
+    crate::topmost::keep(&sidebar, true);
     let visible = sidebar.is_visible().unwrap_or(false);
     let geometry = sidebar_geometry(&sidebar, layout, !visible)?;
     let start_x = if visible {
@@ -450,14 +457,16 @@ pub fn show_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
     };
 
     sidebar.set_size(LogicalSize::new(geometry.width, geometry.height))?;
-    // 侧栏始终置顶；万一被别处连带取消（见 create_owner_window），显示时补回来。
-    let _ = sidebar.set_always_on_top(true);
+    // 侧栏始终置顶；万一被别处连带取消（见 create_owner_window），显示时补回来。tao 记着置顶时
+    // set_always_on_top(true) 不做事，要直接设（见 topmost）。
+    crate::topmost::ensure_topmost(&sidebar);
     // 磨砂玻璃：窗口出来之前，按它将要停的位置截下背后的屏幕（T101）。
     crate::glass::before_show(app, &sidebar, geometry.final_x, geometry.y, geometry.width, geometry.height);
     if !visible {
-        // 先摆到屏幕外再显示，避免出现一帧停在最终位置再跳回去。
+        // 先摆到屏幕外再显示，避免出现一帧停在最终位置再跳回去。窗口被系统藏过（Win+D）时 tao 的 show 不做事，
+        // topmost::show 会补上真正的显示（T106）。
         sidebar.set_position(LogicalPosition::new(start_x, geometry.y))?;
-        sidebar.show()?;
+        crate::topmost::show(&sidebar);
     }
     // 拿不到焦点（系统不让后台程序抢前台）不影响滑入；在这里返回错误的话，窗口会显示着停在屏幕外。
     if let Err(error) = sidebar.set_focus() {
@@ -477,7 +486,7 @@ pub fn show_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
         if animate_x(&handle, start_x, geometry.final_x, geometry.y, duration, generation)
             && !handle.is_visible().unwrap_or(true)
         {
-            let _ = handle.show();
+            crate::topmost::show(&handle);
         }
     });
     Ok(())
@@ -487,6 +496,8 @@ pub fn show_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
 pub fn hide_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
     remember_layout(layout);
     let sidebar = window(app, SIDEBAR_LABEL)?;
+    // 先记下不再想让它显示：Win+D 正让它暂时藏着时（topmost 的键盘钩子），之后不要再放回来。
+    crate::topmost::keep(&sidebar, false);
     if !sidebar.is_visible().unwrap_or(false) {
         return Ok(());
     }
@@ -497,7 +508,7 @@ pub fn hide_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
 
     let duration = layout.duration();
     if duration == 0 {
-        sidebar.hide()?;
+        crate::topmost::hide(&sidebar);
         sidebar.set_position(LogicalPosition::new(geometry.final_x, geometry.y))?;
         return Ok(());
     }
@@ -506,7 +517,7 @@ pub fn hide_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
     std::thread::spawn(move || {
         // 被新的显示请求打断时保持可见，由新动画处理位置。
         if animate_x(&handle, start_x, geometry.offscreen_x, geometry.y, duration, generation) {
-            let _ = handle.hide();
+            crate::topmost::hide(&handle);
             // 收起后复位到贴边位置，避免下次对齐时从错误坐标开始；隐藏的同时来了新的显示请求时不动，交给它摆放。
             if SIDEBAR_ANIMATION.load(Ordering::SeqCst) == generation {
                 let _ = handle.set_position(LogicalPosition::new(geometry.final_x, geometry.y));
@@ -533,8 +544,9 @@ pub fn toggle_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<bool
 pub fn show_capture(app: &AppHandle) -> AppResult<()> {
     let capture = window(app, CAPTURE_LABEL)?;
     capture.center()?;
-    let _ = capture.set_always_on_top(true);
-    capture.show()?;
+    crate::topmost::restore_if_minimized(&capture);
+    crate::topmost::ensure_topmost(&capture);
+    crate::topmost::show(&capture);
     capture.set_focus()?;
     Ok(())
 }
@@ -542,7 +554,7 @@ pub fn show_capture(app: &AppHandle) -> AppResult<()> {
 /// 隐藏速记浮窗；草稿由前端在隐藏前持久化。
 pub fn hide_capture(app: &AppHandle) -> AppResult<()> {
     let capture = window(app, CAPTURE_LABEL)?;
-    capture.hide()?;
+    crate::topmost::hide(&capture);
     Ok(())
 }
 
@@ -550,7 +562,7 @@ pub fn hide_capture(app: &AppHandle) -> AppResult<()> {
 pub fn toggle_capture(app: &AppHandle) -> AppResult<bool> {
     let capture = window(app, CAPTURE_LABEL)?;
     if capture.is_visible().unwrap_or(false) {
-        capture.hide()?;
+        crate::topmost::hide(&capture);
         Ok(false)
     } else {
         show_capture(app)?;
@@ -634,6 +646,7 @@ pub fn show_settings(app: &AppHandle, text_scale: f64, zoom: f64) -> AppResult<(
         settings.unminimize()?;
     }
     settings.show()?;
+    crate::topmost::ensure_topmost(&settings);
     settings.set_focus()?;
     notify_settings_visibility(app);
     Ok(())

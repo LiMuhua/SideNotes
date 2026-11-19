@@ -134,8 +134,10 @@ pub fn present_dialog(app: AppHandle, id: u64, width: f64, height: f64, center: 
         placed.x - f64::from(inner.x - outer.x),
         placed.y - f64::from(inner.y - outer.y),
     ))?;
+    crate::topmost::restore_if_minimized(&dialog);
+    crate::topmost::ensure_topmost(&dialog);
     if !dialog.is_visible().unwrap_or(false) {
-        dialog.show()?;
+        crate::topmost::show(&dialog);
         dialog.set_focus()?;
     }
     Ok(())
@@ -153,7 +155,7 @@ pub fn close_dialog(app: AppHandle, id: Option<u64>) -> AppResult<()> {
         slot.take()
     };
     let dialog = dialog_window(&app)?;
-    dialog.hide()?;
+    crate::topmost::hide(&dialog);
     if let Some(request) = request {
         let _ = app.emit_to(request.opener.as_str(), CLOSED_EVENT, request.id);
         let _ = app.emit_to(DIALOG_LABEL, CLOSED_EVENT, request.id);

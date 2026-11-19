@@ -21,6 +21,7 @@ mod recorder;
 mod shortcuts;
 mod snapshots;
 mod store;
+mod topmost;
 mod tray;
 mod windows;
 
@@ -121,6 +122,8 @@ pub fn run() {
                 }
             }
             windows::disable_sidebar_transitions(&handle);
+            // 置顶守护与 Win+D 防护：丢了的置顶补回，置顶的窗口不让「显示桌面」最小化（见 topmost）。
+            topmost::install(&handle);
             // 启动稳定后建好一个备用的记录窗口，打开记录窗口时不用等 WebView 创建。
             note_windows::ensure_spare_later(&handle, std::time::Duration::from_secs(3));
 
@@ -156,7 +159,12 @@ pub fn run() {
                 // 关闭按钮只隐藏窗口；退出统一走托盘菜单，避免误关导致后台驻留消失。
                 WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
-                    let _ = window.hide();
+                    match window.app_handle().get_webview_window(window.label()) {
+                        Some(webview) => topmost::hide(&webview),
+                        None => {
+                            let _ = window.hide();
+                        }
+                    }
                     if window.label() == windows::SETTINGS_LABEL {
                         windows::notify_settings_visibility(window.app_handle());
                     }

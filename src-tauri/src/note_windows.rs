@@ -455,12 +455,29 @@ pub fn ensure_spare_later(app: &AppHandle, delay: Duration) {
     });
 }
 
-/// 显示窗口并聚焦。
+/// 显示窗口并聚焦。被 Win+D 最小化了（没置顶的窗口）先还原。
 fn show_note(app: &AppHandle, label: &str) {
     if let Some(window) = app.get_webview_window(label) {
+        crate::topmost::restore_if_minimized(&window);
         let _ = window.show();
         let _ = window.set_focus();
     }
+}
+
+/// 应当置顶的记录窗口：置顶的与附着在卡片旁的全文浮窗（置顶守护与 Win+D 防护用，见 topmost）。
+pub fn topmost_windows() -> Vec<String> {
+    with_registry(|map| {
+        map.iter()
+            .filter(|(_, entry)| entry.phase == Phase::Open && (entry.pinned || entry.attached))
+            .map(|(label, _)| label.clone())
+            .collect()
+    })
+}
+
+/// 记录窗口的置顶：直接设到窗口上（tao 记着的标志可能与实际不一致），并更新 Win+D 防护。
+fn apply_topmost(window: &WebviewWindow, on: bool) {
+    crate::topmost::set_topmost(window, on);
+    crate::topmost::protect(window, on);
 }
 
 /// 每条记录只在一个窗口中打开：从其它窗口拿走这些记录（不含 `except`）。
@@ -653,6 +670,7 @@ fn overlay_release(app: &AppHandle) {
 
 /// 不激活地显示窗口并放到置顶层的最前面。Tauri 的 show 会激活窗口，动画层不能抢走焦点。
 fn show_without_focus(window: &WebviewWindow) {
+    crate::topmost::keep(window, true);
     #[cfg(windows)]
     if let Ok(hwnd) = window.hwnd() {
         use ::windows::Win32::UI::WindowsAndMessaging::{
@@ -666,6 +684,7 @@ fn show_without_focus(window: &WebviewWindow) {
 }
 
 fn hide_window(window: &WebviewWindow) {
+    crate::topmost::keep(window, false);
     #[cfg(windows)]
     if let Ok(hwnd) = window.hwnd() {
         use ::windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_HIDE};
@@ -881,7 +900,7 @@ fn detach(app: &AppHandle, label: &str) {
     let Some(pinned) = pinned else { return };
     if let Some(window) = app.get_webview_window(label) {
         set_tool_window(&window, false);
-        let _ = window.set_always_on_top(pinned);
+        apply_topmost(&window, pinned);
     }
     let _ = app.emit_to(label, events::DETACH, ());
     release_peek(app);
@@ -1294,7 +1313,7 @@ pub fn note_window_present(app: AppHandle, window: WebviewWindow, width: f64, he
     let unit = sane_dpr(dpr);
     window.set_min_size(Some(PhysicalSize::new(MIN_SIZE.0 * unit, MIN_SIZE.1 * unit)))?;
     // 全文浮窗附着在卡片旁，像侧栏的一部分：一直置顶，显示之后换成不进任务栏与 Alt+Tab 的工具窗口（T100）。
-    window.set_always_on_top(pinned || attached)?;
+    apply_topmost(&window, pinned || attached);
     let Some(placement) = placement else {
         show_note(&app, &label);
         after_show(&app, &label);
@@ -1338,7 +1357,7 @@ pub fn note_window_sync(window: WebviewWindow, tabs: Vec<String>, active: String
     });
     if changed_pin == Some(true) {
         let attached = with_registry(|map| map.get(window.label()).is_some_and(|entry| entry.attached));
-        window.set_always_on_top(pinned || attached)?;
+        apply_topmost(&window, pinned || attached);
     }
     Ok(())
 }
