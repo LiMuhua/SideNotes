@@ -174,7 +174,7 @@ fn poll(app: &AppHandle, watcher: &EdgeWatcher, state: &mut PollState) {
 
 /// 侧栏显示着却整个停在屏幕外、也没有新的动画时，把它藏起来，下次指针到边缘照常唤出。
 /// 被最小化的窗口停在屏幕外（-32000）：先不激活地还原再藏起来，否则藏起来的仍是最小化的窗口，
-/// 之后显示出来还是在屏幕外（Win+D 之后侧栏唤不出，T106）。
+/// 之后显示出来还是在屏幕外（侧栏不可最小化，以防万一，T106）。
 fn recover_offscreen(sidebar: &tauri::WebviewWindow, state: &mut PollState) {
     if sidebar.is_minimized().unwrap_or(false) {
         state.offscreen_polls = 0;

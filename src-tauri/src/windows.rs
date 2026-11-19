@@ -399,55 +399,16 @@ pub fn disable_transitions(window: &WebviewWindow) {
     let _ = window;
 }
 
-/// 侧栏与速记浮窗的所有者：一个从不显示的隐藏窗口。
-///
-/// 没有所有者的窗口，tao 会加上 WS_EX_APPWINDOW；`skipTaskbar` 只去掉任务栏按钮，窗口仍出现在
-/// Alt+Tab 与 Win+Tab 中。tao 每次显示、隐藏还会按自己的标志重写扩展样式，事后加的 WS_EX_TOOLWINDOW 留不住。
-/// 被拥有的窗口不出现在任务栏、Alt+Tab 与 Win+Tab 中；所有者从不显示、也不会最小化，被拥有的窗口照常显示。
-/// 在主线程上创建，随进程退出销毁。
-///
-/// 交给它的窗口必须一直置顶：系统把「取消置顶」连带到所有者及其所有被拥有的窗口，
-/// 其中一个取消置顶，侧栏也跟着不再置顶（固定侧栏后会被别的窗口盖住）。
-#[cfg(windows)]
-pub fn create_owner_window() -> Option<::windows::Win32::Foundation::HWND> {
-    use ::windows::core::w;
-    use ::windows::Win32::Foundation::HINSTANCE;
-    use ::windows::Win32::System::LibraryLoader::GetModuleHandleW;
-    use ::windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, WS_EX_TOOLWINDOW, WS_POPUP};
-
-    // SAFETY：系统预定义的 STATIC 窗口类不需要注册，其余参数都是按值传入的常量；创建失败时返回 None。
-    unsafe {
-        let module = GetModuleHandleW(None).ok()?;
-        CreateWindowExW(
-            WS_EX_TOOLWINDOW,
-            w!("STATIC"),
-            w!(""),
-            WS_POPUP,
-            0,
-            0,
-            0,
-            0,
-            None,
-            None,
-            Some(HINSTANCE(module.0)),
-            None,
-        )
-        .ok()
-    }
-}
-
 /// 显示侧栏：从屏幕外平滑滑入；若正在收起，则从当前位置滑回。
 pub fn show_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
     remember_layout(layout);
     let sidebar = window(app, SIDEBAR_LABEL)?;
     let generation = SIDEBAR_ANIMATION.fetch_add(1, Ordering::SeqCst) + 1;
-    // 被最小化了（Win+D 防护没拦住）：tao 不知道，只挪位置不会还原，侧栏一直唤不出来。先不激活地还原，
+    // 被最小化了（侧栏不可最小化，以防万一）：tao 不知道，只挪位置不会还原，侧栏一直唤不出来。先不激活地还原，
     // 再让 tao 记下「显示着」（还原后窗口是显示的），从当前位置滑到贴边处（见 topmost）。
     if crate::topmost::restore_if_minimized(&sidebar) {
         crate::topmost::show(&sidebar);
     }
-    // 记下想让它显示着：显示期间别人（显示桌面）藏不了它（见 topmost）。
-    crate::topmost::keep(&sidebar, true);
     let visible = sidebar.is_visible().unwrap_or(false);
     let geometry = sidebar_geometry(&sidebar, layout, !visible)?;
     let start_x = if visible {
@@ -457,13 +418,13 @@ pub fn show_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
     };
 
     sidebar.set_size(LogicalSize::new(geometry.width, geometry.height))?;
-    // 侧栏始终置顶；万一被别处连带取消（见 create_owner_window），显示时补回来。tao 记着置顶时
+    // 侧栏始终置顶；万一被别处取消（见 topmost），显示时补回来。tao 记着置顶时
     // set_always_on_top(true) 不做事，要直接设（见 topmost）。
     crate::topmost::ensure_topmost(&sidebar);
     // 磨砂玻璃：窗口出来之前，按它将要停的位置截下背后的屏幕（T101）。
     crate::glass::before_show(app, &sidebar, geometry.final_x, geometry.y, geometry.width, geometry.height);
     if !visible {
-        // 先摆到屏幕外再显示，避免出现一帧停在最终位置再跳回去。窗口被系统藏过（Win+D）时 tao 的 show 不做事，
+        // 先摆到屏幕外再显示，避免出现一帧停在最终位置再跳回去。窗口被系统藏过时 tao 的 show 不做事，
         // topmost::show 会补上真正的显示（T106）。
         sidebar.set_position(LogicalPosition::new(start_x, geometry.y))?;
         crate::topmost::show(&sidebar);
@@ -496,8 +457,6 @@ pub fn show_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
 pub fn hide_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
     remember_layout(layout);
     let sidebar = window(app, SIDEBAR_LABEL)?;
-    // 先记下不再想让它显示：Win+D 正让它暂时藏着时（topmost 的键盘钩子），之后不要再放回来。
-    crate::topmost::keep(&sidebar, false);
     if !sidebar.is_visible().unwrap_or(false) {
         return Ok(());
     }

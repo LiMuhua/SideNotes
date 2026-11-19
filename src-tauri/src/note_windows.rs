@@ -387,10 +387,8 @@ fn maximized(area: Rect, sidebar: Option<Rect>, right_edge: bool, unit: f64) -> 
 
 /// 新建一个隐藏的记录窗口。建窗口要回到主线程，调用方在别的线程上调用。
 ///
-/// 记录窗口是独立的普通窗口：有任务栏按钮、出现在 Alt+Tab 中，不交给侧栏的隐藏所有者窗口。
-/// 交给它时有两个问题：激活侧栏会把同一所有者的窗口一起提到前面，取消置顶又被别的窗口盖住后，
-/// 记录窗口只能跟着侧栏出现；而且系统会把「取消置顶」连带到所有者及其它被拥有的窗口，
-/// 取消一个记录窗口的置顶，侧栏与速记浮窗也不再置顶。
+/// 记录窗口没置顶时是普通窗口：有任务栏按钮、出现在 Alt+Tab 中，被别的窗口盖住后从这里找回来；
+/// 置顶（或附着在卡片旁）时是面板，不进任务栏与 Alt+Tab，显示桌面时不动（见 apply_topmost、panels）。
 fn build(app: &AppHandle, label: &str) -> AppResult<WebviewWindow> {
     let builder =WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
         .title("SideNotes 记录")
@@ -494,10 +492,29 @@ pub fn topmost_windows() -> Vec<String> {
     })
 }
 
-/// 记录窗口的置顶：直接设到窗口上（tao 记着的标志可能与实际不一致），并更新 Win+D 防护。
+/// 记录窗口的置顶（T120）：置顶（或附着在卡片旁）时是面板，不进任务栏与 Alt+Tab，显示桌面时不动（见 panels），
+/// 不可最小化；取消置顶后是普通窗口，可以最小化，显示桌面时与别的窗口一起收起。置顶直接设到窗口上
+/// （tao 记着的标志可能与实际不一致）。面板先设好，之后 tao 按标志重写样式时经过面板的子类。
 fn apply_topmost(window: &WebviewWindow, on: bool) {
+    let was = crate::panels::set(window, on);
     crate::topmost::set_topmost(window, on);
-    crate::topmost::protect(window, on);
+    let _ = window.set_minimizable(!on);
+    if was != on {
+        // 任务栏按钮跟着增删（显示着的窗口改样式后任务栏不会自己更新）。
+        let _ = window.set_skip_taskbar(on);
+    }
+    #[cfg(windows)]
+    if on {
+        // 工具窗口不一定有系统圆角，请系统画圆角。
+        if let Ok(hwnd) = window.hwnd() {
+            use ::windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND, DWM_WINDOW_CORNER_PREFERENCE};
+            let corner: DWM_WINDOW_CORNER_PREFERENCE = DWMWCP_ROUND;
+            // SAFETY：hwnd 来自仍然存在的 Tauri 窗口；指针指向本函数内的值，大小与之匹配。
+            let _ = unsafe {
+                DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, (&corner as *const DWM_WINDOW_CORNER_PREFERENCE).cast(), std::mem::size_of_val(&corner) as u32)
+            };
+        }
+    }
 }
 
 /// 每条记录只在一个窗口中打开：从其它窗口拿走这些记录（不含 `except`）。
@@ -690,7 +707,6 @@ fn overlay_release(app: &AppHandle) {
 
 /// 不激活地显示窗口并放到置顶层的最前面。Tauri 的 show 会激活窗口，动画层不能抢走焦点。
 fn show_without_focus(window: &WebviewWindow) {
-    crate::topmost::keep(window, true);
     #[cfg(windows)]
     if let Ok(hwnd) = window.hwnd() {
         use ::windows::Win32::UI::WindowsAndMessaging::{
@@ -704,7 +720,6 @@ fn show_without_focus(window: &WebviewWindow) {
 }
 
 fn hide_window(window: &WebviewWindow) {
-    crate::topmost::keep(window, false);
     #[cfg(windows)]
     if let Ok(hwnd) = window.hwnd() {
         use ::windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_HIDE};
@@ -758,7 +773,7 @@ fn finish_animation(app: &AppHandle, id: u64) {
     match animation {
         Animation::Open { label } => {
             show_note(app, &label);
-            after_show(app, &label);
+            update_connector(app);
             let app = app.clone();
             std::thread::spawn(move || {
                 std::thread::sleep(HANDOFF_DELAY);
@@ -857,60 +872,6 @@ fn update_connector(app: &AppHandle) {
     }
 }
 
-/// 全文浮窗附着期间不进任务栏与 Alt+Tab：去掉 WS_EX_APPWINDOW、加上 WS_EX_TOOLWINDOW，并删掉任务栏按钮；
-/// 成为独立窗口时反过来。没有所有者的窗口，tao 在显示、隐藏或改置顶时按自己的标志重写扩展样式（总带 WS_EX_APPWINDOW），
-/// 所以在显示之后设置，窗口获得焦点时再补一次。工具窗口不一定有系统圆角，一并请系统画圆角。
-fn set_tool_window(window: &WebviewWindow, tool: bool) {
-    #[cfg(windows)]
-    if let Ok(hwnd) = window.hwnd() {
-        use ::windows::Win32::Graphics::Dwm::{
-            DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND, DWM_WINDOW_CORNER_PREFERENCE,
-        };
-        use ::windows::Win32::UI::WindowsAndMessaging::{
-            GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE,
-            SWP_NOOWNERZORDER, SWP_NOSIZE, SWP_NOZORDER, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
-        };
-        let (tool_bit, app_bit) = (WS_EX_TOOLWINDOW.0 as isize, WS_EX_APPWINDOW.0 as isize);
-        // SAFETY：hwnd 来自仍然存在的 Tauri 窗口；圆角偏好的指针指向本函数内的值，大小与之匹配。
-        unsafe {
-            let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-            let next = if tool { (style | tool_bit) & !app_bit } else { (style & !tool_bit) | app_bit };
-            if next != style {
-                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next);
-                let _ = SetWindowPos(
-                    hwnd,
-                    None,
-                    0,
-                    0,
-                    0,
-                    0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_FRAMECHANGED,
-                );
-            }
-            if tool {
-                let corner: DWM_WINDOW_CORNER_PREFERENCE = DWMWCP_ROUND;
-                let _ = DwmSetWindowAttribute(
-                    hwnd,
-                    DWMWA_WINDOW_CORNER_PREFERENCE,
-                    (&corner as *const DWM_WINDOW_CORNER_PREFERENCE).cast(),
-                    std::mem::size_of_val(&corner) as u32,
-                );
-            }
-        }
-    }
-    let _ = window.set_skip_taskbar(tool);
-}
-
-/// 显示之后：是全文浮窗时换成工具窗口（不进任务栏与 Alt+Tab），并画连线。
-fn after_show(app: &AppHandle, label: &str) {
-    if with_registry(|map| map.get(label).is_some_and(|entry| entry.attached)) {
-        if let Some(window) = app.get_webview_window(label) {
-            set_tool_window(&window, true);
-        }
-    }
-    update_connector(app);
-}
-
 /// 全文浮窗不再附着（收回或成为独立窗口）：侧栏的按钮换回「展开全文」，收起连线。
 fn release_peek(app: &AppHandle) {
     if let Ok(mut slot) = PEEK_ANCHOR.lock() {
@@ -920,7 +881,7 @@ fn release_peek(app: &AppHandle) {
     update_connector(app);
 }
 
-/// 全文浮窗成为独立的记录窗口：进任务栏与 Alt+Tab，置顶按窗口自己的设置（默认不置顶），去掉连线。
+/// 全文浮窗成为独立的记录窗口：置顶按窗口自己的设置（默认不置顶，进任务栏与 Alt+Tab），去掉连线。
 fn detach(app: &AppHandle, label: &str) {
     let pinned = with_registry(|map| {
         let entry = map.get_mut(label)?;
@@ -932,7 +893,6 @@ fn detach(app: &AppHandle, label: &str) {
     });
     let Some(pinned) = pinned else { return };
     if let Some(window) = app.get_webview_window(label) {
-        set_tool_window(&window, false);
         apply_topmost(&window, pinned);
     }
     let _ = app.emit_to(label, events::DETACH, ());
@@ -956,7 +916,7 @@ pub fn close_attached(app: &AppHandle) {
 /// 并补上工具窗口的样式。
 pub fn refresh_connector(app: &AppHandle, label: &str) {
     if with_registry(|map| map.get(label).is_some_and(|entry| entry.attached && entry.phase == Phase::Open)) {
-        after_show(app, label);
+        update_connector(app);
     }
 }
 
@@ -1578,11 +1538,11 @@ pub fn note_window_present(app: AppHandle, window: WebviewWindow, width: f64, he
     .ok_or_else(|| AppError::Other("记录窗口不存在".into()))?;
     let unit = sane_dpr(dpr);
     window.set_min_size(Some(PhysicalSize::new(MIN_SIZE.0 * unit, MIN_SIZE.1 * unit)))?;
-    // 全文浮窗附着在卡片旁，像侧栏的一部分：一直置顶，显示之后换成不进任务栏与 Alt+Tab 的工具窗口（T100）。
+    // 全文浮窗附着在卡片旁，像侧栏的一部分：一直置顶，是不进任务栏与 Alt+Tab 的面板（T100，见 apply_topmost）。
     apply_topmost(&window, pinned || attached);
     let Some(placement) = placement else {
         show_note(&app, &label);
-        after_show(&app, &label);
+        update_connector(&app);
         return Ok(());
     };
     let size = (width, height);
@@ -1602,7 +1562,7 @@ pub fn note_window_present(app: AppHandle, window: WebviewWindow, width: f64, he
         (Some(html), Some(from)) => play_open(&app, &label, html, from, rect, if kind_drag { "open-drag" } else { "open-expand" }),
         _ => {
             show_note(&app, &label);
-            after_show(&app, &label);
+            update_connector(&app);
         }
     }
     Ok(())

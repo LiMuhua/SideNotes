@@ -16,6 +16,7 @@ mod location;
 mod migration;
 mod models;
 mod note_windows;
+mod panels;
 mod paths;
 mod recorder;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -115,18 +116,13 @@ pub fn run() {
             // 窗口在状态就绪后才创建。配置中的窗口默认先于 setup 创建，页面会在
             // manage 之前调用 load_snapshot 而失败，以空列表启动；此后的整体写入
             // 会覆盖数据库中的其它记录。配置里的窗口均设为 create: false，统一在此创建。
-            // 侧栏、速记浮窗与动画层交给一个隐藏的所有者窗口，不出现在任务栏、Alt+Tab 与 Win+Tab 中
-            // （见 windows::create_owner_window）；记录窗口是独立的普通窗口，不交给它（见 note_windows::build）。
-            #[cfg(windows)]
-            let owner = windows::create_owner_window();
+            // 设置窗口之外都做成面板：不出现在任务栏、Alt+Tab 与 Win+Tab 中，显示桌面时不动（见 panels）。
+            // 记录窗口置顶时才是面板（见 note_windows::apply_topmost）。
             for config in handle.config().app.windows.iter().filter(|config| !config.create) {
-                let builder = WebviewWindowBuilder::from_config(&handle, config)?;
-                #[cfg(windows)]
-                let builder = match owner {
-                    Some(owner) if config.label != windows::SETTINGS_LABEL => builder.owner_raw(owner),
-                    _ => builder,
-                };
-                let window = builder.build()?;
+                let window = WebviewWindowBuilder::from_config(&handle, config)?.build()?;
+                if config.label != windows::SETTINGS_LABEL {
+                    panels::set(&window, true);
+                }
                 if config.label == note_windows::OVERLAY_LABEL {
                     // 动画层点击穿透，指针始终落在下面的窗口上（拖动中的来源窗口仍按住指针）。
                     window.set_ignore_cursor_events(true)?;
@@ -134,7 +130,7 @@ pub fn run() {
                 }
             }
             windows::disable_sidebar_transitions(&handle);
-            // 置顶守护与 Win+D 防护：丢了的置顶补回，置顶的窗口不让「显示桌面」最小化（见 topmost）。
+            // 置顶守护：丢了的置顶补回（见 topmost）。
             topmost::install(&handle);
             // 启动稳定后建好一个备用的记录窗口，打开记录窗口时不用等 WebView 创建。
             note_windows::ensure_spare_later(&handle, std::time::Duration::from_secs(3));
