@@ -55,6 +55,8 @@ const RESIZE_SETTLE = 3000;
 const MARGIN = 12;
 const EDGES = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
 const EVENTS = bridge.NOTE_WINDOW_EVENTS;
+/** 动画层窗口的标签（后端 note_windows::OVERLAY_LABEL）。 */
+const OVERLAY_LABEL = 'overlay';
 
 /** 窗口里的编辑：正在编辑的记录、当前文字与进入编辑时的原文。 */
 interface WindowEdit {
@@ -680,6 +682,12 @@ export function NoteWindow() {
       bridge.onWindowEvent(EVENTS.detach, () => {
         attachedRef.current = false;
         setAttached(false);
+      }),
+      // 按住 Ctrl 拖动时窗口被别的程序挡着：动画层要在原处画它的半透明副本（T126），发一份副本过去。
+      bridge.onWindowEvent(EVENTS.revealSnapshot, () => {
+        const section = sectionRef.current;
+        if (!section) return;
+        void bridge.emitToWindow(OVERLAY_LABEL, EVENTS.revealCopy, { label: bridge.currentLabel(), html: snapshotOf(section) });
       }),
     ]);
     // 先订阅打开事件，再取等着的打开请求，备用窗口不会漏掉请求。

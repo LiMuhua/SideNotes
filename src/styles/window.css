@@ -277,16 +277,12 @@ body[data-window='overlay'] .overlay-connector {
   pointer-events: auto;
 }
 
-/* 按住 Ctrl 拖动时被别的程序挡住的记录窗口（T105）：窗口所在处一个半透明的虚线框，淡入淡出；
- * 指针移上去，窗口提到最前，框换成真正的窗口。不写提示文字，Ctrl 的用法放在使用说明里。 */
-body[data-window='overlay'] .overlay-reveal {
-  position: fixed;
-  border: var(--sn-focus-ring-width) dashed var(--sn-color-accent);
-  border-radius: var(--sn-radius-lg);
-  background: var(--sn-color-accent-subtle);
-  opacity: 0.6;
-  pointer-events: none;
-  animation: fade-in var(--sn-duration-fast) var(--sn-ease-enter);
+/* 按住 Ctrl 拖动时被别的程序挡住的记录窗口（T105、T126）：在窗口所在处画它的半透明副本，整个窗口看得见，
+ * 又看得出不是真的窗口（第六轮反馈：原来的虚线框看不出是什么）；指针移上去，真正的窗口浮现到最前，副本淡出。
+ * 淡入淡出由 Overlay.tsx 播放。不写提示文字，Ctrl 的用法放在使用说明里。 */
+body[data-window='overlay'] .note-window.overlay-reveal-copy {
+  opacity: 0.55;
+  filter: saturate(0.7);
 }
 
 /* 全文浮窗附着的卡片（T122）：只留一道淡淡的强调色细边，高亮与悬停也不加强调色外圈，重点落在浮窗上；

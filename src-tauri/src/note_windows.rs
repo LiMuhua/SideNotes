@@ -80,7 +80,8 @@ pub mod events {
     pub const DETACH: &str = "sidenotes://note-window/detach";
     /// 动画层：全文浮窗与卡片之间的连接带，载荷见 ConnectorPayload，null 时收起。
     pub const CONNECTOR: &str = "sidenotes://overlay/connector";
-    /// 动画层：按住 Ctrl 拖动时被挡住的记录窗口，载荷为矩形列表（相对动画层内容区的物理像素），空列表时收起（T105）。
+    /// 动画层：按住 Ctrl 拖动时被挡住的记录窗口，载荷为 RevealItem 列表，空列表时收起（T105、T126）。
+    /// 动画层再向各窗口要副本的 HTML（页面之间的事件，见 bridge 的 revealSnapshot、revealCopy）。
     pub const REVEAL: &str = "sidenotes://overlay/reveal";
     /// 记录窗口：要提到最前了，页面把自己的副本交给 note_window_surface_ready，动画层用它播放浮现（T119、T130）。
     pub const SURFACE: &str = "sidenotes://note-window/surface";
@@ -1298,13 +1299,22 @@ pub fn note_window_surface_ready(window: WebviewWindow, html: Option<String>) {
     }
 }
 
-/// 按住 Ctrl 拖动时更新动画层上的虚线框：被别的程序挡住的记录窗口（不含 `except`）各画一个（T105）。
-/// 指针移到框上时 window_at 把那个窗口提到最前，它不再被挡住，框随之消失、换成真正的窗口。
+/// 动画层上一个被挡住的记录窗口（T105、T126）：窗口的标签（动画层向它要副本）与窗口内容区的矩形
+/// （相对动画层内容区的物理像素）。
+#[derive(Debug, Clone, Serialize)]
+struct RevealItem {
+    label: String,
+    rect: Rect,
+}
+
+/// 按住 Ctrl 拖动时更新动画层上被挡住的记录窗口（不含 `except`）：动画层在各窗口所在处画它的半透明副本
+/// （T126，第六轮反馈：原来的虚线框看不出是什么，改成整个窗口看得见、带透明度）。指针移到副本上时 window_at
+/// 把那个窗口提到最前，它不再被挡住，副本随之淡出、换成真正的窗口。
 fn update_reveal(app: &AppHandle, session: &mut DragSession, active: bool, point: (f64, f64), except: Option<&str>) {
     #[cfg(windows)]
     if active {
         let skip = skip_handles(app, None);
-        let hidden: Vec<Rect> = with_registry(|map| {
+        let hidden: Vec<(String, Rect)> = with_registry(|map| {
             map.iter()
                 .filter(|(label, entry)| entry.phase == Phase::Open && Some(label.as_str()) != except)
                 .map(|(label, _)| label.clone())
@@ -1314,18 +1324,18 @@ fn update_reveal(app: &AppHandle, session: &mut DragSession, active: bool, point
         .filter_map(|label| app.get_webview_window(label))
         .filter(|window| window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false))
         .filter(|window| window.hwnd().is_ok_and(|hwnd| zorder::covered(hwnd.0 as isize, &skip)))
-        .filter_map(|window| client_rect(&window))
+        .filter_map(|window| client_rect(&window).map(|rect| (window.label().to_string(), rect)))
         .collect();
         if let Some(origin) = overlay_cover(app, point.0, point.1) {
-            let rects: Vec<Rect> = hidden.into_iter().map(|rect| rect.relative_to(origin)).collect();
-            session.revealed = !rects.is_empty();
-            let _ = app.emit_to(OVERLAY_LABEL, events::REVEAL, rects);
+            let items: Vec<RevealItem> = hidden.into_iter().map(|(label, rect)| RevealItem { label, rect: rect.relative_to(origin) }).collect();
+            session.revealed = !items.is_empty();
+            let _ = app.emit_to(OVERLAY_LABEL, events::REVEAL, items);
         }
         return;
     }
     let _ = (point, except);
     if std::mem::take(&mut session.revealed) {
-        let _ = app.emit_to(OVERLAY_LABEL, events::REVEAL, Vec::<Rect>::new());
+        let _ = app.emit_to(OVERLAY_LABEL, events::REVEAL, Vec::<RevealItem>::new());
     }
 }
 

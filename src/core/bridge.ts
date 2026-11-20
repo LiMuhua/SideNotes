@@ -774,11 +774,21 @@ export const NOTE_WINDOW_EVENTS = {
   surface: 'sidenotes://note-window/surface',
   /** 记录窗口：用户开始（true）或结束（false）拖边框改大小。这是系统的拉伸，页面收不到指针事件（T123）。 */
   sizing: 'sidenotes://note-window/sizing',
-  /** 动画层：按住 Ctrl 拖动时被挡住的记录窗口，载荷为矩形列表（物理像素），空列表时收起（T105）。 */
+  /** 动画层：按住 Ctrl 拖动时被挡住的记录窗口，载荷为 RevealItem 列表，空列表时收起（T105、T126）。 */
   reveal: 'sidenotes://overlay/reveal',
+  /** 记录窗口（动画层发）：要画这个窗口的半透明副本，页面回 revealCopy（T126）。 */
+  revealSnapshot: 'sidenotes://note-window/reveal-snapshot',
+  /** 动画层（记录窗口发）：窗口副本的 HTML，载荷 { label, html }（T126）。 */
+  revealCopy: 'sidenotes://overlay/reveal-copy',
   /** 动画层：全文浮窗与卡片之间的连线，载荷 { from, to }（物理像素）或 null（T100）。 */
   connector: 'sidenotes://overlay/connector',
 } as const;
+
+/** 动画层上一个被挡住的记录窗口（T126）：窗口的标签与内容区矩形（相对动画层内容区的物理像素）。 */
+export interface RevealItem {
+  label: string;
+  rect: PixelRect;
+}
 
 /** 页面矩形（DOMRect）取出可以序列化的四个值。 */
 export function rectOf(rect: DOMRect | PixelRect): PixelRect {

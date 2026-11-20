@@ -8,7 +8,8 @@
  *   关闭时真正的窗口先藏起来，副本缩回卡片（或原地提起淡出）。帧与时长照搬原型 note-window.js 的 morph 与 closeEntry。
  * - 连接带（T100、T114、T122）：附着在卡片旁的全文浮窗开着时，卡片的边与浮窗的边之间一块强调色渐变带，
  *   浮窗一边较浓、往卡片渐淡，重点落在浮窗上；出现时从卡片一边展开，收回时原路收拢。
- * - 虚线框（T105）：按住 Ctrl 拖动时，被别的程序挡住的记录窗口各画一个半透明的虚线框；指针移上去，窗口提到最前，框换成真正的窗口。
+ * - 被挡住的窗口（T105、T126）：按住 Ctrl 拖动时，被别的程序挡住的记录窗口在原处画一个半透明的副本（向窗口要一份），
+ *   整个窗口看得见；指针移上去，真正的窗口浮现到最前，副本淡出。
  * - 浮现（T119、T130）：被挡住的记录窗口提到最前时，窗口先隐身，这里在窗口的位置播放它的副本淡入、上浮，结束后窗口现身。
  * 位置由后端给出（相对本窗口内容区的物理像素），除以页面像素比得到页面像素；副本的大小与来源窗口相同（同样的界面缩放）。
  */
@@ -20,7 +21,7 @@ import * as bridge from '../core/bridge';
 /** 与拖影（.card-drag-ghost）的倾斜角度一致。 */
 const DRAG_TILT = -2.5;
 /**
- * 记录窗口浮现（T130）淡入的时长（毫秒），各主题相同：第六轮反馈要求比原来
+ * 记录窗口浮现（T130）与被挡住的窗口的副本（T126）淡入、淡出的时长（毫秒），各主题相同：第六轮反馈要求比原来
  * （主题的常规时长，终端只有 110 毫秒）慢一些。缓动用主题的 standard（前后都缓），不用一下子冲出来的 enter。
  */
 const SURFACE_FADE = 360;
@@ -157,14 +158,16 @@ export function Overlay() {
         ghost = payload.html ? fromHtml(payload.html) : null;
         grab = payload.grab;
         if (ghost) {
-          ghost.style.visibility = 'hidden';
+          ghost.style.display = 'none';
           layer.append(ghost);
         }
       }
       if (!ghost) return;
       ghost.style.left = `${payload.x / ratio() - grab[0]}px`;
       ghost.style.top = `${payload.y / ratio() - grab[1]}px`;
-      ghost.style.visibility = payload.visible ? '' : 'hidden';
+      // 藏起时不画（display），不能只设 visibility：拖影是卡片的副本，高亮的卡片里操作按钮自带 visibility: visible，
+      // 拖影藏起后按钮仍会留在屏幕上（第六轮实测：松开后动画层再显示时，上一张卡片的按钮浮在原处）。
+      ghost.style.display = payload.visible ? '' : 'none';
       ghost.classList.toggle(ghost.classList.contains('note-window-tab-ghost') ? 'is-detaching' : 'is-window', payload.outside);
     };
 
@@ -269,30 +272,53 @@ export function Overlay() {
       copies.delete(id);
     };
 
-    // 虚线框按顺序复用：拖动中每一步都会送来，不必每次重建；多出来的淡出后去掉（出现时淡入，见 window.css）。
-    const boxes: HTMLElement[] = [];
-    const onReveal = (rects: bridge.PixelRect[] | null): void => {
-      const list = rects ?? [];
-      list.forEach((rect, index) => {
-        let box = boxes[index];
-        if (!box) {
-          box = document.createElement('div');
-          box.className = 'overlay-reveal';
-          layer.append(box);
-          boxes[index] = box;
-        }
-        const page = toPage(rect);
-        Object.assign(box.style, { left: `${page.x}px`, top: `${page.y}px`, width: `${page.width}px`, height: `${page.height}px` });
-      });
-      boxes.splice(list.length).forEach((box) => {
-        if (reducedMotion() || typeof box.animate !== 'function') {
-          box.remove();
+    // 被挡住的窗口的副本（T126）：按窗口的标签复用，拖动中每一步都会送来位置，只在第一次向窗口要副本的 HTML；
+    // 副本到了才淡入。窗口不再被挡住（被提到最前）或松开、放开 Ctrl 时，副本淡出后去掉。
+    const reveals = new Map<string, { node: HTMLElement | null; rect: bridge.PixelRect }>();
+    const placeReveal = (node: HTMLElement, rect: bridge.PixelRect): void => {
+      const page = toPage(rect);
+      Object.assign(node.style, { left: `${page.x}px`, top: `${page.y}px`, width: `${page.width}px`, height: `${page.height}px` });
+    };
+    const onReveal = (items: bridge.RevealItem[] | null): void => {
+      const list = items ?? [];
+      list.forEach(({ label, rect }) => {
+        const entry = reveals.get(label);
+        if (entry) {
+          entry.rect = rect;
+          if (entry.node) placeReveal(entry.node, rect);
           return;
         }
-        const fade = box.animate([{ opacity: 1 }, { opacity: 0 }], { duration: duration('--sn-duration-fast'), easing: easing('--sn-ease-exit') });
-        const done = (): void => box.remove();
+        reveals.set(label, { node: null, rect });
+        void bridge.emitToWindow(label, EVENTS.revealSnapshot, null);
+      });
+      const shown = new Set(list.map((item) => item.label));
+      reveals.forEach((entry, label) => {
+        if (shown.has(label)) return;
+        reveals.delete(label);
+        const node = entry.node;
+        if (!node) return;
+        if (reducedMotion() || typeof node.animate !== 'function') {
+          node.remove();
+          return;
+        }
+        const from = window.getComputedStyle(node).opacity;
+        const fade = node.animate({ opacity: [from, '0'] }, { duration: SURFACE_FADE, easing: easing('--sn-ease-standard'), fill: 'forwards' });
+        const done = (): void => node.remove();
         fade.finished.then(done, done);
       });
+    };
+    const onRevealCopy = ({ label, html }: { label: string; html: string }): void => {
+      const entry = reveals.get(label);
+      if (!entry || entry.node) return;
+      const node = fromHtml(html);
+      if (!node) return;
+      node.classList.add('is-overlay-copy', 'overlay-reveal-copy');
+      placeReveal(node, entry.rect);
+      layer.append(node);
+      entry.node = node;
+      if (!reducedMotion() && typeof node.animate === 'function') {
+        node.animate([{ opacity: 0 }], { duration: SURFACE_FADE, easing: easing('--sn-ease-standard') });
+      }
     };
 
     // 连接带：一块梯形，浮窗一边较浓、往卡片一边渐淡到没有（T122，方案 B：重点落在浮窗上），不描边。
@@ -365,7 +391,8 @@ export function Overlay() {
       bridge.onWindowEvent<MorphPayload>(EVENTS.morph, onMorph),
       bridge.onWindowEvent<number>(EVENTS.clear, onClear),
       bridge.onWindowEvent<ConnectorPayload | null>(EVENTS.connector, onConnector),
-      bridge.onWindowEvent<bridge.PixelRect[] | null>(EVENTS.reveal, onReveal),
+      bridge.onWindowEvent<bridge.RevealItem[] | null>(EVENTS.reveal, onReveal),
+      bridge.onWindowEvent<{ label: string; html: string }>(EVENTS.revealCopy, onRevealCopy),
     ]);
   }, []);
 
