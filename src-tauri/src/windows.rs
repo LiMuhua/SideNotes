@@ -467,7 +467,7 @@ pub fn hide_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
 
     let duration = layout.duration();
     if duration == 0 {
-        crate::topmost::hide(&sidebar);
+        crate::note_windows::hide_keeping_order(&sidebar);
         sidebar.set_position(LogicalPosition::new(geometry.final_x, geometry.y))?;
         return Ok(());
     }
@@ -476,7 +476,7 @@ pub fn hide_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
     std::thread::spawn(move || {
         // 被新的显示请求打断时保持可见，由新动画处理位置。
         if animate_x(&handle, start_x, geometry.offscreen_x, geometry.y, duration, generation) {
-            crate::topmost::hide(&handle);
+            crate::note_windows::hide_keeping_order(&handle);
             // 收起后复位到贴边位置，避免下次对齐时从错误坐标开始；隐藏的同时来了新的显示请求时不动，交给它摆放。
             if SIDEBAR_ANIMATION.load(Ordering::SeqCst) == generation {
                 let _ = handle.set_position(LogicalPosition::new(geometry.final_x, geometry.y));
@@ -513,7 +513,7 @@ pub fn show_capture(app: &AppHandle) -> AppResult<()> {
 /// 隐藏速记浮窗；草稿由前端在隐藏前持久化。
 pub fn hide_capture(app: &AppHandle) -> AppResult<()> {
     let capture = window(app, CAPTURE_LABEL)?;
-    crate::topmost::hide(&capture);
+    crate::note_windows::hide_keeping_order(&capture);
     Ok(())
 }
 
@@ -521,7 +521,7 @@ pub fn hide_capture(app: &AppHandle) -> AppResult<()> {
 pub fn toggle_capture(app: &AppHandle) -> AppResult<bool> {
     let capture = window(app, CAPTURE_LABEL)?;
     if capture.is_visible().unwrap_or(false) {
-        crate::topmost::hide(&capture);
+        crate::note_windows::hide_keeping_order(&capture);
         Ok(false)
     } else {
         show_capture(app)?;

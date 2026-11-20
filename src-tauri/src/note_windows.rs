@@ -1157,6 +1157,48 @@ fn skip_handles(app: &AppHandle, moving: Option<&str>) -> Vec<isize> {
         .collect()
 }
 
+/// 藏起侧栏、速记浮窗或弹窗，不打乱记录窗口的前后次序（T129，2026-11-19 第六轮反馈：从侧栏拖卡片时提到最前的
+/// 记录窗口，侧栏一收起又被压回别的程序下面）。
+///
+/// 浮现的记录窗口是不激活地提到最前的（拖动不能断），前台仍是用户原来的程序；侧栏拿着焦点藏起来时，系统把焦点
+/// 还给那个程序，它随之跳到最前，盖住刚提上来的记录窗口。所以藏起之前记下前后次序，藏起之后把原来在新前台窗口
+/// 之上的、没置顶的记录窗口不激活地放回它上面：焦点照样还给用户的程序，看到的前后次序不变。
+pub fn hide_keeping_order(window: &WebviewWindow) {
+    #[cfg(windows)]
+    let before: Vec<isize> = zorder::layers().iter().map(|layer| layer.hwnd).collect();
+    crate::topmost::hide(window);
+    #[cfg(windows)]
+    {
+        // 排在藏起窗口的那一步（topmost::hide 交给主线程）之后执行。
+        let app = window.app_handle().clone();
+        let _ = window.run_on_main_thread(move || restore_order(&app, &before));
+    }
+}
+
+/// 见 hide_keeping_order：原来在新前台窗口之上的没置顶的记录窗口，按原来的次序放回它上面。
+#[cfg(windows)]
+fn restore_order(app: &AppHandle, before: &[isize]) {
+    use ::windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, SetWindowPos, HWND_TOP, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOOWNERZORDER, SWP_NOSIZE};
+    // SAFETY：只读查询。
+    let foreground = unsafe { GetForegroundWindow() }.0 as isize;
+    let Some(front) = before.iter().position(|hwnd| *hwnd == foreground) else { return };
+    let free: Vec<isize> = with_registry(|map| {
+        map.iter().filter(|(_, entry)| entry.phase == Phase::Open && !entry.pinned && !entry.attached).map(|(label, _)| label.clone()).collect::<Vec<_>>()
+    })
+    .iter()
+    .filter_map(|label| app.get_webview_window(label).and_then(|window| window.hwnd().ok()).map(|hwnd| hwnd.0 as isize))
+    .collect();
+    let mut lifted: Vec<(usize, isize)> =
+        free.into_iter().filter_map(|hwnd| before.iter().position(|item| *item == hwnd).filter(|rank| *rank < front).map(|rank| (rank, hwnd))).collect();
+    // 从原来靠后的开始提，提完之后它们之间的次序不变。
+    lifted.sort_by_key(|(rank, _)| std::cmp::Reverse(*rank));
+    for (_, hwnd) in lifted {
+        let hwnd = ::windows::Win32::Foundation::HWND(hwnd as *mut core::ffi::c_void);
+        // SAFETY：本应用的窗口句柄（失效时调用失败），其余参数是按值传入的常量。
+        let _ = unsafe { SetWindowPos(hwnd, Some(HWND_TOP), 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_NOOWNERZORDER) };
+    }
+}
+
 /// 不激活地把窗口提到最前（置顶的窗口提到置顶一层的最前），动画层仍在它上面（拖影与插入线要盖住窗口）。
 /// 被 Win+D 收走的窗口先还原。
 fn raise_window(app: &AppHandle, window: &WebviewWindow) {

@@ -155,7 +155,7 @@ pub fn close_dialog(app: AppHandle, id: Option<u64>) -> AppResult<()> {
         slot.take()
     };
     let dialog = dialog_window(&app)?;
-    crate::topmost::hide(&dialog);
+    crate::note_windows::hide_keeping_order(&dialog);
     if let Some(request) = request {
         let _ = app.emit_to(request.opener.as_str(), CLOSED_EVENT, request.id);
         let _ = app.emit_to(DIALOG_LABEL, CLOSED_EVENT, request.id);
