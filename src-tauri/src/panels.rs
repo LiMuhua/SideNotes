@@ -18,6 +18,12 @@
 //! 残影（透明主题里整条露出来）。所以面板关掉 tao 的投影标志，不留这一圈；投影、圆角与细边框改请 DWM 直接画（见
 //! [`Frame`]）。实测显示桌面照样不碰这样的面板。
 //! 没有这一圈之后，可以拉伸的面板（置顶的记录窗口）改由 Tauri 在窗口里沿四边放的一条拉伸区（一个系统边框宽）拉伸。
+//!
+//! 激活与失活（第七轮反馈 P1：去掉那一圈之后各主题仍偶尔在顶上露出一条原生标题栏）：窗口激活、失活时系统发
+//! WM_NCACTIVATE，默认处理会在窗口顶上画一条小标题栏（工具窗口的高度，写着窗口标题），哪怕窗口已经没有标题栏样式；
+//! 画在窗口自己的表面上，透明的地方一直露着，直到窗口重新显示。2026-11-20 实测：给侧栏发一次 WM_NCACTIVATE
+//! 就画出来，lParam 为 -1 时默认处理不重画非客户区，什么也不画。面板的子类把这条消息的 lParam 改成 -1 再往下交，
+//! tao 照常收到，激活与焦点的事件不变。
 
 use tauri::WebviewWindow;
 
@@ -106,7 +112,7 @@ mod imp {
     use ::windows::Win32::UI::WindowsAndMessaging::{
         GetClientRect, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId, IsIconic, IsWindow, SetWindowLongPtrW, SetWindowPos,
         GWL_EXSTYLE, GWL_STYLE, STYLESTRUCT, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOOWNERZORDER, SWP_NOSIZE, SWP_NOZORDER,
-        WM_STYLECHANGING, WS_CAPTION, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW, WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_SYSMENU,
+        WM_NCACTIVATE, WM_STYLECHANGING, WS_CAPTION, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW, WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_SYSMENU,
     };
 
     /// 子类的标识（同一个窗口上与 tao 的子类区分开）。
@@ -202,6 +208,11 @@ mod imp {
     }
 
     unsafe extern "system" fn procedure(window: HWND, message: u32, wparam: WPARAM, lparam: LPARAM, _id: usize, _data: usize) -> LRESULT {
+        if message == WM_NCACTIVATE && is_panel(window.0 as isize) {
+            // 面板没有非客户区，默认处理却会在顶上画一条小标题栏（见模块说明）：lParam 为 -1 时不重画非客户区。
+            // SAFETY：照常交给下一层窗口过程，只换掉文档允许的 lParam。
+            return unsafe { DefSubclassProc(window, message, wparam, LPARAM(-1)) };
+        }
         if message == WM_STYLECHANGING && lparam.0 != 0 && is_panel(window.0 as isize) {
             // SAFETY：WM_STYLECHANGING 的 lParam 指向系统给的 STYLESTRUCT，允许修改其中的新样式。
             let change = unsafe { &mut *(lparam.0 as *mut STYLESTRUCT) };
