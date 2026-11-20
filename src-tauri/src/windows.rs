@@ -317,7 +317,7 @@ pub fn align_sidebar(app: &AppHandle, layout: &SidebarLayout) -> AppResult<()> {
     set_bounds(&sidebar, geometry.final_x, geometry.y, geometry.width, geometry.height)?;
     // 显示着的磨砂玻璃侧栏换了主题或改了宽度：停下来之后重截背景（T101）。
     if visible {
-        crate::glass::keep_fresh(app, crate::glass::SETTLE_DELAY);
+        crate::glass::recapture_later(app, crate::glass::SETTLE_DELAY);
     }
     Ok(())
 }

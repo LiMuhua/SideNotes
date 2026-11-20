@@ -5,13 +5,16 @@
 //! 所以磨砂玻璃的侧栏窗口改为全透明，由这里截下侧栏背后的那块屏幕，缩小、模糊、加一点饱和度后交给页面，
 //! 各块把它当作背景（按窗口位置对齐，window.css 的 --glass-backdrop），块与块之间仍透出真实的桌面。
 //!
-//! 截图是静止的：侧栏显示前截一次（窗口还没出来），显示期间每隔两秒再截一次。显示期间截图时，
-//! 只在截图的一瞬间把侧栏排除在截图之外（WDA_EXCLUDEFROMCAPTURE），不影响用户自己截图；排除失败时不截，
-//! 免得把侧栏自己截进去。
+//! 截图是静止的：侧栏显示前截一次（窗口还没出来）；显示期间换了主题或改了宽度，停下来之后再截一次，这时只在截图的
+//! 一瞬间把侧栏排除在截图之外（WDA_EXCLUDEFROMCAPTURE），排除失败时不截，免得把侧栏自己截进去。
+//!
+//! 显示期间不再定时重截（第七轮反馈：磨砂玻璃的侧栏一直在闪）：改窗口的截图排除会让系统重画这个窗口，
+//! 原来每隔一两秒排除一次，侧栏就跟着闪一下。Glance 的做法相同，背后的桌面在面板还藏着的时候截。
 //!
 //! Windows 11 上改用系统合成的实时模糊（glass_live.rs，T118），这里只在它用不了时（Windows 10 等）退而求其次。
 
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -23,14 +26,16 @@ use crate::windows::{self, SIDEBAR_LABEL};
 pub const BACKDROP_EVENT: &str = "sidenotes://glass-backdrop";
 /// 发给侧栏页面：侧栏背后那块屏幕的明暗，载荷见 Tone（T131）。
 pub const TONE_EVENT: &str = "sidenotes://glass-tone";
-/// 实时模糊显示期间多久量一次背后的明暗。
+/// 实时模糊显示期间多久量一次块与块之间露出的桌面。
 const TONE_INTERVAL: Duration = Duration::from_millis(1500);
-/// 显示期间多久重截一次。
-const REFRESH_INTERVAL: Duration = Duration::from_secs(2);
 /// 显示期间换了主题或改了宽度：停下来这么久之后重截（拖动调宽时每一帧都会改，不必每帧都截）。
 pub const SETTLE_DELAY: Duration = Duration::from_millis(300);
 /// 截图先缩小这么多倍再模糊：模糊后的图没有细节，页面放大后看不出差别，处理与传给页面都快。
 const DOWNSCALE: usize = 8;
+/// 量块与块之间的桌面时，各块向外让开这么多物理像素：块的边、圆角的抗锯齿与投影不算桌面。
+const GAP_MARGIN: f32 = 4.0;
+/// 块与块之间露出的像素少于整块区域的这一份时不量（各块几乎铺满，量出来不可信）。
+const GAP_MIN_SHARE: f32 = 0.01;
 
 /// 模糊与饱和度，取自磨砂玻璃的令牌（--sn-panel-blur、--sn-panel-saturate），由页面读出后随侧栏布局传来。
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -42,6 +47,10 @@ pub struct Backdrop {
 
 static REFRESH: AtomicU64 = AtomicU64::new(0);
 static TONE_LOOP: AtomicU64 = AtomicU64::new(0);
+/// 侧栏出来之前量到的背后明暗（窗口藏着，截图里没有它，最准）。显示期间只量块与块之间露出的桌面，与它合并。
+static BASE_TONE: Mutex<Option<Tone>> = Mutex::new(None);
+/// 最近一次交给页面的明暗（变了才发）。
+static SENT_TONE: Mutex<Option<Tone>> = Mutex::new(None);
 
 /// 侧栏背后那块屏幕在玻璃里看到的明暗（T131，参考 Glance 按背后的明暗与杂乱程度调磨砂的做法）：按令牌的模糊
 /// 模糊之后，相对亮度（0–1）的第 5 与第 95 百分位。页面据此算出文字仍够清楚时块的着色能淡到多少。
@@ -49,6 +58,13 @@ static TONE_LOOP: AtomicU64 = AtomicU64::new(0);
 pub struct Tone {
     pub low: f32,
     pub high: f32,
+}
+
+impl Tone {
+    /// 合并两次测量：取更暗的暗端、更亮的亮端。范围只会变宽，页面算出的着色只会更浓，文字只会更清楚。
+    fn widen(self, other: Tone) -> Tone {
+        Tone { low: self.low.min(other.low), high: self.high.max(other.high) }
+    }
 }
 
 /* ==================== 图像处理 ==================== */
@@ -200,49 +216,119 @@ fn tone_of(bgra: &[u8], width: usize, height: usize, blur_radius: f64) -> Option
     Some(Tone { low: pick(0.05), high: pick(0.95) })
 }
 
-/// 量一次侧栏内容区背后的明暗。`visible` 时侧栏正显示着，截图的一瞬间把它排除在外；排除不了就不量。
-fn sample_tone(sidebar: &WebviewWindow, visible: bool) -> Option<Tone> {
-    let backdrop = windows::last_layout().backdrop?;
-    let rect = client_rect(sidebar)?;
-    if visible && !exclude_from_capture(sidebar, true) {
+/// 块与块之间露出的桌面的明暗（第七轮反馈：显示期间不再把侧栏排除在截图之外）：`bgra` 是侧栏内容区连同侧栏一起截下的
+/// 像素，`blocks` 是各块的矩形（内容区的物理像素，x、y、宽、高），各块向外让开 `margin` 后剩下的像素就是透过来的桌面。
+/// 不模糊，直接取相对亮度的第 5 与第 95 百分位：比玻璃里模糊过的更极端，着色只会偏浓。露出的太少时为空。
+fn gap_tone(bgra: &[u8], width: usize, height: usize, blocks: &[(f32, f32, f32, f32)], margin: f32) -> Option<Tone> {
+    if width == 0 || height == 0 || bgra.len() < width * height * 4 {
         return None;
     }
-    let pixels = grab(rect.0, rect.1, rect.2, rect.3);
-    if visible {
-        exclude_from_capture(sidebar, false);
+    let mut covered = vec![false; width * height];
+    for &(x, y, w, h) in blocks {
+        let left = ((x - margin).floor().max(0.0) as usize).min(width);
+        let top = ((y - margin).floor().max(0.0) as usize).min(height);
+        let right = ((x + w + margin).ceil().max(0.0) as usize).min(width);
+        let bottom = ((y + h + margin).ceil().max(0.0) as usize).min(height);
+        for row in top..bottom {
+            covered[row * width + left..row * width + right].fill(true);
+        }
     }
-    tone_of(&pixels?, rect.2 as usize, rect.3 as usize, backdrop.blur)
+    // 隔一个像素取一个：几十万个像素足够，量一次只要几毫秒。
+    let mut light = Vec::new();
+    for row in (0..height).step_by(2) {
+        for column in (0..width).step_by(2) {
+            let index = row * width + column;
+            if covered[index] {
+                continue;
+            }
+            let pixel = &bgra[index * 4..index * 4 + 3];
+            light.push(0.2126 * linear(f32::from(pixel[2])) + 0.7152 * linear(f32::from(pixel[1])) + 0.0722 * linear(f32::from(pixel[0])));
+        }
+    }
+    let total = width.div_ceil(2) * height.div_ceil(2);
+    if (light.len() as f32) < total as f32 * GAP_MIN_SHARE || light.is_empty() {
+        return None;
+    }
+    light.sort_by(f32::total_cmp);
+    let pick = |share: f32| light[((light.len() - 1) as f32 * share).round() as usize];
+    Some(Tone { low: pick(0.05), high: pick(0.95) })
 }
 
-/// 实时模糊打开期间（`live`），侧栏显示着时每隔 TONE_INTERVAL 量一次背后的明暗，变了才交给页面（T131）。
-/// 关掉实时模糊、换走磨砂玻璃时停下；再次调用时换成新的一轮。量的一瞬间侧栏被排除在截图之外，同 capture。
+/// 实时模糊的各块（内容区的物理像素）：列表外的块，加上列表里的卡片裁到列表的可见范围之内；列表右边一条（滚动条）
+/// 也算作块，不当桌面量。
+fn glass_rects(layout: &crate::glass_live::GlassLayout) -> Vec<(f32, f32, f32, f32)> {
+    let mut rects: Vec<(f32, f32, f32, f32)> = layout.blocks.iter().map(|block| (block.x, block.y, block.width, block.height)).collect();
+    if let Some(view) = layout.viewport {
+        let (top, bottom) = (view.y, view.y + view.height);
+        for card in &layout.cards {
+            let (y0, y1) = (card.y.max(top), (card.y + card.height).min(bottom));
+            if y1 > y0 {
+                rects.push((card.x, y0, card.width, y1 - y0));
+            }
+        }
+        let rail = 16.0_f32.min(view.width);
+        rects.push((view.x + view.width - rail, view.y, rail, view.height));
+    }
+    rects
+}
+
+/// 显示期间量一次块与块之间露出的桌面：连同侧栏一起截，不改窗口的截图排除。截到屏幕之外的部分去掉（那里是黑的）。
+fn sample_gaps(sidebar: &WebviewWindow) -> Option<Tone> {
+    let layout = crate::glass_live::last_layout()?;
+    let (x, y, width, height) = client_rect(sidebar)?;
+    let (left, top, right, bottom) = monitor_bounds(sidebar)?;
+    let (x0, y0) = (x.max(left), y.max(top));
+    let (x1, y1) = ((x + width).min(right), (y + height).min(bottom));
+    if x1 <= x0 || y1 <= y0 {
+        return None;
+    }
+    let pixels = grab(x0, y0, x1 - x0, y1 - y0)?;
+    let rects: Vec<(f32, f32, f32, f32)> = glass_rects(&layout).into_iter().map(|(rx, ry, rw, rh)| (rx - (x0 - x) as f32, ry - (y0 - y) as f32, rw, rh)).collect();
+    gap_tone(&pixels, (x1 - x0) as usize, (y1 - y0) as usize, &rects, GAP_MARGIN)
+}
+
+/// 侧栏所在屏幕的范围（物理像素：左、上、右、下）。
+fn monitor_bounds(window: &WebviewWindow) -> Option<(i32, i32, i32, i32)> {
+    let monitor = window.current_monitor().ok().flatten()?;
+    let (position, size) = (monitor.position(), monitor.size());
+    Some((position.x, position.y, position.x + size.width as i32, position.y + size.height as i32))
+}
+
+/// 把明暗交给页面（与上次相同时不发）。
+fn send_tone(app: &AppHandle, tone: Tone) {
+    let Ok(mut sent) = SENT_TONE.lock() else { return };
+    if sent.is_some_and(|last| (last.low - tone.low).abs() <= 0.01 && (last.high - tone.high).abs() <= 0.01) {
+        return;
+    }
+    *sent = Some(tone);
+    let _ = app.emit_to(SIDEBAR_LABEL, TONE_EVENT, tone);
+}
+
+/// 实时模糊打开期间（`live`），侧栏显示着时每隔 TONE_INTERVAL 量一次块与块之间露出的桌面，与侧栏出来之前量到的
+/// 明暗合并后交给页面（T131）：背后换成更亮、更杂的画面时着色跟着变浓，文字一直清楚；背后又柔和下来时着色变回去，
+/// 但不比侧栏出来时量到的更淡（块与块之间只是一部分桌面）。关掉实时模糊、换走磨砂玻璃时停下；再次调用时换成新的一轮。
 pub fn watch_tone(app: &AppHandle, live: bool) {
     let generation = TONE_LOOP.fetch_add(1, Ordering::SeqCst) + 1;
     if !live {
         return;
     }
+    // 新的一轮（页面刚打开实时模糊）：页面那边还没有明暗，下一次量到的照发。
+    if let Ok(mut sent) = SENT_TONE.lock() {
+        *sent = None;
+    }
     let app = app.clone();
-    std::thread::spawn(move || {
-        let mut last: Option<Tone> = None;
-        loop {
-            if TONE_LOOP.load(Ordering::SeqCst) != generation || !crate::glass_live::active() {
-                return;
-            }
-            let Some(sidebar) = app.get_webview_window(SIDEBAR_LABEL) else { return };
-            if sidebar.is_visible().unwrap_or(false) {
-                if let Some(tone) = sample_tone(&sidebar, true) {
-                    let changed = match last {
-                        Some(previous) => (previous.low - tone.low).abs() > 0.01 || (previous.high - tone.high).abs() > 0.01,
-                        None => true,
-                    };
-                    if changed {
-                        let _ = app.emit_to(SIDEBAR_LABEL, TONE_EVENT, tone);
-                        last = Some(tone);
-                    }
-                }
-            }
-            std::thread::sleep(TONE_INTERVAL);
+    std::thread::spawn(move || loop {
+        if TONE_LOOP.load(Ordering::SeqCst) != generation || !crate::glass_live::active() {
+            return;
         }
+        let Some(sidebar) = app.get_webview_window(SIDEBAR_LABEL) else { return };
+        if sidebar.is_visible().unwrap_or(false) {
+            if let Some(seen) = sample_gaps(&sidebar) {
+                let base = BASE_TONE.lock().ok().and_then(|slot| *slot);
+                send_tone(&app, base.map_or(seen, |base| base.widen(seen)));
+            }
+        }
+        std::thread::sleep(TONE_INTERVAL);
     });
 }
 
@@ -258,12 +344,13 @@ fn process(bgra: &[u8], width: usize, height: usize, backdrop: Backdrop) -> Stri
 
 /* ==================== 截图 ==================== */
 
-/// 截下屏幕上的一块（物理像素），返回 BGRA 像素（自上而下）。
+/// 截下屏幕上的一块（物理像素），返回 BGRA 像素（自上而下）。只用 SRCCOPY（与 Glance 相同）：加上 CAPTUREBLT 时
+/// 系统每截一次都要把指针藏一下，显示期间定时量明暗，指针停在侧栏上就跟着闪。
 #[cfg(windows)]
 fn grab(x: i32, y: i32, width: i32, height: i32) -> Option<Vec<u8>> {
     use ::windows::Win32::Graphics::Gdi::{
         BitBlt, CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GetDC, ReleaseDC, SelectObject, BITMAPINFO,
-        BITMAPINFOHEADER, BI_RGB, CAPTUREBLT, DIB_RGB_COLORS, SRCCOPY,
+        BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, SRCCOPY,
     };
     if width <= 0 || height <= 0 {
         return None;
@@ -291,7 +378,7 @@ fn grab(x: i32, y: i32, width: i32, height: i32) -> Option<Vec<u8>> {
         let pixels = match CreateDIBSection(Some(screen), &info, DIB_RGB_COLORS, &mut bits, None, 0) {
             Ok(bitmap) => {
                 let previous = SelectObject(memory, bitmap.into());
-                let copied = BitBlt(memory, 0, 0, width, height, Some(screen), x, y, SRCCOPY | CAPTUREBLT).is_ok();
+                let copied = BitBlt(memory, 0, 0, width, height, Some(screen), x, y, SRCCOPY).is_ok();
                 let pixels = (copied && !bits.is_null())
                     .then(|| std::slice::from_raw_parts(bits.cast::<u8>(), width as usize * height as usize * 4).to_vec());
                 SelectObject(memory, previous);
@@ -350,18 +437,31 @@ fn deliver(app: &AppHandle, url: Option<String>) {
     }
 }
 
-/// 侧栏显示之前（窗口还没出来）：按它将要停的位置截一次背景，之后显示期间定时重截。
+/// 侧栏显示之前（窗口还没出来）：按它将要停的位置截一次背景。窗口藏着，截图里没有它，不必排除。
 /// `x`、`y` 为外框将要停的位置，`width`、`height` 为内容区尺寸（逻辑像素，与 windows.rs 的几何相同）。
 pub fn before_show(app: &AppHandle, sidebar: &WebviewWindow, x: f64, y: f64, width: f64, height: f64) {
     let Some(backdrop) = windows::last_layout().backdrop else { return };
     if crate::glass_live::active() {
-        // 实时模糊：窗口出来之前先按将要停的位置量一次明暗（T131），块一出现就是合适的着色。
+        // 实时模糊：窗口出来之前先按将要停的位置量一次明暗（T131），块一出现就是合适的着色；显示期间以它为底，
+        // 只合并块与块之间量到的桌面（见 watch_tone）。截到屏幕之外的部分去掉（那里是黑的，会把着色算浓）。
         if !sidebar.is_visible().unwrap_or(false) {
             if let (Ok(scale), Ok(inner), Ok(outer)) = (sidebar.scale_factor(), sidebar.inner_position(), sidebar.outer_position()) {
                 let (left, top) = ((x * scale).round() as i32 + inner.x - outer.x, (y * scale).round() as i32 + inner.y - outer.y);
                 let (wide, tall) = ((width * scale).round() as i32, (height * scale).round() as i32);
-                if let Some(tone) = grab(left, top, wide, tall).and_then(|pixels| tone_of(&pixels, wide as usize, tall as usize, backdrop.blur)) {
-                    let _ = app.emit_to(SIDEBAR_LABEL, TONE_EVENT, tone);
+                let bounds = app
+                    .monitor_from_point(f64::from(left + wide / 2), f64::from(top + tall / 2))
+                    .ok()
+                    .flatten()
+                    .map(|monitor| (monitor.position().x, monitor.position().y, monitor.position().x + monitor.size().width as i32, monitor.position().y + monitor.size().height as i32));
+                let (x0, y0, x1, y1) = match bounds {
+                    Some((l, t, r, b)) => (left.max(l), top.max(t), (left + wide).min(r), (top + tall).min(b)),
+                    None => (left, top, left + wide, top + tall),
+                };
+                if let Some(tone) = grab(x0, y0, x1 - x0, y1 - y0).and_then(|pixels| tone_of(&pixels, (x1 - x0) as usize, (y1 - y0) as usize, backdrop.blur)) {
+                    if let Ok(mut base) = BASE_TONE.lock() {
+                        *base = Some(tone);
+                    }
+                    send_tone(app, tone);
                 }
             }
         }
@@ -377,33 +477,28 @@ pub fn before_show(app: &AppHandle, sidebar: &WebviewWindow, x: f64, y: f64, wid
         let visible = sidebar.is_visible().unwrap_or(false);
         deliver(app, capture(sidebar, rect, backdrop, visible));
     }
-    keep_fresh(app, REFRESH_INTERVAL);
 }
 
-/// 侧栏显示期间重截背景：等 `first` 之后截一次，之后每隔 REFRESH_INTERVAL 再截；侧栏收起或换掉磨砂玻璃后停止。
-/// 再次调用时换成新的一轮（拖动调宽时连续调用，只在停下来之后截）。
-pub fn keep_fresh(app: &AppHandle, first: Duration) {
+/// 侧栏显示期间换了主题或改了宽度：等 `delay` 之后重截一次背景（截的一瞬间把侧栏排除在截图之外）。再次调用时换成
+/// 新的一次（拖动调宽时连续调用，只在停下来之后截）。不再定时重截，见模块说明。
+pub fn recapture_later(app: &AppHandle, delay: Duration) {
     if windows::last_layout().backdrop.is_none() || crate::glass_live::active() {
         return;
     }
     let generation = REFRESH.fetch_add(1, Ordering::SeqCst) + 1;
     let app = app.clone();
     std::thread::spawn(move || {
-        let mut wait = first;
-        loop {
-            std::thread::sleep(wait);
-            wait = REFRESH_INTERVAL;
-            if REFRESH.load(Ordering::SeqCst) != generation || crate::glass_live::active() {
-                return;
-            }
-            let Some(backdrop) = windows::last_layout().backdrop else { return };
-            let Some(sidebar) = app.get_webview_window(SIDEBAR_LABEL) else { return };
-            if !sidebar.is_visible().unwrap_or(false) {
-                return;
-            }
-            if let Some(rect) = client_rect(&sidebar) {
-                deliver(&app, capture(&sidebar, rect, backdrop, true));
-            }
+        std::thread::sleep(delay);
+        if REFRESH.load(Ordering::SeqCst) != generation || crate::glass_live::active() {
+            return;
+        }
+        let Some(backdrop) = windows::last_layout().backdrop else { return };
+        let Some(sidebar) = app.get_webview_window(SIDEBAR_LABEL) else { return };
+        if !sidebar.is_visible().unwrap_or(false) {
+            return;
+        }
+        if let Some(rect) = client_rect(&sidebar) {
+            deliver(&app, capture(&sidebar, rect, backdrop, true));
         }
     });
 }
@@ -464,5 +559,52 @@ mod tests {
         assert_eq!(base64(b"Ma"), "TWE=");
         assert_eq!(base64(b"M"), "TQ==");
         assert_eq!(base64(&[0xfb, 0xff]), "+/8=");
+    }
+
+    #[test]
+    fn gap_tone_reads_only_the_desktop_between_blocks() {
+        // 40 × 40：左边 20 列是白色的块，右边是黑色的桌面。块（连同让开的边）里的白色不算，量出来全是桌面的黑。
+        let mut pixels = solid(40, 40, [0, 0, 0, 255]);
+        for row in 0..40 {
+            for column in 0..20 {
+                pixels[(row * 40 + column) * 4..(row * 40 + column) * 4 + 3].copy_from_slice(&[255, 255, 255]);
+            }
+        }
+        let tone = gap_tone(&pixels, 40, 40, &[(0.0, 0.0, 20.0, 40.0)], 2.0).expect("露出的桌面够多");
+        assert_eq!((tone.low, tone.high), (0.0, 0.0));
+        // 各块铺满时不量。
+        assert!(gap_tone(&pixels, 40, 40, &[(0.0, 0.0, 40.0, 40.0)], 0.0).is_none());
+    }
+
+    #[test]
+    fn gap_tone_takes_the_5th_and_95th_percentile_of_relative_luminance() {
+        // 桌面一半纯黑、一半纯白：暗端 0、亮端 1。
+        let mut pixels = solid(20, 20, [0, 0, 0, 255]);
+        for index in 0..200 {
+            pixels[index * 4..index * 4 + 3].copy_from_slice(&[255, 255, 255]);
+        }
+        let tone = gap_tone(&pixels, 20, 20, &[], 0.0).expect("没有块时全是桌面");
+        assert!(tone.low.abs() < 1e-6 && (tone.high - 1.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn widened_tone_keeps_the_darker_and_the_lighter_end() {
+        let shown = Tone { low: 0.1, high: 0.4 };
+        assert_eq!(shown.widen(Tone { low: 0.2, high: 0.9 }), Tone { low: 0.1, high: 0.9 });
+        assert_eq!(shown.widen(Tone { low: 0.05, high: 0.3 }), Tone { low: 0.05, high: 0.4 });
+    }
+
+    #[test]
+    fn glass_rects_clip_cards_to_the_list_and_cover_its_scrollbar() {
+        use crate::glass_live::{Block, GlassLayout};
+        let block = |x: f32, y: f32, width: f32, height: f32| Block { x, y, width, height, radius: 0.0 };
+        let layout = GlassLayout {
+            blocks: vec![block(0.0, 0.0, 100.0, 40.0)],
+            cards: vec![block(0.0, 30.0, 90.0, 60.0), block(0.0, 300.0, 90.0, 60.0)],
+            viewport: Some(block(0.0, 50.0, 100.0, 200.0)),
+        };
+        let rects = glass_rects(&layout);
+        // 列表外的块原样；第一张卡片裁到列表顶边；滚出列表的第二张不算；列表右边 16 像素算作块。
+        assert_eq!(rects, vec![(0.0, 0.0, 100.0, 40.0), (0.0, 50.0, 90.0, 40.0), (84.0, 50.0, 16.0, 200.0)]);
     }
 }

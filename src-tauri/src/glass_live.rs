@@ -18,6 +18,7 @@
 //! 命令不是 async 的，Tauri 在主线程上执行，合成对象都在主线程上创建与修改。
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 
 use serde::Deserialize;
 use tauri::{Manager, WebviewWindow};
@@ -78,7 +79,18 @@ pub fn glass_live(window: WebviewWindow, enable: bool, frost: Option<Frost>) -> 
 pub fn glass_blocks(window: WebviewWindow, layout: GlassLayout) {
     if active() && window.label() == crate::windows::SIDEBAR_LABEL {
         imp::arrange(&layout);
+        if let Ok(mut slot) = LAYOUT.lock() {
+            *slot = Some(layout);
+        }
     }
+}
+
+/// 最近一次报告的各块（明暗测量只取块与块之间露出的桌面，见 glass::watch_tone）。
+static LAYOUT: Mutex<Option<GlassLayout>> = Mutex::new(None);
+
+/// 最近一次报告的各块位置。
+pub fn last_layout() -> Option<GlassLayout> {
+    LAYOUT.lock().ok().and_then(|slot| slot.clone())
 }
 
 /// 调饱和度的颜色矩阵（Direct2D 的 5 × 4 矩阵，行是输入的 R、G、B、A 与常数项，列是输出）：
