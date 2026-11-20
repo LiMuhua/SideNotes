@@ -450,10 +450,20 @@ pub fn copy_file_paths(app: AppHandle, paths: Vec<String>) -> AppResult<bool> {
 }
 
 /// 提交退出：注销热键、隐藏窗口并结束进程。
+///
+/// 磨砂玻璃的实时模糊先在主线程上拆掉（同步命令在主线程上执行，见 glass_live::shutdown）；它的调度队列要靠消息循环
+/// 走完关闭，这时等一小会儿再退出，窗口已经藏起来，看不出差别。
 #[tauri::command]
 pub fn quit_app(app: AppHandle) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     crate::shortcuts::unregister_all(&app);
     crate::tray::hide_all(&app);
-    app.exit(0);
+    if crate::glass_live::shutdown() {
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            app.exit(0);
+        });
+    } else {
+        app.exit(0);
+    }
 }

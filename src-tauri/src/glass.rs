@@ -332,6 +332,11 @@ pub fn watch_tone(app: &AppHandle, live: bool) {
     });
 }
 
+/// 停下明暗的测量（退出前，见 glass_live::shutdown）。
+pub fn watch_tone_stop() {
+    TONE_LOOP.fetch_add(1, Ordering::SeqCst);
+}
+
 /// 截下的像素处理成页面用的背景图。
 fn process(bgra: &[u8], width: usize, height: usize, backdrop: Backdrop) -> String {
     let (mut pixels, small_width, small_height) = downscale(bgra, width, height, DOWNSCALE);

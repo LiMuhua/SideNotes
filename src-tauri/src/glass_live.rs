@@ -93,6 +93,18 @@ pub fn last_layout() -> Option<GlassLayout> {
     LAYOUT.lock().ok().and_then(|slot| slot.clone())
 }
 
+/// 退出前拆掉实时模糊（第七轮反馈 P2：磨砂玻璃主题下从托盘退出时，系统弹出「Unknown Hard Error」）。
+///
+/// 合成树与本模块建的调度队列放在主线程的线程局部变量里，原来随进程退出才释放：那时窗口已经销毁、别的线程已被结束，
+/// 释放发生在加载器锁之下，系统的合成组件随即报错（2026-11-20 验证版实测：磨砂玻璃下退出必现，没打开过实时模糊的
+/// 终端主题退出正常）。所以退出前在主线程上、窗口还在时依次关掉：先藏起并关掉合成对象，再关掉调度队列。
+/// 调度队列的关闭是异步的，要靠主线程的消息循环走完；返回 true 时调用方等一小会儿再退出。必须在主线程上调用。
+pub fn shutdown() -> bool {
+    ACTIVE.store(false, Ordering::SeqCst);
+    crate::glass::watch_tone_stop();
+    imp::shutdown()
+}
+
 /// 调饱和度的颜色矩阵（Direct2D 的 5 × 4 矩阵，行是输入的 R、G、B、A 与常数项，列是输出）：
 /// 按亮度（Rec. 709 的权重）把颜色往灰拉（小于 1）或往外推（大于 1），`saturate` 为 1 时不变。
 #[cfg_attr(not(windows), allow(dead_code))]
@@ -113,6 +125,7 @@ fn saturation_matrix(saturate: f32) -> [f32; 20] {
 #[cfg(windows)]
 mod imp {
     use std::cell::RefCell;
+    use std::mem::ManuallyDrop;
 
     use super::{Block, Frost, GlassLayout};
     use tauri::WebviewWindow;
@@ -256,7 +269,9 @@ mod imp {
     }
 
     thread_local! {
-        static LIVE: RefCell<Option<Live>> = const { RefCell::new(None) };
+        /// 合成树。用 ManuallyDrop 包着：线程局部变量的析构在进程退出时、加载器锁之下才跑，那时释放合成对象会让
+        /// 系统报错（见 super::shutdown）；正常退出前已经由 shutdown 依次关掉，万一走了别的退出路径就留给系统回收。
+        static LIVE: RefCell<Option<ManuallyDrop<Live>>> = const { RefCell::new(None) };
     }
 
     fn build(window: &WebviewWindow, frost: Frost) -> Result<Live> {
@@ -294,14 +309,14 @@ mod imp {
             let mut slot = slot.borrow_mut();
             if slot.is_none() {
                 match build(window, frost) {
-                    Ok(live) => *slot = Some(live),
+                    Ok(live) => *slot = Some(ManuallyDrop::new(live)),
                     Err(error) => {
                         crate::diag::log(format!("磨砂玻璃的实时模糊不可用，改用截图：{error}"));
                         return false;
                     }
                 }
             }
-            let Some(live) = slot.as_mut() else { return false };
+            let Some(live) = slot.as_deref_mut() else { return false };
             if live.frost != frost {
                 if let Ok(brush) = brush_for(&live.compositor, frost) {
                     for tile in live.blocks.iter().chain(live.cards.iter()) {
@@ -322,6 +337,32 @@ mod imp {
                 let _ = live.root.SetIsVisible(false);
             }
         });
+    }
+
+    /// 退出前依次关掉合成树与调度队列（见 super::shutdown），返回是否开始了调度队列的关闭。
+    pub fn shutdown() -> bool {
+        let Some(live) = LIVE.with(|slot| slot.borrow_mut().take()) else { return false };
+        let Live { _queue: queue, compositor, _target: target, root, list, brush, blocks, cards, .. } = ManuallyDrop::into_inner(live);
+        let _ = root.SetIsVisible(false);
+        drop((blocks, cards, list, brush, root));
+        let _ = target.Close();
+        drop(target);
+        let _ = compositor.Close();
+        drop(compositor);
+        let Some(queue) = queue else { return false };
+        // 关闭要靠主线程的消息循环走完；关闭的操作与队列本身都不在这里释放，进程马上退出，由系统回收。
+        let started = match queue.ShutdownQueueAsync() {
+            Ok(action) => {
+                std::mem::forget(action);
+                true
+            }
+            Err(error) => {
+                crate::diag::log(format!("磨砂玻璃的调度队列关闭失败：{error}"));
+                false
+            }
+        };
+        std::mem::forget(queue);
+        started
     }
 
     fn tile(compositor: &Compositor, brush: &CompositionBrush, parent: &ContainerVisual) -> Result<Tile> {
@@ -368,7 +409,7 @@ mod imp {
     pub fn arrange(layout: &GlassLayout) {
         LIVE.with(|slot| {
             let mut slot = slot.borrow_mut();
-            let Some(live) = slot.as_mut() else { return };
+            let Some(live) = slot.as_deref_mut() else { return };
             let result = (|| -> Result<()> {
                 sync(&live.compositor, &live.brush, &live.root, &mut live.blocks, &layout.blocks, (0.0, 0.0))?;
                 let viewport = layout.viewport.unwrap_or(Block { x: 0.0, y: 0.0, width: 0.0, height: 0.0, radius: 0.0 });
@@ -393,6 +434,10 @@ mod imp {
     }
 
     pub fn hide() {}
+
+    pub fn shutdown() -> bool {
+        false
+    }
 
     pub fn arrange(_layout: &GlassLayout) {}
 }
