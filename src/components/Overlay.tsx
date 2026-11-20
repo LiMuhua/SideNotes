@@ -29,6 +29,8 @@ const DRAG_TILT = -2.5;
 const SURFACE_FADE = 360;
 /** 交接时页面自己画外框的副本淡出的时长（毫秒），比后端去掉副本（HANDOFF_DELAY，160 毫秒）略短。 */
 const HANDOFF_FADE = 140;
+/** 拿起时副本先原样停这么久（毫秒），等真正的窗口隐身后再缩向拖影，免得两份叠在一起错开（第八轮反馈 P7）。 */
+const CONCEAL_HOLD = 60;
 const EVENTS = bridge.NOTE_WINDOW_EVENTS;
 
 /** 系统给窗口画的圆角（Windows 11，与屏幕缩放无关的像素）。 */
@@ -71,7 +73,7 @@ interface MorphPayload {
   html: string;
   from: bridge.PixelRect;
   to: bridge.PixelRect | null;
-  mode: 'open-drag' | 'open-expand' | 'close-drag' | 'close-expand' | 'surface';
+  mode: 'open-drag' | 'open-expand' | 'close-drag' | 'close-expand' | 'surface' | 'conceal';
   /** 浮现的窗口：按住 Ctrl 时它已经有一份半透明的副本，接着把那份变实（第七轮反馈 4）。 */
   label?: string;
   /** 全文浮窗展开时的连接带，与副本一起长出来（第七轮反馈 3）。 */
@@ -337,9 +339,47 @@ export function Overlay() {
       else removeConnector();
     };
 
+    // 拿起（第八轮反馈 P7）：拖出侧栏的卡片已经开在一个窗口里，这个窗口收进拖影。副本先在窗口的位置原样画出来（画好后
+    // 后端让窗口隐身，副本这时不画投影，免得与窗口的投影叠成两层），稍等一下再缩向拖影、淡出；没有拖影时原地缩小淡出。
+    // 拖动还在进行，拖影不动。
+    const onConceal = (payload: MorphPayload): void => {
+      const node = fromHtml(payload.html);
+      if (!node || reducedMotion() || typeof node.animate !== 'function') {
+        void bridge.overlayReady(payload.id);
+        void bridge.overlayDone(payload.id);
+        return;
+      }
+      applyFrameMetrics();
+      const place = toPage(payload.from);
+      node.classList.add('is-overlay-copy', 'is-landed');
+      Object.assign(node.style, { left: `${place.x}px`, top: `${place.y}px`, width: `${place.width}px`, height: `${place.height}px` });
+      layer.append(node);
+      copies.set(payload.id, node);
+      const target = ghost && ghost.style.display !== 'none' ? ghost.getBoundingClientRect() : null;
+      const end =
+        target && place.width && place.height
+          ? `translate(${target.left + target.width / 2 - (place.x + place.width / 2)}px, ${target.top + target.height / 2 - (place.y + place.height / 2)}px) ` +
+            `scale(${Math.min(target.width / place.width, 1)}, ${Math.min(target.height / place.height, 1)})`
+          : 'scale(0.96)';
+      window.requestAnimationFrame(() => window.requestAnimationFrame(() => void bridge.overlayReady(payload.id)));
+      const animation = node.animate(
+        [
+          { transformOrigin: '50% 50%', transform: 'none', opacity: 1 },
+          { transformOrigin: '50% 50%', transform: end, opacity: 0 },
+        ],
+        { duration: duration('--sn-duration-slow'), delay: CONCEAL_HOLD, easing: easing('--sn-ease-exit'), fill: 'forwards' },
+      );
+      const done = (): void => void bridge.overlayDone(payload.id);
+      animation.finished.then(done, done);
+    };
+
     const onMorph = (payload: MorphPayload): void => {
       if (payload.mode === 'surface') {
         onSurface(payload);
+        return;
+      }
+      if (payload.mode === 'conceal') {
+        onConceal(payload);
         return;
       }
       // 窗口从拖影展开：拖影交给窗口的副本。

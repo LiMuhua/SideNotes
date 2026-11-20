@@ -193,6 +193,9 @@ struct Entry {
     placement: Option<Placement>,
     /// 双击标题栏放大之前的内容区矩形。
     restore: Option<Rect>,
+    /// 被拖出侧栏的卡片「拿起」了（第八轮反馈 P7）：窗口里只有正在拖的记录，松开后它就空了，拖动期间先隐身，
+    /// 不再与拖影同时出现；取消拖动时现出来。拿起的窗口不当落点。
+    picked: bool,
 }
 
 impl Entry {
@@ -210,6 +213,7 @@ impl Entry {
             pending: None,
             placement: None,
             restore: None,
+            picked: false,
         }
     }
 }
@@ -763,6 +767,8 @@ enum Animation {
     Close { label: String, note: Option<String> },
     /// 浮现（T130）：窗口已经隐身提到最前，动画层上的副本淡入、上浮，结束后现出真正的窗口。
     Surface { label: String },
+    /// 拿起（第八轮反馈 P7）：副本画好后窗口隐身，副本收进拖影里消失。
+    Conceal { label: String },
 }
 
 fn animations() -> &'static Mutex<HashMap<u64, Animation>> {
@@ -853,7 +859,8 @@ struct MorphPayload {
     from: Rect,
     /// 关闭时卡片看不见为空：原地提起淡出。
     to: Option<Rect>,
-    /// open-drag、open-expand、close-drag、close-expand，或 surface（浮现，T130：副本在原处淡入）。
+    /// open-drag、open-expand、close-drag、close-expand，surface（浮现，T130：副本在原处淡入），或 conceal（拿起，
+    /// 第八轮反馈 P7：副本缩进拖影）。
     mode: String,
     /// 浮现的是哪个窗口：按住 Ctrl 时它在动画层上已经有一份半透明的副本（T126），接着把那份变实，不再另叠一份
     /// （第七轮反馈 4）。
@@ -927,6 +934,14 @@ fn finish_animation(app: &AppHandle, id: u64) {
             destroy(app, &label);
             if let Some(note) = note {
                 let _ = app.emit_to(SIDEBAR_LABEL, events::LAND, note);
+            }
+            let _ = app.emit_to(OVERLAY_LABEL, events::CLEAR, id);
+            overlay_release(app);
+        }
+        Animation::Conceal { label } => {
+            // 动画层没来得及回话（overlay_ready）时在这里隐身；拖动已经取消时不隐身。
+            if let Some(window) = app.get_webview_window(&label).filter(|_| still_picked(&label)) {
+                set_cloaked(&window, true);
             }
             let _ = app.emit_to(OVERLAY_LABEL, events::CLEAR, id);
             overlay_release(app);
@@ -1016,7 +1031,7 @@ impl ConnectorPayload {
 fn update_connector(app: &AppHandle) {
     let anchor = PEEK_ANCHOR.lock().ok().and_then(|slot| *slot).filter(|_| sidebar_rect(app).is_some());
     let label = with_registry(|map| {
-        map.iter().find(|(_, entry)| entry.attached && entry.phase == Phase::Open).map(|(label, _)| label.clone())
+        map.iter().find(|(_, entry)| entry.attached && entry.phase == Phase::Open && !entry.picked).map(|(label, _)| label.clone())
     });
     let ends = match (anchor, label) {
         (Some(PeekAnchor { card: Some(card), unit }), Some(label)) => app
@@ -1166,7 +1181,7 @@ pub fn touch(label: &str) {
 fn window_at(app: &AppHandle, point: (f64, f64), except: Option<&str>, bands_only: bool, reveal: bool, moving: Option<&str>) -> Option<(String, f64, f64)> {
     let candidates: Vec<(String, Vec<Rect>)> = with_registry(|map| {
         map.iter()
-            .filter(|(label, entry)| entry.phase == Phase::Open && Some(label.as_str()) != except)
+            .filter(|(label, entry)| entry.phase == Phase::Open && !entry.picked && Some(label.as_str()) != except)
             .map(|(label, entry)| (label.clone(), entry.bands.clone()))
             .collect()
     });
@@ -1293,7 +1308,7 @@ fn raise_window(app: &AppHandle, window: &WebviewWindow) {
 fn raise_note_windows(app: &AppHandle) {
     #[allow(unused_mut)]
     let mut windows: Vec<WebviewWindow> = with_registry(|map| {
-        map.iter().filter(|(_, entry)| entry.phase == Phase::Open).map(|(label, _)| label.clone()).collect::<Vec<_>>()
+        map.iter().filter(|(_, entry)| entry.phase == Phase::Open && !entry.picked).map(|(label, _)| label.clone()).collect::<Vec<_>>()
     })
     .iter()
     .filter_map(|label| app.get_webview_window(label))
@@ -1327,6 +1342,15 @@ static SURFACING: Mutex<Vec<(String, bool, Option<String>)>> = Mutex::new(Vec::n
 /// 动画层上的副本在窗口的位置慢慢淡入、轻轻上浮，结束后窗口现身、副本去掉，整个窗口一起浮现。
 /// 已经在浮现的窗口跳过（拖动中每一步都可能要求提起同一个窗口）。
 fn surface_windows(app: &AppHandle, windows: Vec<WebviewWindow>) {
+    with_copies(app, windows, |app, window, html| match html {
+        Some(html) => play_surface(app, window, html),
+        None => raise_window(app, window),
+    });
+}
+
+/// 向这些窗口要它们的副本（等满 SURFACE_WAIT 为止），拿到后在主线程上逐个交给 `then`（没拿到时 html 为空）。
+/// 已经在要副本的窗口跳过。
+fn with_copies(app: &AppHandle, windows: Vec<WebviewWindow>, then: fn(&AppHandle, &WebviewWindow, Option<String>)) {
     let labels: Vec<String> = {
         let Ok(mut pending) = SURFACING.lock() else { return };
         let fresh: Vec<String> = windows
@@ -1371,10 +1395,7 @@ fn surface_windows(app: &AppHandle, windows: Vec<WebviewWindow>) {
                 .unwrap_or_default();
             for (label, html) in copies {
                 let Some(window) = handle.get_webview_window(&label) else { continue };
-                match html {
-                    Some(html) => play_surface(&handle, &window, html),
-                    None => raise_window(&handle, &window),
-                }
+                then(&handle, &window, html);
             }
         });
     });
@@ -1602,6 +1623,8 @@ struct DragSession {
     raised: bool,
     /// 动画层上正画着被挡住窗口的虚线框（T105）。
     revealed: bool,
+    /// 拿起的窗口（第八轮反馈 P7，见 pick_up）。
+    picked: Vec<String>,
 }
 
 static DRAG: Mutex<Option<DragSession>> = Mutex::new(None);
@@ -1622,6 +1645,83 @@ struct GhostPayload {
     visible: bool,
     /// 卡片拖出了侧栏（拖影放大一点）或标签页拖到了窗口外（拆成新窗口）。
     outside: bool,
+}
+
+/// 拿起只放着正在拖的记录的窗口（第八轮反馈 P7）：这条记录已经开着时，拖出侧栏原来是拖影与窗口同时在屏幕上，
+/// 松开后新窗口打开、旧窗口才关掉，看到两份一样的东西又变成一份。现在卡片一拖出侧栏，这些窗口就收进拖影里隐身
+/// （动画层上它的副本缩向拖影、淡出），屏幕上始终只有一份；松开时在落点打开（或并进别的窗口），旧窗口随之空掉关闭；
+/// 取消拖动时原样现出来（put_back）。窗口里还有别的记录时不拿起，照旧把记录拆出来。返回拿起的窗口。
+fn pick_up(app: &AppHandle, ids: &[String]) -> Vec<String> {
+    let labels: Vec<String> = with_registry(|map| {
+        map.iter_mut()
+            .filter(|(_, entry)| entry.phase == Phase::Open && !entry.tabs.is_empty() && entry.tabs.iter().all(|id| ids.contains(id)))
+            .map(|(label, entry)| {
+                entry.picked = true;
+                label.clone()
+            })
+            .collect()
+    });
+    if labels.is_empty() {
+        return labels;
+    }
+    // 附着的全文浮窗被拿起时，连接带跟着收起。
+    update_connector(app);
+    let windows: Vec<WebviewWindow> = labels.iter().filter_map(|label| app.get_webview_window(label)).collect();
+    with_copies(app, windows, |app, window, html| {
+        // 副本送来之前拖动已经取消（put_back）：不再隐身。
+        if !still_picked(window.label()) {
+            return;
+        }
+        match html {
+            Some(html) => play_conceal(app, window, html),
+            None => set_cloaked(window, true),
+        }
+    });
+    labels
+}
+
+/// 窗口仍是拿起的（拖动还没取消）。
+fn still_picked(label: &str) -> bool {
+    with_registry(|map| map.get(label).is_some_and(|entry| entry.picked))
+}
+
+/// 取消拖动：拿起的窗口原样现出来（带浮现的动画），附着的全文浮窗连同连接带一起回来。
+fn put_back(app: &AppHandle, labels: &[String]) {
+    if labels.is_empty() {
+        return;
+    }
+    let windows: Vec<WebviewWindow> = labels
+        .iter()
+        .filter(|label| with_registry(|map| map.get(label.as_str()).is_some_and(|entry| entry.phase == Phase::Open && entry.picked)))
+        .filter_map(|label| app.get_webview_window(label))
+        .collect();
+    with_registry(|map| {
+        for label in labels {
+            if let Some(entry) = map.get_mut(label) {
+                entry.picked = false;
+            }
+        }
+    });
+    surface_windows(app, windows);
+    update_connector(app);
+}
+
+/// 拿起的动画：动画层在窗口的位置画出副本（第一帧画好后窗口隐身，见 overlay_ready），副本缩向拖影、淡出。
+/// 动画层不在时直接隐身。
+fn play_conceal(app: &AppHandle, window: &WebviewWindow, html: String) {
+    let placed = client_rect(window).and_then(|rect| {
+        let (cx, cy) = rect.center();
+        overlay_cover(app, cx, cy).map(|origin| rect.relative_to(origin))
+    });
+    let Some(rect) = placed else {
+        set_cloaked(window, true);
+        return;
+    };
+    let id = ANIMATION.fetch_add(1, Ordering::SeqCst) + 1;
+    with_animations(|map| map.insert(id, Animation::Conceal { label: window.label().into() }));
+    let payload = MorphPayload { id, html, from: rect, to: Some(rect), mode: "conceal".into(), label: Some(window.label().into()), beam: None, retract: false };
+    let _ = app.emit_to(OVERLAY_LABEL, events::MORPH, payload);
+    watchdog(app, id);
 }
 
 /// 切换正在标出合并位置的窗口：通知新的窗口，旧的收起标记，动画层上的插入线跟着清掉。
@@ -1665,6 +1765,7 @@ pub fn drag_begin(app: AppHandle, window: WebviewWindow, request: DragBegin) -> 
         last: Some(point),
         raised: false,
         revealed: false,
+        picked: Vec::new(),
     };
     if let Some(origin) = overlay_cover(&app, point.0, point.1) {
         let payload = GhostPayload {
@@ -1710,9 +1811,11 @@ pub fn drag_update(app: AppHandle, window: WebviewWindow, outside: bool, ctrl: O
         });
     }
     let reveal = ctrl.unwrap_or(false);
-    // 卡片第一次拖出侧栏：已经打开的记录窗口全部提到最前，不抢焦点（T104）。
+    // 卡片第一次拖出侧栏：拿起只放着这些记录的窗口（第八轮反馈 P7），其余已经打开的记录窗口全部提到最前，
+    // 不抢焦点（T104）。
     if session.kind == DragKind::Cards && outside && !session.raised {
         session.raised = true;
+        session.picked = pick_up(&app, &session.ids);
         raise_note_windows(&app);
     }
     let target = drop_target(&app, &session, point, outside, reveal);
@@ -1795,6 +1898,10 @@ pub fn drag_end(app: AppHandle, window: WebviewWindow, drop: bool, outside: bool
         let kind = if session.kind == DragKind::Cards { "drop" } else { "detach" };
         open(&app, ids, kind, true, Some(point), ghost, session.unit)?;
         result.opened = true;
+    }
+    // 合并或新开窗口时，拿起的窗口随之空掉、自己关闭；取消拖动（落回侧栏、按 Esc）时原样现出来。
+    if result.target.is_none() && !result.opened {
+        put_back(&app, &session.picked);
     }
     // 新开窗口时拖影留在松开处，直到窗口的打开动画接手（动画层收到形变动画时去掉拖影）。
     if !result.opened {
@@ -2226,12 +2333,18 @@ pub fn close_all_note_windows(app: AppHandle) -> bool {
 /// 动画层：关闭动画的第一帧已经画出，可以销毁窗口了（之后动画层上的副本代替窗口）。
 #[tauri::command]
 pub fn overlay_ready(app: AppHandle, id: u64) {
-    let label = with_animations(|map| match map.get(&id) {
-        Some(Animation::Close { label, .. }) => Some(label.clone()),
-        _ => None,
+    let (label, conceal) = with_animations(|map| match map.get(&id) {
+        Some(Animation::Close { label, .. }) => (Some(label.clone()), false),
+        Some(Animation::Conceal { label }) => (Some(label.clone()), true),
+        _ => (None, false),
     });
-    if let Some(label) = label {
-        if let Some(window) = app.get_webview_window(&label) {
+    if let Some(window) = label.and_then(|label| app.get_webview_window(&label)) {
+        // 拿起的窗口只隐身：取消拖动时还要原样现出来，前后次序与焦点都不变。已经取消了就不再隐身。
+        if conceal {
+            if still_picked(window.label()) {
+                set_cloaked(&window, true);
+            }
+        } else {
             hide_window(&window);
         }
     }
