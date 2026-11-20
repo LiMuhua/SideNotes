@@ -16,7 +16,7 @@ pub fn setup(app: &AppHandle) -> AppResult<()> {
     let open_capture = MenuItem::with_id(app, "tray-capture", "快捷速记", true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "tray-settings", "设置…", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
-    let quit = MenuItem::with_id(app, "tray-quit", "退出 SideNotes", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "tray-quit", "退出", true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
         &[&open_sidebar, &open_capture, &separator, &settings, &separator, &quit],
