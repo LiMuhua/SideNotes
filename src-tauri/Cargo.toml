@@ -50,6 +50,7 @@ windows = { version = "0.62", features = [
   "Win32_System_Threading",
   "Win32_System_WinRT",
   "Win32_System_WinRT_Composition",
+  "Win32_UI_Controls",
   "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",
   # 磨砂玻璃的实时模糊（T118）：侧栏窗口上挂合成树，用宿主背景画刷画背后的画面；

@@ -593,7 +593,8 @@ pub fn topmost_windows() -> Vec<String> {
 
 /// 记录窗口的置顶（T120）：置顶（或附着在卡片旁）时是面板，不进任务栏与 Alt+Tab，显示桌面时不动（见 panels），
 /// 不可最小化；取消置顶后是普通窗口，可以最小化，显示桌面时与别的窗口一起收起。置顶直接设到窗口上
-/// （tao 记着的标志可能与实际不一致）。面板先设好，之后 tao 按标志重写样式时经过面板的子类。
+/// （tao 记着的标志可能与实际不一致）。面板先设好，之后 tao 按标志重写样式时经过面板的子类；圆角、细边框与投影
+/// 也由 panels 按窗口材质请系统画（T125）。
 fn apply_topmost(window: &WebviewWindow, on: bool) {
     let was = crate::panels::set(window, on);
     crate::topmost::set_topmost(window, on);
@@ -601,18 +602,6 @@ fn apply_topmost(window: &WebviewWindow, on: bool) {
     if was != on {
         // 任务栏按钮跟着增删（显示着的窗口改样式后任务栏不会自己更新）。
         let _ = window.set_skip_taskbar(on);
-    }
-    #[cfg(windows)]
-    if on {
-        // 工具窗口不一定有系统圆角，请系统画圆角。
-        if let Ok(hwnd) = window.hwnd() {
-            use ::windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND, DWM_WINDOW_CORNER_PREFERENCE};
-            let corner: DWM_WINDOW_CORNER_PREFERENCE = DWMWCP_ROUND;
-            // SAFETY：hwnd 来自仍然存在的 Tauri 窗口；指针指向本函数内的值，大小与之匹配。
-            let _ = unsafe {
-                DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, (&corner as *const DWM_WINDOW_CORNER_PREFERENCE).cast(), std::mem::size_of_val(&corner) as u32)
-            };
-        }
     }
 }
 

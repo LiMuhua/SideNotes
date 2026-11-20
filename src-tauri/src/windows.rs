@@ -631,8 +631,10 @@ fn resize_capture(capture: &WebviewWindow, zoom: f64) -> AppResult<()> {
 /// - `acrylic`：透明窗口加亚克力，Windows 11 与磨砂玻璃。窗口本身就是面板，系统画圆角、细边框与投影。
 /// - `clear`：透明、不加材质，杂志的浮动面板。留白在窗口内、透出桌面，面板的圆角与投影由页面画，
 ///   不要系统投影：它画在整个窗口外，会在留白外圈多出一道边框。
-/// - 其余（`opaque`）：不加材质，页面铺满不透明的底色，保留系统投影。
+/// - 其余（`opaque`）：不加材质，页面铺满不透明的底色，保留系统投影。贴边的侧栏（终端、记录纸）是直角，
+///   浮动的速记浮窗与记录窗口由系统画圆角。
 ///
+/// 系统的圆角、边框与投影按 panels::Frame 画：面板没有标题栏样式，要另请 DWM 画（T125，见 panels）。
 /// 透明只能在建窗口时指定，侧栏与速记浮窗都建成透明窗口（tauri.conf.json），切换主题时只换材质。
 /// Linux 不支持材质，失败时忽略，页面仍按不透明的颜色显示。
 pub fn set_window_material(window: &WebviewWindow, material: &str) -> AppResult<()> {
@@ -643,7 +645,12 @@ pub fn set_window_material(window: &WebviewWindow, material: &str) -> AppResult<
         None
     };
     let _ = window.set_effects(effects);
-    window.set_shadow(material != "clear")?;
+    let frame = match material {
+        "clear" => crate::panels::Frame::Bare,
+        "opaque" if window.label() == SIDEBAR_LABEL => crate::panels::Frame::Square,
+        _ => crate::panels::Frame::Round,
+    };
+    crate::panels::set_frame(window, frame);
     Ok(())
 }
 
