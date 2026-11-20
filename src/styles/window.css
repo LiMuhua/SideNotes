@@ -315,6 +315,12 @@ body[data-window='note'] .note-window.is-attached > .note-window-header {
     var(--sn-color-card-head-active);
 }
 
+/* 内容变多、窗口还没按内容长高的一两帧里先不出滚动条（T128，NoteWindow.tsx 的 holdScrollbars）。编辑区的滚动
+ * 写在行内样式里（LiveEditor），这里只藏起滚动条、不改滚动方式。 */
+body[data-window='note'] .note-window[data-fitting] :is(.note-window-body, .live-markdown-editor) {
+  scrollbar-width: none;
+}
+
 .note-card.is-peeking .note-expand .icon {
   transform: rotate(180deg);
 }

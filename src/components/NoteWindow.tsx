@@ -52,6 +52,11 @@ const IMAGE_WAIT = 800;
 const MAXIMIZE_SETTLE = 120;
 /** 拖边框改大小后，最后一次大小变化过了这么久（毫秒）还没有指针回到窗口里，也算拖完（T123）。 */
 const RESIZE_SETTLE = 3000;
+/**
+ * 内容变多、窗口还没按内容长高时先不出滚动条，最长这么久（毫秒，T128）：窗口改好大小就恢复，
+ * 后端没改大小（窗口没显示、正在拖边框）时到点也恢复。
+ */
+const SCROLLBAR_HOLD = 600;
 const MARGIN = 12;
 const EDGES = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
 const EVENTS = bridge.NOTE_WINDOW_EVENTS;
@@ -525,24 +530,65 @@ export function NoteWindow() {
   // 进入、退出编辑，编辑中内容变了。没手动改过大小的窗口宽高都按内容定，编辑中宽度不变（免得每打一个字整段重排）；
   // 手动改过的以手动的大小为准：宽度不变，内容放得下就不动，放不下才长高（最高到上限），内容变少时缩回，最小回到手动的大小。
   // 长高时左上角不动，碰到工作区的底边整体往上挪（后端 note_window_fit）。
-  const refit = useCallback((): void => {
+  // 内容变多、窗口还没长高的这一两帧里，正文与编辑区先不出滚动条（T128，2026-11-19 第六轮反馈：长标题的窗口双击
+  // 进入编辑时闪过一条滚动条）：编辑区排出来比窗口高，要等下一帧量好、后端改好大小才放得下。写在区块的
+  // data-fitting 上（window.css），窗口改好大小后恢复；窗口已经长到上限时不拦，超出上限的内容照常出滚动条。
+  const holdTimer = useRef(0);
+  const releaseScrollbars = useCallback((): void => {
+    window.clearTimeout(holdTimer.current);
+    if (sectionRef.current) delete sectionRef.current.dataset.fitting;
+  }, []);
+  const holdScrollbars = useCallback((): void => {
     const section = sectionRef.current;
     const area = areaRef.current;
     if (!section || !area || !shownRef.current || closingRef.current || resizing.current) return;
+    const ratio = window.devicePixelRatio || 1;
+    const cap = Math.max(MIN_HEIGHT, Math.min((area.height / ratio) * FIT_AREA, FIT_HEIGHT), manualSize.current?.height ?? 0);
+    if (window.innerHeight >= cap - 1) return;
+    section.dataset.fitting = '';
+    window.clearTimeout(holdTimer.current);
+    holdTimer.current = window.setTimeout(releaseScrollbars, SCROLLBAR_HOLD);
+  }, [releaseScrollbars]);
+
+  const refit = useCallback((): void => {
+    const section = sectionRef.current;
+    const area = areaRef.current;
+    if (!section || !area || !shownRef.current || closingRef.current || resizing.current) {
+      releaseScrollbars();
+      return;
+    }
     const manual = manualSize.current;
     const width = manual ? manual.width : editingRef.current ? section.getBoundingClientRect().width : null;
     const size = fitSize(section, stripRef.current, area, width);
-    void bridge.fitNoteWindow(size.width, manual ? Math.max(manual.height, size.height) : size.height);
-  }, []);
+    const height = manual ? Math.max(manual.height, size.height) : size.height;
+    const unchanged = Math.abs(size.width - window.innerWidth) < 1 && Math.abs(height - window.innerHeight) < 1;
+    void bridge.fitNoteWindow(size.width, height).then(() => {
+      // 窗口改好大小（页面收到 resize）之后再恢复滚动条；大小没变时下一帧就恢复。
+      if (unchanged || !section.dataset.fitting) {
+        window.requestAnimationFrame(releaseScrollbars);
+        return;
+      }
+      const onResize = (): void => {
+        window.requestAnimationFrame(releaseScrollbars);
+      };
+      window.addEventListener('resize', onResize, { once: true });
+    });
+  }, [releaseScrollbars]);
 
   /** 编辑中内容变了：下一帧（排版好之后）重新量，同一帧里的多次变化只量一次。 */
   const requestRefit = useCallback((): void => {
+    holdScrollbars();
     if (refitFrame.current) return;
     refitFrame.current = window.requestAnimationFrame(() => {
       refitFrame.current = 0;
       refit();
     });
-  }, [refit]);
+  }, [refit, holdScrollbars]);
+
+  // 当前页、标签页或编辑状态变了：画出来之前先拦住滚动条，等下面的 effect 量好大小（T128）。
+  useLayoutEffect(() => {
+    if (fittedKey.current !== fitKey) holdScrollbars();
+  }, [fitKey, holdScrollbars]);
 
   useEffect(() => {
     const section = sectionRef.current;
@@ -587,6 +633,7 @@ export function NoteWindow() {
       window.removeEventListener('resize', onResize);
       window.removeEventListener('pointermove', onPointer, true);
       window.clearTimeout(resizeTimer.current);
+      window.clearTimeout(holdTimer.current);
       window.cancelAnimationFrame(refitFrame.current);
     };
   }, [endResizing]);
