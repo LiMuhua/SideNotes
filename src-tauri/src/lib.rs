@@ -155,6 +155,10 @@ pub fn run() {
                     note_windows::touch(window.label());
                     note_windows::refresh_connector(window.app_handle(), window.label());
                 }
+                // 重新聚焦侧栏时，打开着却看不到的设置窗口一起拉上来（第八轮反馈 3）。
+                WindowEvent::Focused(true) if window.label() == windows::SIDEBAR_LABEL => {
+                    windows::surface_settings(window.app_handle());
+                }
                 // 全文浮窗被拖边改了大小：连线跟着窗口的边走（T100）。
                 WindowEvent::Resized(_) if note_windows::is_note(window.label()) => {
                     note_windows::refresh_connector(window.app_handle(), window.label());

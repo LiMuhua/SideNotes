@@ -700,6 +700,23 @@ pub fn hide_settings(app: &AppHandle) -> AppResult<()> {
     Ok(())
 }
 
+/// 侧栏拿到焦点时，把打开着、却被最小化或被别的窗口挡住的设置窗口拉上来（第八轮反馈 3），不抢侧栏的焦点：
+/// 不激活地还原，再排到侧栏的正下方。两者都置顶，重叠时侧栏仍在上面，正在点的地方不会被设置窗口盖住。
+pub fn surface_settings(app: &AppHandle) {
+    let Some(settings) = app.get_webview_window(SETTINGS_LABEL) else { return };
+    // 关掉的设置窗口是藏起来的；最小化的窗口仍算显示着。
+    if !settings.is_visible().unwrap_or(false) {
+        return;
+    }
+    let restored = crate::topmost::restore_if_minimized(&settings);
+    if let Some(sidebar) = app.get_webview_window(SIDEBAR_LABEL) {
+        crate::topmost::place_below(&settings, &sidebar);
+    }
+    if restored {
+        notify_settings_visibility(app);
+    }
+}
+
 /// 设置窗口是否正在显示：可见且未最小化。
 fn settings_showing(app: &AppHandle) -> bool {
     app.get_webview_window(SETTINGS_LABEL)

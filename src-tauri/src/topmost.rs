@@ -153,6 +153,18 @@ pub fn set_topmost(window: &WebviewWindow, on: bool) {
     }
 }
 
+/// 把 `window` 不激活地排到 `above` 的正下方（两者都置顶时仍在置顶层里）：盖住它的别的窗口退到它后面，`above` 仍在它上面。
+pub fn place_below(window: &WebviewWindow, above: &WebviewWindow) {
+    #[cfg(windows)]
+    if let (Ok(hwnd), Ok(after)) = (window.hwnd(), above.hwnd()) {
+        use ::windows::Win32::UI::WindowsAndMessaging::{SetWindowPos, SWP_ASYNCWINDOWPOS, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE};
+        // SAFETY：两个句柄都来自仍然存在的 Tauri 窗口，其余参数都是按值传入的常量。
+        let _ = unsafe { SetWindowPos(hwnd, Some(after), 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_ASYNCWINDOWPOS) };
+    }
+    #[cfg(not(windows))]
+    let _ = (window, above);
+}
+
 /// 窗口被最小化了就不激活地还原，返回是否还原过。
 /// 还原后窗口是显示着的；调用方要按需要同步 tao 记的显示状态。
 pub fn restore_if_minimized(window: &WebviewWindow) -> bool {

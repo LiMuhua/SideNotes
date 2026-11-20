@@ -5494,8 +5494,10 @@ body.is-dragging-attachment * {
   outline: none;
 }
 
-/* 窗口本身不画焦点环：窗口打开时获得焦点，以便 Esc 关闭，不需要一圈框。 */
-.note-window:focus-visible {
+/* 窗口本身不画焦点环：窗口打开时获得焦点，以便 Esc 关闭，不需要一圈框。前面带 :root，压过「可聚焦元素
+ * 的焦点环」那一条（:root :is(..., [tabindex])，窗口的 section 带 tabindex）：原来那一条赢，焦点环画在大圆角外面，
+ * 页面自己画外框的窗口（杂志、磨砂玻璃）在四个角上多出一截强调色的弧线，窗口一获得焦点就冒出来（第八轮反馈 2）。 */
+:root .note-window:focus-visible {
   outline: none;
 }
 
