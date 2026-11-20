@@ -54,6 +54,8 @@ interface MorphPayload {
   from: bridge.PixelRect;
   to: bridge.PixelRect | null;
   mode: 'open-drag' | 'open-expand' | 'close-drag' | 'close-expand' | 'surface';
+  /** 浮现的窗口：按住 Ctrl 时它已经有一份半透明的副本，接着把那份变实（第七轮反馈 4）。 */
+  label?: string;
 }
 
 function reducedMotion(): boolean {
@@ -190,25 +192,53 @@ export function Overlay() {
       if (!indicator.isConnected) layer.append(indicator);
     };
 
+    // 被挡住的窗口的副本（T126）：按窗口的标签复用，拖动中每一步都会送来位置，只在第一次向窗口要副本的 HTML；
+    // 副本到了才淡入。窗口不再被挡住（被提到最前）或松开、放开 Ctrl 时，副本淡出后去掉；指针移进去浮现时，
+    // 这份副本直接变实，交给浮现（onSurface）。
+    const reveals = new Map<string, { node: HTMLElement | null; rect: bridge.PixelRect }>();
+    const placeReveal = (node: HTMLElement, rect: bridge.PixelRect): void => {
+      const page = toPage(rect);
+      Object.assign(node.style, { left: `${page.x}px`, top: `${page.y}px`, width: `${page.width}px`, height: `${page.height}px` });
+    };
+
     // 浮现（T130）：窗口已经隐身提到最前，副本在窗口的位置从下面一点淡入、上浮，结束后窗口现身。拖动还在进行，
-    // 拖影不动。
+    // 拖影不动。按住 Ctrl 找回的窗口（第七轮反馈 4）已经有一份半透明的副本摆在原处：不再另叠一份上浮的副本
+    // （两份一淡一显、错开几个像素，看着闪了两下），把那份从现在的透明度接着变实、颜色变回原样。
     const onSurface = (payload: MorphPayload): void => {
-      const node = fromHtml(payload.html);
+      const revealed = payload.label ? reveals.get(payload.label) : undefined;
+      if (payload.label && revealed) reveals.delete(payload.label);
+      const kept = revealed?.node ?? null;
+      const node = kept ?? fromHtml(payload.html);
       if (!node || reducedMotion() || typeof node.animate !== 'function') {
+        kept?.remove();
         void bridge.overlayDone(payload.id);
         return;
       }
       const place = toPage(payload.from);
-      node.classList.add('is-overlay-copy');
-      Object.assign(node.style, { left: `${place.x}px`, top: `${place.y}px`, width: `${place.width}px`, height: `${place.height}px` });
-      layer.append(node);
       copies.set(payload.id, node);
-      const rise = window.getComputedStyle(document.documentElement).getPropertyValue('--sn-space-3').trim() || '0px';
-      const animation = node.animate([{ opacity: 0, transform: `translateY(${rise})` }, { opacity: 1, transform: 'none' }], {
-        duration: SURFACE_FADE,
-        easing: easing('--sn-ease-standard'),
-        fill: 'forwards',
-      });
+      let frames: Keyframe[];
+      if (kept) {
+        const style = window.getComputedStyle(kept);
+        const opacity = style.opacity;
+        const filter = style.filter === 'none' ? 'saturate(1)' : style.filter;
+        kept.getAnimations().forEach((animation) => animation.cancel());
+        placeReveal(kept, payload.from);
+        frames = [
+          { opacity, filter },
+          { opacity: '1', filter: 'saturate(1)' },
+        ];
+      } else {
+        node.classList.add('is-overlay-copy');
+        Object.assign(node.style, { left: `${place.x}px`, top: `${place.y}px`, width: `${place.width}px`, height: `${place.height}px` });
+        layer.append(node);
+        // 被 Ctrl 找回、副本还没送到的窗口原地淡入，不上浮：它一直在这个位置。
+        const rise = revealed ? '0px' : window.getComputedStyle(document.documentElement).getPropertyValue('--sn-space-3').trim() || '0px';
+        frames = [
+          { opacity: 0, transform: `translateY(${rise})` },
+          { opacity: 1, transform: 'none' },
+        ];
+      }
+      const animation = node.animate(frames, { duration: SURFACE_FADE, easing: easing('--sn-ease-standard'), fill: 'forwards' });
       const done = (): void => void bridge.overlayDone(payload.id);
       animation.finished.then(done, done);
     };
@@ -272,13 +302,6 @@ export function Overlay() {
       copies.delete(id);
     };
 
-    // 被挡住的窗口的副本（T126）：按窗口的标签复用，拖动中每一步都会送来位置，只在第一次向窗口要副本的 HTML；
-    // 副本到了才淡入。窗口不再被挡住（被提到最前）或松开、放开 Ctrl 时，副本淡出后去掉。
-    const reveals = new Map<string, { node: HTMLElement | null; rect: bridge.PixelRect }>();
-    const placeReveal = (node: HTMLElement, rect: bridge.PixelRect): void => {
-      const page = toPage(rect);
-      Object.assign(node.style, { left: `${page.x}px`, top: `${page.y}px`, width: `${page.width}px`, height: `${page.height}px` });
-    };
     const onReveal = (items: bridge.RevealItem[] | null): void => {
       const list = items ?? [];
       list.forEach(({ label, rect }) => {
@@ -302,6 +325,7 @@ export function Overlay() {
           return;
         }
         const from = window.getComputedStyle(node).opacity;
+        node.getAnimations().forEach((animation) => animation.cancel());
         const fade = node.animate({ opacity: [from, '0'] }, { duration: SURFACE_FADE, easing: easing('--sn-ease-standard'), fill: 'forwards' });
         const done = (): void => node.remove();
         fade.finished.then(done, done);
@@ -316,8 +340,10 @@ export function Overlay() {
       placeReveal(node, entry.rect);
       layer.append(node);
       entry.node = node;
+      // 从全透明淡入到样式给的半透明。两端都要写：只写一个关键帧时它是终点，副本先一下子出现、再淡没、最后弹回来，
+      // 看着闪了两下（第七轮反馈 4）。
       if (!reducedMotion() && typeof node.animate === 'function') {
-        node.animate([{ opacity: 0 }], { duration: SURFACE_FADE, easing: easing('--sn-ease-standard') });
+        node.animate([{ opacity: 0 }, { opacity: window.getComputedStyle(node).opacity }], { duration: SURFACE_FADE, easing: easing('--sn-ease-standard') });
       }
     };
 

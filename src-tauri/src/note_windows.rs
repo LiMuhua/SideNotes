@@ -830,6 +830,10 @@ struct MorphPayload {
     to: Option<Rect>,
     /// open-drag、open-expand、close-drag、close-expand，或 surface（浮现，T130：副本在原处淡入）。
     mode: String,
+    /// 浮现的是哪个窗口：按住 Ctrl 时它在动画层上已经有一份半透明的副本（T126），接着把那份变实，不再另叠一份
+    /// （第七轮反馈 4）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    label: Option<String>,
 }
 
 /// 在动画层上播放打开动画：窗口的副本从 `from` 变到窗口的位置，结束后显示真正的窗口。
@@ -841,7 +845,7 @@ fn play_open(app: &AppHandle, label: &str, html: String, from: Rect, to: Rect, m
     };
     let id = ANIMATION.fetch_add(1, Ordering::SeqCst) + 1;
     with_animations(|map| map.insert(id, Animation::Open { label: label.into() }));
-    let payload = MorphPayload { id, html, from: from.relative_to(origin), to: Some(to.relative_to(origin)), mode: mode.into() };
+    let payload = MorphPayload { id, html, from: from.relative_to(origin), to: Some(to.relative_to(origin)), mode: mode.into(), label: None };
     let _ = app.emit_to(OVERLAY_LABEL, events::MORPH, payload);
     watchdog(app, id);
 }
@@ -1325,7 +1329,7 @@ fn play_surface(app: &AppHandle, window: &WebviewWindow, html: String) {
     };
     let id = ANIMATION.fetch_add(1, Ordering::SeqCst) + 1;
     with_animations(|map| map.insert(id, Animation::Surface { label: window.label().into() }));
-    let payload = MorphPayload { id, html, from: rect, to: Some(rect), mode: "surface".into() };
+    let payload = MorphPayload { id, html, from: rect, to: Some(rect), mode: "surface".into(), label: Some(window.label().into()) };
     let _ = app.emit_to(OVERLAY_LABEL, events::MORPH, payload);
     watchdog(app, id);
 }
@@ -1888,6 +1892,7 @@ pub fn note_window_close(app: AppHandle, window: WebviewWindow, snapshot: Option
         from: from.relative_to(origin),
         to: to.map(|rect| rect.relative_to(origin)),
         mode: if dragged { "close-drag".into() } else { "close-expand".into() },
+        label: None,
     };
     let _ = app.emit_to(OVERLAY_LABEL, events::MORPH, payload);
     watchdog(&app, id);
