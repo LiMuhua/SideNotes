@@ -770,10 +770,8 @@ export const NOTE_WINDOW_EVENTS = {
   peek: 'sidenotes://peek',
   /** 记录窗口：全文浮窗成为独立的窗口（T100）。 */
   detach: 'sidenotes://note-window/detach',
-  /** 记录窗口：要被提到最前了，页面先整页透明，好了调用 noteWindowSurfaceReady（浮现的第一步，T119）。 */
+  /** 记录窗口：要被提到最前了，页面把自己的副本交给 noteWindowSurfaceReady，动画层用它播放浮现（T119、T130）。 */
   surface: 'sidenotes://note-window/surface',
-  /** 记录窗口：已经提到最前，页面淡入、轻轻上浮（浮现的第二步）。 */
-  surfaced: 'sidenotes://note-window/surfaced',
   /** 记录窗口：用户开始（true）或结束（false）拖边框改大小。这是系统的拉伸，页面收不到指针事件（T123）。 */
   sizing: 'sidenotes://note-window/sizing',
   /** 动画层：按住 Ctrl 拖动时被挡住的记录窗口，载荷为矩形列表（物理像素），空列表时收起（T105）。 */
@@ -956,9 +954,9 @@ export function widenNoteWindow(delta: number): Promise<void> {
   return call<void>('note_window_widen', { delta, dpr: window.devicePixelRatio }, undefined as unknown as void);
 }
 
-/** 页面已经整页透明，可以把窗口提到最前了（浮现的第一步，T119）。 */
-export function noteWindowSurfaceReady(): Promise<void> {
-  return call<void>('note_window_surface_ready', undefined, undefined as unknown as void);
+/** 交出浮现用的副本（窗口的 HTML，减少动态效果时为 null），后端随即把窗口提到最前（T119、T130）。 */
+export function noteWindowSurfaceReady(html: string | null): Promise<void> {
+  return call<void>('note_window_surface_ready', { html }, undefined as unknown as void);
 }
 
 /**

@@ -231,28 +231,6 @@ body[data-window='note'] .note-window {
   backdrop-filter: none;
 }
 
-/* 被提到最前的记录窗口浮现（T119，2026-11-19 用户要求，不再突然闪现）：先整页透明（窗口还被别的程序挡着），
- * 提到最前之后淡入、轻轻上浮。亚克力窗口的底板由系统画，跟不了，只有内容淡入。减少动态效果时没有动画（prototype.css）。 */
-:root[data-surfacing='hidden'] body[data-window='note'] .note-window {
-  opacity: 0;
-}
-
-:root[data-surfacing='in'] body[data-window='note'] .note-window {
-  animation: note-surface var(--sn-duration-normal) var(--sn-ease-enter) both;
-}
-
-@keyframes note-surface {
-  from {
-    opacity: 0;
-    transform: translateY(var(--sn-space-3));
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
 /* 动画层：整页透明、不接收指针；拖影、插入线与窗口的副本按后端给出的位置画。 */
 body[data-window='overlay'] {
   overflow: hidden;

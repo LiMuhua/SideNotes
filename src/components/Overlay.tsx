@@ -9,6 +9,7 @@
  * - 连接带（T100、T114、T122）：附着在卡片旁的全文浮窗开着时，卡片的边与浮窗的边之间一块强调色渐变带，
  *   浮窗一边较浓、往卡片渐淡，重点落在浮窗上；出现时从卡片一边展开，收回时原路收拢。
  * - 虚线框（T105）：按住 Ctrl 拖动时，被别的程序挡住的记录窗口各画一个半透明的虚线框；指针移上去，窗口提到最前，框换成真正的窗口。
+ * - 浮现（T119、T130）：被挡住的记录窗口提到最前时，窗口先隐身，这里在窗口的位置播放它的副本淡入、上浮，结束后窗口现身。
  * 位置由后端给出（相对本窗口内容区的物理像素），除以页面像素比得到页面像素；副本的大小与来源窗口相同（同样的界面缩放）。
  */
 
@@ -18,6 +19,11 @@ import * as bridge from '../core/bridge';
 
 /** 与拖影（.card-drag-ghost）的倾斜角度一致。 */
 const DRAG_TILT = -2.5;
+/**
+ * 记录窗口浮现（T130）淡入的时长（毫秒），各主题相同：第六轮反馈要求比原来
+ * （主题的常规时长，终端只有 110 毫秒）慢一些。缓动用主题的 standard（前后都缓），不用一下子冲出来的 enter。
+ */
+const SURFACE_FADE = 360;
 const EVENTS = bridge.NOTE_WINDOW_EVENTS;
 
 interface GhostPayload {
@@ -46,7 +52,7 @@ interface MorphPayload {
   html: string;
   from: bridge.PixelRect;
   to: bridge.PixelRect | null;
-  mode: 'open-drag' | 'open-expand' | 'close-drag' | 'close-expand';
+  mode: 'open-drag' | 'open-expand' | 'close-drag' | 'close-expand' | 'surface';
 }
 
 function reducedMotion(): boolean {
@@ -181,7 +187,34 @@ export function Overlay() {
       if (!indicator.isConnected) layer.append(indicator);
     };
 
+    // 浮现（T130）：窗口已经隐身提到最前，副本在窗口的位置从下面一点淡入、上浮，结束后窗口现身。拖动还在进行，
+    // 拖影不动。
+    const onSurface = (payload: MorphPayload): void => {
+      const node = fromHtml(payload.html);
+      if (!node || reducedMotion() || typeof node.animate !== 'function') {
+        void bridge.overlayDone(payload.id);
+        return;
+      }
+      const place = toPage(payload.from);
+      node.classList.add('is-overlay-copy');
+      Object.assign(node.style, { left: `${place.x}px`, top: `${place.y}px`, width: `${place.width}px`, height: `${place.height}px` });
+      layer.append(node);
+      copies.set(payload.id, node);
+      const rise = window.getComputedStyle(document.documentElement).getPropertyValue('--sn-space-3').trim() || '0px';
+      const animation = node.animate([{ opacity: 0, transform: `translateY(${rise})` }, { opacity: 1, transform: 'none' }], {
+        duration: SURFACE_FADE,
+        easing: easing('--sn-ease-standard'),
+        fill: 'forwards',
+      });
+      const done = (): void => void bridge.overlayDone(payload.id);
+      animation.finished.then(done, done);
+    };
+
     const onMorph = (payload: MorphPayload): void => {
+      if (payload.mode === 'surface') {
+        onSurface(payload);
+        return;
+      }
       // 窗口从拖影展开：拖影交给窗口的副本。
       ghost?.remove();
       ghost = null;

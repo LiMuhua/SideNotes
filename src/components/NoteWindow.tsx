@@ -48,8 +48,6 @@ const PEEK_BLUR_DELAY = 200;
 const FIT_WRAP_SLACK = 2;
 /** 量尺寸前最多等图片加载这么久（毫秒）：窗口这时还没显示，等一会儿看不出来。 */
 const IMAGE_WAIT = 800;
-/** 浮现的淡入最长这么久（毫秒）就算结束，收不到动画结束的事件时也不会一直透明（T119）。 */
-const SURFACE_FALLBACK = 1000;
 /** 双击放大或还原后等这么久（毫秒）再读窗口的大小，记作手动的大小（T123）。 */
 const MAXIMIZE_SETTLE = 120;
 /** 拖边框改大小后，最后一次大小变化过了这么久（毫秒）还没有指针回到窗口里，也算拖完（T123）。 */
@@ -664,26 +662,11 @@ export function NoteWindow() {
         void bridge.dragIndicator(drop?.rect ?? null, drop?.horizontal ?? false);
       }),
       bridge.onWindowEvent(EVENTS.close, () => void closeWindow()),
-      // 被提到最前时浮现（T119）：先整页透明（窗口这时还被别的程序挡着），排好两帧确定已经画出透明的一帧，
-      // 再请后端提到最前；提好之后淡入、轻轻上浮（window.css 的 data-surfacing）。减少动态效果时直接提。
+      // 被提到最前时浮现（T119、T130）：交出窗口的副本，后端把窗口隐身提到最前，动画层上的副本淡入、上浮，
+      // 结束后窗口现身。减少动态效果时不交副本，直接提。
       bridge.onWindowEvent(EVENTS.surface, () => {
-        const root = document.documentElement;
-        if (reducedMotion()) {
-          void bridge.noteWindowSurfaceReady();
-          return;
-        }
-        root.dataset.surfacing = 'hidden';
-        window.requestAnimationFrame(() => window.requestAnimationFrame(() => void bridge.noteWindowSurfaceReady()));
-      }),
-      bridge.onWindowEvent(EVENTS.surfaced, () => {
-        const root = document.documentElement;
-        if (root.dataset.surfacing !== 'hidden') return;
-        root.dataset.surfacing = 'in';
-        const done = (): void => {
-          if (root.dataset.surfacing === 'in') delete root.dataset.surfacing;
-        };
-        sectionRef.current?.addEventListener('animationend', done, { once: true });
-        window.setTimeout(done, SURFACE_FALLBACK);
+        const section = sectionRef.current;
+        void bridge.noteWindowSurfaceReady(section && !reducedMotion() ? snapshotOf(section) : null);
       }),
       // 用户拖边框改大小（T123）：开始时停下按内容定大小，结束时记下手动的大小。
       bridge.onWindowEvent<boolean>(EVENTS.sizing, (active) => {

@@ -82,10 +82,8 @@ pub mod events {
     pub const CONNECTOR: &str = "sidenotes://overlay/connector";
     /// 动画层：按住 Ctrl 拖动时被挡住的记录窗口，载荷为矩形列表（相对动画层内容区的物理像素），空列表时收起（T105）。
     pub const REVEAL: &str = "sidenotes://overlay/reveal";
-    /// 记录窗口：要提到最前了，页面先整页透明，好了调用 note_window_surface_ready（浮现的第一步，T119）。
+    /// 记录窗口：要提到最前了，页面把自己的副本交给 note_window_surface_ready，动画层用它播放浮现（T119、T130）。
     pub const SURFACE: &str = "sidenotes://note-window/surface";
-    /// 记录窗口：已经提到最前，页面淡入、轻轻上浮（浮现的第二步）。
-    pub const SURFACED: &str = "sidenotes://note-window/surfaced";
     /// 记录窗口：用户开始（true）或结束（false）拖边框改大小（系统的拉伸，页面收不到指针事件，T123，见 watch_sizing）。
     pub const SIZING: &str = "sidenotes://note-window/sizing";
 }
@@ -749,6 +747,8 @@ enum Animation {
     Open { label: String },
     /// `note` 为缩回的卡片对应的记录；原地淡出时为空，侧栏没有卡片要一顿。
     Close { label: String, note: Option<String> },
+    /// 浮现（T130）：窗口已经隐身提到最前，动画层上的副本淡入、上浮，结束后现出真正的窗口。
+    Surface { label: String },
 }
 
 fn animations() -> &'static Mutex<HashMap<u64, Animation>> {
@@ -827,7 +827,7 @@ struct MorphPayload {
     from: Rect,
     /// 关闭时卡片看不见为空：原地提起淡出。
     to: Option<Rect>,
-    /// open-drag、open-expand、close-drag 或 close-expand。
+    /// open-drag、open-expand、close-drag、close-expand，或 surface（浮现，T130：副本在原处淡入）。
     mode: String,
 }
 
@@ -877,7 +877,34 @@ fn finish_animation(app: &AppHandle, id: u64) {
             let _ = app.emit_to(OVERLAY_LABEL, events::CLEAR, id);
             overlay_release(app);
         }
+        Animation::Surface { label } => {
+            // 先现出真正的窗口，等它画出来再去掉副本（与打开动画的交接相同）。
+            if let Some(window) = app.get_webview_window(&label) {
+                set_cloaked(&window, false);
+            }
+            let app = app.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(HANDOFF_DELAY);
+                let _ = app.emit_to(OVERLAY_LABEL, events::CLEAR, id);
+                overlay_release(&app);
+            });
+        }
     }
+}
+
+/// 让窗口隐身或现身（DWM 的 cloak）：隐身的窗口照常算显示着、照常排前后次序，只是不画出来。浮现时窗口先隐身
+/// 提到最前，由动画层上的副本播放淡入，结束后现身（T130），整个窗口连同系统画的边框与投影一起出现。
+fn set_cloaked(window: &WebviewWindow, cloaked: bool) {
+    #[cfg(windows)]
+    if let Ok(hwnd) = window.hwnd() {
+        use ::windows::core::BOOL;
+        use ::windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_CLOAK};
+        let value = BOOL::from(cloaked);
+        // SAFETY：hwnd 来自仍然存在的 Tauri 窗口；指针指向本函数内的 BOOL，大小与之匹配。
+        let _ = unsafe { DwmSetWindowAttribute(hwnd, DWMWA_CLOAK, (&value as *const BOOL).cast(), std::mem::size_of::<BOOL>() as u32) };
+    }
+    #[cfg(not(windows))]
+    let _ = (window, cloaked);
 }
 
 fn destroy(app: &AppHandle, label: &str) {
@@ -1174,24 +1201,27 @@ fn raise_note_windows(app: &AppHandle) {
     surface_windows(app, windows);
 }
 
-/// 等页面准备好浮现（整页透明）最多这么久（T119）：到时还没回话（页面忙）也照样提到最前。
+/// 等页面交来副本最多这么久（T119）：到时还没回话（页面忙）就不播放浮现，直接提到最前。
 const SURFACE_WAIT: Duration = Duration::from_millis(150);
 
-/// 正在浮现的窗口：标签与页面是否已经整页透明。
-static SURFACING: Mutex<Vec<(String, bool)>> = Mutex::new(Vec::new());
+/// 正在浮现的窗口：标签、页面是否已经回话、交来的副本（减少动态效果时为空）。
+static SURFACING: Mutex<Vec<(String, bool, Option<String>)>> = Mutex::new(Vec::new());
 
-/// 不激活地把这些窗口按给出的先后提到最前，带浮现动画（T119，2026-11-19 用户要求，不再突然闪现）：
-/// 先让各窗口的页面整页透明（它们这时被别的程序挡着，看不出来），都好了（或等满 SURFACE_WAIT）再一起提到最前，
-/// 然后页面淡入、轻轻上浮。已经在浮现的窗口跳过（拖动中每一步都可能要求提起同一个窗口）。
+/// 不激活地把这些窗口按给出的先后提到最前，带浮现动画（T119，2026-11-19 用户要求，不再突然闪现）。
+///
+/// 第六轮反馈（T130）：原来只让页面淡入，窗口的底色、系统画的边框与投影却一下子出现，加上主题的时长很短（终端
+/// 110 毫秒），看起来还是一闪。现在请各窗口交来自己的副本（等满 SURFACE_WAIT 为止），窗口先隐身提到最前，
+/// 动画层上的副本在窗口的位置慢慢淡入、轻轻上浮，结束后窗口现身、副本去掉，整个窗口一起浮现。
+/// 已经在浮现的窗口跳过（拖动中每一步都可能要求提起同一个窗口）。
 fn surface_windows(app: &AppHandle, windows: Vec<WebviewWindow>) {
     let labels: Vec<String> = {
         let Ok(mut pending) = SURFACING.lock() else { return };
         let fresh: Vec<String> = windows
             .iter()
             .map(|window| window.label().to_string())
-            .filter(|label| !pending.iter().any(|(item, _)| item == label))
+            .filter(|label| !pending.iter().any(|(item, ..)| item == label))
             .collect();
-        pending.extend(fresh.iter().map(|label| (label.clone(), false)));
+        pending.extend(fresh.iter().map(|label| (label.clone(), false, None)));
         fresh
     };
     if labels.is_empty() {
@@ -1206,7 +1236,7 @@ fn surface_windows(app: &AppHandle, windows: Vec<WebviewWindow>) {
         while Instant::now() < deadline {
             let ready = SURFACING
                 .lock()
-                .map(|pending| labels.iter().all(|label| pending.iter().any(|(item, ok)| item == label && *ok)))
+                .map(|pending| labels.iter().all(|label| pending.iter().any(|(item, ok, _)| item == label && *ok)))
                 .unwrap_or(true);
             if ready {
                 break;
@@ -1215,27 +1245,55 @@ fn surface_windows(app: &AppHandle, windows: Vec<WebviewWindow>) {
         }
         let handle = app.clone();
         let _ = app.run_on_main_thread(move || {
-            for label in &labels {
-                if let Some(window) = handle.get_webview_window(label) {
-                    raise_window(&handle, &window);
+            let copies: Vec<(String, Option<String>)> = SURFACING
+                .lock()
+                .map(|mut pending| {
+                    let taken = labels
+                        .iter()
+                        .map(|label| (label.clone(), pending.iter().find(|(item, ..)| item == label).and_then(|(_, _, html)| html.clone())))
+                        .collect();
+                    pending.retain(|(item, ..)| !labels.contains(item));
+                    taken
+                })
+                .unwrap_or_default();
+            for (label, html) in copies {
+                let Some(window) = handle.get_webview_window(&label) else { continue };
+                match html {
+                    Some(html) => play_surface(&handle, &window, html),
+                    None => raise_window(&handle, &window),
                 }
-            }
-            if let Ok(mut pending) = SURFACING.lock() {
-                pending.retain(|(item, _)| !labels.contains(item));
-            }
-            for label in &labels {
-                let _ = handle.emit_to(label.as_str(), events::SURFACED, ());
             }
         });
     });
 }
 
-/// 页面已经整页透明，可以提到最前了（浮现的第一步，见 surface_windows）。
+/// 浮现的动画（T130，见 surface_windows）：窗口隐身提到最前（被收起的先还原），动画层在它的位置播放副本的淡入，
+/// 结束后（finish_animation）窗口现身。动画层不在时直接提到最前。
+fn play_surface(app: &AppHandle, window: &WebviewWindow, html: String) {
+    set_cloaked(window, true);
+    raise_window(app, window);
+    let placed = client_rect(window).and_then(|rect| {
+        let (cx, cy) = rect.center();
+        overlay_cover(app, cx, cy).map(|origin| rect.relative_to(origin))
+    });
+    let Some(rect) = placed else {
+        set_cloaked(window, false);
+        return;
+    };
+    let id = ANIMATION.fetch_add(1, Ordering::SeqCst) + 1;
+    with_animations(|map| map.insert(id, Animation::Surface { label: window.label().into() }));
+    let payload = MorphPayload { id, html, from: rect, to: Some(rect), mode: "surface".into() };
+    let _ = app.emit_to(OVERLAY_LABEL, events::MORPH, payload);
+    watchdog(app, id);
+}
+
+/// 页面交来浮现用的副本（`html`，减少动态效果时为空），见 surface_windows。
 #[tauri::command]
-pub fn note_window_surface_ready(window: WebviewWindow) {
+pub fn note_window_surface_ready(window: WebviewWindow, html: Option<String>) {
     if let Ok(mut pending) = SURFACING.lock() {
-        if let Some(item) = pending.iter_mut().find(|(label, _)| label == window.label()) {
+        if let Some(item) = pending.iter_mut().find(|(label, ..)| label == window.label()) {
             item.1 = true;
+            item.2 = html;
         }
     }
 }
