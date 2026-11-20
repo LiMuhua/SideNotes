@@ -87,6 +87,8 @@ pub mod events {
     pub const SURFACE: &str = "sidenotes://note-window/surface";
     /// 记录窗口：用户开始（true）或结束（false）拖边框改大小（系统的拉伸，页面收不到指针事件，T123，见 watch_sizing）。
     pub const SIZING: &str = "sidenotes://note-window/sizing";
+    /// 记录窗口：按内容定大小已经完成（平滑变大小时是最后一帧之后），载荷为内容区的物理像素 { width, height }。
+    pub const FITTED: &str = "sidenotes://note-window/fitted";
 }
 
 /// 矩形：屏幕或窗口内的物理像素，或页面像素（由用途决定）。
@@ -2008,10 +2010,26 @@ pub fn note_window_widen(app: AppHandle, window: WebviewWindow, delta: f64, dpr:
 
 /// 按内容重新定大小（合并、切换或关掉标签页之后，T110）：`width`、`height` 为物理像素。左上角尽量不动，
 /// 超出工作区时挪回来（放不下时缩到工作区之内）；变宽后压到侧栏上时挪开（侧栏置顶，会盖住窗口）。
+/// `duration`（毫秒）不为空时平滑地变过去（第七轮反馈 5：进入编辑、内容变多时窗口一下子闪到新的大小），
+/// 缓动为 `easing` 给的三次贝塞尔曲线（主题的 standard 令牌，没给时用 CSS 的 ease）。
 #[tauri::command]
-pub fn note_window_fit(app: AppHandle, window: WebviewWindow, width: f64, height: f64, dpr: f64) -> AppResult<()> {
+pub fn note_window_fit(
+    app: AppHandle,
+    window: WebviewWindow,
+    width: f64,
+    height: f64,
+    dpr: f64,
+    duration: Option<f64>,
+    easing: Option<[f64; 4]>,
+) -> AppResult<()> {
+    // 新的请求打断还在播放的那一次，从当时的大小接着变。
+    let generation = FIT_SEQUENCE.fetch_add(1, Ordering::SeqCst) + 1;
+    if let Ok(mut map) = FIT_GENERATIONS.lock() {
+        map.get_or_insert_with(HashMap::new).insert(window.label().to_string(), generation);
+    }
     let Some(rect) = client_rect(&window) else { return Ok(()) };
     if (rect.width - width).abs() <= 2.0 && (rect.height - height).abs() <= 2.0 {
+        fitted(&window);
         return Ok(());
     }
     let Some(monitor) = monitor_at(&app, rect.center().0, rect.center().1) else { return Ok(()) };
@@ -2023,7 +2041,98 @@ pub fn note_window_fit(app: AppHandle, window: WebviewWindow, width: f64, height
             entry.restore = None;
         }
     });
-    place_client(&window, target)
+    match duration {
+        Some(duration) if duration >= 2.0 * FIT_FRAME.as_secs_f64() * 1000.0 => {
+            let curve = easing.unwrap_or([0.25, 0.1, 0.25, 1.0]);
+            animate_fit(window, rect, target, Duration::from_secs_f64(duration / 1000.0), curve, generation);
+            Ok(())
+        }
+        _ => {
+            let placed = place_client(&window, target);
+            fitted(&window);
+            placed
+        }
+    }
+}
+
+/// 告诉页面按内容定大小已经完成，带上内容区现在的大小：页面等窗口真的变到这个大小再恢复滚动条（T128）。
+fn fitted(window: &WebviewWindow) {
+    if let Some(rect) = client_rect(window) {
+        let _ = window.emit_to(window.label(), events::FITTED, serde_json::json!({ "width": rect.width, "height": rect.height }));
+    }
+}
+
+/// 按内容定大小的动画一帧的间隔（约 60 帧每秒）。
+const FIT_FRAME: Duration = Duration::from_millis(16);
+static FIT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+/// 各窗口最近一次按内容定大小的代次：动画的每一帧先对一下，被新的请求接手时停下。
+static FIT_GENERATIONS: Mutex<Option<HashMap<String, u64>>> = Mutex::new(None);
+
+/// 在后台线程里把窗口的内容区从 `from` 平滑地变到 `to`：每帧按经过的时间算位置（主线程忙时少几帧，总时长不变），
+/// 缓动按 `curve`（三次贝塞尔曲线的两个控制点）。改大小交给主线程处理，WebView 跟着重排，页面按窗口的实际大小排版。
+fn animate_fit(window: WebviewWindow, from: Rect, to: Rect, duration: Duration, curve: [f64; 4], generation: u64) {
+    std::thread::spawn(move || {
+        let label = window.label().to_string();
+        let current = || FIT_GENERATIONS.lock().ok().and_then(|map| map.as_ref().and_then(|map| map.get(&label).copied()));
+        let start = Instant::now();
+        loop {
+            if current() != Some(generation) {
+                return;
+            }
+            let progress = (start.elapsed().as_secs_f64() / duration.as_secs_f64()).min(1.0);
+            let eased = cubic_bezier(curve, progress);
+            let step = |a: f64, b: f64| a + (b - a) * eased;
+            let rect = Rect { x: step(from.x, to.x), y: step(from.y, to.y), width: step(from.width, to.width), height: step(from.height, to.height) };
+            if place_client(&window, rect).is_err() {
+                return;
+            }
+            if progress >= 1.0 {
+                fitted(&window);
+                return;
+            }
+            std::thread::sleep(FIT_FRAME);
+        }
+    });
+}
+
+/// CSS 的三次贝塞尔缓动（cubic-bezier(x1, y1, x2, y2)）在时间进度 `t`（0–1）时的值：先按横坐标解出曲线参数
+/// （牛顿法，不收敛时二分），再求纵坐标。
+fn cubic_bezier([x1, y1, x2, y2]: [f64; 4], t: f64) -> f64 {
+    if t <= 0.0 {
+        return 0.0;
+    }
+    if t >= 1.0 {
+        return 1.0;
+    }
+    let axis = |a: f64, b: f64, s: f64| 3.0 * a * s * (1.0 - s).powi(2) + 3.0 * b * s * s * (1.0 - s) + s.powi(3);
+    let slope = |a: f64, b: f64, s: f64| 3.0 * a * (1.0 - s).powi(2) + 6.0 * (b - a) * s * (1.0 - s) + 3.0 * (1.0 - b) * s * s;
+    let mut s = t;
+    for _ in 0..8 {
+        let error = axis(x1, x2, s) - t;
+        let derivative = slope(x1, x2, s);
+        if error.abs() < 1e-6 {
+            return axis(y1, y2, s);
+        }
+        if derivative.abs() < 1e-6 {
+            break;
+        }
+        s = (s - error / derivative).clamp(0.0, 1.0);
+    }
+    let (mut low, mut high) = (0.0, 1.0);
+    s = t;
+    for _ in 0..40 {
+        let value = axis(x1, x2, s);
+        if (value - t).abs() < 1e-6 {
+            break;
+        }
+        if value < t {
+            low = s;
+        } else {
+            high = s;
+        }
+        s = (low + high) / 2.0;
+    }
+    axis(y1, y2, s)
 }
 
 /// 重新定大小后的矩形：左上角不动；超出工作区的一边挪回来（留 `margin`），比工作区还大时缩小；
@@ -2189,6 +2298,22 @@ mod tests {
         assert_eq!(refit(near, (560.0, 300.0), AREA, 12.0, Some(SIDEBAR), true).x, 2160.0 - 12.0 - 560.0);
         // 比工作区还高：缩到工作区之内。
         assert_eq!(refit(rect, (400.0, 2000.0), AREA, 12.0, None, true).height, 1400.0 - 24.0);
+    }
+
+    #[test]
+    fn cubic_bezier_matches_css_easings() {
+        // linear 的控制点在对角线上：值等于时间。
+        assert!((cubic_bezier([0.0, 0.0, 1.0, 1.0], 0.3) - 0.3).abs() < 1e-4);
+        // CSS 的 ease 在一半时间时约走了 80%；两端固定在 0 与 1。
+        let ease = [0.25, 0.1, 0.25, 1.0];
+        assert!((cubic_bezier(ease, 0.5) - 0.8024).abs() < 1e-3);
+        assert_eq!(cubic_bezier(ease, 0.0), 0.0);
+        assert_eq!(cubic_bezier(ease, 1.0), 1.0);
+        // 先慢后快、先快后慢的曲线各自偏向一边，并且单调。
+        let enter = [0.0, 0.0, 0.2, 1.0];
+        assert!(cubic_bezier(enter, 0.25) > 0.25);
+        let values: Vec<f64> = (0..=20).map(|step| cubic_bezier(enter, f64::from(step) / 20.0)).collect();
+        assert!(values.windows(2).all(|pair| pair[1] >= pair[0]));
     }
 
     #[test]

@@ -774,6 +774,8 @@ export const NOTE_WINDOW_EVENTS = {
   surface: 'sidenotes://note-window/surface',
   /** 记录窗口：用户开始（true）或结束（false）拖边框改大小。这是系统的拉伸，页面收不到指针事件（T123）。 */
   sizing: 'sidenotes://note-window/sizing',
+  /** 记录窗口：按内容定大小完成（平滑变大小时在最后一帧之后），载荷为内容区的物理像素 { width, height }。 */
+  fitted: 'sidenotes://note-window/fitted',
   /** 动画层：按住 Ctrl 拖动时被挡住的记录窗口，载荷为 RevealItem 列表，空列表时收起（T105、T126）。 */
   reveal: 'sidenotes://overlay/reveal',
   /** 记录窗口（动画层发）：要画这个窗口的半透明副本，页面回 revealCopy（T126）。 */
@@ -971,11 +973,21 @@ export function noteWindowSurfaceReady(html: string | null): Promise<void> {
 
 /**
  * 合并、切换或关掉标签页之后按内容重新定大小（页面像素，T110）：左上角尽量不动，放不下时挪回工作区。
- * 与 presentNoteWindow 一样换算成物理像素再交给后端。
+ * 与 presentNoteWindow 一样换算成物理像素再交给后端。`duration`（毫秒）大于 0 时按 `easing`（三次贝塞尔曲线的
+ * 两个控制点）平滑地变过去（第七轮反馈 5），完成后窗口收到 NOTE_WINDOW_EVENTS.fitted。
  */
-export function fitNoteWindow(width: number, height: number): Promise<void> {
+export function fitNoteWindow(
+  width: number,
+  height: number,
+  duration = 0,
+  easing: [number, number, number, number] | null = null,
+): Promise<void> {
   const ratio = window.devicePixelRatio;
-  return call<void>('note_window_fit', { width: width * ratio, height: height * ratio, dpr: ratio }, undefined as unknown as void);
+  return call<void>(
+    'note_window_fit',
+    { width: width * ratio, height: height * ratio, dpr: ratio, duration: duration > 0 ? duration : null, easing },
+    undefined as unknown as void,
+  );
 }
 
 /** 关闭全部记录窗口，返回是否有窗口。 */

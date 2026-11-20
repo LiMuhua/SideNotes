@@ -22,6 +22,7 @@ import type { AttachmentReference } from '../core/attachments';
 import type { EditSession, Note, NoteImage } from '../core/types';
 import type { MarkdownEditor } from '../core/editor';
 import { useShortcut } from '../hooks/useShortcut';
+import { useEditHeight } from '../hooks/useEditHeight';
 
 export interface NoteCardProps {
   note: Note;
@@ -329,6 +330,9 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
   const isEditing = editing !== null && editing.id === note.id;
   const parsed = parse(note.text);
   const content = useRef<HTMLDivElement>(null);
+  const card = useRef<HTMLElement>(null);
+  // 进入、退出编辑时卡片高度平滑地变过去（第七轮反馈 5）。
+  useEditHeight(card, isEditing);
   const [truncated, setTruncated] = useState(() => likelyLong(note));
   const saveKeys = useShortcut('save');
 
@@ -396,6 +400,7 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
 
   return (
     <article
+      ref={card}
       className={classes}
       data-note-id={note.id}
       tabIndex={props.tabStop || isEditing ? 0 : -1}

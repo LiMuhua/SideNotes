@@ -54,9 +54,9 @@ const MAXIMIZE_SETTLE = 120;
 const RESIZE_SETTLE = 3000;
 /**
  * 内容变多、窗口还没按内容长高时先不出滚动条，最长这么久（毫秒，T128）：窗口改好大小就恢复，
- * 后端没改大小（窗口没显示、正在拖边框）时到点也恢复。
+ * 后端没改大小（窗口没显示、正在拖边框）时到点也恢复。大小平滑地变过去（第七轮反馈 5）最长约 0.4 秒，留出余量。
  */
-const SCROLLBAR_HOLD = 600;
+const SCROLLBAR_HOLD = 1000;
 const MARGIN = 12;
 const EDGES = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
 const EVENTS = bridge.NOTE_WINDOW_EVENTS;
@@ -103,6 +103,12 @@ function duration(name: string): number {
 
 function easing(name: string): string {
   return window.getComputedStyle(document.documentElement).getPropertyValue(name).trim() || 'ease';
+}
+
+/** 缓动令牌里的三次贝塞尔曲线的两个控制点；写的是关键字（ease 等）时为空，后端按 CSS 的 ease 算。 */
+function bezier(name: string): [number, number, number, number] | null {
+  const match = /cubic-bezier\(\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*\)/.exec(easing(name));
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3]), Number(match[4])] : null;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -533,9 +539,14 @@ export function NoteWindow() {
   // 内容变多、窗口还没长高的这一两帧里，正文与编辑区先不出滚动条（T128，2026-11-19 第六轮反馈：长标题的窗口双击
   // 进入编辑时闪过一条滚动条）：编辑区排出来比窗口高，要等下一帧量好、后端改好大小才放得下。写在区块的
   // data-fitting 上（window.css），窗口改好大小后恢复；窗口已经长到上限时不拦，超出上限的内容照常出滚动条。
+  // 大小平滑地变过去（第七轮反馈 5：原来一下子闪到新的大小）：当前页、标签页或编辑状态变了用主题的慢速时长，
+  // 编辑中打字长高用常规时长；后端逐帧改窗口大小，最后一帧之后发 fitted，页面等窗口真的变到那个大小再恢复滚动条。
   const holdTimer = useRef(0);
+  /** 等着的 fitted：后端报告的最终大小到了而窗口还没变到时，下一次 resize 再恢复滚动条。 */
+  const fittedSize = useRef<{ width: number; height: number } | null>(null);
   const releaseScrollbars = useCallback((): void => {
     window.clearTimeout(holdTimer.current);
+    fittedSize.current = null;
     if (sectionRef.current) delete sectionRef.current.dataset.fitting;
   }, []);
   const holdScrollbars = useCallback((): void => {
@@ -550,29 +561,49 @@ export function NoteWindow() {
     holdTimer.current = window.setTimeout(releaseScrollbars, SCROLLBAR_HOLD);
   }, [releaseScrollbars]);
 
-  const refit = useCallback((): void => {
-    const section = sectionRef.current;
-    const area = areaRef.current;
-    if (!section || !area || !shownRef.current || closingRef.current || resizing.current) {
-      releaseScrollbars();
-      return;
-    }
-    const manual = manualSize.current;
-    const width = manual ? manual.width : editingRef.current ? section.getBoundingClientRect().width : null;
-    const size = fitSize(section, stripRef.current, area, width);
-    const height = manual ? Math.max(manual.height, size.height) : size.height;
-    const unchanged = Math.abs(size.width - window.innerWidth) < 1 && Math.abs(height - window.innerHeight) < 1;
-    void bridge.fitNoteWindow(size.width, height).then(() => {
-      // 窗口改好大小（页面收到 resize）之后再恢复滚动条；大小没变时下一帧就恢复。
-      if (unchanged || !section.dataset.fitting) {
-        window.requestAnimationFrame(releaseScrollbars);
+  /** 按内容定大小：`motion` 为 state（当前页、标签页或编辑状态变了）、typing（编辑中内容变了），决定变过去的时长。 */
+  const refit = useCallback(
+    (motion: 'state' | 'typing'): void => {
+      const section = sectionRef.current;
+      const area = areaRef.current;
+      if (!section || !area || !shownRef.current || closingRef.current || resizing.current) {
+        releaseScrollbars();
         return;
       }
-      const onResize = (): void => {
-        window.requestAnimationFrame(releaseScrollbars);
-      };
-      window.addEventListener('resize', onResize, { once: true });
+      const manual = manualSize.current;
+      const width = manual ? manual.width : editingRef.current ? section.getBoundingClientRect().width : null;
+      const size = fitSize(section, stripRef.current, area, width);
+      const height = manual ? Math.max(manual.height, size.height) : size.height;
+      const unchanged = Math.abs(size.width - window.innerWidth) < 1 && Math.abs(height - window.innerHeight) < 1;
+      const time = reducedMotion() ? 0 : duration(motion === 'state' ? '--sn-duration-slow' : '--sn-duration-normal');
+      void bridge.fitNoteWindow(size.width, height, unchanged ? 0 : time, bezier('--sn-ease-standard')).then(() => {
+        if (unchanged) window.requestAnimationFrame(releaseScrollbars);
+      });
+    },
+    [releaseScrollbars],
+  );
+
+  // 后端定完大小（平滑变大小的最后一帧之后）：窗口已经是那个大小就在下一帧恢复滚动条，否则等它变过去。
+  useEffect(() => {
+    const matches = (size: { width: number; height: number }): boolean => {
+      const ratio = window.devicePixelRatio || 1;
+      return Math.abs(window.innerWidth * ratio - size.width) <= 2 && Math.abs(window.innerHeight * ratio - size.height) <= 2;
+    };
+    const onResize = (): void => {
+      const size = fittedSize.current;
+      if (size && matches(size)) window.requestAnimationFrame(releaseScrollbars);
+    };
+    window.addEventListener('resize', onResize);
+    const fitted = bridge.onWindowEvent<{ width: number; height: number }>(EVENTS.fitted, (size) => {
+      if (!sectionRef.current?.dataset.fitting) return;
+      if (matches(size)) window.requestAnimationFrame(releaseScrollbars);
+      else fittedSize.current = size;
     });
+    const dispose = bridge.subscribeAll([fitted]);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      dispose();
+    };
   }, [releaseScrollbars]);
 
   /** 编辑中内容变了：下一帧（排版好之后）重新量，同一帧里的多次变化只量一次。 */
@@ -581,7 +612,7 @@ export function NoteWindow() {
     if (refitFrame.current) return;
     refitFrame.current = window.requestAnimationFrame(() => {
       refitFrame.current = 0;
-      refit();
+      refit('typing');
     });
   }, [refit, holdScrollbars]);
 
@@ -598,7 +629,7 @@ export function NoteWindow() {
     void settleImages(section, IMAGE_WAIT).then(() => {
       if (cancelled || closingRef.current) return;
       fittedKey.current = fitKey;
-      refit();
+      refit('state');
     });
     return () => {
       cancelled = true;
