@@ -16,6 +16,10 @@
 //! 块的边上不会因为模糊到外面的透明而发暗）。效果用 Direct2D 效果的编号与参数描述，交给合成器在 GPU 上算。
 //! 合成器不支持某个效果时依次退回只模糊、只用宿主背景。
 //! 命令不是 async 的，Tauri 在主线程上执行，合成对象都在主线程上创建与修改。
+//!
+//! 磨砂玻璃的记录窗口（第八轮反馈 2）也用这里：窗口全透明，页面自己画主题的大圆角与边框，后端在窗口下面摆一块
+//! 同样圆角的实时模糊。原来用系统的亚克力，系统只给窗口画 8 像素的小圆角，展开全文时副本是卡片的大圆角，换成真正的
+//! 窗口时一下子变成小圆角。每个窗口各有一棵合成树，合成器与调度队列共用一份。
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -57,32 +61,96 @@ pub struct Frost {
     pub saturate: f32,
 }
 
-/// 打开或关掉实时模糊（换到磨砂玻璃或换走时，页面调用），返回是否能用。打开失败时页面用截图。
+/// 打开或关掉实时模糊（换到磨砂玻璃或换走时，页面调用），返回是否能用。侧栏打开失败时页面用截图，记录窗口用系统的亚克力。
 #[tauri::command]
 pub fn glass_live(window: WebviewWindow, enable: bool, frost: Option<Frost>) -> bool {
-    if window.label() != crate::windows::SIDEBAR_LABEL {
+    let sidebar = window.label() == crate::windows::SIDEBAR_LABEL;
+    if !sidebar && !crate::note_windows::is_note(window.label()) {
         return false;
     }
     let frost = frost.unwrap_or(Frost { blur: 0.0, saturate: 1.0 });
     let live = enable && imp::show(&window, frost);
     if !enable {
-        imp::hide();
+        imp::hide(window.label());
     }
-    ACTIVE.store(live, Ordering::SeqCst);
-    // 实时模糊打开期间定时量一次背后的明暗，页面按它调块的着色（T131，见 glass::watch_tone）；关掉时停下。
-    crate::glass::watch_tone(window.app_handle(), live);
+    if sidebar {
+        ACTIVE.store(live, Ordering::SeqCst);
+        // 实时模糊打开期间定时量一次背后的明暗，页面按它调块的着色（T131，见 glass::watch_tone）；关掉时停下。
+        crate::glass::watch_tone(window.app_handle(), live);
+    }
     live
 }
 
 /// 页面报告各块的位置（变了才报告）。
 #[tauri::command]
 pub fn glass_blocks(window: WebviewWindow, layout: GlassLayout) {
-    if active() && window.label() == crate::windows::SIDEBAR_LABEL {
-        imp::arrange(&layout);
+    let sidebar = window.label() == crate::windows::SIDEBAR_LABEL;
+    if sidebar && !active() {
+        return;
+    }
+    imp::arrange(window.label(), &layout);
+    if sidebar {
         if let Ok(mut slot) = LAYOUT.lock() {
             *slot = Some(layout);
         }
     }
+}
+
+/// 记录窗口销毁后拆掉它的合成树（主线程上调用）。
+pub fn forget(label: &str) {
+    imp::forget(label);
+}
+
+/// 记录窗口显示出来以后：合成树是在窗口藏着时建的（备用窗口），宿主背景画成一片黑，重建一次。交给主线程执行。
+pub fn refresh_later(window: &WebviewWindow) {
+    let handle = window.clone();
+    let _ = window.run_on_main_thread(move || imp::refresh(&handle));
+}
+
+/// 磨砂玻璃的记录窗口改了大小（后端摆放、按内容伸缩的每一帧）：整个窗口那一块跟着变，不等页面量出来再报告
+/// （页面藏着时不量，伸缩时晚一两帧，下边露出一条没有磨砂的）。交给主线程执行。
+pub fn fit_window(window: &WebviewWindow, width: f64, height: f64) {
+    let label = window.label().to_string();
+    let apply = move || imp::fit_window(&label, width as f32, height as f32);
+    if on_window_thread(window) {
+        apply();
+    } else {
+        let _ = window.run_on_main_thread(apply);
+    }
+}
+
+/// 窗口的实时模糊是不是在它藏着时建的，显示之前要重建（主线程上调用）。
+pub fn stale(window: &WebviewWindow) -> bool {
+    imp::stale(window.label())
+}
+
+/// 马上重建（主线程上调用，窗口要已经显示着，可以是隐身的）。
+pub fn refresh_now(window: &WebviewWindow) {
+    imp::refresh(window);
+}
+
+/// 记录窗口显示之前：藏着时建的合成树先藏起（不然显示的第一帧画出一片黑），显示之后由 refresh_later 重建。
+/// 在主线程上时直接执行，否则交给主线程（排在之后的显示前面）。
+pub fn hide_stale(window: &WebviewWindow) {
+    if on_window_thread(window) {
+        imp::hide_stale(window.label());
+        return;
+    }
+    let label = window.label().to_string();
+    let _ = window.run_on_main_thread(move || imp::hide_stale(&label));
+}
+
+/// 当前线程是不是窗口所在的线程（主线程）。
+fn on_window_thread(window: &WebviewWindow) -> bool {
+    #[cfg(windows)]
+    if let Ok(hwnd) = window.hwnd() {
+        use ::windows::Win32::System::Threading::GetCurrentThreadId;
+        use ::windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
+        // SAFETY：只读查询窗口所属的线程。
+        return unsafe { GetWindowThreadProcessId(hwnd, None) } == unsafe { GetCurrentThreadId() };
+    }
+    let _ = window;
+    false
 }
 
 /// 最近一次报告的各块（明暗测量只取块与块之间露出的桌面，见 glass::watch_tone）。
@@ -252,46 +320,69 @@ mod imp {
         shape: CompositionRoundedRectangleGeometry,
     }
 
-    /// 侧栏窗口上的合成树。
-    struct Live {
+    /// 各窗口共用的合成器。
+    struct Shared {
         /// 主线程原来没有调度队列时由这里建的，合成器要靠它（随进程退出）。
         _queue: Option<DispatcherQueueController>,
         compositor: Compositor,
+    }
+
+    /// 一个窗口上的合成树（侧栏或磨砂玻璃的记录窗口）。
+    struct Live {
         _target: DesktopWindowTarget,
         root: ContainerVisual,
-        /// 记录卡片的容器：摆在列表的可见范围上，裁掉滚出列表的部分。
+        /// 记录卡片的容器：摆在列表的可见范围上，裁掉滚出列表的部分（只有侧栏用）。
         list: ContainerVisual,
         brush: CompositionBrush,
         /// 画刷按它建的：页面换了令牌（换主题明暗、换屏幕缩放）时重建。
         frost: Frost,
         blocks: Vec<Tile>,
         cards: Vec<Tile>,
+        /// 建的时候窗口是显示着的。藏着的窗口（备用的记录窗口）上建的合成树，宿主背景画出来是一片黑（2026-11-20 验证版
+        /// 实测），显示出来以后要重建一次（refresh）。
+        built_visible: bool,
+        /// 最近一次摆放的各块，重建后照着再摆。
+        layout: Option<GlassLayout>,
     }
 
     thread_local! {
-        /// 合成树。用 ManuallyDrop 包着：线程局部变量的析构在进程退出时、加载器锁之下才跑，那时释放合成对象会让
-        /// 系统报错（见 super::shutdown）；正常退出前已经由 shutdown 依次关掉，万一走了别的退出路径就留给系统回收。
-        static LIVE: RefCell<Option<ManuallyDrop<Live>>> = const { RefCell::new(None) };
+        /// 合成器与各窗口（按标签）的合成树。用 ManuallyDrop 包着：线程局部变量的析构在进程退出时、加载器锁之下才跑，
+        /// 那时释放合成对象会让系统报错（见 super::shutdown）；正常退出前已经由 shutdown 依次关掉，万一走了别的退出路径
+        /// 就留给系统回收。
+        static SHARED: RefCell<Option<ManuallyDrop<Shared>>> = const { RefCell::new(None) };
+        static LIVES: RefCell<Vec<(String, ManuallyDrop<Live>)>> = const { RefCell::new(Vec::new()) };
     }
 
-    fn build(window: &WebviewWindow, frost: Frost) -> Result<Live> {
+    /// 共用的合成器（第一次时建起来）。
+    fn shared() -> Result<Compositor> {
+        SHARED.with(|slot| {
+            let mut slot = slot.borrow_mut();
+            if let Some(shared) = slot.as_deref() {
+                return Ok(shared.compositor.clone());
+            }
+            // 合成器要求所在线程有调度队列；主线程已经有了（别的组件建过）时建会失败，用原来的就行。
+            let options = DispatcherQueueOptions {
+                dwSize: std::mem::size_of::<DispatcherQueueOptions>() as u32,
+                threadType: DQTYPE_THREAD_CURRENT,
+                apartmentType: DQTAT_COM_NONE,
+            };
+            // SAFETY：在当前线程（主线程）上建调度队列，参数是本函数内的结构体。
+            let queue = unsafe { CreateDispatcherQueueController(options) }.ok();
+            let compositor = Compositor::new()?;
+            *slot = Some(ManuallyDrop::new(Shared { _queue: queue, compositor: compositor.clone() }));
+            Ok(compositor)
+        })
+    }
+
+    fn build(window: &WebviewWindow, compositor: &Compositor, frost: Frost) -> Result<Live> {
         let hwnd = window.hwnd().map_err(|_| ::windows::core::Error::from(::windows::Win32::Foundation::E_HANDLE))?;
-        // Windows 11（22000）起才有这一项；更早的系统在这里失败，页面退回截图。
+        // Windows 11（22000）起才有这一项；更早的系统在这里失败，页面退回截图或亚克力。
         let enable = BOOL::from(true);
         // SAFETY：指针指向本函数内的 BOOL，大小与之匹配。
         unsafe { DwmSetWindowAttribute(hwnd, DWMWA_USE_HOSTBACKDROPBRUSH, (&enable as *const BOOL).cast(), std::mem::size_of::<BOOL>() as u32)? };
-        // 合成器要求所在线程有调度队列；主线程已经有了（别的组件建过）时建会失败，用原来的就行。
-        let options = DispatcherQueueOptions {
-            dwSize: std::mem::size_of::<DispatcherQueueOptions>() as u32,
-            threadType: DQTYPE_THREAD_CURRENT,
-            apartmentType: DQTAT_COM_NONE,
-        };
-        // SAFETY：在当前线程（主线程）上建调度队列，参数是本函数内的结构体。
-        let queue = unsafe { CreateDispatcherQueueController(options) }.ok();
-        let compositor = Compositor::new()?;
         let interop: ICompositorDesktopInterop = compositor.cast()?;
         // 第二个参数为 false：合成树画在窗口的子窗口（WebView）下面，页面盖在上面。
-        // SAFETY：hwnd 来自仍然存在的侧栏窗口。
+        // SAFETY：hwnd 来自仍然存在的窗口。
         let target = unsafe { interop.CreateDesktopWindowTarget(hwnd, false)? };
         let root = compositor.CreateContainerVisual()?;
         root.SetRelativeSizeAdjustment(Vector2 { X: 1.0, Y: 1.0 })?;
@@ -299,26 +390,35 @@ mod imp {
         let list = compositor.CreateContainerVisual()?;
         list.SetClip(&compositor.CreateInsetClip()?)?;
         root.Children()?.InsertAtTop(&list)?;
-        let brush = brush_for(&compositor, frost)?;
-        Ok(Live { _queue: queue, compositor, _target: target, root, list, brush, frost, blocks: Vec::new(), cards: Vec::new() })
+        let brush = brush_for(compositor, frost)?;
+        let built_visible = window.is_visible().unwrap_or(false);
+        Ok(Live { _target: target, root, list, brush, frost, blocks: Vec::new(), cards: Vec::new(), built_visible, layout: None })
     }
 
-    /// 显示合成树（第一次时建起来），返回是否能用。效果的参数变了时换画刷。
+    /// 显示窗口的合成树（第一次时建起来），返回是否能用。效果的参数变了时换画刷。
     pub fn show(window: &WebviewWindow, frost: Frost) -> bool {
-        LIVE.with(|slot| {
-            let mut slot = slot.borrow_mut();
-            if slot.is_none() {
-                match build(window, frost) {
-                    Ok(live) => *slot = Some(ManuallyDrop::new(live)),
+        let label = window.label().to_string();
+        let compositor = match shared() {
+            Ok(compositor) => compositor,
+            Err(error) => {
+                crate::diag::log(format!("磨砂玻璃的实时模糊不可用：{error}"));
+                return false;
+            }
+        };
+        LIVES.with(|lives| {
+            let mut lives = lives.borrow_mut();
+            if !lives.iter().any(|(item, _)| *item == label) {
+                match build(window, &compositor, frost) {
+                    Ok(live) => lives.push((label.clone(), ManuallyDrop::new(live))),
                     Err(error) => {
-                        crate::diag::log(format!("磨砂玻璃的实时模糊不可用，改用截图：{error}"));
+                        crate::diag::log(format!("窗口 {label} 的实时模糊不可用：{error}"));
                         return false;
                     }
                 }
             }
-            let Some(live) = slot.as_deref_mut() else { return false };
+            let Some((_, live)) = lives.iter_mut().find(|(item, _)| *item == label) else { return false };
             if live.frost != frost {
-                if let Ok(brush) = brush_for(&live.compositor, frost) {
+                if let Ok(brush) = brush_for(&compositor, frost) {
                     for tile in live.blocks.iter().chain(live.cards.iter()) {
                         let _ = tile.sprite.SetBrush(&brush);
                     }
@@ -330,23 +430,98 @@ mod imp {
         })
     }
 
-    /// 藏起合成树（换到别的主题）。
-    pub fn hide() {
-        LIVE.with(|slot| {
-            if let Some(live) = slot.borrow().as_ref() {
+    /// 藏起窗口的合成树（换到别的主题）。
+    pub fn hide(label: &str) {
+        LIVES.with(|lives| {
+            if let Some((_, live)) = lives.borrow().iter().find(|(item, _)| item == label) {
                 let _ = live.root.SetIsVisible(false);
             }
         });
     }
 
-    /// 退出前依次关掉合成树与调度队列（见 super::shutdown），返回是否开始了调度队列的关闭。
-    pub fn shutdown() -> bool {
-        let Some(live) = LIVE.with(|slot| slot.borrow_mut().take()) else { return false };
-        let Live { _queue: queue, compositor, _target: target, root, list, brush, blocks, cards, .. } = ManuallyDrop::into_inner(live);
+    /// 拆掉一棵合成树：先藏起，释放各块，再关掉窗口目标。
+    fn close(live: Live) {
+        let Live { _target: target, root, list, brush, blocks, cards, .. } = live;
         let _ = root.SetIsVisible(false);
         drop((blocks, cards, list, brush, root));
         let _ = target.Close();
-        drop(target);
+    }
+
+    /// 窗口销毁后拆掉它的合成树。
+    pub fn forget(label: &str) {
+        let taken = LIVES.with(|lives| {
+            let mut lives = lives.borrow_mut();
+            let index = lives.iter().position(|(item, _)| item == label)?;
+            Some(lives.remove(index).1)
+        });
+        if let Some(live) = taken {
+            close(ManuallyDrop::into_inner(live));
+        }
+    }
+
+    /// 记录窗口只有铺满窗口的一块：改成新的大小再摆（见 super::fit_window）。
+    pub fn fit_window(label: &str, width: f32, height: f32) {
+        let layout = LIVES.with(|lives| {
+            let lives = lives.borrow();
+            let (_, live) = lives.iter().find(|(item, _)| item == label)?;
+            let mut layout = live.layout.clone()?;
+            let [block] = layout.blocks.as_mut_slice() else { return None };
+            if block.x != 0.0 || block.y != 0.0 || (block.width == width && block.height == height) {
+                return None;
+            }
+            block.width = width;
+            block.height = height;
+            Some(layout)
+        });
+        if let Some(layout) = layout {
+            arrange(label, &layout);
+        }
+    }
+
+    /// 窗口的合成树是在它藏着时建的。
+    pub fn stale(label: &str) -> bool {
+        LIVES.with(|lives| lives.borrow().iter().any(|(item, live)| item == label && !live.built_visible))
+    }
+
+    /// 藏着时建的合成树先藏起（见 super::hide_stale）。
+    pub fn hide_stale(label: &str) {
+        LIVES.with(|lives| {
+            if let Some((_, live)) = lives.borrow().iter().find(|(item, live)| item == label && !live.built_visible) {
+                let _ = live.root.SetIsVisible(false);
+            }
+        });
+    }
+
+    /// 窗口显示出来以后：合成树是在它藏着时建的，就重建一次并照原来的位置摆好（见 Live::built_visible）。
+    pub fn refresh(window: &WebviewWindow) {
+        let label = window.label();
+        if !window.is_visible().unwrap_or(false) {
+            return;
+        }
+        let stale = LIVES.with(|lives| {
+            let mut lives = lives.borrow_mut();
+            let index = lives.iter().position(|(item, live)| item == label && !live.built_visible)?;
+            Some(lives.remove(index).1)
+        });
+        let Some(stale) = stale else { return };
+        let stale = ManuallyDrop::into_inner(stale);
+        let (frost, layout) = (stale.frost, stale.layout.clone());
+        close(stale);
+        if show(window, frost) {
+            if let Some(layout) = layout {
+                arrange(label, &layout);
+            }
+        }
+    }
+
+    /// 退出前依次关掉各窗口的合成树、合成器与调度队列（见 super::shutdown），返回是否开始了调度队列的关闭。
+    pub fn shutdown() -> bool {
+        let lives = LIVES.with(|lives| std::mem::take(&mut *lives.borrow_mut()));
+        for (_, live) in lives {
+            close(ManuallyDrop::into_inner(live));
+        }
+        let Some(shared) = SHARED.with(|slot| slot.borrow_mut().take()) else { return false };
+        let Shared { _queue: queue, compositor } = ManuallyDrop::into_inner(shared);
         let _ = compositor.Close();
         drop(compositor);
         let Some(queue) = queue else { return false };
@@ -405,17 +580,21 @@ mod imp {
         Ok(())
     }
 
-    /// 按页面报告的位置摆好各块。
-    pub fn arrange(layout: &GlassLayout) {
-        LIVE.with(|slot| {
-            let mut slot = slot.borrow_mut();
-            let Some(live) = slot.as_deref_mut() else { return };
+    /// 按页面报告的位置摆好窗口里的各块。
+    pub fn arrange(label: &str, layout: &GlassLayout) {
+        let Ok(compositor) = shared() else { return };
+        LIVES.with(|lives| {
+            let mut lives = lives.borrow_mut();
+            let Some((_, live)) = lives.iter_mut().find(|(item, _)| item == label) else { return };
+            // 先解开 ManuallyDrop，下面才能同时借用各字段。
+            let live: &mut Live = live;
+            live.layout = Some(layout.clone());
             let result = (|| -> Result<()> {
-                sync(&live.compositor, &live.brush, &live.root, &mut live.blocks, &layout.blocks, (0.0, 0.0))?;
+                sync(&compositor, &live.brush, &live.root, &mut live.blocks, &layout.blocks, (0.0, 0.0))?;
                 let viewport = layout.viewport.unwrap_or(Block { x: 0.0, y: 0.0, width: 0.0, height: 0.0, radius: 0.0 });
                 live.list.SetOffset(Vector3 { X: viewport.x, Y: viewport.y, Z: 0.0 })?;
                 live.list.SetSize(Vector2 { X: viewport.width.max(0.0), Y: viewport.height.max(0.0) })?;
-                sync(&live.compositor, &live.brush, &live.list, &mut live.cards, &layout.cards, (viewport.x, viewport.y))
+                sync(&compositor, &live.brush, &live.list, &mut live.cards, &layout.cards, (viewport.x, viewport.y))
             })();
             if let Err(error) = result {
                 crate::diag::log(format!("磨砂玻璃的实时模糊摆放失败：{error}"));
@@ -433,13 +612,25 @@ mod imp {
         false
     }
 
-    pub fn hide() {}
+    pub fn hide(_label: &str) {}
+
+    pub fn forget(_label: &str) {}
+
+    pub fn refresh(_window: &WebviewWindow) {}
+
+    pub fn hide_stale(_label: &str) {}
+
+    pub fn stale(_label: &str) -> bool {
+        false
+    }
+
+    pub fn fit_window(_label: &str, _width: f32, _height: f32) {}
 
     pub fn shutdown() -> bool {
         false
     }
 
-    pub fn arrange(_layout: &GlassLayout) {}
+    pub fn arrange(_label: &str, _layout: &GlassLayout) {}
 }
 
 #[cfg(test)]

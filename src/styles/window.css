@@ -258,6 +258,23 @@ body[data-window='overlay'] .overlay-layer {
   pointer-events: none;
 }
 
+/* 副本照真正的窗口画外框（第八轮反馈 2）：系统画外框的窗口（data-frame="system"，不透明与亚克力）是系统的小圆角与
+ * 一个物理像素的细边框（Overlay.tsx 按字号与屏幕缩放写入），投影先由副本画，窗口显示出来（is-landed）就去掉，免得与
+ * 系统的投影叠成两层、一深一浅地闪（P6）。页面自己画外框的透明窗口（data-frame="page"，杂志与磨砂玻璃）画不出窗口外的
+ * 投影，副本也不画，只留顶边的受光。原来副本是主题的圆角、边框与投影，换成真正的窗口时外框一下子变了。 */
+body[data-window='overlay'] .note-window.is-overlay-copy[data-frame='system'] {
+  border-width: var(--copy-device-pixel);
+  border-radius: var(--copy-system-radius);
+}
+
+body[data-window='overlay'] .note-window.is-overlay-copy[data-frame='system'].is-landed {
+  box-shadow: none;
+}
+
+body[data-window='overlay'] .note-window.is-overlay-copy[data-frame='page'] {
+  box-shadow: inset 0 var(--sn-border-width) 0 var(--sn-color-edge-highlight);
+}
+
 /* 全文浮窗与卡片之间的连接带（T100、T114、T122）：铺满动画层的一张图，出现与收回的动画由 Overlay.tsx 播放。 */
 body[data-window='overlay'] .overlay-connector {
   position: fixed;
@@ -288,8 +305,9 @@ body[data-window='overlay'] .overlay-connector {
 }
 
 /* 按住 Ctrl 拖动时被别的程序挡住的记录窗口（T105、T126）：在窗口所在处画它的半透明副本，整个窗口看得见，
- * 又看得出不是真的窗口（第六轮反馈：原来的虚线框看不出是什么）；指针移上去，真正的窗口浮现到最前，副本淡出。
- * 淡入淡出由 Overlay.tsx 播放。不写提示文字，Ctrl 的用法放在使用说明里。 */
+ * 又看得出不是真的窗口（第六轮反馈：原来的虚线框看不出是什么）；拖到它上面时副本变实，拖进去合并了窗口才浮现到最前，
+ * 松开 Ctrl 或没有合并时副本沉下去消失（第八轮反馈 P5）。淡入淡出由 Overlay.tsx 播放。不写提示文字，Ctrl 的用法放在
+ * 使用说明里。 */
 body[data-window='overlay'] .note-window.overlay-reveal-copy {
   opacity: 0.55;
   filter: saturate(0.7);

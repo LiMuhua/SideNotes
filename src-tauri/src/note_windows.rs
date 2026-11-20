@@ -72,6 +72,8 @@ pub mod events {
     pub const MORPH: &str = "sidenotes://overlay/morph";
     /// 动画层：去掉已经交接给窗口的副本，载荷为动画标识。
     pub const CLEAR: &str = "sidenotes://overlay/clear";
+    /// 真正的窗口显示出来了：副本去掉自己画的投影（第八轮反馈 2、P6）。
+    pub const LANDED: &str = "sidenotes://overlay/landed";
     /// 侧栏：窗口缩回了这张卡片，卡片轻轻一顿，载荷为记录标识。
     pub const LAND: &str = "sidenotes://card-land";
     /// 侧栏：附着在卡片旁的全文浮窗开着的记录（T100），载荷为记录标识或 null；卡片的按钮据此显示「收起全文」。
@@ -577,8 +579,11 @@ pub fn ensure_spare_later(app: &AppHandle, delay: Duration) {
 fn show_note(app: &AppHandle, label: &str) {
     if let Some(window) = app.get_webview_window(label) {
         crate::topmost::restore_if_minimized(&window);
+        // 磨砂玻璃的记录窗口：藏着时建的实时模糊画出来是一片黑，显示之前先藏起，显示之后重建（见 glass_live）。
+        crate::glass_live::hide_stale(&window);
         let _ = window.show();
         let _ = window.set_focus();
+        crate::glass_live::refresh_later(&window);
     }
 }
 
@@ -816,6 +821,18 @@ fn show_without_focus(window: &WebviewWindow) {
     let _ = window.show();
 }
 
+/// 不激活地显示窗口，不改前后次序与置顶。
+fn show_inactive(window: &WebviewWindow) {
+    #[cfg(windows)]
+    if let Ok(hwnd) = window.hwnd() {
+        use ::windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_SHOWNA};
+        // SAFETY：hwnd 来自仍然存在的 Tauri 窗口。
+        let _ = unsafe { ShowWindow(hwnd, SW_SHOWNA) };
+        return;
+    }
+    let _ = window.show();
+}
+
 fn hide_window(window: &WebviewWindow) {
     #[cfg(windows)]
     if let Ok(hwnd) = window.hwnd() {
@@ -893,7 +910,11 @@ fn finish_animation(app: &AppHandle, id: u64) {
     let Some(animation) = with_animations(|map| map.remove(&id)) else { return };
     match animation {
         Animation::Open { label } => {
+            if let Some(window) = app.get_webview_window(&label) {
+                set_cloaked(&window, false);
+            }
             show_note(app, &label);
+            let _ = app.emit_to(OVERLAY_LABEL, events::LANDED, id);
             update_connector(app);
             let app = app.clone();
             std::thread::spawn(move || {
@@ -915,6 +936,7 @@ fn finish_animation(app: &AppHandle, id: u64) {
             if let Some(window) = app.get_webview_window(&label) {
                 set_cloaked(&window, false);
             }
+            let _ = app.emit_to(OVERLAY_LABEL, events::LANDED, id);
             let app = app.clone();
             std::thread::spawn(move || {
                 std::thread::sleep(HANDOFF_DELAY);
@@ -952,6 +974,7 @@ fn destroy(app: &AppHandle, label: &str) {
 
 /// 窗口销毁后从登记表中去掉（页面崩溃、开发时整页重载之外的正常关闭已经先去掉了）。
 pub fn forget(app: &AppHandle, label: &str) {
+    crate::glass_live::forget(label);
     let entry = with_registry(|map| map.remove(label));
     if entry.is_some_and(|entry| entry.attached) {
         release_peek(app);
@@ -1879,6 +1902,14 @@ pub fn note_window_present(app: AppHandle, window: WebviewWindow, width: f64, he
     let right_edge = windows::last_layout().edge != "left";
     let rect = position(&placement, size, unit, sidebar_rect(&app), right_edge, &others);
     place_client(&window, rect)?;
+    crate::glass_live::fit_window(&window, rect.width, rect.height);
+    // 磨砂玻璃的记录窗口：实时模糊是窗口藏着时建的，显示出来是一片黑，要等窗口显示后重建，交接时会暗两帧。所以趁
+    // 动画层播放打开动画，先隐身显示（不激活），马上重建；动画结束时现身（finish_animation）。
+    if crate::glass_live::stale(&window) {
+        set_cloaked(&window, true);
+        show_inactive(&window);
+        crate::glass_live::refresh_now(&window);
+    }
     match (snapshot, placement.from) {
         (Some(html), Some(from)) => {
             let beam = if attached { peek_beam(rect) } else { None };
@@ -2049,6 +2080,9 @@ pub fn note_window_fit(
         }
         _ => {
             let placed = place_client(&window, target);
+            if let Some(now) = client_rect(&window) {
+                crate::glass_live::fit_window(&window, now.width, now.height);
+            }
             fitted(&window);
             placed
         }
@@ -2085,6 +2119,9 @@ fn animate_fit(window: WebviewWindow, from: Rect, to: Rect, duration: Duration, 
             let rect = Rect { x: step(from.x, to.x), y: step(from.y, to.y), width: step(from.width, to.width), height: step(from.height, to.height) };
             if place_client(&window, rect).is_err() {
                 return;
+            }
+            if let Some(now) = client_rect(&window) {
+                crate::glass_live::fit_window(&window, now.width, now.height);
             }
             if progress >= 1.0 {
                 fitted(&window);
@@ -2191,18 +2228,22 @@ pub fn overlay_done(app: AppHandle, id: u64) {
 }
 
 /// 获得焦点的窗口边框带一点强调色（原型 .note-window:focus-within）。系统画边框的窗口（亚克力与不透明）
-/// 由页面算好颜色交给这里，写到 DWM 的边框颜色上；`None` 恢复系统默认。只有 Windows 11 支持，失败时忽略。
+/// 由页面算好颜色交给这里，写到 DWM 的边框颜色上；`None` 恢复系统默认；`none` 不画边框：页面自己画外框的透明窗口
+/// （杂志、磨砂玻璃）不要系统的边框，它按系统的小圆角画在窗口边上，在页面的大圆角旁边多出一截（第八轮反馈 2）。
+/// 只有 Windows 11 支持，失败时忽略。
 #[tauri::command]
 pub fn set_window_border_color(window: WebviewWindow, color: Option<String>) {
     #[cfg(windows)]
     if let Ok(hwnd) = window.hwnd() {
         use ::windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_BORDER_COLOR};
-        // COLORREF 为 0x00BBGGRR；DWMWA_COLOR_DEFAULT（0xFFFFFFFF）恢复默认。
-        let value: u32 = color
-            .as_deref()
-            .and_then(|text| u32::from_str_radix(text.trim_start_matches('#'), 16).ok())
-            .map(|rgb| ((rgb & 0xFF) << 16) | (rgb & 0xFF00) | ((rgb >> 16) & 0xFF))
-            .unwrap_or(0xFFFF_FFFF);
+        // COLORREF 为 0x00BBGGRR；DWMWA_COLOR_DEFAULT（0xFFFFFFFF）恢复默认，DWMWA_COLOR_NONE（0xFFFFFFFE）不画。
+        let value: u32 = match color.as_deref() {
+            Some("none") => 0xFFFF_FFFE,
+            text => text
+                .and_then(|text| u32::from_str_radix(text.trim_start_matches('#'), 16).ok())
+                .map(|rgb| ((rgb & 0xFF) << 16) | (rgb & 0xFF00) | ((rgb >> 16) & 0xFF))
+                .unwrap_or(0xFFFF_FFFF),
+        };
         // SAFETY：传入的指针指向本函数内的 u32，大小与之匹配。
         let _ = unsafe { DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, (&value as *const u32).cast(), std::mem::size_of::<u32>() as u32) };
     }

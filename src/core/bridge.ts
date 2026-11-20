@@ -759,6 +759,8 @@ export const NOTE_WINDOW_EVENTS = {
   indicator: 'sidenotes://overlay/indicator',
   morph: 'sidenotes://overlay/morph',
   clear: 'sidenotes://overlay/clear',
+  /** 真正的窗口显示出来了（打开、浮现结束），副本去掉自己画的投影，免得与系统的投影叠成两层（第八轮反馈 2、P6）。 */
+  landed: 'sidenotes://overlay/landed',
   land: 'sidenotes://card-land',
   /** 记录窗口问侧栏：这条记录的卡片在屏幕上的位置（关闭时缩回去），载荷 { id, reply }。 */
   cardRectRequest: 'sidenotes://card-rect-request',
@@ -1042,7 +1044,7 @@ export function overlayDone(id: number): Promise<void> {
   return call<void>('overlay_done', { id }, undefined as unknown as void);
 }
 
-/** 系统画边框的窗口：获得焦点时边框的颜色（#rrggbb），null 恢复默认。 */
+/** 系统画边框的窗口：获得焦点时边框的颜色（#rrggbb），null 恢复默认，'none' 不画系统的边框（页面自己画外框的透明窗口）。 */
 export function setWindowBorderColor(color: string | null): Promise<void> {
   return call<void>('set_window_border_color', { color }, undefined as unknown as void);
 }

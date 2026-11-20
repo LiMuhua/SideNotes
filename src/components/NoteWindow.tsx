@@ -18,6 +18,7 @@ import { LiveEditor } from './LiveEditor';
 import { Markdown } from './Markdown';
 import { useStoreSlice } from '../hooks/useStore';
 import { useToast } from '../hooks/useToast';
+import { useWindowMaterial } from '../hooks/useWindowMaterial';
 import * as bridge from '../core/bridge';
 import * as store from '../core/store';
 import { openAttachment } from '../core/attachments';
@@ -810,15 +811,22 @@ export function NoteWindow() {
   }, [finishEditing, closeWindow, beginResizing, endResizing]);
 
   // 附着在卡片旁的全文浮窗一直描强调色边框（T122，方案 B：重点落在浮窗上，卡片只留淡淡的细边）。
+  // 页面自己画外框的透明窗口（杂志、磨砂玻璃）不要系统的边框：系统按自己的小圆角把边框画在窗口边上，在页面的大圆角
+  // 旁边多出一截（第八轮反馈 2）。材质要等 App 写到根节点上（这个效果先于 App 的效果执行）。
+  const material = useWindowMaterial();
   useEffect(() => {
-    if (document.documentElement.dataset.snWindow === 'clear') return;
+    if (material === undefined) return;
+    if (material === 'clear') {
+      void bridge.setWindowBorderColor('none');
+      return;
+    }
     const color = attached
       ? hexColor('var(--sn-color-accent)')
       : front
         ? hexColor('color-mix(in srgb, var(--sn-color-accent) 40%, var(--sn-color-border))')
         : null;
     void bridge.setWindowBorderColor(color);
-  }, [front, attached, settings.surface, settings.theme]);
+  }, [front, attached, settings.surface, settings.theme, material]);
 
   /* ==================== 标签页的位置 ==================== */
 
@@ -1269,6 +1277,8 @@ export function NoteWindow() {
     <section
       ref={sectionRef}
       className={classes}
+      // 外框由谁画（系统或页面）：动画层上的副本照着画，交给真正的窗口时外框不变（第八轮反馈 2）。
+      data-frame={material === 'clear' ? 'page' : 'system'}
       role="dialog"
       tabIndex={-1}
       aria-label={many ? `${tabs.length} 条记录` : title}

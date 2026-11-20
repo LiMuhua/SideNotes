@@ -32,7 +32,7 @@ const GLASS_TONE_EVENT = 'sidenotes://glass-tone';
 const GLASS_TEXT_TOKENS = ['--sn-color-text', '--sn-color-text-secondary', '--sn-color-text-muted', '--sn-color-accent-text'];
 import { appIconFolder, appIconSource } from './core/appIcons';
 import { useCustomAppIcon } from './hooks/useAppIcon';
-import { useLiveGlass } from './hooks/useLiveGlass';
+import { measureWindowGlass, useLiveGlass } from './hooks/useLiveGlass';
 import type { WindowRole } from './main';
 
 export interface AppProps {
@@ -108,12 +108,36 @@ export function App({ role }: AppProps) {
   // 动画层（T83）始终全透明、不要系统投影。
   // 分块的磨砂玻璃侧栏窗口全透明，各块的磨砂背景是后端截下的背后屏幕（T101，sidebarMaterial 与 glass.rs）。
   const { surface } = settings;
+  // 磨砂玻璃的记录窗口（第八轮反馈 2）：系统的亚克力只给窗口画 8 像素的小圆角，展开全文时卡片的大圆角一交给真正的窗口
+  // 就变小。改成与侧栏的玻璃块一样：窗口全透明，页面画主题的圆角、边框与半透明底色，后端在下面摆一块同样圆角的实时
+  // 模糊（glass_live.rs）。实时模糊打不开（Windows 10 等）时退回亚克力。null 表示还在打开。
+  const glassNote = role === 'note' && isGlassBlocks(surface);
+  const [noteGlass, setNoteGlass] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!glassNote) return;
+    let disposed = false;
+    const tokens = getComputedStyle(document.documentElement);
+    const frost = {
+      blur: (parseFloat(tokens.getPropertyValue('--sn-panel-blur')) || 0) * window.devicePixelRatio,
+      saturate: parseFloat(tokens.getPropertyValue('--sn-panel-saturate')) || 1,
+    };
+    void bridge.glassLive(true, frost).then((ok) => {
+      if (!disposed) setNoteGlass(ok);
+    });
+    return () => {
+      disposed = true;
+      void bridge.glassLive(false);
+      setNoteGlass(null);
+    };
+  }, [glassNote]);
+  useLiveGlass(glassNote && noteGlass === true, measureWindowGlass);
   useEffect(() => {
     if (role === 'settings' || role === 'dialog') return;
-    const material = role === 'overlay' ? 'clear' : role === 'sidebar' ? sidebarMaterial(surface) : windowMaterial(surface);
+    const material =
+      role === 'overlay' ? 'clear' : role === 'sidebar' ? sidebarMaterial(surface) : glassNote && noteGlass !== false ? 'clear' : windowMaterial(surface);
     document.documentElement.dataset.snWindow = material;
     void bridge.setWindowMaterial(material);
-  }, [role, surface]);
+  }, [role, surface, glassNote, noteGlass]);
 
   // 磨砂玻璃侧栏的背景：Windows 11 上由系统实时模糊背后的画面（T118，glass_live.rs）：后端在窗口的合成树里给每一块
   // 摆一个模糊的圆角矩形（各块的位置由 useLiveGlass 报告），--glass-backdrop 换成透明，各块半透明的底色盖在上面。

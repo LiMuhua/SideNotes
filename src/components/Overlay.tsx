@@ -17,6 +17,8 @@
 import { useEffect, useRef } from 'react';
 import { IconSprite } from './Icon';
 import * as bridge from '../core/bridge';
+import * as store from '../core/store';
+import { uiZoom } from '../core/settings';
 
 /** 与拖影（.card-drag-ghost）的倾斜角度一致。 */
 const DRAG_TILT = -2.5;
@@ -25,7 +27,23 @@ const DRAG_TILT = -2.5;
  * （主题的常规时长，终端只有 110 毫秒）慢一些。缓动用主题的 standard（前后都缓），不用一下子冲出来的 enter。
  */
 const SURFACE_FADE = 360;
+/** 交接时页面自己画外框的副本淡出的时长（毫秒），比后端去掉副本（HANDOFF_DELAY，160 毫秒）略短。 */
+const HANDOFF_FADE = 140;
 const EVENTS = bridge.NOTE_WINDOW_EVENTS;
+
+/** 系统给窗口画的圆角（Windows 11，与屏幕缩放无关的像素）。 */
+const SYSTEM_RADIUS = 8;
+
+/**
+ * 副本照真正的窗口画外框（第八轮反馈 2）：系统画外框的窗口（不透明与亚克力）是系统的小圆角与一个物理像素的细边框，
+ * 写成页面像素交给 window.css（页面按字号整页缩放）。原来副本是主题的圆角与边框，换成真正的窗口时外框一下子变了。
+ */
+function applyFrameMetrics(): void {
+  const root = document.documentElement;
+  const zoom = uiZoom(store.getState().settings.fontSize) || 1;
+  root.style.setProperty('--copy-system-radius', `${SYSTEM_RADIUS / zoom}px`);
+  root.style.setProperty('--copy-device-pixel', `${1 / (window.devicePixelRatio || 1)}px`);
+}
 
 interface GhostPayload {
   /** 开始拖动时给出拖影的 HTML，之后只给位置。 */
@@ -209,6 +227,7 @@ export function Overlay() {
     // 拖影不动。按住 Ctrl 找回的窗口（第七轮反馈 4）已经有一份半透明的副本摆在原处：不再另叠一份上浮的副本
     // （两份一淡一显、错开几个像素，看着闪了两下），把那份从现在的透明度接着变实、颜色变回原样。
     const onSurface = (payload: MorphPayload): void => {
+      applyFrameMetrics();
       const revealed = payload.label ? reveals.get(payload.label) : undefined;
       if (payload.label && revealed) reveals.delete(payload.label);
       const kept = revealed?.node ?? null;
@@ -326,6 +345,7 @@ export function Overlay() {
       // 窗口从拖影展开：拖影交给窗口的副本。
       ghost?.remove();
       ghost = null;
+      applyFrameMetrics();
       const node = fromHtml(payload.html);
       if (!node || reducedMotion() || typeof node.animate !== 'function') {
         if (payload.beam) drawConnector(payload.beam);
@@ -377,6 +397,18 @@ export function Overlay() {
       copies.delete(id);
     };
 
+    // 真正的窗口已经显示：副本不再画投影（系统画外框的窗口有自己的投影，叠在一起时投影一深一浅地闪，第八轮反馈 P6）。
+    // 页面自己画外框的窗口（磨砂玻璃、杂志）在交接的这一小段里慢慢淡出：半透明的副本叠在同样半透明的窗口上，底色
+    // 叠成两层，交接时会先暗一下再亮回来。
+    const onLanded = (id: number): void => {
+      const node = copies.get(id);
+      if (!node) return;
+      node.classList.add('is-landed');
+      if (node.dataset.frame === 'page' && !reducedMotion() && typeof node.animate === 'function') {
+        node.animate({ opacity: [window.getComputedStyle(node).opacity, '0'] }, { duration: HANDOFF_FADE, easing: 'linear', fill: 'forwards' });
+      }
+    };
+
     const onReveal = (items: bridge.RevealItem[] | null): void => {
       const list = items ?? [];
       list.forEach(({ label, rect }) => {
@@ -411,6 +443,7 @@ export function Overlay() {
       if (!entry || entry.node) return;
       const node = fromHtml(html);
       if (!node) return;
+      applyFrameMetrics();
       node.classList.add('is-overlay-copy', 'overlay-reveal-copy');
       placeReveal(node, entry.rect);
       layer.append(node);
@@ -427,6 +460,7 @@ export function Overlay() {
       bridge.onWindowEvent<{ rect: bridge.PixelRect; horizontal: boolean } | null>(EVENTS.indicator, onIndicator),
       bridge.onWindowEvent<MorphPayload>(EVENTS.morph, onMorph),
       bridge.onWindowEvent<number>(EVENTS.clear, onClear),
+      bridge.onWindowEvent<number>(EVENTS.landed, onLanded),
       bridge.onWindowEvent<ConnectorPayload | null>(EVENTS.connector, onConnector),
       bridge.onWindowEvent<bridge.RevealItem[] | null>(EVENTS.reveal, onReveal),
       bridge.onWindowEvent<{ label: string; html: string }>(EVENTS.revealCopy, onRevealCopy),

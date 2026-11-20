@@ -56,15 +56,27 @@ export function measureGlass(): bridge.GlassLayout | null {
   return { blocks, cards, viewport: bounds ? block(bounds, 0, ratio) : null };
 }
 
-/** 打开实时模糊后（`enabled`）每一帧量一次，变了才报告。 */
-export function useLiveGlass(enabled: boolean): void {
+/**
+ * 磨砂玻璃的记录窗口（第八轮反馈 2）：整个窗口就是一块，按记录窗口外框的圆角模糊。窗口隐藏时也照常报告，
+ * 显示出来时模糊已经摆好。
+ */
+export function measureWindowGlass(): bridge.GlassLayout | null {
+  const ratio = window.devicePixelRatio || 1;
+  const panel = document.querySelector('.note-window');
+  const rect = panel?.getBoundingClientRect();
+  if (!panel || !rect || rect.width <= 0 || rect.height <= 0) return null;
+  return { blocks: [block(rect, radiusOf(panel), ratio)], cards: [], viewport: null };
+}
+
+/** 打开实时模糊后（`enabled`）每一帧量一次（默认量侧栏的各块），变了才报告。 */
+export function useLiveGlass(enabled: boolean, measure: () => bridge.GlassLayout | null = measureGlass): void {
   useEffect(() => {
     if (!enabled) return;
     let frame = 0;
     let last = '';
     const tick = (): void => {
       frame = window.requestAnimationFrame(tick);
-      const layout = measureGlass();
+      const layout = measure();
       if (!layout) return;
       const key = JSON.stringify(layout);
       if (key === last) return;
@@ -73,5 +85,5 @@ export function useLiveGlass(enabled: boolean): void {
     };
     frame = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frame);
-  }, [enabled]);
+  }, [enabled, measure]);
 }
