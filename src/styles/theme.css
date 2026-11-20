@@ -1353,6 +1353,17 @@ body.is-dragging-tab * {
   box-shadow: var(--sn-shadow-editing);
 }
 
+/* 磨砂玻璃（第八轮反馈 P2）：获得焦点时只把边框换成强调色，不浮起。玻璃块外面没有磨砂，浮起的投影直接画在桌面与
+ * 下一块上，像一片脏影；边缘受光也收起，不盖在强调色的边框上（同编辑中的卡片）。 */
+[data-sn-dock='blocks'] .sidebar > #quick-composer.sidebar-composer:focus-within {
+  border-color: var(--sn-color-accent);
+  box-shadow: var(--sn-shadow-panel);
+}
+
+[data-sn-dock='blocks'] .sidebar > #quick-composer.sidebar-composer:focus-within::after {
+  opacity: 0;
+}
+
 #quick-composer .composer-footer {
   display: flex;
   align-items: center;
@@ -4993,6 +5004,14 @@ body.is-dragging-attachment * {
 
 [data-sn-entries='tiles'] .note-list .note-card.is-editing::after {
   opacity: 0;
+}
+
+/* 磨砂玻璃（第八轮反馈 P1、P3）：高亮与编辑中的卡片只把一像素的边框换成强调色，投影仍是平时玻璃块的那一层，
+ * 不加强调色的外圈与浮起的投影。玻璃块浮在桌面上，块外没有磨砂：外圈与投影直接画在桌面上，边角与下沿像一圈脏边；
+ * 外圈又与边框叠成两像素，线条显得又粗又硬。 */
+[data-sn-entries='tiles'] .note-list .note-card:is(:hover, .is-current):where(:not(.is-editing)),
+[data-sn-entries='tiles'] .note-list .note-card.is-editing {
+  --local-shadow: var(--sn-shadow-panel);
 }
 
 /* ---------- 拖动排序（Playground 的 sn-drag-ghost 与 sn-drop-line） ----------
