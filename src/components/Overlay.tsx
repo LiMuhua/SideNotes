@@ -56,6 +56,10 @@ interface MorphPayload {
   mode: 'open-drag' | 'open-expand' | 'close-drag' | 'close-expand' | 'surface';
   /** 浮现的窗口：按住 Ctrl 时它已经有一份半透明的副本，接着把那份变实（第七轮反馈 4）。 */
   label?: string;
+  /** 全文浮窗展开时的连接带，与副本一起长出来（第七轮反馈 3）。 */
+  beam?: ConnectorPayload;
+  /** 全文浮窗收回时，连接带与副本一起收拢。 */
+  retract?: boolean;
 }
 
 function reducedMotion(): boolean {
@@ -243,6 +247,77 @@ export function Overlay() {
       animation.finished.then(done, done);
     };
 
+    // 连接带：一块梯形，浮窗一边较浓、往卡片一边渐淡到没有（T122，方案 B：重点落在浮窗上），不描边。
+    // 出现时从卡片那一边横向展开，收回时原路收拢后去掉（关闭是打开的倒放）。全文浮窗展开、收回时（第七轮反馈 3），
+    // 连接带随形变动画一起出现、一起收拢，用同样的时长与缓动（beam、retract），不再等窗口出来后另外长出来。
+    let connector: SVGSVGElement | null = null;
+    let leaving: Animation | null = null;
+    const beamFrames = (cardX: number): Keyframe[] => [
+      { transformOrigin: `${cardX}px 50%`, transform: 'scaleX(0)', opacity: 0 },
+      { transformOrigin: `${cardX}px 50%`, transform: 'none', opacity: 1 },
+    ];
+    /** 收起连接带：`timing` 为空时用常规时长。 */
+    const removeConnector = (timing?: KeyframeAnimationOptions): void => {
+      const node = connector;
+      connector = null;
+      if (!node) return;
+      const cardX = Number(node.dataset.cardX) || 0;
+      if (reducedMotion() || typeof node.animate !== 'function') {
+        node.remove();
+        return;
+      }
+      leaving = node.animate([...beamFrames(cardX)].reverse(), {
+        duration: duration('--sn-duration-normal'),
+        easing: easing('--sn-ease-exit'),
+        ...timing,
+        fill: 'forwards',
+      });
+      const done = (): void => node.remove();
+      leaving.finished.then(done, done);
+    };
+    /** 画出（或挪动）连接带；新建时按 `timing` 长出来（为空时用常规时长）。 */
+    const drawConnector = (payload: ConnectorPayload, timing?: KeyframeAnimationOptions): void => {
+      const [cardX, cardTop, cardBottom] = payload.card.map((value) => value / ratio());
+      const [panelX, panelTop, panelBottom] = payload.panel.map((value) => value / ratio());
+      if (!connector) {
+        // 正在收拢的旧连接带直接去掉，换成新的。
+        leaving?.cancel();
+        layer.querySelectorAll('.overlay-connector').forEach((node) => node.remove());
+        connector = document.createElementNS(SVG, 'svg');
+        connector.setAttribute('class', 'overlay-connector');
+        const defs = document.createElementNS(SVG, 'defs');
+        const gradient = document.createElementNS(SVG, 'linearGradient');
+        gradient.setAttribute('id', BEAM_GRADIENT);
+        gradient.setAttribute('gradientUnits', 'userSpaceOnUse');
+        const near = document.createElementNS(SVG, 'stop');
+        near.setAttribute('class', 'overlay-beam-near');
+        near.setAttribute('offset', '0');
+        const far = document.createElementNS(SVG, 'stop');
+        far.setAttribute('class', 'overlay-beam-far');
+        far.setAttribute('offset', '1');
+        gradient.append(near, far);
+        defs.append(gradient);
+        const body = document.createElementNS(SVG, 'polygon');
+        body.setAttribute('class', 'overlay-beam');
+        body.setAttribute('fill', `url(#${BEAM_GRADIENT})`);
+        connector.append(defs, body);
+        layer.append(connector);
+        if (!reducedMotion() && typeof connector.animate === 'function') {
+          connector.animate(beamFrames(cardX), { duration: duration('--sn-duration-normal'), easing: easing('--sn-ease-enter'), ...timing });
+        }
+      }
+      connector.dataset.cardX = String(cardX);
+      const gradient = connector.querySelector('linearGradient');
+      gradient?.setAttribute('x1', `${cardX}`);
+      gradient?.setAttribute('x2', `${panelX}`);
+      const body = connector.querySelector('polygon');
+      body?.setAttribute('points', `${cardX},${cardTop} ${panelX},${panelTop} ${panelX},${panelBottom} ${cardX},${cardBottom}`);
+    };
+    const onConnector = (payload: ConnectorPayload | null): void => {
+      if (payload) drawConnector(payload);
+      else removeConnector();
+    };
+
     const onMorph = (payload: MorphPayload): void => {
       if (payload.mode === 'surface') {
         onSurface(payload);
@@ -253,6 +328,8 @@ export function Overlay() {
       ghost = null;
       const node = fromHtml(payload.html);
       if (!node || reducedMotion() || typeof node.animate !== 'function') {
+        if (payload.beam) drawConnector(payload.beam);
+        if (payload.retract) removeConnector();
         void bridge.overlayReady(payload.id);
         void bridge.overlayDone(payload.id);
         return;
@@ -272,19 +349,17 @@ export function Overlay() {
       });
       layer.append(node);
       copies.set(payload.id, node);
-      const animation = opening
-        ? node.animate(
-            dragged ? openFrames(from, place, DRAG_TILT, 0.9, true) : openFrames(from, place, 0, 0.5, false),
-            {
-              duration: duration('--sn-duration-slow') * (dragged ? 1.6 : 1.3),
-              easing: easing(dragged ? '--sn-ease-standard' : '--sn-ease-enter'),
-              fill: 'forwards',
-            },
-          )
-        : (() => {
-            const { frames, options } = closeFrames(from, to, dragged);
-            return node.animate(frames, options);
-          })();
+      const openTiming: KeyframeAnimationOptions = {
+        duration: duration('--sn-duration-slow') * (dragged ? 1.6 : 1.3),
+        easing: easing(dragged ? '--sn-ease-standard' : '--sn-ease-enter'),
+      };
+      const closing = opening ? null : closeFrames(from, to, dragged);
+      const animation = closing
+        ? node.animate(closing.frames, closing.options)
+        : node.animate(dragged ? openFrames(from, place, DRAG_TILT, 0.9, true) : openFrames(from, place, 0, 0.5, false), { ...openTiming, fill: 'forwards' });
+      // 全文浮窗的连接带与副本同一帧开始、同样的时长与缓动：展开时长出来，收回时收拢。
+      if (payload.beam) drawConnector(payload.beam, { duration: openTiming.duration, easing: openTiming.easing });
+      if (payload.retract) removeConnector(closing ? { duration: closing.options.duration, easing: closing.options.easing } : undefined);
       // 第一帧画出之后：关闭时藏起真正的窗口，由副本代替。
       window.requestAnimationFrame(() => window.requestAnimationFrame(() => void bridge.overlayReady(payload.id)));
       const done = (): void => {
@@ -345,70 +420,6 @@ export function Overlay() {
       if (!reducedMotion() && typeof node.animate === 'function') {
         node.animate([{ opacity: 0 }, { opacity: window.getComputedStyle(node).opacity }], { duration: SURFACE_FADE, easing: easing('--sn-ease-standard') });
       }
-    };
-
-    // 连接带：一块梯形，浮窗一边较浓、往卡片一边渐淡到没有（T122，方案 B：重点落在浮窗上），不描边。
-    // 出现时从卡片那一边横向展开，收回时原路收拢后去掉（关闭是打开的倒放）。
-    let connector: SVGSVGElement | null = null;
-    let leaving: Animation | null = null;
-    const beamFrames = (cardX: number): Keyframe[] => [
-      { transformOrigin: `${cardX}px 50%`, transform: 'scaleX(0)', opacity: 0 },
-      { transformOrigin: `${cardX}px 50%`, transform: 'none', opacity: 1 },
-    ];
-    const onConnector = (payload: ConnectorPayload | null): void => {
-      if (!payload) {
-        const node = connector;
-        connector = null;
-        if (!node) return;
-        const cardX = Number(node.dataset.cardX) || 0;
-        if (reducedMotion() || typeof node.animate !== 'function') {
-          node.remove();
-          return;
-        }
-        leaving = node.animate([...beamFrames(cardX)].reverse(), {
-          duration: duration('--sn-duration-normal'),
-          easing: easing('--sn-ease-exit'),
-          fill: 'forwards',
-        });
-        const done = (): void => node.remove();
-        leaving.finished.then(done, done);
-        return;
-      }
-      const [cardX, cardTop, cardBottom] = payload.card.map((value) => value / ratio());
-      const [panelX, panelTop, panelBottom] = payload.panel.map((value) => value / ratio());
-      if (!connector) {
-        // 正在收拢的旧连接带直接去掉，换成新的。
-        leaving?.cancel();
-        layer.querySelectorAll('.overlay-connector').forEach((node) => node.remove());
-        connector = document.createElementNS(SVG, 'svg');
-        connector.setAttribute('class', 'overlay-connector');
-        const defs = document.createElementNS(SVG, 'defs');
-        const gradient = document.createElementNS(SVG, 'linearGradient');
-        gradient.setAttribute('id', BEAM_GRADIENT);
-        gradient.setAttribute('gradientUnits', 'userSpaceOnUse');
-        const near = document.createElementNS(SVG, 'stop');
-        near.setAttribute('class', 'overlay-beam-near');
-        near.setAttribute('offset', '0');
-        const far = document.createElementNS(SVG, 'stop');
-        far.setAttribute('class', 'overlay-beam-far');
-        far.setAttribute('offset', '1');
-        gradient.append(near, far);
-        defs.append(gradient);
-        const body = document.createElementNS(SVG, 'polygon');
-        body.setAttribute('class', 'overlay-beam');
-        body.setAttribute('fill', `url(#${BEAM_GRADIENT})`);
-        connector.append(defs, body);
-        layer.append(connector);
-        if (!reducedMotion() && typeof connector.animate === 'function') {
-          connector.animate(beamFrames(cardX), { duration: duration('--sn-duration-normal'), easing: easing('--sn-ease-enter') });
-        }
-      }
-      connector.dataset.cardX = String(cardX);
-      const gradient = connector.querySelector('linearGradient');
-      gradient?.setAttribute('x1', `${cardX}`);
-      gradient?.setAttribute('x2', `${panelX}`);
-      const body = connector.querySelector('polygon');
-      body?.setAttribute('points', `${cardX},${cardTop} ${panelX},${panelTop} ${panelX},${panelBottom} ${cardX},${cardBottom}`);
     };
 
     return bridge.subscribeAll([

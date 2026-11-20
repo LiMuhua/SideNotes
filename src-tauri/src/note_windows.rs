@@ -631,17 +631,22 @@ fn open(app: &AppHandle, ids: Vec<String>, kind: &str, pinned: bool, point: Opti
     let tabs = unique(ids);
     let Some(first) = tabs.first().cloned() else { return Ok(()) };
 
-    // 展开全文时，记录已经在某个窗口里：切到它的标签页并提到最前。
+    // 展开全文时，记录已经在某个窗口里：切到它的标签页并提到最前。还在打开（连点了两下「展开全文」，第一次的
+    // 窗口还没出来）时等它打开，不再开第二个。
     if kind == "expand" {
         let owner = with_registry(|map| {
             map.iter()
-                .find(|(_, entry)| entry.phase == Phase::Open && entry.tabs.contains(&first))
-                .map(|(label, _)| label.clone())
+                .find(|(_, entry)| matches!(entry.phase, Phase::Open | Phase::Opening) && entry.tabs.contains(&first))
+                .map(|(label, entry)| (label.clone(), entry.phase == Phase::Open))
         });
-        if let Some(label) = owner {
-            let _ = app.emit_to(label.as_str(), events::ACTIVATE, serde_json::json!({ "id": first }));
-            show_note(app, &label);
-            return Ok(());
+        match owner {
+            Some((label, true)) => {
+                let _ = app.emit_to(label.as_str(), events::ACTIVATE, serde_json::json!({ "id": first }));
+                show_note(app, &label);
+                return Ok(());
+            }
+            Some((_, false)) => return Ok(()),
+            None => {}
         }
     }
     remove_from_others(app, &tabs, None);
@@ -718,11 +723,12 @@ fn open(app: &AppHandle, ids: Vec<String>, kind: &str, pinned: bool, point: Opti
             let _ = app.emit_to(label.as_str(), events::OPEN, payload);
         }
     }
+    // 卡片换成附着的样子（「收起全文」、不再高亮）等浮窗开始展开时再换（note_window_present），与连接带、浮窗的
+    // 强调色一起出现（第七轮反馈 3：原来卡片在点下时就先变了，浮窗过了约 0.3 秒才出来）。
     if attached {
         if let Ok(mut slot) = PEEK_ANCHOR.lock() {
             *slot = Some(PeekAnchor { card: from, unit: peek_unit });
         }
-        let _ = app.emit_to(SIDEBAR_LABEL, events::PEEK, Some(first));
     }
     ensure_spare_later(app, Duration::from_millis(1200));
     Ok(())
@@ -834,18 +840,38 @@ struct MorphPayload {
     /// （第七轮反馈 4）。
     #[serde(skip_serializing_if = "Option::is_none")]
     label: Option<String>,
+    /// 全文浮窗打开时，连接带与副本一起长出来（第七轮反馈 3：原来窗口出来之后连接带才另外长出来）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    beam: Option<ConnectorPayload>,
+    /// 全文浮窗收回时，连接带与副本一起收拢。
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    retract: bool,
 }
 
 /// 在动画层上播放打开动画：窗口的副本从 `from` 变到窗口的位置，结束后显示真正的窗口。
-fn play_open(app: &AppHandle, label: &str, html: String, from: Rect, to: Rect, mode: &str) {
+/// `beam` 为全文浮窗的连接带（屏幕物理像素），与副本一起长出来。
+fn play_open(app: &AppHandle, label: &str, html: String, from: Rect, to: Rect, mode: &str, beam: Option<ConnectorPayload>) {
     let (cx, cy) = to.center();
     let Some(origin) = overlay_cover(app, cx, cy) else {
         show_note(app, label);
+        update_connector(app);
         return;
     };
     let id = ANIMATION.fetch_add(1, Ordering::SeqCst) + 1;
     with_animations(|map| map.insert(id, Animation::Open { label: label.into() }));
-    let payload = MorphPayload { id, html, from: from.relative_to(origin), to: Some(to.relative_to(origin)), mode: mode.into(), label: None };
+    if beam.is_some() {
+        CONNECTOR_SHOWN.store(true, Ordering::SeqCst);
+    }
+    let payload = MorphPayload {
+        id,
+        html,
+        from: from.relative_to(origin),
+        to: Some(to.relative_to(origin)),
+        mode: mode.into(),
+        label: None,
+        beam: beam.map(|beam| beam.relative_to(origin)),
+        retract: false,
+    };
     let _ = app.emit_to(OVERLAY_LABEL, events::MORPH, payload);
     watchdog(app, id);
 }
@@ -994,11 +1020,29 @@ fn update_connector(app: &AppHandle) {
 
 /// 全文浮窗不再附着（收回或成为独立窗口）：侧栏的按钮换回「展开全文」，收起连线。
 fn release_peek(app: &AppHandle) {
+    release_peek_with(app, false);
+}
+
+/// 同 release_peek。`with_morph` 时连接带不在这里收起，交给收回的形变动画与副本一起收拢（第七轮反馈 3），返回连接带
+/// 原来是否显示着。
+fn release_peek_with(app: &AppHandle, with_morph: bool) -> bool {
     if let Ok(mut slot) = PEEK_ANCHOR.lock() {
         *slot = None;
     }
     let _ = app.emit_to(SIDEBAR_LABEL, events::PEEK, None::<String>);
+    if with_morph {
+        return CONNECTOR_SHOWN.swap(false, Ordering::SeqCst);
+    }
     update_connector(app);
+    false
+}
+
+/// 全文浮窗展开时的连接带：卡片的边连到浮窗将要停的位置（`panel`，屏幕物理像素）。没有附着的卡片时为空。
+fn peek_beam(panel: Rect) -> Option<ConnectorPayload> {
+    let anchor = PEEK_ANCHOR.lock().ok().and_then(|slot| *slot)?;
+    let card = anchor.card?;
+    let right_edge = windows::last_layout().edge != "left";
+    Some(connector_beam(card, panel, right_edge, CONNECTOR_CARD_INSET * anchor.unit, CONNECTOR_INSET * anchor.unit))
 }
 
 /// 全文浮窗成为独立的记录窗口：置顶按窗口自己的设置（默认不置顶，进任务栏与 Alt+Tab），去掉连线。
@@ -1329,7 +1373,7 @@ fn play_surface(app: &AppHandle, window: &WebviewWindow, html: String) {
     };
     let id = ANIMATION.fetch_add(1, Ordering::SeqCst) + 1;
     with_animations(|map| map.insert(id, Animation::Surface { label: window.label().into() }));
-    let payload = MorphPayload { id, html, from: rect, to: Some(rect), mode: "surface".into(), label: Some(window.label().into()) };
+    let payload = MorphPayload { id, html, from: rect, to: Some(rect), mode: "surface".into(), label: Some(window.label().into()), beam: None, retract: false };
     let _ = app.emit_to(OVERLAY_LABEL, events::MORPH, payload);
     watchdog(app, id);
 }
@@ -1800,13 +1844,17 @@ pub async fn open_note_window(app: AppHandle, window: WebviewWindow, ids: Vec<St
 #[tauri::command]
 pub fn note_window_present(app: AppHandle, window: WebviewWindow, width: f64, height: f64, dpr: f64, snapshot: Option<String>) -> AppResult<()> {
     let label = window.label().to_string();
-    let (placement, pinned, kind_drag, attached) = with_registry(|map| {
+    let (placement, pinned, kind_drag, attached, note) = with_registry(|map| {
         let entry = map.get_mut(&label)?;
         entry.phase = Phase::Open;
         entry.order = ORDER.fetch_add(1, Ordering::SeqCst) + 1;
-        Some((entry.placement.take(), entry.pinned, entry.origin == "drag", entry.attached))
+        Some((entry.placement.take(), entry.pinned, entry.origin == "drag", entry.attached, entry.active.clone()))
     })
     .ok_or_else(|| AppError::Other("记录窗口不存在".into()))?;
+    // 全文浮窗这就展开：侧栏的卡片同时换成附着的样子（见 open）。
+    if attached {
+        let _ = app.emit_to(SIDEBAR_LABEL, events::PEEK, Some(note));
+    }
     let unit = sane_dpr(dpr);
     window.set_min_size(Some(PhysicalSize::new(MIN_SIZE.0 * unit, MIN_SIZE.1 * unit)))?;
     // 全文浮窗附着在卡片旁，像侧栏的一部分：一直置顶，是不进任务栏与 Alt+Tab 的面板（T100，见 apply_topmost）。
@@ -1830,7 +1878,10 @@ pub fn note_window_present(app: AppHandle, window: WebviewWindow, width: f64, he
     let rect = position(&placement, size, unit, sidebar_rect(&app), right_edge, &others);
     place_client(&window, rect)?;
     match (snapshot, placement.from) {
-        (Some(html), Some(from)) => play_open(&app, &label, html, from, rect, if kind_drag { "open-drag" } else { "open-expand" }),
+        (Some(html), Some(from)) => {
+            let beam = if attached { peek_beam(rect) } else { None };
+            play_open(&app, &label, html, from, rect, if kind_drag { "open-drag" } else { "open-expand" }, beam);
+        }
         _ => {
             show_note(&app, &label);
             update_connector(&app);
@@ -1871,16 +1922,14 @@ pub fn note_window_close(app: AppHandle, window: WebviewWindow, snapshot: Option
         was_attached = std::mem::take(&mut entry.attached);
         Some((entry.active.clone(), entry.origin == "drag"))
     });
-    // 全文浮窗开始收回：侧栏的按钮换回「展开全文」，连线先收起。
-    if was_attached {
-        release_peek(&app);
-    }
-    let (Some((note, dragged)), Some(html), Some(from)) = (info, snapshot, client_rect(&window)) else {
-        destroy(&app, &label);
-        return Ok(());
+    let from = client_rect(&window);
+    let origin = match (&info, &snapshot, from) {
+        (Some(_), Some(_), Some(rect)) => overlay_cover(&app, rect.center().0, rect.center().1),
+        _ => None,
     };
-    let (cx, cy) = from.center();
-    let Some(origin) = overlay_cover(&app, cx, cy) else {
+    // 全文浮窗开始收回：侧栏的按钮换回「展开全文」，连接带与缩回卡片的副本一起收拢（没有动画时直接收起）。
+    let retract = was_attached && release_peek_with(&app, origin.is_some());
+    let (Some((note, dragged)), Some(html), Some(from), Some(origin)) = (info, snapshot, from, origin) else {
         destroy(&app, &label);
         return Ok(());
     };
@@ -1893,6 +1942,8 @@ pub fn note_window_close(app: AppHandle, window: WebviewWindow, snapshot: Option
         to: to.map(|rect| rect.relative_to(origin)),
         mode: if dragged { "close-drag".into() } else { "close-expand".into() },
         label: None,
+        beam: None,
+        retract,
     };
     let _ = app.emit_to(OVERLAY_LABEL, events::MORPH, payload);
     watchdog(&app, id);

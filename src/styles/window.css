@@ -304,12 +304,14 @@ body[data-window='overlay'] .note-window.overlay-reveal-copy {
 }
 
 /* 附着在卡片旁的全文浮窗（T122、T127）：强调色描边，标题栏换成卡片高亮时的样子（选中色、顶部一条强调色线），
- * 一眼看出重点在这里。亚克力与不透明的窗口边框由系统画，NoteWindow.tsx 把它设成强调色。 */
-body[data-window='note'] .note-window.is-attached {
+ * 一眼看出重点在这里。亚克力与不透明的窗口边框由系统画，NoteWindow.tsx 把它设成强调色。
+ * 动画层上展开、收回的副本也要这样画（第七轮反馈 3）：原来只写给记录窗口，副本是平常的样子，换成真正的窗口时
+ * 强调色的边框与标题栏才一下子出现。 */
+:is(body[data-window='note'], body[data-window='overlay']) .note-window.is-attached {
   border-color: var(--sn-color-accent);
 }
 
-body[data-window='note'] .note-window.is-attached > .note-window-header {
+:is(body[data-window='note'], body[data-window='overlay']) .note-window.is-attached > .note-window-header {
   background:
     linear-gradient(var(--sn-color-accent), var(--sn-color-accent)) top / 100% var(--sn-focus-ring-width) no-repeat,
     var(--sn-color-card-head-active);
