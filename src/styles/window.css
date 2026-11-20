@@ -345,6 +345,12 @@ body[data-window='overlay'] .note-window.overlay-reveal-copy {
     var(--sn-color-card-head-active);
 }
 
+/* 磨砂玻璃（第八轮反馈 2、P3）：标题栏不画顶部的强调色线，与高亮的玻璃卡片一样只有一像素的强调色边框。大圆角下那条线
+ * 贴着上边，上边显得比两侧粗、发硬。 */
+[data-sn-entries='tiles'] :is(body[data-window='note'], body[data-window='overlay']) .note-window.is-attached > .note-window-header {
+  background: var(--sn-color-card-head-active);
+}
+
 /* 内容变多、窗口还没按内容长高的一两帧里先不出滚动条（T128，NoteWindow.tsx 的 holdScrollbars）。编辑区的滚动
  * 写在行内样式里（LiveEditor），这里只藏起滚动条、不改滚动方式。 */
 body[data-window='note'] .note-window[data-fitting] :is(.note-window-body, .live-markdown-editor) {
