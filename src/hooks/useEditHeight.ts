@@ -10,6 +10,7 @@
  */
 
 import { useLayoutEffect, useRef, type RefObject } from 'react';
+import { RESIZE_EASING_CSS, resizeDuration } from '../core/motion';
 
 /** 卡片最近一次排版后的高度（边框盒）。 */
 const heights = new WeakMap<Element, number>();
@@ -31,21 +32,12 @@ function reducedMotion(): boolean {
   return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-function token(name: string): string {
-  return window.getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
-
-function milliseconds(value: string): number {
-  if (!value) return 0;
-  return value.endsWith('ms') ? parseFloat(value) : parseFloat(value) * 1000;
-}
-
 /** 动画的标识：同一张卡片又切换时先停下上一次的。 */
 const ANIMATION_ID = 'sn-edit-height';
 /** 各卡片的切换次数：上一次的动画收尾时，卡片已经开始了新的一次，就不动新一次设下的样式。 */
 const rounds = new WeakMap<Element, number>();
 
-/** `editing` 变化时，`ref` 指向的卡片高度从旧值平滑地变到新值（时长与缓动取主题的慢速令牌）。 */
+/** `editing` 变化时，`ref` 指向的卡片高度从旧值平滑地变到新值（时长随距离加长、减速的缓动，见 core/motion）。 */
 export function useEditHeight(ref: RefObject<HTMLElement | null>, editing: boolean): void {
   useLayoutEffect(() => {
     const element = ref.current;
@@ -85,8 +77,8 @@ export function useEditHeight(ref: RefObject<HTMLElement | null>, editing: boole
         }
         element.style.maxHeight = 'none';
         const animation = element.animate([{ height: `${from}px` }, { height: `${to}px` }], {
-          duration: milliseconds(token('--sn-duration-slow')) || 250,
-          easing: token('--sn-ease-standard') || 'ease',
+          duration: resizeDuration(to - from),
+          easing: RESIZE_EASING_CSS,
         });
         animation.id = ANIMATION_ID;
         // 动画期间裁掉溢出的部分；结束后交还给内容（被下一次切换取消时由下一次接着管）。

@@ -2250,9 +2250,22 @@ fn animate_fit(window: WebviewWindow, from: Rect, to: Rect, duration: Duration, 
                 fitted(&window);
                 return;
             }
-            std::thread::sleep(FIT_FRAME);
+            next_frame();
         }
     });
+}
+
+/// 等到下一次屏幕合成（垂直同步）再走下一步（第八轮反馈 7）：sleep 的精度只有十几毫秒，每步的间隔忽长忽短，
+/// 窗口一顿一顿地变。系统不能合成时退回按 FIT_FRAME 睡。
+fn next_frame() {
+    #[cfg(windows)]
+    {
+        // SAFETY：不带参数，只阻塞到下一次合成。
+        if unsafe { ::windows::Win32::Graphics::Dwm::DwmFlush() }.is_ok() {
+            return;
+        }
+    }
+    std::thread::sleep(FIT_FRAME);
 }
 
 /// CSS 的三次贝塞尔缓动（cubic-bezier(x1, y1, x2, y2)）在时间进度 `t`（0–1）时的值：先按横坐标解出曲线参数

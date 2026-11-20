@@ -25,6 +25,7 @@ import { openAttachment } from '../core/attachments';
 import { noteDisplay, sourceOffset } from '../core/display';
 import { noteTitle } from '../core/notes';
 import { matches } from '../core/shortcuts';
+import { RESIZE_EASING, resizeDuration } from '../core/motion';
 import { bodyEnd, canonicalize, parse } from '../core/tags';
 import type { MarkdownEditor } from '../core/editor';
 import type { Note } from '../core/types';
@@ -104,12 +105,6 @@ function duration(name: string): number {
 
 function easing(name: string): string {
   return window.getComputedStyle(document.documentElement).getPropertyValue(name).trim() || 'ease';
-}
-
-/** 缓动令牌里的三次贝塞尔曲线的两个控制点；写的是关键字（ease 等）时为空，后端按 CSS 的 ease 算。 */
-function bezier(name: string): [number, number, number, number] | null {
-  const match = /cubic-bezier\(\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*\)/.exec(easing(name));
-  return match ? [Number(match[1]), Number(match[2]), Number(match[3]), Number(match[4])] : null;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -576,8 +571,10 @@ export function NoteWindow() {
       const size = fitSize(section, stripRef.current, area, width);
       const height = manual ? Math.max(manual.height, size.height) : size.height;
       const unchanged = Math.abs(size.width - window.innerWidth) < 1 && Math.abs(height - window.innerHeight) < 1;
-      const time = reducedMotion() ? 0 : duration(motion === 'state' ? '--sn-duration-slow' : '--sn-duration-normal');
-      void bridge.fitNoteWindow(size.width, height, unchanged ? 0 : time, bezier('--sn-ease-standard')).then(() => {
+      // 时长随变化的距离加长，减速的缓动（第八轮反馈 7，见 core/motion）。
+      const distance = Math.max(Math.abs(size.width - window.innerWidth), Math.abs(height - window.innerHeight));
+      const time = reducedMotion() ? 0 : resizeDuration(distance, motion);
+      void bridge.fitNoteWindow(size.width, height, unchanged ? 0 : time, RESIZE_EASING).then(() => {
         if (unchanged) window.requestAnimationFrame(releaseScrollbars);
       });
     },
