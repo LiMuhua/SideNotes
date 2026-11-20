@@ -21,6 +21,10 @@ use crate::windows::{self, SIDEBAR_LABEL};
 
 /// 发给侧栏页面：模糊后的背景图（data URL）。
 pub const BACKDROP_EVENT: &str = "sidenotes://glass-backdrop";
+/// 发给侧栏页面：侧栏背后那块屏幕的明暗，载荷见 Tone（T131）。
+pub const TONE_EVENT: &str = "sidenotes://glass-tone";
+/// 实时模糊显示期间多久量一次背后的明暗。
+const TONE_INTERVAL: Duration = Duration::from_millis(1500);
 /// 显示期间多久重截一次。
 const REFRESH_INTERVAL: Duration = Duration::from_secs(2);
 /// 显示期间换了主题或改了宽度：停下来这么久之后重截（拖动调宽时每一帧都会改，不必每帧都截）。
@@ -37,6 +41,15 @@ pub struct Backdrop {
 }
 
 static REFRESH: AtomicU64 = AtomicU64::new(0);
+static TONE_LOOP: AtomicU64 = AtomicU64::new(0);
+
+/// 侧栏背后那块屏幕在玻璃里看到的明暗（T131，参考 Glance 按背后的明暗与杂乱程度调磨砂的做法）：按令牌的模糊
+/// 模糊之后，相对亮度（0–1）的第 5 与第 95 百分位。页面据此算出文字仍够清楚时块的着色能淡到多少。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct Tone {
+    pub low: f32,
+    pub high: f32,
+}
 
 /* ==================== 图像处理 ==================== */
 
@@ -162,6 +175,77 @@ fn base64(bytes: &[u8]) -> String {
     out
 }
 
+/// sRGB 的一个分量（0–255）换成线性值。
+fn linear(channel: f32) -> f32 {
+    let value = channel / 255.0;
+    if value <= 0.04045 {
+        value / 12.92
+    } else {
+        ((value + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+/// 截下的像素在玻璃里看到的明暗（见 Tone）：缩小、按令牌的模糊模糊（系统的宿主背景另有模糊，这里不算，
+/// 估出的明暗只会更极端，着色偏浓、文字偏清楚），取相对亮度的百分位。
+fn tone_of(bgra: &[u8], width: usize, height: usize, blur_radius: f64) -> Option<Tone> {
+    let (mut pixels, small_width, small_height) = downscale(bgra, width, height, DOWNSCALE);
+    blur(&mut pixels, small_width, small_height, blur_radius / DOWNSCALE as f64);
+    let mut light: Vec<f32> =
+        pixels.iter().map(|[r, g, b]| 0.2126 * linear(*r) + 0.7152 * linear(*g) + 0.0722 * linear(*b)).filter(|value| value.is_finite()).collect();
+    if light.is_empty() {
+        return None;
+    }
+    light.sort_by(f32::total_cmp);
+    let pick = |share: f32| light[((light.len() - 1) as f32 * share).round() as usize];
+    Some(Tone { low: pick(0.05), high: pick(0.95) })
+}
+
+/// 量一次侧栏内容区背后的明暗。`visible` 时侧栏正显示着，截图的一瞬间把它排除在外；排除不了就不量。
+fn sample_tone(sidebar: &WebviewWindow, visible: bool) -> Option<Tone> {
+    let backdrop = windows::last_layout().backdrop?;
+    let rect = client_rect(sidebar)?;
+    if visible && !exclude_from_capture(sidebar, true) {
+        return None;
+    }
+    let pixels = grab(rect.0, rect.1, rect.2, rect.3);
+    if visible {
+        exclude_from_capture(sidebar, false);
+    }
+    tone_of(&pixels?, rect.2 as usize, rect.3 as usize, backdrop.blur)
+}
+
+/// 实时模糊打开期间（`live`），侧栏显示着时每隔 TONE_INTERVAL 量一次背后的明暗，变了才交给页面（T131）。
+/// 关掉实时模糊、换走磨砂玻璃时停下；再次调用时换成新的一轮。量的一瞬间侧栏被排除在截图之外，同 capture。
+pub fn watch_tone(app: &AppHandle, live: bool) {
+    let generation = TONE_LOOP.fetch_add(1, Ordering::SeqCst) + 1;
+    if !live {
+        return;
+    }
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let mut last: Option<Tone> = None;
+        loop {
+            if TONE_LOOP.load(Ordering::SeqCst) != generation || !crate::glass_live::active() {
+                return;
+            }
+            let Some(sidebar) = app.get_webview_window(SIDEBAR_LABEL) else { return };
+            if sidebar.is_visible().unwrap_or(false) {
+                if let Some(tone) = sample_tone(&sidebar, true) {
+                    let changed = match last {
+                        Some(previous) => (previous.low - tone.low).abs() > 0.01 || (previous.high - tone.high).abs() > 0.01,
+                        None => true,
+                    };
+                    if changed {
+                        let _ = app.emit_to(SIDEBAR_LABEL, TONE_EVENT, tone);
+                        last = Some(tone);
+                    }
+                }
+            }
+            std::thread::sleep(TONE_INTERVAL);
+        }
+    });
+}
+
 /// 截下的像素处理成页面用的背景图。
 fn process(bgra: &[u8], width: usize, height: usize, backdrop: Backdrop) -> String {
     let (mut pixels, small_width, small_height) = downscale(bgra, width, height, DOWNSCALE);
@@ -269,10 +353,20 @@ fn deliver(app: &AppHandle, url: Option<String>) {
 /// 侧栏显示之前（窗口还没出来）：按它将要停的位置截一次背景，之后显示期间定时重截。
 /// `x`、`y` 为外框将要停的位置，`width`、`height` 为内容区尺寸（逻辑像素，与 windows.rs 的几何相同）。
 pub fn before_show(app: &AppHandle, sidebar: &WebviewWindow, x: f64, y: f64, width: f64, height: f64) {
+    let Some(backdrop) = windows::last_layout().backdrop else { return };
     if crate::glass_live::active() {
+        // 实时模糊：窗口出来之前先按将要停的位置量一次明暗（T131），块一出现就是合适的着色。
+        if !sidebar.is_visible().unwrap_or(false) {
+            if let (Ok(scale), Ok(inner), Ok(outer)) = (sidebar.scale_factor(), sidebar.inner_position(), sidebar.outer_position()) {
+                let (left, top) = ((x * scale).round() as i32 + inner.x - outer.x, (y * scale).round() as i32 + inner.y - outer.y);
+                let (wide, tall) = ((width * scale).round() as i32, (height * scale).round() as i32);
+                if let Some(tone) = grab(left, top, wide, tall).and_then(|pixels| tone_of(&pixels, wide as usize, tall as usize, backdrop.blur)) {
+                    let _ = app.emit_to(SIDEBAR_LABEL, TONE_EVENT, tone);
+                }
+            }
+        }
         return;
     }
-    let Some(backdrop) = windows::last_layout().backdrop else { return };
     if let (Ok(scale), Ok(inner), Ok(outer)) = (sidebar.scale_factor(), sidebar.inner_position(), sidebar.outer_position()) {
         let rect = (
             (x * scale).round() as i32 + inner.x - outer.x,

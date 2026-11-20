@@ -20,7 +20,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde::Deserialize;
-use tauri::WebviewWindow;
+use tauri::{Manager, WebviewWindow};
 
 /// 实时模糊正在用：截图（glass.rs）这时不再截。
 static ACTIVE: AtomicBool = AtomicBool::new(false);
@@ -68,6 +68,8 @@ pub fn glass_live(window: WebviewWindow, enable: bool, frost: Option<Frost>) -> 
         imp::hide();
     }
     ACTIVE.store(live, Ordering::SeqCst);
+    // 实时模糊打开期间定时量一次背后的明暗，页面按它调块的着色（T131，见 glass::watch_tone）；关掉时停下。
+    crate::glass::watch_tone(window.app_handle(), live);
     live
 }
 

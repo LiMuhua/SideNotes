@@ -8,7 +8,7 @@
  * 并把主题、明暗、结构差异与字体写到页面根节点，供 CSS 取设计令牌；字号按全局的界面缩放应用到各窗口。
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon, IconSprite } from './components/Icon';
 import { Sidebar } from './components/Sidebar';
 import { Capture } from './components/Capture';
@@ -22,9 +22,14 @@ import * as store from './core/store';
 import * as bridge from './core/bridge';
 import { resolveTheme, resolveFontFamily, uiZoom } from './core/settings';
 import { applySurface, isGlassBlocks, sidebarMaterial, windowMaterial } from './core/surfaces';
+import { cssColor, tintScale, type GlassTone, type Rgba } from './core/glassTone';
 
 /** 后端送来的磨砂玻璃侧栏背景（src-tauri/src/glass.rs 的 BACKDROP_EVENT）。 */
 const GLASS_BACKDROP_EVENT = 'sidenotes://glass-backdrop';
+/** 后端量出的磨砂玻璃背后的明暗（T131，glass.rs 的 TONE_EVENT）。 */
+const GLASS_TONE_EVENT = 'sidenotes://glass-tone';
+/** 磨砂玻璃块上的文字：着色调淡之后它们仍要达到 4.5:1（T131）。 */
+const GLASS_TEXT_TOKENS = ['--sn-color-text', '--sn-color-text-secondary', '--sn-color-text-muted', '--sn-color-accent-text'];
 import { appIconFolder, appIconSource } from './core/appIcons';
 import { useCustomAppIcon } from './hooks/useAppIcon';
 import { useLiveGlass } from './hooks/useLiveGlass';
@@ -116,6 +121,24 @@ export function App({ role }: AppProps) {
   // 两种做法都写 data-glass-backdrop，各块的样式相同（window.css）。换成别的主题时去掉，等下次再用。
   const glassSidebar = role === 'sidebar' && isGlassBlocks(surface);
   const [liveGlass, setLiveGlass] = useState(false);
+  // 实时模糊时块的着色随背后的明暗调淡（T131，core/glassTone）：后端定时量出背后的明暗，按当前令牌的底色与文字色
+  // 算出文字仍够清楚时最淡的倍数，写到 --glass-tint-scale（window.css）。换明暗时按上一次的明暗重算。
+  const glassTone = useRef<GlassTone | null>(null);
+  const applyGlassTone = useCallback((): void => {
+    const root = document.documentElement;
+    const tone = glassTone.current;
+    const tokens = getComputedStyle(root);
+    const card = tone ? cssColor(tokens.getPropertyValue('--sn-color-card')) : null;
+    const texts = GLASS_TEXT_TOKENS.map((name) => cssColor(tokens.getPropertyValue(name))).filter((color): color is Rgba => color !== null);
+    if (!tone || !card) {
+      root.style.removeProperty('--glass-tint-scale');
+      return;
+    }
+    root.style.setProperty('--glass-tint-scale', String(tintScale(tone, card, texts)));
+  }, []);
+  useEffect(() => {
+    if (glassSidebar) applyGlassTone();
+  }, [glassSidebar, settings.theme, systemDark, applyGlassTone]);
   useEffect(() => {
     if (!glassSidebar) return;
     const root = document.documentElement;
@@ -126,6 +149,10 @@ export function App({ role }: AppProps) {
         if (live) return;
         root.style.setProperty('--glass-backdrop', `url("${url}")`);
         root.dataset.glassBackdrop = '';
+      }),
+      bridge.onWindowEvent<GlassTone>(GLASS_TONE_EVENT, (tone) => {
+        glassTone.current = tone;
+        applyGlassTone();
       }),
     ]);
     // 系统模糊之上再叠的模糊与饱和度取磨砂玻璃的令牌（T124，参考 Glance）：模糊换算成物理像素。
@@ -146,10 +173,12 @@ export function App({ role }: AppProps) {
       unsubscribe();
       if (live) void bridge.glassLive(false);
       setLiveGlass(false);
+      glassTone.current = null;
       root.style.removeProperty('--glass-backdrop');
+      root.style.removeProperty('--glass-tint-scale');
       delete root.dataset.glassBackdrop;
     };
-  }, [glassSidebar]);
+  }, [glassSidebar, applyGlassTone]);
   useLiveGlass(glassSidebar && liveGlass);
 
   /* ==================== 应用图标（T85） ==================== */

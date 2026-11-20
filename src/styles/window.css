@@ -329,9 +329,22 @@ body[data-window='note'] .note-window[data-fitting] :is(.note-window-body, .live
  * 分块的磨砂玻璃侧栏窗口全透明，块与块之间透出桌面。各块的磨砂是后端截下的背后屏幕（已模糊、加了饱和度，--glass-backdrop），
  * 按窗口铺满并固定（fixed，与屏幕对齐，列表滚动时不跟着走），上面盖一层块的底色（--local-base）与顶部光泽。
  * 页面里的 backdrop-filter 背后是透明的，没有东西可模糊，去掉。背景图送来之前（data-glass-backdrop 未写）照原样画。 */
+/* 着色随背后的明暗调淡（T131，2026-11-19 第六轮反馈：透明度再加大一点，对齐 Glance）：令牌的底色按最坏情况取，
+ * 偏浓；实时模糊时 App.tsx 按后端量出的背后明暗算出文字仍达到 4.5:1 时最淡的倍数（--glass-tint-scale，
+ * core/glassTone），底色按它调淡，背后变了慢慢过渡。截图的做法没有这个量，倍数保持 1。 */
+@property --glass-tint-scale {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 1;
+}
+
+:root[data-glass-backdrop] {
+  transition: --glass-tint-scale calc(var(--sn-duration-slow) * 2) var(--sn-ease-standard);
+}
+
 :root[data-glass-backdrop] .sidebar > :is(.sidebar-header, .sidebar-navigation, .list-topline, .workspace-nudge, .sync-warning, .sidebar-footer),
 :root[data-glass-backdrop] .sidebar > #quick-composer.sidebar-composer {
-  --local-base: var(--sn-color-card);
+  --local-base: color-mix(in srgb, var(--sn-color-card) calc(var(--glass-tint-scale) * 100%), transparent);
   background-color: transparent;
   background-image:
     linear-gradient(to bottom, var(--sn-color-sheen), transparent var(--sn-space-9)),
@@ -347,7 +360,7 @@ body[data-window='note'] .note-window[data-fitting] :is(.note-window-body, .live
 }
 
 :root[data-glass-backdrop] .note-list .note-card {
-  --local-base: var(--sn-color-card);
+  --local-base: color-mix(in srgb, var(--sn-color-card) calc(var(--glass-tint-scale) * 100%), transparent);
   background-color: transparent;
   background-image:
     linear-gradient(var(--local-overlay), var(--local-overlay)),
