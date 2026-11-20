@@ -792,6 +792,8 @@ export const NOTE_WINDOW_EVENTS = {
 export interface RevealItem {
   label: string;
   rect: PixelRect;
+  /** 拖到了它上面、松开就并进去：副本变实（第八轮反馈 P5）。 */
+  hot?: boolean;
 }
 
 /** 页面矩形（DOMRect）取出可以序列化的四个值。 */

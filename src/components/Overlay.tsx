@@ -217,7 +217,7 @@ export function Overlay() {
     // 被挡住的窗口的副本（T126）：按窗口的标签复用，拖动中每一步都会送来位置，只在第一次向窗口要副本的 HTML；
     // 副本到了才淡入。窗口不再被挡住（被提到最前）或松开、放开 Ctrl 时，副本淡出后去掉；指针移进去浮现时，
     // 这份副本直接变实，交给浮现（onSurface）。
-    const reveals = new Map<string, { node: HTMLElement | null; rect: bridge.PixelRect }>();
+    const reveals = new Map<string, { node: HTMLElement | null; rect: bridge.PixelRect; hot: boolean }>();
     const placeReveal = (node: HTMLElement, rect: bridge.PixelRect): void => {
       const page = toPage(rect);
       Object.assign(node.style, { left: `${page.x}px`, top: `${page.y}px`, width: `${page.width}px`, height: `${page.height}px` });
@@ -411,14 +411,18 @@ export function Overlay() {
 
     const onReveal = (items: bridge.RevealItem[] | null): void => {
       const list = items ?? [];
-      list.forEach(({ label, rect }) => {
+      list.forEach(({ label, rect, hot = false }) => {
         const entry = reveals.get(label);
         if (entry) {
           entry.rect = rect;
-          if (entry.node) placeReveal(entry.node, rect);
+          entry.hot = hot;
+          if (entry.node) {
+            placeReveal(entry.node, rect);
+            entry.node.classList.toggle('is-hot', hot);
+          }
           return;
         }
-        reveals.set(label, { node: null, rect });
+        reveals.set(label, { node: null, rect, hot });
         void bridge.emitToWindow(label, EVENTS.revealSnapshot, null);
       });
       const shown = new Set(list.map((item) => item.label));
@@ -431,9 +435,14 @@ export function Overlay() {
           node.remove();
           return;
         }
+        // 没有合并：副本沉下去消失，窗口留在别的程序下面（第八轮反馈 P5：原来松开 Ctrl 后窗口总是回到最前）。
         const from = window.getComputedStyle(node).opacity;
+        const sink = window.getComputedStyle(document.documentElement).getPropertyValue('--sn-space-3').trim() || '0px';
         node.getAnimations().forEach((animation) => animation.cancel());
-        const fade = node.animate({ opacity: [from, '0'] }, { duration: SURFACE_FADE, easing: easing('--sn-ease-standard'), fill: 'forwards' });
+        const fade = node.animate(
+          { opacity: [from, '0'], transform: ['none', `translateY(${sink})`] },
+          { duration: SURFACE_FADE, easing: easing('--sn-ease-exit'), fill: 'forwards' },
+        );
         const done = (): void => node.remove();
         fade.finished.then(done, done);
       });
@@ -445,6 +454,7 @@ export function Overlay() {
       if (!node) return;
       applyFrameMetrics();
       node.classList.add('is-overlay-copy', 'overlay-reveal-copy');
+      node.classList.toggle('is-hot', entry.hot);
       placeReveal(node, entry.rect);
       layer.append(node);
       entry.node = node;

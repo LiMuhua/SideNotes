@@ -311,6 +311,15 @@ body[data-window='overlay'] .overlay-connector {
 body[data-window='overlay'] .note-window.overlay-reveal-copy {
   opacity: 0.55;
   filter: saturate(0.7);
+  transition:
+    opacity var(--sn-duration-normal) var(--sn-ease-standard),
+    filter var(--sn-duration-normal) var(--sn-ease-standard);
+}
+
+/* 拖到了被挡住的窗口上、松开就并进去（第八轮反馈 P5）：副本变实，看得出落点；窗口本身不提到最前，合并了才提。 */
+body[data-window='overlay'] .note-window.overlay-reveal-copy.is-hot {
+  opacity: 1;
+  filter: none;
 }
 
 /* 全文浮窗附着的卡片（T122、T127）：重点落在浮窗上（第六轮反馈：卡片的悬停高亮把重点抢了回去）。卡片不跟着

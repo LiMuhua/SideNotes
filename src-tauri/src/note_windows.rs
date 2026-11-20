@@ -1187,23 +1187,20 @@ fn window_at(app: &AppHandle, point: (f64, f64), except: Option<&str>, bands_onl
             })
             .collect();
         let skip = skip_handles(app, moving);
-        let mut covered = false;
         for layer in zorder::layers() {
             if skip.contains(&layer.hwnd) || !layer.contains(point) {
                 continue;
             }
             if let Some((_, label, bands, window)) = windows.iter().find(|(hwnd, ..)| *hwnd == layer.hwnd) {
-                // 虚线框整块都算：指针一进框就把窗口提到最前（T105），带浮现动画（T119）；合并照旧只认标题栏与标签栏。
-                if covered {
-                    surface_windows(app, vec![window.clone()]);
-                }
+                // 被挡住的窗口（按住 Ctrl 时）照样能合并，但这时不提到最前（第八轮反馈 P5）：指针移进去只让动画层上的
+                // 副本变实（update_reveal 的 hot），松开 Ctrl 或没有合并时副本沉下去消失，窗口留在原来的位置；拖进去
+                // 合并了才提到最前（drag_end）。合并照旧只认标题栏与标签栏。
                 let (x, y) = hit(window, bands)?;
                 return Some((label.clone(), x, y));
             }
             if !reveal || layer.own {
                 return None;
             }
-            covered = true;
         }
         None
     }
@@ -1420,6 +1417,8 @@ pub fn note_window_surface_ready(window: WebviewWindow, html: Option<String>) {
 struct RevealItem {
     label: String,
     rect: Rect,
+    /// 拖到了它上面、松开就并进去（第八轮反馈 P5）：副本变实，看得出落点；移开后回到半透明。
+    hot: bool,
 }
 
 /// 按住 Ctrl 拖动时更新动画层上被挡住的记录窗口（不含 `except`）：动画层在各窗口所在处画它的半透明副本
@@ -1442,7 +1441,13 @@ fn update_reveal(app: &AppHandle, session: &mut DragSession, active: bool, point
         .filter_map(|window| client_rect(&window).map(|rect| (window.label().to_string(), rect)))
         .collect();
         if let Some(origin) = overlay_cover(app, point.0, point.1) {
-            let items: Vec<RevealItem> = hidden.into_iter().map(|(label, rect)| RevealItem { label, rect: rect.relative_to(origin) }).collect();
+            let items: Vec<RevealItem> = hidden
+                .into_iter()
+                .map(|(label, rect)| {
+                    let hot = session.hint.as_deref() == Some(label.as_str());
+                    RevealItem { label, rect: rect.relative_to(origin), hot }
+                })
+                .collect();
             session.revealed = !items.is_empty();
             let _ = app.emit_to(OVERLAY_LABEL, events::REVEAL, items);
         }
@@ -1763,6 +1768,17 @@ pub fn drag_end(app: AppHandle, window: WebviewWindow, drop: bool, outside: bool
     };
     let point = session.last.unwrap_or_else(|| cursor(&app));
     let target = if drop { drop_target(&app, &session, point, outside, ctrl.unwrap_or(false)) } else { None };
+    // 按住 Ctrl 拖进被挡住的窗口合并：这时才把它提到最前（第八轮反馈 P5）。动画层上它的副本已经变实，接着交给窗口
+    // （浮现动画沿用这份副本），再收起别的副本；没有合并的副本都沉下去消失，窗口留在原处。
+    #[cfg(windows)]
+    if let (Some((label, ..)), true) = (&target, session.revealed) {
+        if let Some(found) = app.get_webview_window(label) {
+            let skip = skip_handles(&app, None);
+            if found.hwnd().is_ok_and(|hwnd| zorder::covered(hwnd.0 as isize, &skip)) {
+                play_surface(&app, &found, String::new());
+            }
+        }
+    }
     set_hint(&app, &mut session, None);
     update_reveal(&app, &mut session, false, point, None);
     let _ = app.emit_to(OVERLAY_LABEL, events::INDICATOR, serde_json::Value::Null);
