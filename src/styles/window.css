@@ -285,16 +285,34 @@ body[data-window='overlay'] .note-window.overlay-reveal-copy {
   filter: saturate(0.7);
 }
 
-/* 全文浮窗附着的卡片（T122）：只留一道淡淡的强调色细边，高亮与悬停也不加强调色外圈，重点落在浮窗上；
- * 按钮是「收起全文」，箭头朝上。 */
-.note-list .note-card.is-peeking:where(:not(.is-editing)) {
+/* 全文浮窗附着的卡片（T122、T127）：重点落在浮窗上（第六轮反馈：卡片的悬停高亮把重点抢了回去）。卡片不跟着
+ * 悬停与单击变亮：不加强调色外圈与叠加色，窗格的标题栏不染色、没有顶部的强调色线，玻璃块保留边缘受光，
+ * 只留一道淡淡的强调色细边；多选照常标出。按钮是「收起全文」，箭头朝上。 */
+.note-list .note-card.is-peeking:where(:not(.is-editing, .is-selected)),
+.note-list .note-card.is-peeking:is(:hover, .is-current):where(:not(.is-editing, .is-selected)) {
+  --local-overlay: transparent;
   --local-shadow: var(--sn-shadow-sm);
   border-color: color-mix(in srgb, var(--sn-color-accent) 45%, var(--sn-color-border));
 }
 
-/* 附着在卡片旁的全文浮窗（T122）：强调色描边。亚克力与不透明的窗口边框由系统画，NoteWindow.tsx 把它设成强调色。 */
+[data-sn-entries='panes'] .note-card.is-peeking:is(:hover, .is-current):where(:not(.is-editing, .is-selected)) > .note-header {
+  background: var(--sn-color-card-head);
+}
+
+[data-sn-entries='tiles'] .note-card.is-peeking:is(:hover, .is-current):where(:not(.is-editing, .is-selected))::after {
+  opacity: 1;
+}
+
+/* 附着在卡片旁的全文浮窗（T122、T127）：强调色描边，标题栏换成卡片高亮时的样子（选中色、顶部一条强调色线），
+ * 一眼看出重点在这里。亚克力与不透明的窗口边框由系统画，NoteWindow.tsx 把它设成强调色。 */
 body[data-window='note'] .note-window.is-attached {
   border-color: var(--sn-color-accent);
+}
+
+body[data-window='note'] .note-window.is-attached > .note-window-header {
+  background:
+    linear-gradient(var(--sn-color-accent), var(--sn-color-accent)) top / 100% var(--sn-focus-ring-width) no-repeat,
+    var(--sn-color-card-head-active);
 }
 
 .note-card.is-peeking .note-expand .icon {
