@@ -140,7 +140,7 @@ pub async fn import_backup_attachments(state: State<'_, AppState>, file: String,
 }
 
 /// 快照目录：设置中填写的目录，没有填写时为数据目录下的 snapshots 文件夹；是软链接时用实际位置。
-fn snapshot_root(state: &AppState, directory: &str) -> PathBuf {
+pub(crate) fn snapshot_root(state: &AppState, directory: &str) -> PathBuf {
     match directory.trim() {
         "" => state.store.directory().join(snapshots::SNAPSHOTS_DIR),
         custom => crate::paths::resolve(std::path::Path::new(custom)),

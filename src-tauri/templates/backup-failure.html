@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>SideNotes 通知：云端同步失败</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f6f8;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 640px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            border-top: 4px solid #c62828;
+        }
+        h2 {
+            color: #333333;
+            margin-top: 0;
+            border-bottom: 1px solid #eeeeee;
+            padding-bottom: 10px;
+        }
+        h3 {
+            color: #333333;
+            margin-top: 28px;
+        }
+        .content {
+            font-size: 15px;
+            line-height: 1.6;
+            color: #555555;
+        }
+        .status-list {
+            background-color: #fff8f7;
+            padding: 15px 20px;
+            border-radius: 4px;
+            border-left: 4px solid #c62828;
+        }
+        .status-error {
+            color: #c62828;
+            font-weight: bold;
+        }
+        .details {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 14px;
+        }
+        .details th, .details td {
+            border-bottom: 1px solid #eeeeee;
+            padding: 8px;
+            text-align: left;
+            vertical-align: top;
+            overflow-wrap: anywhere;
+        }
+        .details th {
+            width: 110px;
+            color: #555555;
+            background-color: #f9f9f9;
+        }
+        .footer {
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px dashed #dddddd;
+            font-size: 12px;
+            color: #999999;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🔔 SideNotes 通知：云端同步失败</h2>
+
+        <div class="content">
+            <p>您好，电脑 <strong>{{computer}}</strong> 上的 SideNotes 没能把记录备份到 <strong>{{provider}}</strong>，请检查以下信息。</p>
+
+            <div class="status-list">
+                <ul style="margin: 0; padding-left: 20px;">
+                    <li>原因：<span class="status-error">{{reason}}</span></li>
+                    <li>失败时间：{{failure_time}}</li>
+                    <li>上次成功：{{last_success}}</li>
+                </ul>
+            </div>
+
+            <h3>备份详情</h3>
+            <table class="details"><tbody>{{detail_rows}}</tbody></table>
+
+            <p>本机的记录不受影响。修好之后可以在「设置 → 数据与同步 → 云端同步」里点「立即备份」重试；同样的原因不会重复通知，备份恢复正常后再出错会重新通知。</p>
+        </div>
+
+        <div class="footer">
+            此为 SideNotes 自动发送的邮件，请勿直接回复。
+        </div>
+    </div>
+</body>
+</html>

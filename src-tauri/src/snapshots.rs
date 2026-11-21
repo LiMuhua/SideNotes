@@ -128,7 +128,7 @@ pub fn referenced_folders(texts: &[String]) -> BTreeSet<String> {
 }
 
 /// 读取数据库文件中全部记录与草稿的原文，以及记录条数。
-fn read_database(path: &Path) -> AppResult<(Vec<String>, i64)> {
+pub(crate) fn read_database(path: &Path) -> AppResult<(Vec<String>, i64)> {
     let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
     let mut statement = connection.prepare("SELECT text FROM notes UNION ALL SELECT text FROM drafts")?;
     let texts = statement
@@ -180,7 +180,7 @@ fn list(root: &Path) -> Vec<SnapshotInfo> {
 
 /// 要保留的快照编号（`infos` 按创建时间从新到旧排列）：最近 24 小时内的全部保留；1 至 7 天前每天保留
 /// 最新的一份；7 至 35 天前每周保留最新的一份；不论多久没有使用，最新的 3 份总是保留。
-fn retained(infos: &[SnapshotInfo], now: i64) -> BTreeSet<String> {
+pub(crate) fn retained(infos: &[SnapshotInfo], now: i64) -> BTreeSet<String> {
     let mut days = BTreeSet::new();
     let mut weeks = BTreeSet::new();
     let mut keep = BTreeSet::new();
@@ -347,17 +347,30 @@ pub fn restore(store: &Store, root: &Path, id: &str, now: i64) -> AppResult<Rest
         return Err(other("快照编号无效"));
     }
     let _guard = LOCK.lock().map_err(|_| other("快照状态异常，请重启应用"))?;
-    let data_dir = store.directory();
-    prepare_root(root, &data_dir)?;
+    prepare_root(root, &store.directory())?;
     let info = list(root)
         .into_iter()
         .find(|info| info.id == id)
         .ok_or_else(|| other("找不到这份快照，可能已被清理"))?;
+    restore_locked(store, root, &root.join(DATABASE_DIR).join(format!("{id}.db")), &info, &root.join(ATTACHMENTS_DIR), now)
+}
+
+/// 从快照目录之外的一份备份恢复（云端备份下载到本机临时目录的数据库与附件，见 cloud::job）：
+/// 与 restore 相同，恢复前的快照建在本机的快照目录 `root` 里。
+pub fn restore_external(store: &Store, root: &Path, database: &Path, info: &SnapshotInfo, attachments: &Path, now: i64) -> AppResult<RestoreReport> {
+    let _guard = LOCK.lock().map_err(|_| other("快照状态异常，请重启应用"))?;
+    prepare_root(root, &store.directory())?;
+    restore_locked(store, root, database, info, attachments, now)
+}
+
+/// 恢复的过程，调用方已经拿到锁、建好快照目录：`database` 是要恢复的数据库，`attachments` 里是它引用的附件子文件夹。
+fn restore_locked(store: &Store, root: &Path, database: &Path, info: &SnapshotInfo, attachments: &Path, now: i64) -> AppResult<RestoreReport> {
+    let data_dir = store.directory();
     // 恢复前的快照先不清理旧快照，以免把要恢复的这一份清掉。
     let backup = create_unpruned(store, root, "restore", now)?;
 
     let temp = data_dir.join(format!("{DATABASE_FILE}.restore-{now}"));
-    std::fs::copy(root.join(DATABASE_DIR).join(format!("{id}.db")), &temp)?;
+    std::fs::copy(database, &temp)?;
     let replaced = (|| -> AppResult<i64> {
         // 打开一次以按当前版本补齐结构迁移。
         drop(Store::open(&temp)?);
@@ -371,7 +384,6 @@ pub fn restore(store: &Store, root: &Path, id: &str, now: i64) -> AppResult<Rest
     let notes = replaced?;
 
     // 记录已经替换；之后拷回附件出错时不再返回错误，拷不回的计入「找不到」。
-    let source = root.join(ATTACHMENTS_DIR);
     let target = data_dir.join(ATTACHMENTS_DIR);
     let (mut restored_attachments, mut missing_attachments) = (0, 0);
     for folder in referenced_folders(&store.reference_texts().unwrap_or_default()) {
@@ -379,7 +391,7 @@ pub fn restore(store: &Store, root: &Path, id: &str, now: i64) -> AppResult<Rest
             continue;
         }
         let _ = std::fs::create_dir_all(&target);
-        if source.join(&folder).is_dir() && copy_folder(&source.join(&folder), &target.join(&folder)).is_ok() {
+        if attachments.join(&folder).is_dir() && copy_folder(&attachments.join(&folder), &target.join(&folder)).is_ok() {
             restored_attachments += 1;
         } else {
             missing_attachments += 1;

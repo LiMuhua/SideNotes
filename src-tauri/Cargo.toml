@@ -13,6 +13,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+# 构建脚本读 oauth-clients.json（见 build.rs）。
+serde_json = "1"
 
 [dependencies]
 # devtools：正式版也能从设置页打开开发者工具，便于排查问题。
@@ -31,6 +33,19 @@ thiserror = "2"
 dunce = "1"
 # 大图的显示副本（T115）：读 PNG、JPEG 的尺寸，缩小后另存（Tauri 已依赖同一版本，这里加上 JPEG 的编解码）。
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# 云端同步（T159 起）：WebDAV、OneDrive、Google Drive 与 Resend 的 HTTP 请求，在后台线程里同步发出。
+# TLS 用系统自带的（Windows 上是 SChannel），不用默认的 rustls + aws-lc：后者在 Windows 上编译要装 cmake 与 NASM。
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "form", "query", "native-tls"] }
+# WebDAV 的 PROPFIND 回复是 XML（Tauri 已依赖同一版本）。
+quick-xml = "0.42"
+# OAuth 的 PKCE 校验码与邮件的幂等键（Tauri 已依赖同一版本）。
+sha2 = "0.10"
+getrandom = "0.3"
+# 自动备份按 crontab 的五段写法算本地时间的下一次（Tauri 已依赖同一版本）。
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+# 云端路径逐段编码进网址。
+percent-encoding = "2"
+url = "2"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-global-shortcut = "2"
@@ -43,6 +58,8 @@ windows = { version = "0.62", features = [
   "Win32_Graphics_DirectWrite",
   "Win32_Graphics_Dwm",
   "Win32_Graphics_Gdi",
+  # 云端同步的凭据（密码、登录令牌、Resend 密钥）用 DPAPI 加密后存在本机（cloud::secrets）。
+  "Win32_Security_Cryptography",
   "Win32_Storage_FileSystem",
   "Win32_System_Com",
   "Win32_System_LibraryLoader",

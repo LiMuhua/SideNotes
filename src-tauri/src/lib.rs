@@ -3,6 +3,7 @@
 mod app_icon;
 mod attachments;
 mod backup;
+mod cloud;
 mod commands;
 mod diag;
 mod dialogs;
@@ -105,6 +106,9 @@ pub fn run() {
             #[cfg(any(target_os = "android", target_os = "ios"))]
             let hotkeys = commands::HotkeyState::default();
 
+            // 云端同步：凭据与运行状态放在本机的应用数据目录（不随数据目录迁移），临时的数据库副本放在缓存目录。
+            app.manage(cloud::CloudState::new(&default_dir, &paths::resolve(&handle.path().app_cache_dir()?)));
+
             app.manage(AppState {
                 store,
                 edge: watcher.clone(),
@@ -140,6 +144,7 @@ pub fn run() {
             tray::setup(&handle)?;
 
             edge::spawn(handle.clone(), watcher);
+            cloud::spawn_scheduler(handle.clone());
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -229,6 +234,20 @@ pub fn run() {
             commands::create_snapshot,
             commands::auto_snapshot,
             commands::restore_snapshot,
+            cloud::cloud_overview,
+            cloud::cloud_check_schedule,
+            cloud::cloud_connect_webdav,
+            cloud::cloud_login,
+            cloud::cloud_cancel_login,
+            cloud::cloud_submit_code,
+            cloud::cloud_disconnect,
+            cloud::cloud_list_folders,
+            cloud::cloud_create_folder,
+            cloud::cloud_backup_now,
+            cloud::cloud_list_backups,
+            cloud::cloud_restore,
+            cloud::cloud_set_resend_key,
+            cloud::cloud_test_email,
             commands::copy_file_paths,
             commands::quit_app,
             note_windows::note_window_init,
