@@ -139,21 +139,23 @@ body[data-window='dialog'] .toast-region.dialog-toast-region {
 /* ==================== 调宽手柄（原型第二版） ====================
  * 停留 400ms（is-armed）、拖动或获得焦点时，手柄亮起一条强调色的线，与 Playground 的 .sn-resizer 相同；
  * theme.css（与原型）的 ::after 缺 content，高亮画不出来，这里补上。手柄贴在窗口的内侧边（窗口外收不到指针），
- * 线跨在面板边上，一半在窗口外，看到的是贴边的一条。获得焦点时由这条线指示，不画焦点环。 */
+ * 获得焦点时由这条线指示，不画焦点环。线一直画着、平时全透明，亮起与熄灭都是淡入淡出（第九轮反馈 4：原来换的是
+ * 底色，过渡只有主题的快速时长，终端 70 毫秒，看着一下子出现）。线不接收指针，手柄的范围不变。 */
 body[data-window='sidebar'] .sidebar-resizer::after {
   content: '';
   position: absolute;
   top: 0;
   bottom: 0;
   width: var(--sn-space-1);
+  background: var(--sn-color-accent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity max(var(--sn-duration-slow), 200ms) var(--sn-ease-standard); /* 固定：最短 200 毫秒，看得出淡入淡出 */
 }
 
-body[data-window='sidebar'] .sidebar-resizer[data-edge='right']::after {
-  left: calc(var(--sn-space-1) / -2);
-}
-
-body[data-window='sidebar'] .sidebar-resizer[data-edge='left']::after {
-  right: calc(var(--sn-space-1) / -2);
+body[data-window='sidebar'] .sidebar-resizer:is(.is-armed, :focus-visible)::after,
+body[data-window='sidebar'].is-resizing-sidebar .sidebar-resizer::after {
+  opacity: 1;
 }
 
 body[data-window='sidebar'] .sidebar-resizer:focus-visible {
@@ -168,6 +170,28 @@ body[data-window='sidebar'] .sidebar-resizer:focus-visible {
 
 :root:is([data-sn-window='opaque'], [data-sn-window='acrylic']) body[data-window='sidebar'] .sidebar-resizer[data-edge='left']::after {
   right: var(--sn-border-width);
+}
+
+/* 页面自己画面板的透明窗口（杂志、记录纸、磨砂玻璃）：窗口比面板高（上下留白），线贴着面板朝屏幕内侧的一边，只占面板
+ * 的高度，两端随面板的圆角收住，与 Windows 11 由系统的圆角裁掉两端一样（第九轮反馈 4、5：原来线是窗口的整个高度，
+ * 上下留白处也有，又硬又长）。画法：盖住面板内侧一条，宽度取圆角半径，圆角与面板相同，只有贴边的线宽里有颜色，
+ * 圆角把两端裁掉。磨砂玻璃的面板是若干块，线从最上一块的顶到最下一块的底，连成一条。 */
+:root[data-sn-window='clear'] body[data-window='sidebar'] .sidebar-resizer::after {
+  top: var(--sn-panel-inset);
+  bottom: var(--sn-panel-inset);
+  width: max(var(--sn-panel-radius), var(--sn-space-1));
+}
+
+:root[data-sn-window='clear'] body[data-window='sidebar'] .sidebar-resizer[data-edge='right']::after {
+  left: 0;
+  border-radius: var(--sn-panel-radius) 0 0 var(--sn-panel-radius);
+  background: linear-gradient(to right, var(--sn-color-accent) var(--sn-space-1), transparent var(--sn-space-1));
+}
+
+:root[data-sn-window='clear'] body[data-window='sidebar'] .sidebar-resizer[data-edge='left']::after {
+  right: 0;
+  border-radius: 0 var(--sn-panel-radius) var(--sn-panel-radius) 0;
+  background: linear-gradient(to left, var(--sn-color-accent) var(--sn-space-1), transparent var(--sn-space-1));
 }
 
 /* 记录纸的侧栏（第九轮反馈 5）：贴边整块，朝屏幕内侧的两个角是圆角。窗口全透明（core/surfaces 的 sidebarMaterial），
