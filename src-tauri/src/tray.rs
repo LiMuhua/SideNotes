@@ -30,7 +30,7 @@ pub fn setup(app: &AppHandle) -> AppResult<()> {
     let open_capture = item("tray-capture", "快捷速记", Glyph::Capture)?;
     let settings = item("tray-settings", "设置", Glyph::Settings)?;
     let separator = PredefinedMenuItem::separator(app)?;
-    let quit = item("tray-quit", "退出应用", Glyph::Quit)?;
+    let quit = item("tray-quit", "退出", Glyph::Quit)?;
     let menu = Menu::with_items(
         app,
         &[&open_sidebar, &open_capture, &separator, &settings, &separator, &quit],

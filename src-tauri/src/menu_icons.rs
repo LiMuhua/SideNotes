@@ -22,7 +22,7 @@ pub enum Glyph {
     Capture,
     /// 设置：齿轮。
     Settings,
-    /// 退出应用：电源。
+    /// 退出：电源。
     Quit,
 }
 
