@@ -1,6 +1,6 @@
 # 记录纸（Paper）
 
-一叠贴着屏幕边缘的记录纸：灰绿纸垫上铺着一张张浅色纸片，只有一种墨色，编辑时纸片上出现横线。取自 Glance 的记录纸外观，也对应现有 SideNotes 的纸张材质。
+一叠浮在屏幕边上的记录纸：灰绿纸垫上铺着一张张浅色纸片，只有一种墨色，编辑时纸片上出现横线。取自 Glance 的记录纸外观，也对应现有 SideNotes 的纸张材质。
 
 令牌文件：[tokens/paper.css](../tokens/paper.css)。结构差异：[surfaces.ts](../playground/src/surfaces.ts) 中 `id: 'paper'` 的一项。
 
@@ -8,7 +8,7 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 关键词 | 贴边纸垫、纸片、单色墨水、灰绿纸色、编辑时的横线 |
+| 关键词 | 纸垫、纸片、单色墨水、灰绿纸色、编辑时的横线 |
 | 适合 | 喜欢安静、颜色少的界面；记录长短不一，需要一眼分清每一条 |
 | 参考 | Glance 记录纸外观（`theme.rs`），见 [glance-analysis.md](../references/glance-analysis.md)；现有 SideNotes 的纸张材质 |
 
@@ -16,7 +16,7 @@
 
 | 项目 | 取值 | 说明 |
 | --- | --- | --- |
-| 与屏幕边缘 | 贴边整块 | 贴住屏幕的侧边，上下离开屏幕 10px（与杂志、磨砂玻璃一样）；贴边一侧没有圆角，朝屏幕内侧一边 16px 圆角 |
+| 与屏幕边缘 | 浮动面板 | 离开屏幕边缘 10px（与杂志、磨砂玻璃一样），四角 16px 圆角，一像素边框；速记浮窗与记录窗口仍是不透明的一整块，外框由系统画 |
 | 记录 | 纸片 | 一像素边框、3px 圆角，底边一像素的纸厚阴影；纸片之间留 8px |
 | 页签 | 下划线 | 当前页签下方一条墨绿色的线 |
 | 底栏 | 版本号与设置 | — |
@@ -57,8 +57,7 @@ Glance 用细线分栏，它的栏目内容短而整齐；SideNotes 的记录长
 
 | 项目 | 令牌 | 取值 |
 | --- | --- | --- |
-| 面板离屏幕上下边 | `--sn-panel-inset` | 10px |
-| 面板圆角（内侧、贴边一侧） | `--sn-panel-radius`、`--sn-panel-radius-edge` | 16px、0 |
+| 面板离屏幕边缘、面板圆角 | `--sn-panel-inset`、`--sn-panel-radius` | 10px、16px |
 | 记录圆角、控件圆角 | `--sn-card-radius`、`--sn-radius-control` | 3px、6px |
 | 面板内边距 | `--sn-panel-padding` | 12px |
 | 记录内边距 | `--sn-card-padding-x`、`--sn-card-padding-y` | 12px、10px |
@@ -187,7 +186,7 @@ Glance 用细线分栏，它的栏目内容短而整齐；SideNotes 的记录长
 | `--sn-panel-saturate` | `1` |
 | `--sn-panel-inset` | `10px` |
 | `--sn-panel-radius` | `16px` |
-| `--sn-panel-radius-edge` | `0px` |
+| `--sn-panel-radius-edge` | `16px` |
 | `--sn-block-gap` | `0px` |
 | `--sn-font-ui` | `Archivo, 'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans SC', 'Noto Sans CJK SC', system-ui, -apple-system, Roboto, 'Noto Sans', Ubuntu, Cantarell, sans-serif` |
 | `--sn-font-title` | `var(--sn-font-ui)` |

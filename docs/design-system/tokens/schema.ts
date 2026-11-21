@@ -121,7 +121,7 @@ export const TOKENS: readonly TokenSpec[] = [
   ...fixed('material', [
     ['--sn-panel-blur', '面板的背景模糊半径；0 表示实心表面'],
     ['--sn-panel-saturate', '背景模糊时的饱和度倍数'],
-    ['--sn-panel-inset', '侧栏离屏幕边缘的距离：浮动面板与玻璃块是上下与贴边一侧，贴边整块的面板只有上下；0 表示铺满'],
+    ['--sn-panel-inset', '侧栏离屏幕上下边与贴边一侧的距离；0 表示贴边'],
     ['--sn-panel-radius', '面板圆角'],
     ['--sn-panel-radius-edge', '面板贴边一侧的圆角'],
     ['--sn-block-gap', '分块面板之间的间隙（磨砂玻璃）；整块面板为 0'],

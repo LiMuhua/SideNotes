@@ -13,7 +13,7 @@ window.SideNotesSurfaces = (function createSurfaces() {
   const SURFACES = Object.freeze([
     { id: 'terminal', name: '终端', dock: 'flush', entries: 'panes', tabs: 'underline', translucent: false, inlineShortcuts: true, tabMarks: false },
     { id: 'magazine', name: '杂志', dock: 'floating', entries: 'cards', tabs: 'segmented', translucent: false, inlineShortcuts: false, tabMarks: false },
-    { id: 'paper', name: '记录纸', dock: 'flush', entries: 'cards', tabs: 'underline', translucent: false, inlineShortcuts: false, tabMarks: false },
+    { id: 'paper', name: '记录纸', dock: 'floating', entries: 'cards', tabs: 'underline', translucent: false, inlineShortcuts: false, tabMarks: false },
     { id: 'win11', name: 'Windows 11', dock: 'floating', entries: 'cards', tabs: 'underline', translucent: true, inlineShortcuts: false, tabMarks: false },
     { id: 'glass', name: '磨砂玻璃', dock: 'blocks', entries: 'tiles', tabs: 'segmented', translucent: true, inlineShortcuts: false, tabMarks: true }
   ].map(Object.freeze));

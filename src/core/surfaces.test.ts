@@ -43,14 +43,29 @@ describe('主题结构', () => {
     expect(surfaceAttributes('terminal', 'light')['data-sn-shortcuts']).toBe('inline');
   });
 
-  it('侧栏窗口的材质：贴边整块、内侧却是圆角的主题（记录纸）与分块的磨砂玻璃全透明，其余同 windowMaterial', () => {
-    for (const { id, dock } of SURFACES) {
-      const radius = parseFloat(tokensFor(id, `tokens/${id}.css`, 'light').get('--sn-panel-radius') ?? '0');
-      const pageDrawn = dock === 'blocks' || (dock === 'flush' && radius > 0);
-      expect(sidebarMaterial(id), id).toBe(pageDrawn ? 'clear' : windowMaterial(id));
+  it('侧栏窗口的材质：分块的磨砂玻璃与不透明的浮动面板全透明，半透明的浮动面板用亚克力，贴边整块不透明', () => {
+    for (const { id, dock, translucent } of SURFACES) {
+      const expected = dock === 'blocks' ? 'clear' : translucent ? 'acrylic' : dock === 'floating' ? 'clear' : 'opaque';
+      expect(sidebarMaterial(id), id).toBe(expected);
     }
-    // 速记浮窗与记录窗口照常：记录纸仍是不透明的一整块。
-    expect(windowMaterial('paper')).toBe('opaque');
+    expect(sidebarMaterial('paper')).toBe('clear');
     expect(sidebarMaterial('terminal')).toBe('opaque');
+  });
+
+  it('速记浮窗与记录窗口的材质：记录纸的侧栏是浮动面板，这两种窗口仍是不透明的一整块，外框由系统画', () => {
+    expect(surfaceAttributes('paper', 'light')['data-sn-dock']).toBe('floating');
+    expect(windowMaterial('paper')).toBe('opaque');
+    expect(windowMaterial('terminal')).toBe('opaque');
+    expect(windowMaterial('magazine')).toBe('clear');
+    expect(windowMaterial('win11')).toBe('acrylic');
+    expect(windowMaterial('glass')).toBe('acrylic');
+  });
+
+  it('浮动面板四角同样圆：贴边一侧的圆角与面板圆角相同', () => {
+    for (const { id, dock } of SURFACES) {
+      if (dock !== 'floating') continue;
+      const tokens = tokensFor(id, `tokens/${id}.css`, 'light');
+      expect(tokens.get('--sn-panel-radius-edge'), id).toBe(tokens.get('--sn-panel-radius'));
+    }
   });
 });

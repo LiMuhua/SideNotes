@@ -113,7 +113,7 @@ SideNotes 的取舍：
 
 - Windows 11 主题与 Windows 一致：`--sn-radius-control`、`--sn-card-radius` 与工具提示用的 `--sn-radius-sm` 为 4px，弹窗用的 `--sn-radius-lg` 与 `--sn-panel-radius` 为 8px。
 - 菜单不一致：Playground 的菜单取 `--sn-radius-md`，Windows 11 主题为 4px，而 Windows 的菜单是 8px（Glance 的菜单也是 8px）。可以把这套主题的 `--sn-radius-md` 改为 8px（代码块、行内提示随之变化），或为菜单单设令牌（推断）。
-- 贴边：终端与记录纸贴住屏幕的侧边（记录纸只离开上下 10px），贴边一侧的 `--sn-panel-radius-edge` 为 0，符合 Fluent 的贴屏幕边缘不圆与 Windows 的直边相接不圆。
+- 贴边：终端贴住屏幕边缘，贴边一侧的 `--sn-panel-radius-edge` 为 0，符合 Fluent 的贴屏幕边缘不圆与 Windows 的直边相接不圆。记录纸原来也贴边，桌面端第十一轮反馈改为浮动面板，四角同样圆。
 - 其余主题的圆角是风格选择，不对应某个平台：终端 2 至 6px，杂志用胶囊按钮（999px）与 14px 卡片，磨砂玻璃 12px 控件、18px 卡片、24px 面板（推断）。
 - 阴影用两层：Windows 11 主题 `--sn-shadow-md` 的主阴影 `0 8px 16px` 与 `--sn-shadow-lg` 的 `0 32px 64px`，与 Fluent Web 的 shadow16、shadow64 几何相同。五套主题深色 `--sn-shadow-md` 的不透明度都高于浅色，与 Fluent 一致。
 

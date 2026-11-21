@@ -65,16 +65,6 @@
   border-right: var(--sn-border-width) solid var(--sn-color-border);
 }
 
-/* 贴边整块贴住屏幕的侧边，只在上下离开屏幕 --sn-panel-inset（记录纸与杂志、磨砂玻璃的上下留白一致；终端为 0，铺满整个高度）。
- * 上下离开屏幕时面板的上下边也画边框；边框宽度取边框与留白中较小的一个，留白为 0 时没有上下边框。 */
-.sn-sidebar-window:has(.sn-sidebar.is-flush) {
-  padding-inline: 0;
-}
-
-.sn-sidebar.is-flush {
-  border-block: min(var(--sn-border-width), var(--sn-panel-inset)) solid var(--sn-color-border);
-}
-
 /* 分开的玻璃块：面板本身透明，每一块各自磨砂。 */
 .sn-sidebar.is-blocks {
   gap: var(--sn-block-gap);

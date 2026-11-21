@@ -32,7 +32,7 @@ export interface SurfaceSpec {
 export const SURFACES: readonly SurfaceSpec[] = [
   { id: 'terminal', name: '终端', dock: 'flush', entries: 'panes', tabs: 'underline', translucent: false, inlineShortcuts: true, tabMarks: false },
   { id: 'magazine', name: '杂志', dock: 'floating', entries: 'cards', tabs: 'segmented', translucent: false, inlineShortcuts: false, tabMarks: false },
-  { id: 'paper', name: '记录纸', dock: 'flush', entries: 'cards', tabs: 'underline', translucent: false, inlineShortcuts: false, tabMarks: false },
+  { id: 'paper', name: '记录纸', dock: 'floating', entries: 'cards', tabs: 'underline', translucent: false, inlineShortcuts: false, tabMarks: false },
   { id: 'win11', name: 'Windows 11', dock: 'floating', entries: 'cards', tabs: 'underline', translucent: true, inlineShortcuts: false, tabMarks: false },
   { id: 'glass', name: '磨砂玻璃', dock: 'blocks', entries: 'tiles', tabs: 'segmented', translucent: true, inlineShortcuts: false, tabMarks: true },
 ];
@@ -87,16 +87,22 @@ export function surfaceAttributes(surface: SurfaceMode, theme: 'light' | 'dark')
  * 窗口材质（T84，adaptation.md 第三、四节，技术决策第 40 条）：
  * - `acrylic`：Windows 11 与磨砂玻璃。透明窗口加亚克力，窗口本身就是面板，侧栏窗口离开屏幕边缘一段留白；
  * - `clear`：杂志。透明、不加材质，浮动面板的留白在窗口内，透出桌面；
- * - `opaque`：终端与记录纸，贴边整块，面板铺满窗口。
- * 设置窗口一律不透明，不经过这里。
+ * - `opaque`：终端与记录纸，面板铺满窗口，外框由系统画。
+ * 这里是速记浮窗与记录窗口的材质，侧栏另见 sidebarMaterial。设置窗口一律不透明，不经过这里。
  */
 export type WindowMaterial = 'acrylic' | 'clear' | 'opaque';
 
-/** 主题对应的窗口材质。 */
+/**
+ * 侧栏是浮动面板、速记浮窗与记录窗口却仍由系统画外框的主题：记录纸。它的侧栏在第十一轮反馈 1 改为浮动面板（与杂志、
+ * 磨砂玻璃一样四周离开屏幕），速记浮窗与记录窗口没有要求改动，照旧是不透明的一整块（技术决策第 62 条）。
+ */
+const SYSTEM_FRAMED: ReadonlySet<SurfaceMode> = new Set<SurfaceMode>(['paper']);
+
+/** 速记浮窗与记录窗口的材质。 */
 export function windowMaterial(surface: SurfaceMode): WindowMaterial {
   const item = surfaceSpec(surface);
   if (item.translucent) return 'acrylic';
-  return item.dock === 'flush' ? 'opaque' : 'clear';
+  return item.dock === 'flush' || SYSTEM_FRAMED.has(surface) ? 'opaque' : 'clear';
 }
 
 /**
@@ -109,17 +115,14 @@ export function isGlassBlocks(surface: SurfaceMode): boolean {
 }
 
 /**
- * 贴边整块、朝屏幕内侧的两个角却是圆角的主题（令牌 `--sn-panel-radius`）：记录纸。不透明的窗口画不出圆角外面的桌面，
- * 角上露出底色，系统的直角边框也还在，看着多出一截线条（第九轮反馈 5）。
- */
-const ROUNDED_FLUSH: ReadonlySet<SurfaceMode> = new Set<SurfaceMode>(['paper']);
-
-/**
- * 侧栏窗口的材质：分块的磨砂玻璃与内侧带圆角的记录纸全透明，面板的圆角与边框由页面画；其余与 windowMaterial 相同
- * （速记浮窗与记录窗口仍是一整块，照常用亚克力或不透明的底色）。
+ * 侧栏窗口的材质：分块的磨砂玻璃与不透明的浮动面板（杂志、记录纸）全透明，面板的留白、圆角与边框由页面画；
+ * 半透明的浮动面板（Windows 11）用亚克力，窗口本身就是面板；贴边整块（终端）不透明。
  */
 export function sidebarMaterial(surface: SurfaceMode): WindowMaterial {
-  return isGlassBlocks(surface) || ROUNDED_FLUSH.has(surface) ? 'clear' : windowMaterial(surface);
+  const item = surfaceSpec(surface);
+  if (isGlassBlocks(surface)) return 'clear';
+  if (item.translucent) return 'acrylic';
+  return item.dock === 'floating' ? 'clear' : 'opaque';
 }
 
 /**

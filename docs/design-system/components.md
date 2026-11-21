@@ -24,8 +24,8 @@
 
 | 结构 | 主题 | 做法 |
 | --- | --- | --- |
-| 贴边整块（flush） | 终端、记录纸 | 面板贴住屏幕的侧边，上下离开屏幕 `--sn-panel-inset`（终端为 0，铺满整个高度）；朝屏幕内侧一条边框，上下离开屏幕时上下边也有边框；贴边一侧的圆角取 `--sn-panel-radius-edge` |
-| 浮动面板（floating） | 杂志、Windows 11 | 离开屏幕边缘 `--sn-panel-inset`，四角圆角 `--sn-panel-radius`，一像素边框 |
+| 贴边整块（flush） | 终端 | 面板贴住屏幕边缘，朝屏幕内侧一条边框；贴边一侧的圆角取 `--sn-panel-radius-edge` |
+| 浮动面板（floating） | 杂志、记录纸、Windows 11 | 离开屏幕边缘 `--sn-panel-inset`，四角圆角 `--sn-panel-radius`，一像素边框 |
 | 分开的若干块（blocks） | 磨砂玻璃 | 没有整块面板：标题区与页签、列表顶栏、新建卡片、每条记录、底栏各是一块，块间距 `--sn-block-gap` |
 
 面板底色 `--sn-color-panel`，投影 `--sn-shadow-panel`；半透明主题加背景模糊 `--sn-panel-blur` 与饱和度 `--sn-panel-saturate`。
