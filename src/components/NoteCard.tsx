@@ -16,6 +16,7 @@ import { LiveEditor } from './LiveEditor';
 import { TagInput } from './TagInput';
 import { Markdown, MarkdownInline } from './Markdown';
 import { formatTime, likelyLong, noteTitle } from '../core/notes';
+import { watchResize } from '../core/resizeWatch';
 import { isValidTag, parse } from '../core/tags';
 import { noteDisplay, sourceOffset } from '../core/display';
 import type { AttachmentReference } from '../core/attachments';
@@ -336,7 +337,8 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
   const [truncated, setTruncated] = useState(() => likelyLong(note));
   const saveKeys = useShortcut('save');
 
-  // 正文实际溢出时渐隐并在悬停时提示，图片加载后需要复核。
+  // 正文实际溢出时渐隐并在悬停时提示，图片加载后需要复核。正文的大小变了也要复核：设置中改了「卡片最大高度」、
+  // 侧栏变宽变窄时正文跟着变高变矮（原来只在正文、图片、编辑与折叠状态变化时量，改设置后「展开全文」按钮不出现或不消失）。
   useEffect(() => {
     const target = content.current;
     if (!target || isEditing) return;
@@ -344,6 +346,7 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
       setTruncated(target.scrollHeight > target.clientHeight + 2);
     };
     const frame = window.requestAnimationFrame(measure);
+    const unwatch = watchResize(target, measure);
     const images = Array.from(target.querySelectorAll('img'));
     images.forEach((image) => {
       image.addEventListener('load', measure);
@@ -351,6 +354,7 @@ export const NoteCard = memo(function NoteCard(props: NoteCardProps) {
     });
     return () => {
       window.cancelAnimationFrame(frame);
+      unwatch();
       images.forEach((image) => {
         image.removeEventListener('load', measure);
         image.removeEventListener('error', measure);
