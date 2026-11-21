@@ -206,7 +206,7 @@ img.brand-mark.is-small {
 }
 
 /* ---------- 侧栏面板与屏幕边缘 ----------
- * .sidebar 相当于侧栏窗口，面板画在 ::before 上：贴边整块铺满窗口；浮动面板离开屏幕边缘 --sn-panel-inset，
+ * .sidebar 相当于侧栏窗口，面板画在 ::before 上：贴边整块贴住屏幕的侧边、上下离开 --sn-panel-inset；浮动面板离开屏幕边缘 --sn-panel-inset，
  * 朝屏幕内侧的一边不留缝；磨砂玻璃没有整块面板，标题区、列表顶栏、新建卡片、每条记录与底栏各是一块。 */
 .sidebar {
   /* 侧栏在缩放后的坐标中排版，屏幕宽度要除以缩放，宽度设置大于屏幕时才不会伸出屏幕。
@@ -231,6 +231,17 @@ img.brand-mark.is-small {
   backdrop-filter: blur(var(--sn-panel-blur)) saturate(var(--sn-panel-saturate));
   box-shadow: var(--sn-shadow-panel);
   pointer-events: none;
+}
+
+/* 贴边整块贴住屏幕的侧边，上下离开屏幕 --sn-panel-inset（第十轮反馈 2：记录纸与杂志、磨砂玻璃的上下留白一致；终端为 0，
+ * 铺满整个高度）。上下离开屏幕时面板的上下边也画边框；边框宽度取边框与留白中较小的一个，留白为 0 时没有上下边框。 */
+[data-sn-dock='flush'] .sidebar {
+  padding-block: var(--sn-panel-inset);
+}
+
+[data-sn-dock='flush'] .sidebar::before {
+  inset-block: var(--sn-panel-inset);
+  border-block: min(var(--sn-border-width), var(--sn-panel-inset)) solid var(--sn-color-border);
 }
 
 [data-sn-dock='flush'] .sidebar[data-edge='right']::before {

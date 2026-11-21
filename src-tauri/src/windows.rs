@@ -802,8 +802,8 @@ mod tests {
 
     #[test]
     fn floating_panel_leaves_a_gap_to_the_screen_edges() {
-        // Windows 11 主题：12px 留白乘 1.25 的界面缩放。内侧边与贴边时相同，窗口窄一段，上下各让出留白。
-        let gap = 15.0;
+        // Windows 11 主题：8px 留白乘 1.25 的界面缩放。内侧边与贴边时相同，窗口窄一段，上下各让出留白。
+        let gap = 10.0;
         let right = place_sidebar(AREA, 452.0, false, INSET, gap);
         assert!(close(right.final_x + INSET.0, 2560.0 - 452.0));
         assert!(close(right.final_x + INSET.0 + right.width, 2560.0 - gap));

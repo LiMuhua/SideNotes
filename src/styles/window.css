@@ -194,9 +194,10 @@ body[data-window='sidebar'] .sidebar-resizer:focus-visible {
   background: linear-gradient(to left, var(--sn-color-accent) var(--sn-space-1), transparent var(--sn-space-1));
 }
 
-/* 记录纸的侧栏（第九轮反馈 5）：贴边整块，朝屏幕内侧的两个角是圆角。窗口全透明（core/surfaces 的 sidebarMaterial），
- * 圆角外透出桌面，系统不再画直角的边框与投影；面板的投影在窗口里只剩圆角旁边的一小块、又被窗口边切断，一并不画。 */
-:root[data-sn-window='clear'][data-sn-dock='flush'] body[data-window='sidebar'] .sidebar::before {
+/* 页面自己画面板的透明侧栏窗口（杂志、记录纸）：面板不画投影。窗口只比面板大出留白的一圈，投影在窗口里只剩面板旁边的
+ * 一小段、又被窗口边切断，看着是面板底下多出一条生硬的暗带（第九轮反馈 5 的记录纸；第十轮反馈 2 的杂志，杂志的投影
+ * 向下偏 24～28px，底边最明显）。磨砂玻璃没有整块面板，各块的投影只有贴近边缘的一点，照常画。 */
+:root[data-sn-window='clear'] body[data-window='sidebar'] .sidebar::before {
   box-shadow: none;
 }
 

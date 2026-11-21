@@ -16,7 +16,7 @@
 
 | 项目 | 取值 | 说明 |
 | --- | --- | --- |
-| 与屏幕边缘 | 贴边整块 | 贴边一侧没有圆角，朝屏幕内侧一边 16px 圆角 |
+| 与屏幕边缘 | 贴边整块 | 贴住屏幕的侧边，上下离开屏幕 10px（与杂志、磨砂玻璃一样）；贴边一侧没有圆角，朝屏幕内侧一边 16px 圆角 |
 | 记录 | 纸片 | 一像素边框、3px 圆角，底边一像素的纸厚阴影；纸片之间留 8px |
 | 页签 | 下划线 | 当前页签下方一条墨绿色的线 |
 | 底栏 | 版本号与设置 | — |
@@ -57,6 +57,7 @@ Glance 用细线分栏，它的栏目内容短而整齐；SideNotes 的记录长
 
 | 项目 | 令牌 | 取值 |
 | --- | --- | --- |
+| 面板离屏幕上下边 | `--sn-panel-inset` | 10px |
 | 面板圆角（内侧、贴边一侧） | `--sn-panel-radius`、`--sn-panel-radius-edge` | 16px、0 |
 | 记录圆角、控件圆角 | `--sn-card-radius`、`--sn-radius-control` | 3px、6px |
 | 面板内边距 | `--sn-panel-padding` | 12px |
@@ -184,7 +185,7 @@ Glance 用细线分栏，它的栏目内容短而整齐；SideNotes 的记录长
 | --- | --- |
 | `--sn-panel-blur` | `0px` |
 | `--sn-panel-saturate` | `1` |
-| `--sn-panel-inset` | `0px` |
+| `--sn-panel-inset` | `10px` |
 | `--sn-panel-radius` | `16px` |
 | `--sn-panel-radius-edge` | `0px` |
 | `--sn-block-gap` | `0px` |

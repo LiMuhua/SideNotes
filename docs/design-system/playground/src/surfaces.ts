@@ -83,7 +83,7 @@ export const SURFACES: readonly SurfaceSpec[] = [
     id: 'win11',
     name: 'Windows 11',
     english: 'Windows 11',
-    idea: '一张亚克力面板，和开始菜单、快速设置一样：离开屏幕边缘 12 像素，8 像素圆角，一像素描边。',
+    idea: '一张亚克力面板，像开始菜单、快速设置那样浮在屏幕边上：离开屏幕边缘 8 像素，8 像素圆角，一像素描边。',
     keywords: ['亚克力', '系统强调色', 'Segoe UI Variable', '分层卡片', '浮动面板', '输入框底部强调线'],
     references: ['Glance Windows 11 外观（theme.rs、skins.rs）', 'Fluent 2', '现有 SideNotes 的 Win11 材质'],
     dock: 'floating',

@@ -1,6 +1,6 @@
 # Windows 11
 
-一张亚克力面板，和开始菜单、快速设置一样：离开屏幕边缘 12 像素，8 像素圆角，一像素描边。取自 Glance 的 Windows 11 外观，也对应现有 SideNotes 的 Win11 材质。
+一张亚克力面板，像开始菜单、快速设置那样浮在屏幕边上：离开屏幕边缘 8 像素（比开始菜单的 12 像素紧一些：这套主题清淡，留白大了显得空），8 像素圆角，一像素描边。取自 Glance 的 Windows 11 外观，也对应现有 SideNotes 的 Win11 材质。
 
 令牌文件：[tokens/win11.css](../tokens/win11.css)。结构差异：[surfaces.ts](../playground/src/surfaces.ts) 中 `id: 'win11'` 的一项。
 
@@ -16,7 +16,7 @@
 
 | 项目 | 取值 | 说明 |
 | --- | --- | --- |
-| 与屏幕边缘 | 浮动面板 | 离开屏幕边缘 12px，8px 圆角，一像素描边 |
+| 与屏幕边缘 | 浮动面板 | 离开屏幕边缘 8px，8px 圆角，一像素描边 |
 | 记录 | 卡片 | 半透明的白色卡片，4px 圆角，卡片之间留 4px |
 | 页签 | 下划线 | 当前页签下方一条强调色的线 |
 | 底栏 | 版本号与设置 | 底栏比面板稍暗 |
@@ -56,7 +56,7 @@
 
 | 项目 | 令牌 | 取值 |
 | --- | --- | --- |
-| 面板离屏幕边缘、面板圆角 | `--sn-panel-inset`、`--sn-panel-radius` | 12px、8px |
+| 面板离屏幕边缘、面板圆角 | `--sn-panel-inset`、`--sn-panel-radius` | 8px、8px |
 | 记录圆角、控件圆角 | `--sn-card-radius`、`--sn-radius-control` | 4px、4px |
 | 面板内边距 | `--sn-panel-padding` | 12px |
 | 记录内边距 | `--sn-card-padding-x`、`--sn-card-padding-y` | 12px、10px |
@@ -186,7 +186,7 @@
 | --- | --- |
 | `--sn-panel-blur` | `30px` |
 | `--sn-panel-saturate` | `1.25` |
-| `--sn-panel-inset` | `12px` |
+| `--sn-panel-inset` | `8px` |
 | `--sn-panel-radius` | `8px` |
 | `--sn-panel-radius-edge` | `8px` |
 | `--sn-block-gap` | `0px` |
