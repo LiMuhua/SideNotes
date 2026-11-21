@@ -786,6 +786,8 @@ export const NOTE_WINDOW_EVENTS = {
   revealCopy: 'sidenotes://overlay/reveal-copy',
   /** 动画层：全文浮窗与卡片之间的连线，载荷 { from, to }（物理像素）或 null（T100）。 */
   connector: 'sidenotes://overlay/connector',
+  /** 记录窗口（磨砂玻璃）：垫在底下的截图（data URL），实时模糊暖好之前用它，null 时撤掉（第九轮反馈 3）。 */
+  backdrop: 'sidenotes://note-window/backdrop',
 } as const;
 
 /** 动画层上一个被挡住的记录窗口（T126）：窗口的标签与内容区矩形（相对动画层内容区的物理像素）。 */

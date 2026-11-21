@@ -337,6 +337,62 @@ pub fn watch_tone_stop() {
     TONE_LOOP.fetch_add(1, Ordering::SeqCst);
 }
 
+/// 系统的宿主背景自带的模糊（标准差，与屏幕缩放无关的像素）。实时模糊 = 宿主背景（已经模糊过）→ 令牌的饱和度 →
+/// 令牌的高斯模糊。2026-11-21 在验证版上标定：色彩丰富的背景前，只留实时模糊（页面藏起）截下的画面，与同一块屏幕
+/// 按标准差 √(令牌² + (20 × 屏幕缩放)²) 模糊、再按令牌调饱和度的结果平均只差 0.6 / 255（150% 缩放，令牌
+/// 12px × 1.73 ≈ 20.8，合计约 36 个物理像素）。
+const HOST_BLUR: f64 = 20.0;
+
+/// 截图模糊成实时模糊的样子要用的标准差（物理像素）：令牌的模糊（`frost_blur`，物理像素）与宿主背景自带的模糊合起来。
+fn window_sigma(frost_blur: f64, scale: f64) -> f64 {
+    (frost_blur.max(0.0).powi(2) + (HOST_BLUR * scale.max(0.1)).powi(2)).sqrt()
+}
+
+/// 从按行排列的像素里裁出一块（超出的部分截掉，至少一个像素）。
+fn crop(pixels: &[[f32; 3]], width: usize, height: usize, left: usize, top: usize, crop_width: usize, crop_height: usize) -> (Vec<[f32; 3]>, usize, usize) {
+    let left = left.min(width.saturating_sub(1));
+    let top = top.min(height.saturating_sub(1));
+    let crop_width = crop_width.clamp(1, width - left);
+    let crop_height = crop_height.clamp(1, height - top);
+    let out = (top..top + crop_height).flat_map(|row| pixels[row * width + left..row * width + left + crop_width].iter().copied()).collect();
+    (out, crop_width, crop_height)
+}
+
+/// 磨砂玻璃的记录窗口打开时垫在底下的截图（第九轮反馈 3）。动画层上的副本没有模糊，背后的画面是清楚的；真正的窗口
+/// 显示之后实时模糊才重建，显示到重建好之间有一两帧没有模糊。所以窗口还隐身时截下它将要停的那块屏幕（`rect`：物理像素的左、上、宽、高；四周多截三个标准差，边上的模糊才对，截到屏幕之外的部分去掉），
+/// 模糊、调饱和度成实时模糊的样子，裁回窗口那一块，返回 data URL，副本与窗口都先垫着它。`frost_blur` 为令牌的模糊
+/// （物理像素），`saturation` 为令牌的饱和度，`scale` 为屏幕缩放。截不到时为空。
+pub fn window_backdrop(app: &AppHandle, rect: (i32, i32, i32, i32), frost_blur: f64, saturation: f64, scale: f64) -> Option<String> {
+    let (x, y, width, height) = rect;
+    if width <= 0 || height <= 0 {
+        return None;
+    }
+    let sigma = window_sigma(frost_blur, scale);
+    let margin = (sigma * 3.0).ceil() as i32;
+    let bounds = app.monitor_from_point(f64::from(x + width / 2), f64::from(y + height / 2)).ok().flatten().map(|monitor| {
+        let (position, size) = (monitor.position(), monitor.size());
+        (position.x, position.y, position.x + size.width as i32, position.y + size.height as i32)
+    });
+    let (x0, y0, x1, y1) = match bounds {
+        Some((left, top, right, bottom)) => ((x - margin).max(left), (y - margin).max(top), (x + width + margin).min(right), (y + height + margin).min(bottom)),
+        None => (x - margin, y - margin, x + width + margin, y + height + margin),
+    };
+    if x1 <= x0 || y1 <= y0 {
+        return None;
+    }
+    let pixels = grab(x0, y0, x1 - x0, y1 - y0)?;
+    let (mut small, small_width, small_height) = downscale(&pixels, (x1 - x0) as usize, (y1 - y0) as usize, DOWNSCALE);
+    blur(&mut small, small_width, small_height, sigma / DOWNSCALE as f64);
+    if (saturation - 1.0).abs() > f64::EPSILON {
+        saturate(&mut small, saturation);
+    }
+    let step = DOWNSCALE as f64;
+    let (left, top) = ((f64::from((x - x0).max(0)) / step).round() as usize, (f64::from((y - y0).max(0)) / step).round() as usize);
+    let (cropped, crop_width, crop_height) =
+        crop(&small, small_width, small_height, left, top, (f64::from(width) / step).round() as usize, (f64::from(height) / step).round() as usize);
+    Some(format!("data:image/bmp;base64,{}", base64(&encode_bmp(&cropped, crop_width, crop_height))))
+}
+
 /// 截下的像素处理成页面用的背景图。
 fn process(bgra: &[u8], width: usize, height: usize, backdrop: Backdrop) -> String {
     let (mut pixels, small_width, small_height) = downscale(bgra, width, height, DOWNSCALE);
@@ -511,6 +567,27 @@ pub fn recapture_later(app: &AppHandle, delay: Duration) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_window_backdrop_blurs_as_much_as_the_live_glass() {
+        // 150% 缩放、令牌 12px × 1.73：标定出的 36 个物理像素。
+        // 标定时按 3 个像素一档试，最接近的是 36；公式给出约 36.5，在半档之内。
+        assert!((window_sigma(20.77, 1.5) - 36.0).abs() < 1.5);
+        // 没有令牌的模糊时只剩宿主背景自带的那一份，随屏幕缩放变化。
+        assert!((window_sigma(0.0, 1.0) - HOST_BLUR).abs() < 1e-9);
+    }
+
+    #[test]
+    fn cropping_keeps_the_window_part_and_stays_inside() {
+        let pixels: Vec<[f32; 3]> = (0..20).map(|index| [index as f32, 0.0, 0.0]).collect();
+        let (out, width, height) = crop(&pixels, 5, 4, 1, 1, 2, 2);
+        assert_eq!((width, height), (2, 2));
+        assert_eq!(out.iter().map(|pixel| pixel[0] as usize).collect::<Vec<_>>(), vec![6, 7, 11, 12]);
+        // 超出右下的部分截掉，至少留一个像素。
+        let (out, width, height) = crop(&pixels, 5, 4, 4, 3, 9, 9);
+        assert_eq!((width, height, out.len()), (1, 1, 1));
+        assert_eq!(out[0][0] as usize, 19);
+    }
 
     fn solid(width: usize, height: usize, bgra: [u8; 4]) -> Vec<u8> {
         bgra.repeat(width * height)

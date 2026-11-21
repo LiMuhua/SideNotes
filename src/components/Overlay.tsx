@@ -36,15 +36,24 @@ const EVENTS = bridge.NOTE_WINDOW_EVENTS;
 /** 系统给窗口画的圆角（Windows 11，与屏幕缩放无关的像素）。 */
 const SYSTEM_RADIUS = 8;
 
+/** 最近一次后端报来的系统细边框（物理像素），按住 Ctrl 时的半透明副本没有载荷，沿用它。 */
+let systemBorder = 0;
+
 /**
- * 副本照真正的窗口画外框（第八轮反馈 2）：系统画外框的窗口（不透明与亚克力）是系统的小圆角与一个物理像素的细边框，
+ * 副本照真正的窗口画外框（第八轮反馈 2）：系统画外框的窗口（不透明与亚克力）是系统的小圆角与细边框，
  * 写成页面像素交给 window.css（页面按字号整页缩放）。原来副本是主题的圆角与边框，换成真正的窗口时外框一下子变了。
+ * 细边框按后端读到的宽度画（`border`，物理像素，150% 时是 2）；原来只画一个物理像素，交接后边框变粗（第九轮反馈 3）。
+ * 读不到时按屏幕缩放估算（页面像素比除去整页缩放）。
  */
-function applyFrameMetrics(): void {
+function applyFrameMetrics(border?: number): void {
   const root = document.documentElement;
   const zoom = uiZoom(store.getState().settings.fontSize) || 1;
+  const ratio = window.devicePixelRatio || 1;
+  if (border && border > 0) systemBorder = border;
+  const pixels = systemBorder || Math.max(1, Math.round(ratio / zoom));
   root.style.setProperty('--copy-system-radius', `${SYSTEM_RADIUS / zoom}px`);
-  root.style.setProperty('--copy-device-pixel', `${1 / (window.devicePixelRatio || 1)}px`);
+  // 多给百分之一个物理像素：边框与描边按物理像素向下取整，2 ÷ 1.7308 再乘回来是 1.99999，会少算一个像素。
+  root.style.setProperty('--copy-system-border', `${(pixels + 0.01) / ratio}px`);
 }
 
 interface GhostPayload {
@@ -80,6 +89,10 @@ interface MorphPayload {
   beam?: ConnectorPayload;
   /** 全文浮窗收回时，连接带与副本一起收拢。 */
   retract?: boolean;
+  /** 系统给这个窗口画的细边框（物理像素），副本照着画。 */
+  border?: number;
+  /** 垫在副本底下的截图（磨砂玻璃的记录窗口打开时，data URL），与窗口刚现身时垫的是同一张（第九轮反馈 3）。 */
+  backdrop?: string;
 }
 
 function reducedMotion(): boolean {
@@ -229,7 +242,7 @@ export function Overlay() {
     // 拖影不动。按住 Ctrl 找回的窗口（第七轮反馈 4）已经有一份半透明的副本摆在原处：不再另叠一份上浮的副本
     // （两份一淡一显、错开几个像素，看着闪了两下），把那份从现在的透明度接着变实、颜色变回原样。
     const onSurface = (payload: MorphPayload): void => {
-      applyFrameMetrics();
+      applyFrameMetrics(payload.border);
       const revealed = payload.label ? reveals.get(payload.label) : undefined;
       if (payload.label && revealed) reveals.delete(payload.label);
       const kept = revealed?.node ?? null;
@@ -349,7 +362,7 @@ export function Overlay() {
         void bridge.overlayDone(payload.id);
         return;
       }
-      applyFrameMetrics();
+      applyFrameMetrics(payload.border);
       const place = toPage(payload.from);
       node.classList.add('is-overlay-copy', 'is-landed');
       Object.assign(node.style, { left: `${place.x}px`, top: `${place.y}px`, width: `${place.width}px`, height: `${place.height}px` });
@@ -385,7 +398,7 @@ export function Overlay() {
       // 窗口从拖影展开：拖影交给窗口的副本。
       ghost?.remove();
       ghost = null;
-      applyFrameMetrics();
+      applyFrameMetrics(payload.border);
       const node = fromHtml(payload.html);
       if (!node || reducedMotion() || typeof node.animate !== 'function') {
         if (payload.beam) drawConnector(payload.beam);
@@ -398,9 +411,14 @@ export function Overlay() {
       const dragged = payload.mode.endsWith('drag');
       const from = toPage(payload.from);
       const to = payload.to ? toPage(payload.to) : null;
-      // 副本摆在窗口的位置：打开时是终点，关闭时是起点。
+      // 副本摆在窗口的位置：打开时是终点，关闭时是起点。打开的窗口一出来就获得焦点，副本的边框照那时的颜色画（window.css）。
       const place = opening && to ? to : from;
       node.classList.add('is-overlay-copy');
+      node.classList.toggle('is-opening', opening);
+      if (payload.backdrop) {
+        node.dataset.backdrop = '';
+        node.style.setProperty('--note-backdrop', `url("${payload.backdrop}")`);
+      }
       Object.assign(node.style, {
         left: `${place.x}px`,
         top: `${place.y}px`,

@@ -119,14 +119,10 @@ pub fn fit_window(window: &WebviewWindow, width: f64, height: f64) {
     }
 }
 
-/// 窗口的实时模糊是不是在它藏着时建的，显示之前要重建（主线程上调用）。
-pub fn stale(window: &WebviewWindow) -> bool {
-    imp::stale(window.label())
-}
-
-/// 马上重建（主线程上调用，窗口要已经显示着，可以是隐身的）。
-pub fn refresh_now(window: &WebviewWindow) {
-    imp::refresh(window);
+/// 窗口的实时模糊叠的效果（令牌的模糊与饱和度）；没有实时模糊时为空（主线程上调用）。打开记录窗口时按它把截图
+/// 模糊成实时模糊的样子（glass::window_backdrop）。
+pub fn frost(window: &WebviewWindow) -> Option<Frost> {
+    imp::frost(window.label())
 }
 
 /// 记录窗口显示之前：藏着时建的合成树先藏起（不然显示的第一帧画出一片黑），显示之后由 refresh_later 重建。
@@ -478,9 +474,9 @@ mod imp {
         }
     }
 
-    /// 窗口的合成树是在它藏着时建的。
-    pub fn stale(label: &str) -> bool {
-        LIVES.with(|lives| lives.borrow().iter().any(|(item, live)| item == label && !live.built_visible))
+    /// 窗口的合成树叠的效果。
+    pub fn frost(label: &str) -> Option<Frost> {
+        LIVES.with(|lives| lives.borrow().iter().find(|(item, _)| item == label).map(|(_, live)| live.frost))
     }
 
     /// 藏着时建的合成树先藏起（见 super::hide_stale）。
@@ -620,8 +616,8 @@ mod imp {
 
     pub fn hide_stale(_label: &str) {}
 
-    pub fn stale(_label: &str) -> bool {
-        false
+    pub fn frost(_label: &str) -> Option<Frost> {
+        None
     }
 
     pub fn fit_window(_label: &str, _width: f32, _height: f32) {}

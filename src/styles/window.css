@@ -259,12 +259,27 @@ body[data-window='overlay'] .overlay-layer {
 }
 
 /* 副本照真正的窗口画外框（第八轮反馈 2）：系统画外框的窗口（data-frame="system"，不透明与亚克力）是系统的小圆角与
- * 一个物理像素的细边框（Overlay.tsx 按字号与屏幕缩放写入），投影先由副本画，窗口显示出来（is-landed）就去掉，免得与
- * 系统的投影叠成两层、一深一浅地闪（P6）。页面自己画外框的透明窗口（data-frame="page"，杂志与磨砂玻璃）画不出窗口外的
- * 投影，副本也不画，只留顶边的受光。原来副本是主题的圆角、边框与投影，换成真正的窗口时外框一下子变了。 */
+ * 细边框，投影先由副本画，窗口显示出来（is-landed）就去掉，免得与系统的投影叠成两层、一深一浅地闪（P6）。页面自己画
+ * 外框的透明窗口（data-frame="page"，杂志与磨砂玻璃）画不出窗口外的投影，副本也不画，只留顶边的受光。原来副本是主题的
+ * 圆角、边框与投影，换成真正的窗口时外框一下子变了。
+ * 系统的细边框盖在窗口内容最外的一圈上，宽度是后端读到的系统边框（150% 时两个物理像素，Overlay.tsx 按字号与屏幕缩放
+ * 写入）：副本用向里收的描边照着盖，页面自己的边框仍是一像素，内容区与真正的窗口一样宽（第九轮反馈 3：原来副本只画
+ * 一个物理像素，交接后边框变粗；直接加宽边框又会挤窄内容区，快满一行的文字在副本里折行）。颜色是窗口交接后的边框色：
+ * 全文浮窗是强调色，拖出来新开的窗口获得焦点，是一点强调色（NoteWindow.tsx 设给系统的颜色）。 */
 body[data-window='overlay'] .note-window.is-overlay-copy[data-frame='system'] {
-  border-width: var(--copy-device-pixel);
+  --local-frame: var(--sn-color-border);
+  border-color: transparent;
   border-radius: var(--copy-system-radius);
+  outline: var(--copy-system-border) solid var(--local-frame);
+  outline-offset: calc(var(--copy-system-border) * -1);
+}
+
+body[data-window='overlay'] .note-window.is-overlay-copy[data-frame='system'].is-opening {
+  --local-frame: color-mix(in srgb, var(--sn-color-accent) 40%, var(--sn-color-border));
+}
+
+body[data-window='overlay'] .note-window.is-overlay-copy[data-frame='system'].is-attached {
+  --local-frame: var(--sn-color-accent);
 }
 
 body[data-window='overlay'] .note-window.is-overlay-copy[data-frame='system'].is-landed {
@@ -273,6 +288,30 @@ body[data-window='overlay'] .note-window.is-overlay-copy[data-frame='system'].is
 
 body[data-window='overlay'] .note-window.is-overlay-copy[data-frame='page'] {
   box-shadow: inset 0 var(--sn-border-width) 0 var(--sn-color-edge-highlight);
+}
+
+/* 页面画外框、拖出来新开的窗口一出来就获得焦点，边框是一点强调色（theme.css 的 :focus-within）：副本照这个颜色画。
+ * 全文浮窗是强调色，不在此列。 */
+body[data-window='overlay'] .note-window.is-overlay-copy[data-frame='page'].is-opening:not(.is-attached) {
+  border-color: color-mix(in srgb, var(--sn-color-accent) 40%, var(--sn-color-border));
+}
+
+/* 页面自己画外框的记录窗口（杂志、磨砂玻璃）：窗口与面板一样大，投影只在四个圆角外面露出一点、又被窗口边切断，
+ * 角上像一块方形的脏边（第九轮反馈 3，色彩丰富的背景前看得出）。不画投影，获得焦点时也不加，只留顶边的受光，
+ * 与动画层上的副本相同。 */
+:root[data-sn-window='clear'] body[data-window='note'] .note-window,
+:root[data-sn-window='clear'] body[data-window='note'] .note-window:focus-within {
+  box-shadow: inset 0 var(--sn-border-width) 0 var(--sn-color-edge-highlight);
+}
+
+/* 磨砂玻璃的记录窗口刚打开时垫在底下的截图（第九轮反馈 3）：后端趁窗口还隐身截下它将要停的那块屏幕，模糊、调饱和度
+ * 成实时模糊的样子（glass.rs 的 window_backdrop）。动画层上的副本没有模糊，背后是清楚的；真正的窗口显示之后实时模糊才
+ * 重建，之前有一两帧没有模糊。副本与窗口都垫着这一张，形变时就是磨砂的样子，交给真正的窗口时看不出变化；后端在窗口
+ * 显示 400 毫秒后撤掉（两者几乎一样，撤掉时也看不出）。 */
+:is(body[data-window='note'], body[data-window='overlay']) .note-window[data-backdrop]:not(.is-editing) {
+  background:
+    linear-gradient(var(--sn-color-card), var(--sn-color-card)),
+    var(--note-backdrop) 0 0 / 100% 100% no-repeat;
 }
 
 /* 全文浮窗与卡片之间的连接带（T100、T114、T122）：铺满动画层的一张图，出现与收回的动画由 Overlay.tsx 播放。 */

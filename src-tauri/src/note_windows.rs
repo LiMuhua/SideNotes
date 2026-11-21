@@ -49,6 +49,8 @@ const HANDOFF_DELAY: Duration = Duration::from_millis(160);
 const CONNECTOR_INSET: f64 = 16.0;
 /// 连接带在卡片一端让开上下的圆角（按 13px 字号计）。
 const CONNECTOR_CARD_INSET: f64 = 6.0;
+/// 磨砂玻璃的记录窗口显示之后，垫着的截图再留多久：显示之后重建的实时模糊下一两帧就有画面（2026-11-21 实测），留出余量。
+const BACKDROP_HOLD: Duration = Duration::from_millis(400);
 
 /// 后端发给页面的事件。
 pub mod events {
@@ -91,6 +93,8 @@ pub mod events {
     pub const SIZING: &str = "sidenotes://note-window/sizing";
     /// 记录窗口：按内容定大小已经完成（平滑变大小时是最后一帧之后），载荷为内容区的物理像素 { width, height }。
     pub const FITTED: &str = "sidenotes://note-window/fitted";
+    /// 记录窗口（磨砂玻璃）：垫在底下的截图，载荷为 data URL，null 时撤掉（第九轮反馈 3，见 note_window_present）。
+    pub const BACKDROP: &str = "sidenotes://note-window/backdrop";
 }
 
 /// 矩形：屏幕或窗口内的物理像素，或页面像素（由用途决定）。
@@ -771,6 +775,11 @@ enum Animation {
     Conceal { label: String },
 }
 
+/// 窗口正在播放打开动画（窗口还藏着，动画层上的副本在展开）。
+fn opening(label: &str) -> bool {
+    with_animations(|map| map.values().any(|animation| matches!(animation, Animation::Open { label: item } if item == label)))
+}
+
 fn animations() -> &'static Mutex<HashMap<u64, Animation>> {
     static ANIMATIONS: OnceLock<Mutex<HashMap<u64, Animation>>> = OnceLock::new();
     ANIMATIONS.get_or_init(|| Mutex::new(HashMap::new()))
@@ -827,18 +836,6 @@ fn show_without_focus(window: &WebviewWindow) {
     let _ = window.show();
 }
 
-/// 不激活地显示窗口，不改前后次序与置顶。
-fn show_inactive(window: &WebviewWindow) {
-    #[cfg(windows)]
-    if let Ok(hwnd) = window.hwnd() {
-        use ::windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_SHOWNA};
-        // SAFETY：hwnd 来自仍然存在的 Tauri 窗口。
-        let _ = unsafe { ShowWindow(hwnd, SW_SHOWNA) };
-        return;
-    }
-    let _ = window.show();
-}
-
 fn hide_window(window: &WebviewWindow) {
     #[cfg(windows)]
     if let Ok(hwnd) = window.hwnd() {
@@ -872,14 +869,38 @@ struct MorphPayload {
     /// 全文浮窗收回时，连接带与副本一起收拢。
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     retract: bool,
+    /// 系统给这个窗口画的细边框有几个物理像素（见 frame_border），副本照着画。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    border: Option<f64>,
+    /// 垫在副本底下的截图（磨砂玻璃的记录窗口打开时，见 note_window_present），data URL。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    backdrop: Option<String>,
+}
+
+/// 系统给窗口画的细边框有几个物理像素（DWMWA_VISIBLE_FRAME_BORDER_THICKNESS，随屏幕缩放变化，150% 时是 2）。
+/// 动画层上的副本照着画：原来副本只画一个物理像素，交给真正的窗口时左右下三边一下子变粗（第九轮反馈 3）。
+/// 取不到时为空，动画层按屏幕缩放估算。
+fn frame_border(window: &WebviewWindow) -> Option<f64> {
+    #[cfg(windows)]
+    if let Ok(hwnd) = window.hwnd() {
+        use ::windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_VISIBLE_FRAME_BORDER_THICKNESS};
+        let mut value = 0u32;
+        // SAFETY：hwnd 来自仍然存在的 Tauri 窗口；指针指向本函数内的 u32，大小与之匹配。
+        let read = unsafe { DwmGetWindowAttribute(hwnd, DWMWA_VISIBLE_FRAME_BORDER_THICKNESS, (&mut value as *mut u32).cast(), 4) };
+        return (read.is_ok() && value > 0).then_some(f64::from(value));
+    }
+    let _ = window;
+    None
 }
 
 /// 在动画层上播放打开动画：窗口的副本从 `from` 变到窗口的位置，结束后显示真正的窗口。
-/// `beam` 为全文浮窗的连接带（屏幕物理像素），与副本一起长出来。
-fn play_open(app: &AppHandle, label: &str, html: String, from: Rect, to: Rect, mode: &str, beam: Option<ConnectorPayload>) {
+/// `beam` 为全文浮窗的连接带（屏幕物理像素），与副本一起长出来；`backdrop` 为垫在副本底下的截图（磨砂玻璃）。
+#[allow(clippy::too_many_arguments)]
+fn play_open(app: &AppHandle, label: &str, html: String, from: Rect, to: Rect, mode: &str, beam: Option<ConnectorPayload>, backdrop: Option<String>) {
     let (cx, cy) = to.center();
     let Some(origin) = overlay_cover(app, cx, cy) else {
         show_note(app, label);
+        drop_backdrop_later(app, label);
         update_connector(app);
         return;
     };
@@ -897,6 +918,8 @@ fn play_open(app: &AppHandle, label: &str, html: String, from: Rect, to: Rect, m
         label: None,
         beam: beam.map(|beam| beam.relative_to(origin)),
         retract: false,
+        border: app.get_webview_window(label).as_ref().and_then(frame_border),
+        backdrop,
     };
     let _ = app.emit_to(OVERLAY_LABEL, events::MORPH, payload);
     watchdog(app, id);
@@ -921,6 +944,7 @@ fn finish_animation(app: &AppHandle, id: u64) {
                 set_cloaked(&window, false);
             }
             show_note(app, &label);
+            drop_backdrop_later(app, &label);
             let _ = app.emit_to(OVERLAY_LABEL, events::LANDED, id);
             update_connector(app);
             let app = app.clone();
@@ -1027,7 +1051,9 @@ impl ConnectorPayload {
 }
 
 /// 按全文浮窗与卡片现在的位置画连线，动画层提到最前（它不接收指针，盖在上面不碍事）；
-/// 没有附着的浮窗、浮窗还没显示、侧栏收起或卡片看不见时收起连线。
+/// 没有附着的浮窗、浮窗还没显示、侧栏收起或卡片看不见时收起连线。浮窗正在播放打开动画时窗口还藏着，但已经摆在
+/// 最后的位置，连接带随副本一起长出来（play_open），这时照常按窗口的位置画，不收起（第九轮反馈 3：原来侧栏一报告
+/// 卡片的位置，连接带就被收掉，浮窗到位后再长一次）。
 fn update_connector(app: &AppHandle) {
     let anchor = PEEK_ANCHOR.lock().ok().and_then(|slot| *slot).filter(|_| sidebar_rect(app).is_some());
     let label = with_registry(|map| {
@@ -1036,7 +1062,7 @@ fn update_connector(app: &AppHandle) {
     let ends = match (anchor, label) {
         (Some(PeekAnchor { card: Some(card), unit }), Some(label)) => app
             .get_webview_window(&label)
-            .filter(|window| window.is_visible().unwrap_or(false))
+            .filter(|window| window.is_visible().unwrap_or(false) || opening(&label))
             .and_then(|window| client_rect(&window))
             .map(|panel| {
                 let right_edge = windows::last_layout().edge != "left";
@@ -1416,7 +1442,18 @@ fn play_surface(app: &AppHandle, window: &WebviewWindow, html: String) {
     };
     let id = ANIMATION.fetch_add(1, Ordering::SeqCst) + 1;
     with_animations(|map| map.insert(id, Animation::Surface { label: window.label().into() }));
-    let payload = MorphPayload { id, html, from: rect, to: Some(rect), mode: "surface".into(), label: Some(window.label().into()), beam: None, retract: false };
+    let payload = MorphPayload {
+        id,
+        html,
+        from: rect,
+        to: Some(rect),
+        mode: "surface".into(),
+        label: Some(window.label().into()),
+        beam: None,
+        retract: false,
+        border: frame_border(window),
+        backdrop: None,
+    };
     let _ = app.emit_to(OVERLAY_LABEL, events::MORPH, payload);
     watchdog(app, id);
 }
@@ -1719,7 +1756,18 @@ fn play_conceal(app: &AppHandle, window: &WebviewWindow, html: String) {
     };
     let id = ANIMATION.fetch_add(1, Ordering::SeqCst) + 1;
     with_animations(|map| map.insert(id, Animation::Conceal { label: window.label().into() }));
-    let payload = MorphPayload { id, html, from: rect, to: Some(rect), mode: "conceal".into(), label: Some(window.label().into()), beam: None, retract: false };
+    let payload = MorphPayload {
+        id,
+        html,
+        from: rect,
+        to: Some(rect),
+        mode: "conceal".into(),
+        label: Some(window.label().into()),
+        beam: None,
+        retract: false,
+        border: frame_border(window),
+        backdrop: None,
+    };
     let _ = app.emit_to(OVERLAY_LABEL, events::MORPH, payload);
     watchdog(app, id);
 }
@@ -2025,25 +2073,44 @@ pub fn note_window_present(app: AppHandle, window: WebviewWindow, width: f64, he
     let right_edge = windows::last_layout().edge != "left";
     let rect = position(&placement, size, unit, sidebar_rect(&app), right_edge, &others);
     place_client(&window, rect)?;
+    // 摆放时取了整：动画层上的副本照窗口真正的位置画，交接时文字与边框不错开零点几个像素（第九轮反馈 3）。
+    let rect = client_rect(&window).unwrap_or(rect);
     crate::glass_live::fit_window(&window, rect.width, rect.height);
-    // 磨砂玻璃的记录窗口：实时模糊是窗口藏着时建的，显示出来是一片黑，要等窗口显示后重建，交接时会暗两帧。所以趁
-    // 动画层播放打开动画，先隐身显示（不激活），马上重建；动画结束时现身（finish_animation）。
-    if crate::glass_live::stale(&window) {
-        set_cloaked(&window, true);
-        show_inactive(&window);
-        crate::glass_live::refresh_now(&window);
+    // 磨砂玻璃的记录窗口（第九轮反馈 3）：动画层上的副本没有模糊，背后是清楚的；窗口藏着时建的实时模糊要在窗口显示之后
+    // 重建（show_note），显示到重建好之间有一两帧没有模糊。趁窗口还藏着，截下它将要停的那块屏幕，模糊成实时模糊的样子，
+    // 副本与窗口都先垫着它：形变时就是磨砂的样子，交接时看不出变化；实时模糊重建好之后撤掉（drop_backdrop_later）。
+    // 原来（第八轮）在打开动画开始时先隐身显示、重建，但隐身时重建的模糊现身后还要 0.6–3 秒才有画面，交接时露出深色的底。
+    let backdrop = crate::glass_live::frost(&window).and_then(|frost| {
+        let scale = window.scale_factor().unwrap_or(1.0);
+        let area = (rect.x.round() as i32, rect.y.round() as i32, rect.width.round() as i32, rect.height.round() as i32);
+        crate::glass::window_backdrop(&app, area, f64::from(frost.blur), f64::from(frost.saturate), scale)
+    });
+    if let Some(url) = &backdrop {
+        let _ = app.emit_to(label.as_str(), events::BACKDROP, Some(url.as_str()));
     }
     match (snapshot, placement.from) {
         (Some(html), Some(from)) => {
             let beam = if attached { peek_beam(rect) } else { None };
-            play_open(&app, &label, html, from, rect, if kind_drag { "open-drag" } else { "open-expand" }, beam);
+            play_open(&app, &label, html, from, rect, if kind_drag { "open-drag" } else { "open-expand" }, beam, backdrop);
         }
         _ => {
             show_note(&app, &label);
+            if backdrop.is_some() {
+                drop_backdrop_later(&app, &label);
+            }
             update_connector(&app);
         }
     }
     Ok(())
+}
+
+/// 窗口现身之后，过实时模糊暖好的时间再撤掉垫着的截图（见 note_window_present）。没有垫截图的窗口收到空的事件，不受影响。
+fn drop_backdrop_later(app: &AppHandle, label: &str) {
+    let (app, label) = (app.clone(), label.to_string());
+    std::thread::spawn(move || {
+        std::thread::sleep(BACKDROP_HOLD);
+        let _ = app.emit_to(label.as_str(), events::BACKDROP, None::<&str>);
+    });
 }
 
 /// 页面的标签页、当前页、置顶与标题栏位置变化后同步到登记表。`bands` 为页面像素。
@@ -2102,6 +2169,8 @@ pub fn note_window_close(app: AppHandle, window: WebviewWindow, snapshot: Option
         label: None,
         beam: None,
         retract,
+        border: frame_border(&window),
+        backdrop: None,
     };
     let _ = app.emit_to(OVERLAY_LABEL, events::MORPH, payload);
     watchdog(&app, id);

@@ -12,7 +12,7 @@
  * 记录变化由跨窗口同步带来（每个窗口有自己的状态仓库），记录被删除或移入回收站时关掉它的标签页。
  */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
 import { Icon, IconSprite } from './Icon';
 import { LiveEditor } from './LiveEditor';
 import { Markdown } from './Markdown';
@@ -167,6 +167,9 @@ export function NoteWindow() {
   const [editing, setEditing] = useState<WindowEdit | null>(null);
   const [front, setFront] = useState(() => document.hasFocus());
   const [merge, setMerge] = useState(false);
+  // 磨砂玻璃的窗口刚打开时垫在底下的截图（后端截下、模糊成实时模糊的样子，第九轮反馈 3）：窗口现身之后实时模糊才重建，
+  // 之前有一两帧没有模糊，先垫着它，动画层上的副本也垫着同一张，交接时看不出变化。
+  const [backdrop, setBackdrop] = useState<string | null>(null);
   const [moving, setMoving] = useState(false);
   const [dragTab, setDragTab] = useState('');
   const [opening, setOpening] = useState<bridge.NoteWindowOpen | null>(null);
@@ -759,6 +762,7 @@ export function NoteWindow() {
         attachedRef.current = false;
         setAttached(false);
       }),
+      bridge.onWindowEvent<string | null>(EVENTS.backdrop, (url) => setBackdrop(url)),
       // 按住 Ctrl 拖动时窗口被别的程序挡着：动画层要在原处画它的半透明副本（T126），发一份副本过去。
       bridge.onWindowEvent(EVENTS.revealSnapshot, () => {
         const section = sectionRef.current;
@@ -1276,6 +1280,8 @@ export function NoteWindow() {
       className={classes}
       // 外框由谁画（系统或页面）：动画层上的副本照着画，交给真正的窗口时外框不变（第八轮反馈 2）。
       data-frame={material === 'clear' ? 'page' : 'system'}
+      data-backdrop={backdrop ? '' : undefined}
+      style={backdrop ? ({ '--note-backdrop': `url("${backdrop}")` } as CSSProperties) : undefined}
       role="dialog"
       tabIndex={-1}
       aria-label={many ? `${tabs.length} 条记录` : title}
