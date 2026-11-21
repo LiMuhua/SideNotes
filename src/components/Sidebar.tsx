@@ -2267,7 +2267,8 @@ export function Sidebar() {
         const root = window.getComputedStyle(document.documentElement);
         const token = root.getPropertyValue("--sn-duration-normal").trim();
         const normal = (token.endsWith("ms") ? parseFloat(token) : parseFloat(token) * 1000) || 167;
-        // 卡片轻轻按下再弹回（第八轮反馈 P4）：原来先放大一点，卡片贴着列表与窗口的边，放大的那几帧左右的边框被裁掉。
+        // 拖出来的窗口缩回卡片后，卡片轻轻按下再弹回（第八轮反馈 P4）：原来先放大一点，卡片贴着列表与窗口的边，放大的那几帧
+        // 左右的边框被裁掉。全文浮窗收回时后端不发这个事件，卡片本身不缩放（第九轮反馈 2）。
         card.animate([{ transform: "none" }, { offset: 0.4, transform: "scale(0.985)" }, { transform: "none" }], {
           duration: normal * 2,
           easing: root.getPropertyValue("--sn-ease-standard").trim() || "ease",

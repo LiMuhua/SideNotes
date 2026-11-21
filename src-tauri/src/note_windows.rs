@@ -74,7 +74,7 @@ pub mod events {
     pub const CLEAR: &str = "sidenotes://overlay/clear";
     /// 真正的窗口显示出来了：副本去掉自己画的投影（第八轮反馈 2、P6）。
     pub const LANDED: &str = "sidenotes://overlay/landed";
-    /// 侧栏：窗口缩回了这张卡片，卡片轻轻一顿，载荷为记录标识。
+    /// 侧栏：拖出来的窗口缩回了这张卡片，卡片轻轻一顿，载荷为记录标识（全文浮窗收回时不发，第九轮反馈 2）。
     pub const LAND: &str = "sidenotes://card-land";
     /// 侧栏：附着在卡片旁的全文浮窗开着的记录（T100），载荷为记录标识或 null；卡片的按钮据此显示「收起全文」。
     pub const PEEK: &str = "sidenotes://peek";
@@ -763,7 +763,7 @@ fn unique(ids: Vec<String>) -> Vec<String> {
 #[derive(Debug, Clone)]
 enum Animation {
     Open { label: String },
-    /// `note` 为缩回的卡片对应的记录；原地淡出时为空，侧栏没有卡片要一顿。
+    /// `note` 为缩回的卡片对应的记录；原地淡出与全文浮窗收回时为空，侧栏没有卡片要一顿。
     Close { label: String, note: Option<String> },
     /// 浮现（T130）：窗口已经隐身提到最前，动画层上的副本淡入、上浮，结束后现出真正的窗口。
     Surface { label: String },
@@ -2090,7 +2090,9 @@ pub fn note_window_close(app: AppHandle, window: WebviewWindow, snapshot: Option
         return Ok(());
     };
     let id = ANIMATION.fetch_add(1, Ordering::SeqCst) + 1;
-    with_animations(|map| map.insert(id, Animation::Close { label: label.clone(), note: to.map(|_| note) }));
+    // 缩回卡片之后卡片轻轻按下再弹回，只给拖出来的窗口：全文浮窗收回时卡片本身不缩放（第九轮反馈 2）。
+    let land = to.filter(|_| dragged).map(|_| note);
+    with_animations(|map| map.insert(id, Animation::Close { label: label.clone(), note: land }));
     let payload = MorphPayload {
         id,
         html,
