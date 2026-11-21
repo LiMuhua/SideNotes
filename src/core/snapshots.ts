@@ -21,7 +21,10 @@ export function snapshotReason(reason: string): string {
   return SNAPSHOT_REASON_LABELS[reason as SnapshotReason] ?? reason;
 }
 
-/** 快照时间：今天写「今天 10:05」，昨天写「昨天 10:05」，今年其它日子省略年份，如「11月3日 10:05」。 */
+/**
+ * 快照时间：今天写「今天 10:05」，昨天写「昨天 10:05」，今年其它日子省略年份，如「11月3日 10:05」。
+ * 云端同步的下一次自动备份也用这个写法，明天的写「明天 03:00」。
+ */
 export function snapshotTime(timestamp: number, now = Date.now()): string {
   const date = new Date(timestamp);
   const pad = (value: number): string => String(value).padStart(2, '0');
@@ -30,6 +33,7 @@ export function snapshotTime(timestamp: number, now = Date.now()): string {
   const days = Math.round((startOfDay(new Date(now)) - startOfDay(date)) / 86_400_000);
   if (days === 0) return `今天 ${time}`;
   if (days === 1) return `昨天 ${time}`;
+  if (days === -1) return `明天 ${time}`;
   const day = `${date.getMonth() + 1}月${date.getDate()}日`;
   return date.getFullYear() === new Date(now).getFullYear() ? `${day} ${time}` : `${date.getFullYear()}年${day} ${time}`;
 }

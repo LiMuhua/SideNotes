@@ -147,6 +147,18 @@ export function Row({
   );
 }
 
+/**
+ * 一行设置（原型 settings.js 的 row 加 settings-inline-value）：名称与问号在左，取值与按钮紧跟在名称后面；
+ * `grow` 时取值占满剩下的宽度（路径放不下时末尾省略）。数据与同步页与云端同步共用。
+ */
+export function DataRow({ title, help, grow, children }: { title: string; help?: string; grow?: boolean; children: ReactNode }) {
+  return (
+    <Row title={title} description={help}>
+      <span className={classes('settings-inline-value', grow && 'is-grow')}>{children}</span>
+    </Row>
+  );
+}
+
 /** 带标题的设置卡。 */
 export function Group({
   title,

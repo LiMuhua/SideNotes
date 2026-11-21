@@ -41,6 +41,7 @@ export type IconName =
   | 'link'
   | 'loader'
   | 'lock'
+  | 'mail'
   | 'merge'
   | 'minus'
   | 'moon'
@@ -152,6 +153,9 @@ export function IconSprite() {
       </symbol>
       <symbol id="i-lock" viewBox="0 0 24 24">
         <rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V6a4 4 0 0 1 8 0v4M12 14v3"/>
+      </symbol>
+      <symbol id="i-mail" viewBox="0 0 24 24">
+        <rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/>
       </symbol>
       <symbol id="i-unlock" viewBox="0 0 24 24">
         <rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V6a4 4 0 0 1 7-2M12 14v3"/>

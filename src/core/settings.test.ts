@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   boundedNumber,
+  DEFAULT_CLOUD_SCHEDULE,
   DEFAULT_SETTINGS,
   normalizeFontFamily,
   normalizePinnedTags,
+  normalizeRemoteFolder,
   normalizeSettings,
   parseDelay,
   resolveFontFamily,
@@ -146,6 +148,21 @@ describe('设置校验', () => {
     expect(settings.lazyLoading).toBe(false);
     expect(settings.cloud.enabled).toBe(true);
     expect(settings.cloud.provider).toBe('onedrive');
+  });
+
+  it('云端同步：远程文件夹以 / 开头，时间表缺省为每天 3 点，旧版的上次备份与错误丢掉', () => {
+    const cloud = normalizeSettings({
+      cloud: { folder: 'SideNotes', schedule: '  ', lastBackup: 5, lastError: 'x', email: ' a@b.com ', notifications: true },
+    }).cloud;
+    expect(cloud.folder).toBe('/SideNotes');
+    expect(cloud.schedule).toBe(DEFAULT_CLOUD_SCHEDULE);
+    expect(cloud.email).toBe('a@b.com');
+    expect(cloud.notifications).toBe(true);
+    expect(cloud).not.toHaveProperty('lastBackup');
+    expect(cloud).not.toHaveProperty('lastError');
+    expect(normalizeRemoteFolder('\\Test\\\\备份\\')).toBe('/Test/备份');
+    expect(normalizeRemoteFolder('')).toBe('/SideNotes');
+    expect(normalizeSettings({ cloud: { schedule: '*/30 * * * *' } }).cloud.schedule).toBe('*/30 * * * *');
   });
 
   it('宽度按步长 4 取整', () => {

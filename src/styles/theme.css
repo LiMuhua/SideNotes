@@ -3780,7 +3780,7 @@ body.is-dragging-attachment * {
   transform: translate(calc(var(--local-track) * 0.8), -50%);
 }
 
-/* 不可用的开关与不可用的按钮一样调淡（云端备份的失败通知：还不知道系统是否支持通知时）。 */
+/* 不可用的开关与不可用的按钮一样调淡（云端同步的失败通知：还不知道系统是否支持通知时）。 */
 :is(.settings-modal, .settings-confirm-dialog) input:is(.toggle, .settings-toggle):disabled {
   opacity: var(--sn-opacity-disabled);
   cursor: default;
@@ -3932,7 +3932,7 @@ body.is-dragging-attachment * {
   height: var(--sn-icon-size-sm);
 }
 
-/* 云端备份的服务：三张选项卡片。 */
+/* 云端同步的服务：三张选项卡片。 */
 .settings-modal .sync-provider-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -6321,49 +6321,231 @@ body.is-dragging-attachment * {
   text-align: right;
 }
 
-/* 云端备份的行：名称单独成一列，取值、输入框与操作紧跟在后（Playground 的 sn-set-data）。 */
-.settings-modal .data-rows {
-  display: grid;
-  grid-template-columns: minmax(calc(var(--sn-dialog-width) * 0.18), auto) minmax(0, 1fr);
-  align-items: center;
-  gap: var(--sn-space-3) var(--sn-space-4);
+/* ---------- 云端同步（第十一轮反馈） ---------- */
+
+/* 服务卡片角上的点：连接正常是成功色，正在备份是强调色并呼吸，异常是危险色（悬停显示原因）。 */
+.settings-modal .sync-provider {
+  position: relative;
 }
 
-.settings-modal .data-row {
+.settings-modal .sync-provider-dot {
+  position: absolute;
+  top: var(--sn-space-3);
+  right: var(--sn-space-3);
+  width: var(--sn-space-3);
+  height: var(--sn-space-3);
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-success);
+  box-shadow: 0 0 0 var(--sn-space-1) var(--sn-color-success-subtle);
+}
+
+.settings-modal .sync-provider-dot.is-error {
+  background: var(--sn-color-danger);
+  box-shadow: 0 0 0 var(--sn-space-1) var(--sn-color-danger-subtle);
+  cursor: help;
+}
+
+.settings-modal .sync-provider-dot.is-running {
+  background: var(--sn-color-accent);
+  box-shadow: 0 0 0 var(--sn-space-1) var(--sn-color-accent-subtle);
+  animation: cloud-dot-pulse 1.2s var(--sn-ease-standard) infinite alternate; /* 固定：呼吸一次的时长 */
+}
+
+@keyframes cloud-dot-pulse {
+  to {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-modal .sync-provider-dot.is-running {
+    animation: none;
+  }
+}
+
+/* 两行各放两项（账户与远程文件夹、自动备份与失败通知），放不下时整项折到下一行，同「数据目录」的一行。
+ * 前一项至少占一半宽，后一项在两行里对齐；前一项更宽（每周、自定义的时间）时后一项往后挪或折行。 */
+.settings-modal .cloud-field-grid {
+  margin-top: var(--sn-space-2);
+}
+
+.settings-modal .cloud-field-grid > :first-child {
+  min-width: 52%;
+}
+
+.settings-modal .cloud-group .settings-inline-value .settings-path {
+  max-width: calc(var(--sn-dialog-width) * 0.3);
+}
+
+.settings-modal .cloud-account {
+  max-width: calc(var(--sn-dialog-width) * 0.4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 自动备份的时间（HH:MM）与自定义的 crontab：输入框按内容的长短给宽度，用等宽字体。 */
+.settings-modal .settings-inline-value :is(.cloud-time, .cloud-cron) input.form-control:not([type='number']) {
+  flex: none;
+  font-family: var(--sn-font-code);
+}
+
+.settings-modal .settings-inline-value .cloud-time input.form-control:not([type='number']) {
+  width: 6em;
+}
+
+.settings-modal .settings-inline-value .cloud-cron input.form-control:not([type='number']) {
+  width: 11em;
+}
+
+.settings-modal .cloud-backup-list {
+  margin-top: var(--sn-space-2);
+}
+
+/* 云端同步的弹窗（连接群晖 NAS、登录、失败通知邮件、选择远程文件夹）：叠在设置窗口之外，输入框的样式照设置页写一遍。 */
+.cloud-dialog .cloud-form {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sn-space-3) var(--sn-space-4);
+  margin: var(--sn-space-4) 0 0;
+}
+
+.cloud-dialog .cloud-form-row {
   display: contents;
 }
 
-.settings-modal .data-row-controls {
+.cloud-dialog .cloud-form-label {
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+  white-space: nowrap;
+}
+
+.cloud-dialog input.form-control {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  height: var(--sn-control-height-sm);
+  padding: 0 var(--sn-space-4);
+  border: var(--sn-border-width) solid var(--sn-color-border-strong);
+  border-radius: var(--sn-radius-control);
+  background-color: var(--sn-color-surface);
+  color: var(--sn-color-text);
+  font-size: var(--sn-font-size-sm);
+}
+
+.cloud-dialog input.form-control:focus {
+  border-bottom-color: transparent;
+  background-image: linear-gradient(var(--sn-color-accent), var(--sn-color-accent));
+  background-position: bottom;
+  background-repeat: no-repeat;
+  background-size: 100% calc(var(--sn-border-width) * 2);
+  background-origin: border-box;
+  outline: none;
+}
+
+.cloud-dialog .cloud-dialog-spacer {
+  flex: 1;
+}
+
+.cloud-dialog .cloud-dialog-note {
+  margin: var(--sn-space-4) 0 0;
+  color: var(--sn-color-text-secondary);
+  font-size: var(--sn-font-size-sm);
+}
+
+/* 证书上的名字与地址对不上时的说明与指纹。 */
+.cloud-dialog .cloud-certificate {
+  margin: var(--sn-space-4) 0 0;
+  padding: var(--sn-space-4);
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-md);
+  background: var(--sn-color-warning-subtle);
+  color: var(--sn-color-text);
+  font-size: var(--sn-font-size-sm);
+  line-height: var(--sn-line-height-normal);
+}
+
+.cloud-dialog .cloud-certificate p {
+  margin: 0 0 var(--sn-space-2);
+}
+
+.cloud-dialog .cloud-certificate code {
+  display: block;
+  color: var(--sn-color-text-muted);
+  font-family: var(--sn-font-code);
+  font-size: var(--sn-font-size-xs);
+  overflow-wrap: anywhere;
+}
+
+.cloud-folder-dialog .cloud-folder-path {
   display: flex;
   align-items: center;
   gap: var(--sn-space-3);
+  margin: var(--sn-space-3) 0;
+}
+
+.cloud-folder-dialog .cloud-folder-path .settings-path {
+  flex: 1;
   min-width: 0;
-  min-height: var(--sn-control-height);
+  overflow: hidden;
+  color: var(--sn-color-text-secondary);
+  font-family: var(--sn-font-code);
+  font-size: var(--sn-font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.settings-modal .data-row-controls input.form-control:not([type='number']) {
-  width: calc(var(--sn-dialog-width) * 0.65);
-}
-
-.settings-modal .data-row-controls .settings-status {
+/* 子文件夹列表：带边框的一块，在框内滚动，一行一个文件夹，点一下进入。 */
+.cloud-folder-dialog .cloud-folder-list {
+  height: calc(var(--sn-control-height) * 7);
   margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
+  padding: var(--sn-space-1);
+  overflow-y: auto;
+  border: var(--sn-border-width) solid var(--sn-color-border);
+  border-radius: var(--sn-radius-md);
+  list-style: none;
 }
 
-/* 群晖 NAS 的用户名与密码并排，两个合起来与地址框一样宽，「连接」跟在后面（第十轮反馈 3）。 */
-.settings-modal .data-row-controls .cloud-credentials {
-  display: grid;
-  flex: none;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.cloud-folder-dialog .cloud-folder-item {
+  display: flex;
+  align-items: center;
   gap: var(--sn-space-3);
-  width: calc(var(--sn-dialog-width) * 0.65);
+  width: 100%;
+  min-height: var(--sn-control-height);
+  padding: 0 var(--sn-space-4);
+  border: 0;
+  border-radius: var(--sn-radius-sm);
+  background: transparent;
+  color: var(--sn-color-text);
+  font-size: var(--sn-font-size-sm);
+  text-align: left;
+  cursor: pointer;
 }
 
-.settings-modal .data-row-controls .cloud-credentials input.form-control:not([type='number']) {
-  width: 100%;
-  min-width: 0;
+.cloud-folder-dialog .cloud-folder-item:hover,
+.cloud-folder-dialog .cloud-folder-item:focus-visible {
+  background: var(--sn-color-hover);
+  outline: none;
+}
+
+.cloud-folder-dialog .cloud-folder-item .icon {
+  flex: none;
+  width: var(--sn-icon-size-sm);
+  height: var(--sn-icon-size-sm);
+  color: var(--sn-color-text-muted);
+}
+
+.cloud-folder-dialog .cloud-folder-empty {
+  padding: var(--sn-space-4);
+  color: var(--sn-color-text-muted);
+  font-size: var(--sn-font-size-sm);
+}
+
+.cloud-folder-dialog .cloud-folder-create {
+  display: flex;
+  align-items: center;
+  gap: var(--sn-space-3);
+  margin: var(--sn-space-3) 0 0;
 }
 
 /* 快捷键：一行是名称、改过时的「恢复默认」与按键；格式一组两列排列。 */
@@ -6542,7 +6724,7 @@ body.is-dragging-attachment * {
   width: var(--sn-control-height);
 }
 
-.settings-modal :is(.settings-inline-value, .data-row-controls, .settings-actions) > .icon-button {
+.settings-modal :is(.settings-inline-value, .settings-actions) > .icon-button {
   flex: none;
   width: var(--sn-control-height);
   height: var(--sn-control-height);

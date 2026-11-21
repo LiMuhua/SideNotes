@@ -4,19 +4,17 @@
  * 内容对应原型 settings.js 的 renderData（导入与导出、数据目录、云端自动备份），桌面端另加「快照」。
  * 用户反馈原型的布局太乱，桌面端改为一行一项：名称（说明放在问号里）在左，取值与操作靠右，
  * 目录路径占据中间的空间；分组按常用程度排列：数据目录、快照、导入与导出、云端备份。
- * 导入导出、打开目录、更换存储位置（复制数据并改写附件路径）、附件清理与快照在桌面端真实可用；
- * 云端备份尚未接入，界面只保存配置，连接与登录时明确提示，不把未实现的能力表现为已完成。
+ * 导入导出、打开目录、更换存储位置（复制数据并改写附件路径）、附件清理、快照与云端备份在桌面端真实可用；
+ * 云端同步的界面在 CloudPanel.tsx。
  */
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import * as bridge from '../../core/bridge';
 import * as store from '../../core/store';
 import { BACKUP_ATTACHMENTS, backupName, parseBackup, rewriteAttachmentPaths, type ParsedBackup } from '../../core/backup';
 import { formatBytes } from '../../core/files';
 import { snapshotReason, snapshotTime } from '../../core/snapshots';
 import type {
-  CloudProvider,
-  CloudSettings,
   DataSnapshot,
   Settings,
   SnapshotOverview,
@@ -24,107 +22,16 @@ import type {
   StorageLocation,
 } from '../../core/types';
 import { useToast } from '../../hooks/useToast';
+import { CloudGroup } from './CloudPanel';
 import { useConfirm } from './confirm';
-import { ActionButton, Group, Row, SelectField, TextField, Toggle, classes, type SaveSettings } from './controls';
+import { ActionButton, DataRow, Group, Row, SelectField, TextField, type SaveSettings } from './controls';
+import { PathText } from './PathText';
 
 const LOCATIONS: ReadonlyArray<readonly [StorageLocation, string]> = [
   ['appdata', '应用数据目录（AppData）'],
   ['portable', '安装目录（便携模式）'],
   ['custom', '自定义目录'],
 ];
-
-/** 备份服务：名称与连接方式。OneDrive 排在 Google Drive 之前（第十轮反馈 3）。 */
-const PROVIDERS: ReadonlyArray<readonly [CloudProvider, string, string]> = [
-  ['synology', '群晖 NAS', 'WebDAV'],
-  ['onedrive', 'OneDrive', 'Microsoft 账户'],
-  ['google', 'Google Drive', 'Google 账户'],
-];
-
-/** 各备份服务的品牌标识，图形取自原型。内容为固定常量，不含外部输入。 */
-const PROVIDER_MARKS: Record<CloudProvider, { viewBox: string; paths: string }> = {
-  synology: {
-    viewBox: '0 0 24 24',
-    paths:
-      '<path fill="#4468ff" d="M3 4h10.2L21 8.8v4.1L11 8H3z"/><path fill="#1e3f9e" d="M21 20H10.8L3 15.2v-4.1l10 4.9h8z"/><path fill="#8097ff" d="M3 8h8l8 4.8H11z"/>',
-  },
-  google: {
-    viewBox: '0 0 87.3 78',
-    paths:
-      '<path fill="#0066da" d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3L27.5 53H0c0 1.55.4 3.1 1.2 4.5z"/><path fill="#00ac47" d="M43.65 25L29.9 1.2c-1.35.8-2.5 1.9-3.3 3.3L1.2 48.5A9.3 9.3 0 000 53h27.5z"/><path fill="#ea4335" d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5H59.8l5.85 11.5z"/><path fill="#00832d" d="M43.65 25L57.4 1.2C56.05.4 54.5 0 52.9 0H34.4c-1.6 0-3.15.45-4.5 1.2z"/><path fill="#2684fc" d="M59.8 53H27.5L13.75 76.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z"/><path fill="#ffba00" d="M73.4 26.5L60.7 4.5c-.8-1.4-1.95-2.5-3.3-3.3L43.65 25l16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z"/>',
-  },
-  onedrive: {
-    viewBox: '0 0 24 24',
-    paths:
-      '<defs><linearGradient id="onedrive-mark-gradient" x1="4" y1="19" x2="20" y2="5" gradientUnits="userSpaceOnUse"><stop stop-color="#0364b8"/><stop offset="1" stop-color="#28a8ea"/></linearGradient></defs><path fill="url(#onedrive-mark-gradient)" d="M19.35 10.04A7.49 7.49 0 0012 4C9.11 4 6.6 5.64 5.35 8.04A6 6 0 000 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/><path fill="#fff" fill-opacity=".24" d="M7.1 16.6h10.3c1.45 0 2.6-1.08 2.6-2.45 0-1.3-1.06-2.37-2.39-2.44a3.73 3.73 0 00-7.12-1.48 3.03 3.03 0 00-3.39 3.02c0 1.53 1.23 2.75 2.78 2.75z"/>',
-  },
-};
-
-function ProviderMark({ provider }: { provider: CloudProvider }) {
-  const mark = PROVIDER_MARKS[provider];
-  return (
-    <svg
-      className="sync-provider-mark"
-      aria-hidden="true"
-      focusable="false"
-      viewBox={mark.viewBox}
-      dangerouslySetInnerHTML={{ __html: mark.paths }}
-    />
-  );
-}
-
-/**
- * 一行设置（原型 settings.js 的 row 加 settings-inline-value）：名称与问号在左，取值与按钮紧跟在名称后面；
- * `grow` 时取值占满剩下的宽度（路径放不下时末尾省略）。
- */
-function DataRow({ title, help, grow, children }: { title: string; help?: string; grow?: boolean; children: ReactNode }) {
-  return (
-    <Row title={title} description={help}>
-      <span className={classes('settings-inline-value', grow && 'is-grow')}>{children}</span>
-    </Row>
-  );
-}
-
-/** 云端备份的一行（原型 dataRow）：名称单独成列，各行的输入框对齐；放在 .data-rows 里。 */
-function CloudRow({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <div className="data-row">
-      <span className="settings-row-label">{title}</span>
-      <div className="data-row-controls">{children}</div>
-    </div>
-  );
-}
-
-/**
- * 路径（原型 pathText）：等宽小字，只占一行，放不下时末尾省略，不把别的控件挤乱。
- * 被截断时悬停显示完整路径；双击复制完整路径并提示（双击不选中文字）。
- */
-function PathText({ label, path }: { label: string; path: string }) {
-  const toast = useToast();
-  const [full, setFull] = useState<string | undefined>(undefined);
-  return (
-    <code
-      className="settings-path"
-      aria-label={label}
-      title={full}
-      onMouseEnter={(event) => {
-        const node = event.currentTarget;
-        setFull(node.scrollWidth > node.clientWidth ? path : undefined);
-      }}
-      onMouseDown={(event) => {
-        if (event.detail > 1) event.preventDefault();
-      }}
-      onDoubleClick={(event) => {
-        event.preventDefault();
-        void bridge
-          .writeClipboardText(path)
-          .then(() => toast('已复制目录路径'))
-          .catch(() => toast('无法复制目录路径', null, true));
-      }}
-    >
-      {path}
-    </code>
-  );
-}
 
 /** 取出错误说明，供提示条使用。 */
 function reason(error: unknown, fallback: string): string {
@@ -530,142 +437,6 @@ function SnapshotGroup({ settings, save }: { settings: Settings; save: SaveSetti
           ))}
         </ul>
       ) : null}
-    </Group>
-  );
-}
-
-/**
- * 云端备份（第十轮反馈 3 重排，技术决策第 60 条）：按使用的先后从上到下排——选服务、连接账户、远程文件夹、
- * 自动备份与失败通知，最后是状态和手动的备份、恢复。群晖 NAS 走 WebDAV，填地址、用户名与密码后连接；
- * OneDrive 与 Google Drive 在浏览器里登录各自的账户。
- *
- * 桌面版尚未接入云服务，一直是未连接：地址、用户名、远程文件夹与两个开关照常保存；密码要在连接成功后存进系统的
- * 凭据管理器，不写进设置，所以只留在输入框里；点「连接」「登录」时提示尚未接入；「立即备份」「从云端恢复」要先连接，
- * 未连接时不可用，旁边的状态写着原因。
- */
-function CloudGroup({ settings, save }: { settings: Settings; save: SaveSettings }) {
-  const toast = useToast();
-  const cloud = settings.cloud;
-  const [notify, setNotify] = useState<boolean | null>(null);
-  const [password, setPassword] = useState('');
-
-  useEffect(() => {
-    let alive = true;
-    void bridge.notificationGranted().then((granted) => {
-      if (alive) setNotify(granted);
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const saveCloud = (patch: Partial<CloudSettings>): Promise<boolean> =>
-    save({ cloud: { ...settings.cloud, ...patch } });
-
-  const connect = (): void => toast('云端服务尚未接入，可先导出本地备份');
-
-  /** 打开失败通知时先申请系统通知的权限，未允许就不打开；关闭直接保存。 */
-  const switchNotifications = async (enabled: boolean): Promise<void> => {
-    if (!enabled) {
-      await saveCloud({ notifications: false });
-      return;
-    }
-    try {
-      const granted = await bridge.requestNotifications();
-      setNotify(granted);
-      if (granted) await saveCloud({ notifications: true });
-      else toast('通知未开启，可稍后在系统设置中允许');
-    } catch {
-      toast('系统通知请求受限，可稍后在系统设置中允许');
-    }
-  };
-
-  return (
-    <Group title="云端备份" className="settings-wide cloud-group">
-      <div className="sync-provider-grid" role="group" aria-label="备份服务">
-        {PROVIDERS.map(([provider, name, protocol]) => {
-          const active = cloud.provider === provider;
-          return (
-            <button
-              key={provider}
-              type="button"
-              className={classes('sync-provider', active && 'active selected')}
-              data-provider={provider}
-              aria-label={`${name}，${protocol}`}
-              aria-pressed={active}
-              onClick={() => void saveCloud({ provider, lastError: '', lastBackup: 0 })}
-            >
-              <ProviderMark provider={provider} />
-              <span className="sync-provider-name">{name}</span>
-              <small>{protocol}</small>
-            </button>
-          );
-        })}
-      </div>
-      <div className="data-rows">
-        {cloud.provider === 'synology' ? (
-          <>
-            <CloudRow title="地址">
-              <TextField
-                label="WebDAV 地址"
-                value={cloud.endpoint}
-                placeholder="https://nas.example.com:5006"
-                onCommit={(endpoint) => saveCloud({ endpoint: endpoint.slice(0, 500) })}
-              />
-            </CloudRow>
-            <CloudRow title="账户">
-              <span className="cloud-credentials">
-                <TextField
-                  label="用户名"
-                  value={cloud.account}
-                  placeholder="用户名"
-                  onCommit={(account) => saveCloud({ account: account.slice(0, 120) })}
-                />
-                <input
-                  className="form-control"
-                  type="password"
-                  aria-label="密码"
-                  placeholder="密码"
-                  autoComplete="off"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                />
-              </span>
-              <ActionButton label="连接" icon="link" onClick={connect} />
-            </CloudRow>
-          </>
-        ) : (
-          <CloudRow title="账户">
-            <ActionButton label="登录" icon="external" onClick={connect} />
-          </CloudRow>
-        )}
-        <CloudRow title="远程文件夹">
-          <TextField
-            label="远程文件夹"
-            value={cloud.folder}
-            placeholder="SideNotes"
-            onCommit={(folder) => saveCloud({ folder: folder.slice(0, 240) })}
-          />
-        </CloudRow>
-        <CloudRow title="自动备份">
-          <Toggle label="自动备份" checked={cloud.enabled} onChange={(enabled) => void saveCloud({ enabled })} />
-        </CloudRow>
-        <CloudRow title="失败通知">
-          <Toggle
-            label="备份失败时发送系统通知"
-            checked={cloud.notifications && notify === true}
-            disabled={notify === null}
-            onChange={(enabled) => void switchNotifications(enabled)}
-          />
-        </CloudRow>
-        <CloudRow title="状态">
-          <span className="settings-value sync-status settings-status" data-cloud-status="true">
-            未连接
-          </span>
-          <ActionButton label="立即备份" icon="upload" disabled />
-          <ActionButton label="从云端恢复" icon="download" disabled />
-        </CloudRow>
-      </div>
     </Group>
   );
 }

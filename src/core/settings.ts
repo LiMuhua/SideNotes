@@ -100,9 +100,22 @@ function clampInt(value: unknown, min: number, max: number, fallback: number): n
   return Math.max(min, Math.min(max, number));
 }
 
-/** 校验云端备份配置。 */
+/** 自动备份的默认时间：每天 3 点（电脑关着的话，下次打开应用时补上）。与后端 cloud::DEFAULT_SCHEDULE 一致。 */
+export const DEFAULT_CLOUD_SCHEDULE = '0 3 * * *';
+
+/** 规范远程文件夹：以 / 开头，反斜杠当作斜杠，去掉多余与末尾的斜杠；空的用 /SideNotes。 */
+export function normalizeRemoteFolder(value: unknown): string {
+  const segments = String(value ?? '')
+    .split(/[\\/]+/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  return segments.length ? `/${segments.join('/')}`.slice(0, 300) : '/SideNotes';
+}
+
+/** 校验云端同步配置。旧版的 lastBackup、lastError 改由后端记录，读到时丢掉。 */
 function normalizeCloud(value: unknown): CloudSettings {
   const input = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+  const schedule = String(input.schedule ?? '').trim();
   return {
     enabled: input.enabled === true,
     provider: ['synology', 'google', 'onedrive'].includes(input.provider as string)
@@ -110,10 +123,12 @@ function normalizeCloud(value: unknown): CloudSettings {
       : 'synology',
     endpoint: String(input.endpoint ?? '').slice(0, 1000),
     account: String(input.account ?? '').slice(0, 160),
-    folder: String(input.folder ?? 'SideNotes').slice(0, 300),
-    lastBackup: Number(input.lastBackup) || 0,
-    lastError: String(input.lastError ?? '').slice(0, 500),
+    tlsName: String(input.tlsName ?? '').trim().slice(0, 253),
+    folder: normalizeRemoteFolder(input.folder),
+    schedule: (schedule || DEFAULT_CLOUD_SCHEDULE).slice(0, 120),
     notifications: input.notifications === true,
+    email: String(input.email ?? '').trim().slice(0, 254),
+    emailFrom: String(input.emailFrom ?? '').trim().slice(0, 254),
   };
 }
 

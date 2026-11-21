@@ -15,6 +15,10 @@ import { readFile, readTextFile, writeFile } from '@tauri-apps/plugin-fs';
 import { isPermissionGranted, requestPermission } from '@tauri-apps/plugin-notification';
 import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener';
 import type {
+  CloudBackup,
+  CloudOverview,
+  CloudProvider,
+  WebDavOutcome,
   CleanupReport,
   DataSnapshot,
   Draft,
@@ -60,6 +64,8 @@ export const APP_EVENTS = {
   settingsVisibility: 'sidenotes://settings-visibility',
   /** 录入快捷键期间的按键，只发给设置窗口，载荷见 RecordedKeys。 */
   shortcutRecorded: 'sidenotes://shortcut-recorded',
+  /** 云端同步的状态变了（开始、结束、登录、断开），设置页重新读取 cloudOverview。 */
+  cloudStatus: 'sidenotes://cloud-status',
 } as const;
 
 /**
@@ -218,6 +224,98 @@ export function autoSnapshot(directory: string): Promise<DataSnapshot | null> {
  */
 export function restoreSnapshot(directory: string, id: string): Promise<RestoreReport> {
   return call<RestoreReport>('restore_snapshot', { directory, id });
+}
+
+/* ==================== 云端同步（第十一轮反馈；现在是备份与恢复） ==================== */
+
+/** 浏览器预览里的云端状态：都没连接。 */
+const OFFLINE_CLOUD: CloudOverview = {
+  providers: {
+    synology: { connected: false, account: '', error: '', available: true, builtin: true, client: '' },
+    onedrive: { connected: false, account: '', error: '', available: false, builtin: false, client: '' },
+    google: { connected: false, account: '', error: '', available: false, builtin: false, client: '' },
+  },
+  running: false,
+  lastSuccess: 0,
+  lastProvider: '',
+  nextRun: null,
+  resendKey: false,
+};
+
+/** 云端同步的运行状态：各服务的连接、上次备份、下次自动备份。 */
+export function cloudOverview(): Promise<CloudOverview> {
+  return call<CloudOverview>('cloud_overview', undefined, OFFLINE_CLOUD);
+}
+
+/** 检查自动备份的时间表（crontab 写法）：返回下一次的时间，写错时 error 是原因。浏览器预览不检查。 */
+export function checkCloudSchedule(expression: string): Promise<{ next: number | null; error: string }> {
+  return call('cloud_check_schedule', { expression }, { next: null, error: '' });
+}
+
+/**
+ * 连接群晖 NAS（WebDAV）：成功后后端存下密码；地址、用户名与 tlsName 由调用方存进设置。
+ * 证书上的名字与地址对不上时返回证书上的名字，用户同意后带上 tlsName 再连一次。
+ */
+export function connectWebDav(endpoint: string, username: string, password: string, tlsName: string): Promise<WebDavOutcome> {
+  return call<WebDavOutcome>('cloud_connect_webdav', { endpoint, username, password, tlsName });
+}
+
+/**
+ * 在浏览器里登录 OneDrive 或 Google Drive，返回登录的账户。构建时没有写进客户端编号时带上用户填的（Google 还有密钥）。
+ * 浏览器没能跳回来时，用 submitCloudCode 把授权码或回调网址交给这次登录。
+ */
+export function cloudLogin(provider: Exclude<CloudProvider, 'synology'>, clientId: string, clientSecret: string): Promise<string> {
+  return call<string>('cloud_login', { provider, clientId, clientSecret });
+}
+
+/** 把粘贴的授权码或回调网址交给正在等的登录。 */
+export function submitCloudCode(text: string): Promise<void> {
+  return call<void>('cloud_submit_code', { text });
+}
+
+/** 取消正在等的登录。 */
+export function cancelCloudLogin(): Promise<void> {
+  return call<void>('cloud_cancel_login', undefined, undefined as unknown as void);
+}
+
+/** 断开群晖 NAS 或退出登录：删掉本机存的凭据，云端的备份不动。 */
+export function cloudDisconnect(provider: CloudProvider): Promise<void> {
+  return call<void>('cloud_disconnect', { provider });
+}
+
+/** 列出云端某个文件夹下的子文件夹（远程文件夹的选择框）。 */
+export function listCloudFolders(path: string): Promise<string[]> {
+  return call<string[]>('cloud_list_folders', { path });
+}
+
+/** 在云端新建一个文件夹，返回它的路径。 */
+export function createCloudFolder(parent: string, name: string): Promise<string> {
+  return call<string>('cloud_create_folder', { parent, name });
+}
+
+/** 立即备份一次。 */
+export function cloudBackupNow(): Promise<CloudBackup> {
+  return call<CloudBackup>('cloud_backup_now');
+}
+
+/** 列出远程文件夹里的备份（最新的在前）。 */
+export function listCloudBackups(): Promise<CloudBackup[]> {
+  return call<CloudBackup[]>('cloud_list_backups');
+}
+
+/** 从云端的一份备份恢复记录；恢复前在本机的快照目录（空的是默认位置）建一份快照。 */
+export function cloudRestore(id: string, snapshotDirectory: string): Promise<RestoreReport> {
+  return call<RestoreReport>('cloud_restore', { id, snapshotDirectory });
+}
+
+/** 保存 Resend 的 API 密钥（空的删除）。 */
+export function setResendKey(key: string): Promise<void> {
+  return call<void>('cloud_set_resend_key', { key });
+}
+
+/** 发一封测试邮件；key 为空时用保存的密钥。 */
+export function sendTestEmail(to: string, from: string, key: string): Promise<void> {
+  return call<void>('cloud_test_email', { to, from, key });
 }
 
 /** 列出系统已安装的字体族名称；浏览器预览读不到系统字体，返回空列表。 */

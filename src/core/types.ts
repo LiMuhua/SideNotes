@@ -80,17 +80,68 @@ export type StorageLocation = 'appdata' | 'portable' | 'custom';
 /** 备份服务提供方。 */
 export type CloudProvider = 'synology' | 'google' | 'onedrive';
 
-/** 云端备份配置。 */
+/**
+ * 云端同步配置（第十一轮反馈起接入真实的服务，现在是备份与恢复）。凭据（密码、登录令牌、Resend 密钥）不在这里，由后端加密存在本机；
+ * 登录的账户与备份的结果是后端的运行状态（CloudOverview），也不在这里。
+ */
 export interface CloudSettings {
+  /** 自动备份。 */
   enabled: boolean;
   provider: CloudProvider;
+  /** 群晖 NAS 的 WebDAV 地址。 */
   endpoint: string;
+  /** 群晖 NAS 的用户名。 */
   account: string;
+  /** 按证书上的这个名字验证 NAS 的证书（地址是 IP、证书是给域名的时候）；空的按地址里的主机名验证。 */
+  tlsName: string;
+  /** 远程文件夹，以 / 开头。 */
   folder: string;
-  lastBackup: number;
-  lastError: string;
+  /** 自动备份的时间：crontab 的五段写法。 */
+  schedule: string;
+  /** 备份失败时通知（系统通知；填了邮箱时还发邮件）。 */
   notifications: boolean;
+  /** 失败通知的收件邮箱；空的不发邮件。 */
+  email: string;
+  /** 发件地址（Resend 上验证过的域名）；空的用 Resend 的测试地址。 */
+  emailFrom: string;
 }
+
+/** 一个服务的连接状态（后端的运行状态）。 */
+export interface CloudProviderState {
+  /** 连接或登录过（本机存着凭据）。 */
+  connected: boolean;
+  /** 登录的账户；群晖 NAS 是用户名。 */
+  account: string;
+  /** 最近的错误；空的表示正常。 */
+  error: string;
+  /** 有没有客户端编号（构建时写进程序的，或设置页里填的）。 */
+  available: boolean;
+  /** 客户端编号是构建时写进程序的，登录时不用再填。 */
+  builtin: boolean;
+  /** 设置页里填过的客户端编号。 */
+  client: string;
+}
+
+/** 连接群晖 NAS 的结果：连上了，或证书上的名字与地址对不上，要问用户是否按证书上的名字验证。 */
+export type WebDavOutcome =
+  | { status: 'connected'; account: string }
+  | { status: 'certificate'; names: string[]; suggested: string; fingerprint: string };
+
+/** 云端同步的运行状态。 */
+export interface CloudOverview {
+  providers: Record<CloudProvider, CloudProviderState>;
+  running: boolean;
+  /** 上次成功备份的时间（毫秒），0 表示没有。 */
+  lastSuccess: number;
+  lastProvider: string;
+  /** 下次自动备份的时间；没开或时间表写错时为 null。 */
+  nextRun: number | null;
+  /** 保存了 Resend 的密钥。 */
+  resendKey: boolean;
+}
+
+/** 一份云端备份。 */
+export type CloudBackup = DataSnapshot & { size: number };
 
 /** 应用设置。 */
 export interface Settings {

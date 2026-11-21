@@ -3,12 +3,13 @@
  *
  * 分组、设置项、说明文字与操作沿用现有应用 0.7.3（`DataPanel.tsx`、`TrashPanel.tsx`、`AboutPanel.tsx`）。
  * 「数据与同步」按外观页的写法排得紧凑：名称后紧跟取值与操作，相关的两项放在同一行；云端备份的输入框较多，名称单独成列以便对齐。
- * 云端备份尚未接入，与现有应用一样只保存配置（T11），布局与现有应用第十轮反馈后的一致。
+ * 云端同步（原名云端备份）的布局与现有应用第十一轮反馈后的一致，只演示，不连接云端。
  * Playground 不访问文件系统，目录、快照与附件都是示例数值，操作只给出提示。
  */
 
 import { useMemo, useState } from 'react';
 import { formatFullTime, isExpired, noteTitle } from '@/core/notes';
+import { MONTH_DAYS, SCHEDULE_KINDS, WEEKDAYS, buildSchedule, formatTime, parseSchedule, parseTime } from '@/core/schedule';
 import { TRASH_DAYS_RANGE } from '@/core/settings';
 import { parse } from '@/core/tags';
 import type { CloudProvider, CloudSettings, Note, StorageLocation } from '@/core/types';
@@ -25,7 +26,7 @@ import { Switch } from '../ui/Toggle';
 import { HelpTip } from '../ui/Tooltip';
 import { AVAILABLE_UPDATE, UpdateDialog } from './menus';
 import { AppIcon } from './SidebarParts';
-import { DataRow, Field, FieldRow, PathText, SettingsCard, SettingsPage } from './SettingsParts';
+import { Field, FieldRow, PathText, SettingsCard, SettingsPage } from './SettingsParts';
 
 const LOCATIONS: ReadonlyArray<{ value: StorageLocation; label: string; path: string }> = [
   { value: 'appdata', label: '应用数据目录（AppData）', path: 'C:\\Users\\用户\\AppData\\Roaming\\SideNotes' },
@@ -82,7 +83,10 @@ export function DataPanel() {
   const demo = (action: string) => toast({ message: `${action}（Playground 只演示，不访问文件）` });
   const cloud = settings.cloud;
   const saveCloud = (patch: Partial<CloudSettings>) => updateSettings({ cloud: { ...cloud, ...patch } });
-  const connect = () => toast({ message: '云端服务尚未接入，可先导出本地备份' });
+  // 演示用的连接状态：点「连接」「登录」后显示一个示例账户。
+  const [accounts, setAccounts] = useState<Record<CloudProvider, string>>({ synology: '', onedrive: '', google: '' });
+  const account = accounts[cloud.provider];
+  const schedule = parseSchedule(cloud.schedule);
 
   return (
     <SettingsPage title="数据与同步">
@@ -191,10 +195,11 @@ export function DataPanel() {
         </FieldRow>
       </SettingsCard>
 
-      {/* 云端备份按使用的先后排：选服务、连接账户、远程文件夹、自动备份与失败通知，最后是状态与手动操作（现有应用第十轮反馈）。
-       * 群晖 NAS 填地址、用户名与密码后连接，OneDrive 与 Google Drive 登录各自的账户；尚未接入，一直是未连接，
-       * 密码不保存，「立即备份」「从云端恢复」不可用。 */}
-      <SettingsCard title="云端备份">
+      {/* 云端同步（现有应用第十一轮反馈，原名云端备份）：服务卡片角上的点是连接状态，异常为红色、悬停看原因；下面一行放两项、
+       * 放不下时折行：账户与远程文件夹、自动备份与失败通知，最后是已有备份。群晖 NAS 在弹窗里填地址、用户名与密码，
+       * OneDrive 与 Google Drive 在浏览器里登录，登录后显示账户、按钮改为退出登录；远程文件夹是路径加文件夹按钮；
+       * 自动备份选频率与时间，或自定义 crontab；失败通知可以发邮件（Resend）。Playground 只演示，不连接云端。 */}
+      <SettingsCard title="云端同步">
         <div className="sn-provider-grid" role="group" aria-label="备份服务">
           {PROVIDERS.map((provider) => (
             <button
@@ -202,79 +207,106 @@ export function DataPanel() {
               type="button"
               className={cx('sn-provider', cloud.provider === provider.id && 'is-selected')}
               aria-pressed={cloud.provider === provider.id}
-              aria-label={`${provider.name}，${provider.protocol}`}
-              onClick={() => saveCloud({ provider: provider.id, lastError: '', lastBackup: 0 })}
+              aria-label={`${provider.name}，${provider.protocol}${accounts[provider.id] ? '，已连接' : ''}`}
+              onClick={() => saveCloud({ provider: provider.id })}
             >
               <ProviderMark provider={provider.id} />
               <span className="sn-provider-name">{provider.name}</span>
               <span className="sn-provider-protocol">{provider.protocol}</span>
+              {accounts[provider.id] ? <span className="sn-provider-dot is-ok" aria-hidden="true" /> : null}
             </button>
           ))}
         </div>
-        {cloud.provider === 'synology' ? (
-          <>
-            <DataRow label="地址">
-              <TextInput
-                key="endpoint"
-                className="sn-set-data-input"
-                aria-label="WebDAV 地址"
-                placeholder="https://nas.example.com:5006"
-                defaultValue={cloud.endpoint}
-                onBlur={(event) => saveCloud({ endpoint: event.target.value.slice(0, 500) })}
-              />
-            </DataRow>
-            <DataRow label="账户">
-              <span className="sn-set-data-input sn-set-credentials">
-                <TextInput
-                  key="account"
-                  aria-label="用户名"
-                  placeholder="用户名"
-                  defaultValue={cloud.account}
-                  onBlur={(event) => saveCloud({ account: event.target.value.slice(0, 120) })}
-                />
-                <TextInput type="password" aria-label="密码" placeholder="密码" autoComplete="off" />
-              </span>
-              <Button variant="secondary" icon="link" onClick={connect}>
-                连接
+        <FieldRow>
+          <Field label="账户">
+            {account ? <span className="sn-set-value">{account}</span> : null}
+            {account ? (
+              <Button variant="secondary" icon="cloud-off" onClick={() => setAccounts({ ...accounts, [cloud.provider]: '' })}>
+                {cloud.provider === 'synology' ? '断开连接' : '退出登录'}
               </Button>
-            </DataRow>
-          </>
-        ) : (
-          <DataRow label="账户">
-            <Button variant="secondary" icon="external" onClick={connect}>
-              登录
+            ) : (
+              <Button
+                variant="secondary"
+                icon={cloud.provider === 'synology' ? 'link' : 'external'}
+                onClick={() => {
+                  setAccounts({ ...accounts, [cloud.provider]: cloud.provider === 'synology' ? 'admin · nas.example.com:5006' : 'you@example.com' });
+                  demo(cloud.provider === 'synology' ? '连接群晖 NAS' : '登录');
+                }}
+              >
+                {cloud.provider === 'synology' ? '连接' : '登录'}
+              </Button>
+            )}
+          </Field>
+          <Field label="远程文件夹">
+            <PathText label="远程文件夹" path={cloud.folder} />
+            <IconButton icon="folder" label="选择远程文件夹" disabled={!account} onClick={() => demo('选择远程文件夹')} />
+          </Field>
+        </FieldRow>
+        <FieldRow>
+          <Field label="自动备份">
+            <Switch label="自动备份" hideLabel checked={cloud.enabled} onChange={(enabled) => saveCloud({ enabled })} />
+            <Select
+              aria-label="自动备份的频率"
+              size="sm"
+              value={schedule.kind}
+              options={SCHEDULE_KINDS.map(([value, label]) => ({ value, label }))}
+              onChange={(kind) => saveCloud({ schedule: kind === 'custom' ? cloud.schedule : buildSchedule({ ...schedule, kind }) })}
+            />
+            {schedule.kind === 'weekly' ? (
+              <Select
+                aria-label="星期几"
+                size="sm"
+                value={String(schedule.weekday)}
+                options={WEEKDAYS.map(([value, label]) => ({ value: String(value), label }))}
+                onChange={(weekday) => saveCloud({ schedule: buildSchedule({ ...schedule, weekday: Number(weekday) }) })}
+              />
+            ) : null}
+            {schedule.kind === 'monthly' ? (
+              <Select
+                aria-label="每月的哪一天"
+                size="sm"
+                value={String(schedule.day)}
+                options={MONTH_DAYS.map(([value, label]) => ({ value: String(value), label }))}
+                onChange={(day) => saveCloud({ schedule: buildSchedule({ ...schedule, day: Number(day) }) })}
+              />
+            ) : null}
+            {schedule.kind === 'custom' ? (
+              <TextInput
+                key={`cron-${cloud.schedule}`}
+                inputSize="sm"
+                className="sn-set-cron"
+                aria-label="crontab（分 时 日 月 周）"
+                placeholder="0 3 * * *"
+                defaultValue={schedule.cron}
+                onBlur={(event) => saveCloud({ schedule: event.target.value.trim() || '0 3 * * *' })}
+              />
+            ) : schedule.kind !== 'hourly' ? (
+              <TextInput
+                key={`time-${cloud.schedule}`}
+                inputSize="sm"
+                className="sn-set-time"
+                aria-label="时间"
+                placeholder="03:00"
+                defaultValue={formatTime(schedule.hour, schedule.minute)}
+                onBlur={(event) => {
+                  const time = parseTime(event.target.value);
+                  if (time) saveCloud({ schedule: buildSchedule({ ...schedule, ...time }) });
+                }}
+              />
+            ) : null}
+          </Field>
+          <Field label="失败通知">
+            <Switch label="备份失败时通知" hideLabel checked={cloud.notifications} onChange={(notifications) => saveCloud({ notifications })} />
+            <Button variant="secondary" icon="mail" onClick={() => demo('设置失败通知邮件')}>
+              {cloud.email || '通知邮件'}
             </Button>
-          </DataRow>
-        )}
-        <DataRow label="远程文件夹">
-          <TextInput
-            key="folder"
-            className="sn-set-data-input"
-            aria-label="远程文件夹"
-            placeholder="SideNotes"
-            defaultValue={cloud.folder}
-            onBlur={(event) => saveCloud({ folder: event.target.value.slice(0, 240) })}
-          />
-        </DataRow>
-        <DataRow label="自动备份">
-          <Switch label="自动备份" hideLabel checked={cloud.enabled} onChange={(enabled) => saveCloud({ enabled })} />
-        </DataRow>
-        <DataRow label="失败通知">
-          <Switch
-            label="备份失败时发送系统通知"
-            hideLabel
-            checked={cloud.notifications}
-            onChange={(notifications) => saveCloud({ notifications })}
-          />
-        </DataRow>
-        <DataRow label="状态" value="未连接">
-          <Button variant="secondary" icon="upload" disabled>
+          </Field>
+        </FieldRow>
+        <Field label="已有备份">
+          <Button variant="secondary" icon="upload" disabled={!account} onClick={() => demo('立即备份')}>
             立即备份
           </Button>
-          <Button variant="secondary" icon="download" disabled>
-            从云端恢复
-          </Button>
-        </DataRow>
+        </Field>
       </SettingsCard>
     </SettingsPage>
   );

@@ -66,17 +66,6 @@ export function FieldRow({ children, spread = false }: { children: ReactNode; sp
   return <div className={cx('sn-set-row', spread && 'is-spread')}>{children}</div>;
 }
 
-/** 数据行：名称单独成一列，取值与操作紧跟在后（云端备份的几行输入框因此对齐）。 */
-export function DataRow({ label, help, value, children }: { label: string; help?: string; value?: ReactNode; children?: ReactNode }) {
-  return (
-    <div className="sn-set-data">
-      <SettingLabel label={label} help={help} />
-      {value !== undefined ? <div className="sn-set-data-value">{value}</div> : null}
-      {children ? <div className="sn-set-data-actions">{children}</div> : null}
-    </div>
-  );
-}
-
 /**
  * 目录路径：等宽字体，只占一行，放不下时末尾省略，不把别的控件挤乱；按钮紧跟在路径之后。
  * 放不下时悬停显示完整路径，双击复制完整路径（双击不选中文字）（本次提出）。

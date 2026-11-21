@@ -857,42 +857,6 @@ button.sn-shortcut-key:hover {
   font-size: var(--sn-font-size-xs);
 }
 
-/* 数据行（云端备份）：名称单独成一列，取值、输入框与操作紧跟在后，不推到最右边；各行的输入框因此对齐。 */
-.sn-set-data {
-  display: grid;
-  grid-template-columns: minmax(calc(var(--sn-dialog-width) * 0.18), auto) minmax(0, auto) auto;
-  justify-content: start;
-  align-items: center;
-  gap: var(--sn-space-3) var(--sn-space-4);
-  min-height: var(--sn-control-height);
-}
-
-.sn-set-data-value {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--sn-color-text-secondary);
-  font-size: var(--sn-font-size-sm);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sn-set-data-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sn-space-2);
-}
-
-.sn-set-data-input {
-  width: calc(var(--sn-dialog-width) * 0.65);
-}
-
-/* 群晖 NAS 的用户名与密码并排，两个合起来与地址框一样宽，「连接」跟在后面。 */
-.sn-set-credentials {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--sn-space-3);
-}
-
 .sn-set-path {
   display: block;
   cursor: default;
@@ -968,6 +932,7 @@ button.sn-shortcut-key:hover {
 }
 
 .sn-provider {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -991,6 +956,38 @@ button.sn-shortcut-key:hover {
 .sn-provider-mark {
   width: var(--sn-icon-size);
   height: var(--sn-icon-size);
+}
+
+/* 卡片角上的点：连接正常是成功色，异常是危险色（现有应用里悬停显示原因），正在备份是强调色。 */
+.sn-provider-dot {
+  position: absolute;
+  top: var(--sn-space-3);
+  right: var(--sn-space-3);
+  width: var(--sn-space-3);
+  height: var(--sn-space-3);
+  border-radius: var(--sn-radius-full);
+  background: var(--sn-color-success);
+  box-shadow: 0 0 0 var(--sn-space-1) var(--sn-color-success-subtle);
+}
+
+.sn-provider-dot.is-error {
+  background: var(--sn-color-danger);
+  box-shadow: 0 0 0 var(--sn-space-1) var(--sn-color-danger-subtle);
+}
+
+/* 自动备份的时间（HH:MM）与自定义的 crontab：输入框按内容的长短给宽度，用等宽字体。 */
+.sn-set-time,
+.sn-set-cron {
+  flex: none;
+  font-family: var(--sn-font-code);
+}
+
+.sn-set-time {
+  width: 6em;
+}
+
+.sn-set-cron {
+  width: 11em;
 }
 
 .sn-provider-name {
