@@ -160,14 +160,20 @@ body[data-window='sidebar'] .sidebar-resizer:focus-visible {
   outline: none;
 }
 
-/* 系统画边框的侧栏窗口（不透明与亚克力：终端、记录纸、Windows 11）：系统的边框盖住窗口内容最外的一圈，跨在边上的线
- * 只露出窗口里的半条，正好被它盖住，停留之后看不到高亮（第八轮反馈 4）。线整条画在窗口里，让开边框这一圈。 */
+/* 系统画边框的侧栏窗口（不透明与亚克力：终端、Windows 11）：窗口就是面板，系统的边框盖住窗口内容最外的一圈，线整条
+ * 画在窗口里、让开边框这一圈（第八轮反馈 4），与窗口一样高；Windows 11 的圆角由系统裁，线的两端随之收住。 */
 :root:is([data-sn-window='opaque'], [data-sn-window='acrylic']) body[data-window='sidebar'] .sidebar-resizer[data-edge='right']::after {
   left: var(--sn-border-width);
 }
 
 :root:is([data-sn-window='opaque'], [data-sn-window='acrylic']) body[data-window='sidebar'] .sidebar-resizer[data-edge='left']::after {
   right: var(--sn-border-width);
+}
+
+/* 记录纸的侧栏（第九轮反馈 5）：贴边整块，朝屏幕内侧的两个角是圆角。窗口全透明（core/surfaces 的 sidebarMaterial），
+ * 圆角外透出桌面，系统不再画直角的边框与投影；面板的投影在窗口里只剩圆角旁边的一小块、又被窗口边切断，一并不画。 */
+:root[data-sn-window='clear'][data-sn-dock='flush'] body[data-window='sidebar'] .sidebar::before {
+  box-shadow: none;
 }
 
 /* 页签栏的测量行（SidebarTabs）：与页签栏同样的页签，看不见，按内容排开，只用来量各个页签的宽度。

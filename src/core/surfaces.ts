@@ -108,9 +108,18 @@ export function isGlassBlocks(surface: SurfaceMode): boolean {
   return item.translucent && item.dock === 'blocks';
 }
 
-/** 侧栏窗口的材质：分块的磨砂玻璃全透明，其余与 windowMaterial 相同（速记浮窗与记录窗口仍是一整块，照常用亚克力）。 */
+/**
+ * 贴边整块、朝屏幕内侧的两个角却是圆角的主题（令牌 `--sn-panel-radius`）：记录纸。不透明的窗口画不出圆角外面的桌面，
+ * 角上露出底色，系统的直角边框也还在，看着多出一截线条（第九轮反馈 5）。
+ */
+const ROUNDED_FLUSH: ReadonlySet<SurfaceMode> = new Set<SurfaceMode>(['paper']);
+
+/**
+ * 侧栏窗口的材质：分块的磨砂玻璃与内侧带圆角的记录纸全透明，面板的圆角与边框由页面画；其余与 windowMaterial 相同
+ * （速记浮窗与记录窗口仍是一整块，照常用亚克力或不透明的底色）。
+ */
 export function sidebarMaterial(surface: SurfaceMode): WindowMaterial {
-  return isGlassBlocks(surface) ? 'clear' : windowMaterial(surface);
+  return isGlassBlocks(surface) || ROUNDED_FLUSH.has(surface) ? 'clear' : windowMaterial(surface);
 }
 
 /**

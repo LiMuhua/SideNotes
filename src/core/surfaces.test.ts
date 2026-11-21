@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SURFACE as PLAYGROUND_DEFAULT, SURFACES as PLAYGROUND_SURFACES } from '../../docs/design-system/playground/src/surfaces';
 import { tokensFor } from '../../docs/design-system/tests/token-utils';
-import { DEFAULT_SURFACE, SURFACES, THEME_FONTS, normalizeSurface, surfaceAttributes } from './surfaces';
+import { DEFAULT_SURFACE, SURFACES, THEME_FONTS, normalizeSurface, sidebarMaterial, surfaceAttributes, windowMaterial } from './surfaces';
 
 /** 6 项结构差异与名称，按同样的字段取出后比较。 */
 function structure(item: object): Record<string, unknown> {
@@ -41,5 +41,16 @@ describe('主题结构', () => {
       'data-sn-tab-marks': 'true',
     });
     expect(surfaceAttributes('terminal', 'light')['data-sn-shortcuts']).toBe('inline');
+  });
+
+  it('侧栏窗口的材质：贴边整块、内侧却是圆角的主题（记录纸）与分块的磨砂玻璃全透明，其余同 windowMaterial', () => {
+    for (const { id, dock } of SURFACES) {
+      const radius = parseFloat(tokensFor(id, `tokens/${id}.css`, 'light').get('--sn-panel-radius') ?? '0');
+      const pageDrawn = dock === 'blocks' || (dock === 'flush' && radius > 0);
+      expect(sidebarMaterial(id), id).toBe(pageDrawn ? 'clear' : windowMaterial(id));
+    }
+    // 速记浮窗与记录窗口照常：记录纸仍是不透明的一整块。
+    expect(windowMaterial('paper')).toBe('opaque');
+    expect(sidebarMaterial('terminal')).toBe('opaque');
   });
 });
