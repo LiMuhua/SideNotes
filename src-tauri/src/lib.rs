@@ -13,6 +13,7 @@ mod fullscreen;
 mod glass;
 mod glass_live;
 mod location;
+mod menu_icons;
 mod migration;
 mod models;
 mod note_windows;
