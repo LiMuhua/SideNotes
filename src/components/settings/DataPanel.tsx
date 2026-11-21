@@ -3,9 +3,9 @@
  *
  * 内容对应原型 settings.js 的 renderData（导入与导出、数据目录、云端自动备份），桌面端另加「快照」。
  * 用户反馈原型的布局太乱，桌面端改为一行一项：名称（说明放在问号里）在左，取值与操作靠右，
- * 目录路径占据中间的空间；分组按常用程度排列：数据目录、快照、导入与导出、云端自动备份。
+ * 目录路径占据中间的空间；分组按常用程度排列：数据目录、快照、导入与导出、云端备份。
  * 导入导出、打开目录、更换存储位置（复制数据并改写附件路径）、附件清理与快照在桌面端真实可用；
- * 云端备份尚未接入，界面只保存配置并明确说明，不把未实现的能力表现为已完成。
+ * 云端备份尚未接入，界面只保存配置，连接与登录时明确提示，不把未实现的能力表现为已完成。
  */
 
 import { useEffect, useState, type ReactNode } from 'react';
@@ -33,10 +33,11 @@ const LOCATIONS: ReadonlyArray<readonly [StorageLocation, string]> = [
   ['custom', '自定义目录'],
 ];
 
+/** 备份服务：名称与连接方式。OneDrive 排在 Google Drive 之前（第十轮反馈 3）。 */
 const PROVIDERS: ReadonlyArray<readonly [CloudProvider, string, string]> = [
   ['synology', '群晖 NAS', 'WebDAV'],
-  ['google', 'Google Drive', 'OAuth'],
-  ['onedrive', 'OneDrive', 'Microsoft'],
+  ['onedrive', 'OneDrive', 'Microsoft 账户'],
+  ['google', 'Google Drive', 'Google 账户'],
 ];
 
 /** 各备份服务的品牌标识，图形取自原型。内容为固定常量，不含外部输入。 */
@@ -533,11 +534,20 @@ function SnapshotGroup({ settings, save }: { settings: Settings; save: SaveSetti
   );
 }
 
-/** 云端自动备份：桌面版尚未接入云服务，只保存配置。 */
+/**
+ * 云端备份（第十轮反馈 3 重排，技术决策第 60 条）：按使用的先后从上到下排——选服务、连接账户、远程文件夹、
+ * 自动备份与失败通知，最后是状态和手动的备份、恢复。群晖 NAS 走 WebDAV，填地址、用户名与密码后连接；
+ * OneDrive 与 Google Drive 在浏览器里登录各自的账户。
+ *
+ * 桌面版尚未接入云服务，一直是未连接：地址、用户名、远程文件夹与两个开关照常保存；密码要在连接成功后存进系统的
+ * 凭据管理器，不写进设置，所以只留在输入框里；点「连接」「登录」时提示尚未接入；「立即备份」「从云端恢复」要先连接，
+ * 未连接时不可用，旁边的状态写着原因。
+ */
 function CloudGroup({ settings, save }: { settings: Settings; save: SaveSettings }) {
   const toast = useToast();
   const cloud = settings.cloud;
   const [notify, setNotify] = useState<boolean | null>(null);
+  const [password, setPassword] = useState('');
 
   useEffect(() => {
     let alive = true;
@@ -552,28 +562,26 @@ function CloudGroup({ settings, save }: { settings: Settings; save: SaveSettings
   const saveCloud = (patch: Partial<CloudSettings>): Promise<boolean> =>
     save({ cloud: { ...settings.cloud, ...patch } });
 
-  const enableNotifications = async (): Promise<void> => {
-    if (notify === null) {
-      toast('当前环境不支持系统通知');
+  const connect = (): void => toast('云端服务尚未接入，可先导出本地备份');
+
+  /** 打开失败通知时先申请系统通知的权限，未允许就不打开；关闭直接保存。 */
+  const switchNotifications = async (enabled: boolean): Promise<void> => {
+    if (!enabled) {
+      await saveCloud({ notifications: false });
       return;
     }
     try {
       const granted = await bridge.requestNotifications();
       setNotify(granted);
-      if (granted) void saveCloud({ notifications: true });
-      toast(granted ? '已允许备份失败系统通知' : '通知未开启，可稍后在系统设置中允许');
+      if (granted) await saveCloud({ notifications: true });
+      else toast('通知未开启，可稍后在系统设置中允许');
     } catch {
       toast('系统通知请求受限，可稍后在系统设置中允许');
     }
   };
 
   return (
-    <Group title="云端自动备份" className="settings-wide">
-      <div className="data-rows">
-        <CloudRow title="自动备份">
-          <Toggle label="启用云端自动备份" checked={cloud.enabled} onChange={(enabled) => void saveCloud({ enabled })} />
-        </CloudRow>
-      </div>
+    <Group title="云端备份" className="settings-wide cloud-group">
       <div className="sync-provider-grid" role="group" aria-label="备份服务">
         {PROVIDERS.map(([provider, name, protocol]) => {
           const active = cloud.provider === provider;
@@ -596,48 +604,66 @@ function CloudGroup({ settings, save }: { settings: Settings; save: SaveSettings
       </div>
       <div className="data-rows">
         {cloud.provider === 'synology' ? (
-          <CloudRow title="WebDAV 地址">
-            <TextField
-              label="NAS WebDAV 地址"
-              value={cloud.endpoint}
-              placeholder="https://nas.example.com:5006"
-              onCommit={(endpoint) => saveCloud({ endpoint: endpoint.slice(0, 500) })}
-            />
+          <>
+            <CloudRow title="地址">
+              <TextField
+                label="WebDAV 地址"
+                value={cloud.endpoint}
+                placeholder="https://nas.example.com:5006"
+                onCommit={(endpoint) => saveCloud({ endpoint: endpoint.slice(0, 500) })}
+              />
+            </CloudRow>
+            <CloudRow title="账户">
+              <span className="cloud-credentials">
+                <TextField
+                  label="用户名"
+                  value={cloud.account}
+                  placeholder="用户名"
+                  onCommit={(account) => saveCloud({ account: account.slice(0, 120) })}
+                />
+                <input
+                  className="form-control"
+                  type="password"
+                  aria-label="密码"
+                  placeholder="密码"
+                  autoComplete="off"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
+              </span>
+              <ActionButton label="连接" icon="link" onClick={connect} />
+            </CloudRow>
+          </>
+        ) : (
+          <CloudRow title="账户">
+            <ActionButton label="登录" icon="external" onClick={connect} />
           </CloudRow>
-        ) : null}
-        <CloudRow title="账户">
-          <TextField
-            label="同步账户标识"
-            value={cloud.account}
-            placeholder={cloud.provider === 'synology' ? 'NAS 用户名' : '账户邮箱'}
-            onCommit={(account) => saveCloud({ account: account.slice(0, 120) })}
-          />
-        </CloudRow>
+        )}
         <CloudRow title="远程文件夹">
           <TextField
-            label="云端备份文件夹"
+            label="远程文件夹"
             value={cloud.folder}
             placeholder="SideNotes"
             onCommit={(folder) => saveCloud({ folder: folder.slice(0, 240) })}
           />
         </CloudRow>
-        <CloudRow title="状态">
-          <span className={classes('settings-value sync-status settings-status', cloud.enabled && 'is-warning')} data-cloud-status="true">
-            {cloud.enabled ? '已启用，暂不上传' : '未启用'}
-          </span>
-          <ActionButton
-            label="云端备份"
-            icon="cloud"
-            onClick={() => toast(cloud.enabled ? '云端服务尚未接入桌面版，可先导出本地备份' : '请先启用自动备份')}
-          />
+        <CloudRow title="自动备份">
+          <Toggle label="自动备份" checked={cloud.enabled} onChange={(enabled) => void saveCloud({ enabled })} />
         </CloudRow>
         <CloudRow title="失败通知">
-          <ActionButton
-            label={notify ? '已开启' : '开启通知'}
-            icon="bell"
+          <Toggle
+            label="备份失败时发送系统通知"
+            checked={cloud.notifications && notify === true}
             disabled={notify === null}
-            onClick={() => void enableNotifications()}
+            onChange={(enabled) => void switchNotifications(enabled)}
           />
+        </CloudRow>
+        <CloudRow title="状态">
+          <span className="settings-value sync-status settings-status" data-cloud-status="true">
+            未连接
+          </span>
+          <ActionButton label="立即备份" icon="upload" disabled />
+          <ActionButton label="从云端恢复" icon="download" disabled />
         </CloudRow>
       </div>
     </Group>

@@ -3791,6 +3791,12 @@ body.is-dragging-attachment * {
   transform: translate(calc(var(--local-track) * 0.8), -50%);
 }
 
+/* 不可用的开关与不可用的按钮一样调淡（云端备份的失败通知：还不知道系统是否支持通知时）。 */
+:is(.settings-modal, .settings-confirm-dialog) input:is(.toggle, .settings-toggle):disabled {
+  opacity: var(--sn-opacity-disabled);
+  cursor: default;
+}
+
 /* 设置页里是小号次要按钮（Playground 的 sn-button is-secondary is-sm）：浮起的表面、一圈边框与小投影；
  * 叠在设置窗口上的确认与裁切弹窗用常规尺寸。 */
 .settings-confirm-backdrop .settings-confirm-dialog .button {
@@ -6355,6 +6361,20 @@ body.is-dragging-attachment * {
   padding: 0;
   border: 0;
   background: transparent;
+}
+
+/* 群晖 NAS 的用户名与密码并排，两个合起来与地址框一样宽，「连接」跟在后面（第十轮反馈 3）。 */
+.settings-modal .data-row-controls .cloud-credentials {
+  display: grid;
+  flex: none;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sn-space-3);
+  width: calc(var(--sn-dialog-width) * 0.65);
+}
+
+.settings-modal .data-row-controls .cloud-credentials input.form-control:not([type='number']) {
+  width: 100%;
+  min-width: 0;
 }
 
 /* 快捷键：一行是名称、改过时的「恢复默认」与按键；格式一组两列排列。 */

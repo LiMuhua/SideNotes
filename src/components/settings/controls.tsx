@@ -177,11 +177,13 @@ export function Toggle({
   label,
   checked,
   title,
+  disabled,
   onChange,
 }: {
   label: string;
   checked: boolean;
   title?: string;
+  disabled?: boolean;
   onChange: (next: boolean) => void;
 }) {
   return (
@@ -191,6 +193,7 @@ export function Toggle({
       aria-label={label}
       title={title}
       checked={checked}
+      disabled={disabled}
       onChange={(event) => onChange(event.target.checked)}
     />
   );

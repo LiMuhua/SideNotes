@@ -886,6 +886,13 @@ button.sn-shortcut-key:hover {
   width: calc(var(--sn-dialog-width) * 0.65);
 }
 
+/* 群晖 NAS 的用户名与密码并排，两个合起来与地址框一样宽，「连接」跟在后面。 */
+.sn-set-credentials {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sn-space-3);
+}
+
 .sn-set-path {
   display: block;
   cursor: default;

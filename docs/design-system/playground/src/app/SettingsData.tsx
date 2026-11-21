@@ -3,7 +3,7 @@
  *
  * 分组、设置项、说明文字与操作沿用现有应用 0.7.3（`DataPanel.tsx`、`TrashPanel.tsx`、`AboutPanel.tsx`）。
  * 「数据与同步」按外观页的写法排得紧凑：名称后紧跟取值与操作，相关的两项放在同一行；云端备份的输入框较多，名称单独成列以便对齐。
- * 云端备份尚未接入，与现有应用一样只保存配置（T11）。
+ * 云端备份尚未接入，与现有应用一样只保存配置（T11），布局与现有应用第十轮反馈后的一致。
  * Playground 不访问文件系统，目录、快照与附件都是示例数值，操作只给出提示。
  */
 
@@ -42,8 +42,8 @@ const SNAPSHOTS = [
 
 const PROVIDERS: ReadonlyArray<{ id: CloudProvider; name: string; protocol: string }> = [
   { id: 'synology', name: '群晖 NAS', protocol: 'WebDAV' },
-  { id: 'google', name: 'Google Drive', protocol: 'OAuth' },
-  { id: 'onedrive', name: 'OneDrive', protocol: 'Microsoft' },
+  { id: 'onedrive', name: 'OneDrive', protocol: 'Microsoft 账户' },
+  { id: 'google', name: 'Google Drive', protocol: 'Google 账户' },
 ];
 
 /** 各备份服务的标识，图形取自现有应用（DataPanel 的 PROVIDER_MARKS）。内容为固定常量，不含外部输入。 */
@@ -82,7 +82,7 @@ export function DataPanel() {
   const demo = (action: string) => toast({ message: `${action}（Playground 只演示，不访问文件）` });
   const cloud = settings.cloud;
   const saveCloud = (patch: Partial<CloudSettings>) => updateSettings({ cloud: { ...cloud, ...patch } });
-  const [notify, setNotify] = useState(false);
+  const connect = () => toast({ message: '云端服务尚未接入，可先导出本地备份' });
 
   return (
     <SettingsPage title="数据与同步">
@@ -191,10 +191,10 @@ export function DataPanel() {
         </FieldRow>
       </SettingsCard>
 
-      <SettingsCard title="云端自动备份">
-        <DataRow label="自动备份">
-          <Switch label="启用云端自动备份" hideLabel checked={cloud.enabled} onChange={(enabled) => saveCloud({ enabled })} />
-        </DataRow>
+      {/* 云端备份按使用的先后排：选服务、连接账户、远程文件夹、自动备份与失败通知，最后是状态与手动操作（现有应用第十轮反馈）。
+       * 群晖 NAS 填地址、用户名与密码后连接，OneDrive 与 Google Drive 登录各自的账户；尚未接入，一直是未连接，
+       * 密码不保存，「立即备份」「从云端恢复」不可用。 */}
+      <SettingsCard title="云端备份">
         <div className="sn-provider-grid" role="group" aria-label="备份服务">
           {PROVIDERS.map((provider) => (
             <button
@@ -212,53 +212,67 @@ export function DataPanel() {
           ))}
         </div>
         {cloud.provider === 'synology' ? (
-          <DataRow label="WebDAV 地址">
-            <TextInput
-              key="endpoint"
-              className="sn-set-data-input"
-              aria-label="NAS WebDAV 地址"
-              placeholder="https://nas.example.com:5006"
-              defaultValue={cloud.endpoint}
-              onBlur={(event) => saveCloud({ endpoint: event.target.value.slice(0, 500) })}
-            />
+          <>
+            <DataRow label="地址">
+              <TextInput
+                key="endpoint"
+                className="sn-set-data-input"
+                aria-label="WebDAV 地址"
+                placeholder="https://nas.example.com:5006"
+                defaultValue={cloud.endpoint}
+                onBlur={(event) => saveCloud({ endpoint: event.target.value.slice(0, 500) })}
+              />
+            </DataRow>
+            <DataRow label="账户">
+              <span className="sn-set-data-input sn-set-credentials">
+                <TextInput
+                  key="account"
+                  aria-label="用户名"
+                  placeholder="用户名"
+                  defaultValue={cloud.account}
+                  onBlur={(event) => saveCloud({ account: event.target.value.slice(0, 120) })}
+                />
+                <TextInput type="password" aria-label="密码" placeholder="密码" autoComplete="off" />
+              </span>
+              <Button variant="secondary" icon="link" onClick={connect}>
+                连接
+              </Button>
+            </DataRow>
+          </>
+        ) : (
+          <DataRow label="账户">
+            <Button variant="secondary" icon="external" onClick={connect}>
+              登录
+            </Button>
           </DataRow>
-        ) : null}
-        <DataRow label="账户">
-          <TextInput
-            key={`account-${cloud.provider}`}
-            className="sn-set-data-input"
-            aria-label="同步账户标识"
-            placeholder={cloud.provider === 'synology' ? 'NAS 用户名' : '账户邮箱'}
-            defaultValue={cloud.account}
-            onBlur={(event) => saveCloud({ account: event.target.value.slice(0, 120) })}
-          />
-        </DataRow>
+        )}
         <DataRow label="远程文件夹">
           <TextInput
             key="folder"
             className="sn-set-data-input"
-            aria-label="云端备份文件夹"
+            aria-label="远程文件夹"
             placeholder="SideNotes"
             defaultValue={cloud.folder}
             onBlur={(event) => saveCloud({ folder: event.target.value.slice(0, 240) })}
           />
         </DataRow>
-        <DataRow label="状态" value={<span className={cx(cloud.enabled && 'sn-set-warning')}>{cloud.enabled ? '已启用，暂不上传' : '未启用'}</span>}>
-          <Button variant="secondary" icon="cloud" onClick={() => toast({ message: cloud.enabled ? '云端服务尚未接入桌面版，可先导出本地备份' : '请先启用自动备份' })}>
-            云端备份
-          </Button>
+        <DataRow label="自动备份">
+          <Switch label="自动备份" hideLabel checked={cloud.enabled} onChange={(enabled) => saveCloud({ enabled })} />
         </DataRow>
         <DataRow label="失败通知">
-          <Button
-            variant="secondary"
-            icon="bell"
-            onClick={() => {
-              setNotify(true);
-              saveCloud({ notifications: true });
-              toast({ message: '已允许备份失败系统通知（示例）', tone: 'success' });
-            }}
-          >
-            {notify ? '已开启' : '开启通知'}
+          <Switch
+            label="备份失败时发送系统通知"
+            hideLabel
+            checked={cloud.notifications}
+            onChange={(notifications) => saveCloud({ notifications })}
+          />
+        </DataRow>
+        <DataRow label="状态" value="未连接">
+          <Button variant="secondary" icon="upload" disabled>
+            立即备份
+          </Button>
+          <Button variant="secondary" icon="download" disabled>
+            从云端恢复
           </Button>
         </DataRow>
       </SettingsCard>
