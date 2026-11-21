@@ -49,6 +49,8 @@ const HANDOFF_DELAY: Duration = Duration::from_millis(160);
 const CONNECTOR_INSET: f64 = 16.0;
 /// 连接带在卡片一端让开上下的圆角（按 13px 字号计）。
 const CONNECTOR_CARD_INSET: f64 = 6.0;
+/// 被挡住的窗口的副本下沉淡出要多久（Overlay.tsx 的 SURFACE_FADE，360 毫秒），再留一点余量：这段时间里动画层不收起。
+const SINK_FADE: Duration = Duration::from_millis(420);
 /// 磨砂玻璃的记录窗口显示之后，垫着的截图再留多久：显示之后重建的实时模糊下一两帧就有画面（2026-11-21 实测），留出余量。
 const BACKDROP_HOLD: Duration = Duration::from_millis(400);
 
@@ -812,14 +814,34 @@ fn overlay_cover(app: &AppHandle, x: f64, y: f64) -> Option<(f64, f64)> {
     client_rect(&overlay).map(|rect| (rect.x, rect.y)).or(Some((area.x, area.y)))
 }
 
-/// 动画层空闲时（没有拖动、动画与连线）收起。
+/// 动画层上被挡住的窗口的副本正在下沉淡出：到这个时刻之前动画层不收起（见 hold_overlay）。
+static SINKING_UNTIL: Mutex<Option<Instant>> = Mutex::new(None);
+
+/// 动画层空闲时（没有拖动、动画、连线与正在下沉的副本）收起。
 fn overlay_release(app: &AppHandle) {
     if drag_active() || with_animations(|map| !map.is_empty()) || CONNECTOR_SHOWN.load(Ordering::SeqCst) {
+        return;
+    }
+    if SINKING_UNTIL.lock().ok().and_then(|slot| *slot).is_some_and(|until| Instant::now() < until) {
         return;
     }
     if let Some(overlay) = app.get_webview_window(OVERLAY_LABEL) {
         hide_window(&overlay);
     }
+}
+
+/// 被挡住的窗口的副本开始下沉淡出（Overlay.tsx 的 onReveal）：`duration` 之内动画层不收起，到点后再看能不能收。
+/// 原来松开鼠标时拖动一结束就收起动画层，副本没淡出就一下子没了；松开 Ctrl 时拖动还在，所以有淡出（第九轮反馈 6）。
+fn hold_overlay(app: &AppHandle, duration: Duration) {
+    let until = Instant::now() + duration;
+    if let Ok(mut slot) = SINKING_UNTIL.lock() {
+        *slot = Some(slot.map_or(until, |old| old.max(until)));
+    }
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(duration);
+        overlay_release(&app);
+    });
 }
 
 /// 不激活地显示窗口并放到置顶层的最前面。Tauri 的 show 会激活窗口，动画层不能抢走焦点。
@@ -1506,6 +1528,10 @@ fn update_reveal(app: &AppHandle, session: &mut DragSession, active: bool, point
                     RevealItem { label, rect: rect.relative_to(origin), hot }
                 })
                 .collect();
+            // 原来有副本，这次一个也不剩：它们都在下沉淡出。
+            if session.revealed && items.is_empty() {
+                hold_overlay(app, SINK_FADE);
+            }
             session.revealed = !items.is_empty();
             let _ = app.emit_to(OVERLAY_LABEL, events::REVEAL, items);
         }
@@ -1513,6 +1539,7 @@ fn update_reveal(app: &AppHandle, session: &mut DragSession, active: bool, point
     }
     let _ = (point, except);
     if std::mem::take(&mut session.revealed) {
+        hold_overlay(app, SINK_FADE);
         let _ = app.emit_to(OVERLAY_LABEL, events::REVEAL, Vec::<RevealItem>::new());
     }
 }

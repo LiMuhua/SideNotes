@@ -1021,7 +1021,8 @@ export function dragBegin(request: {
 
 /**
  * 拖动的一步：`outside` 为指针离开了来源（侧栏或窗口）。返回指针下可以合并的窗口。
- * `ctrl` 为按住了 Ctrl：被别的程序挡住的记录窗口用虚线框标出，指针移上去就提到最前、可以合并（T105）。
+ * `ctrl` 为按住了 Ctrl：被别的程序挡住的记录窗口在原处显出半透明的副本，拖到它的标题栏上松开就并进去，并进去之后
+ * 才提到最前（T105、T126、第八轮反馈 P5）。
  * `float` 为卡片还在侧栏里、拖影却超出了侧栏窗口：拖影改画在动画层上，不被窗口的边截掉（T117）。
  */
 export function dragUpdate(outside: boolean, ctrl = false, float = false): Promise<string | null> {
