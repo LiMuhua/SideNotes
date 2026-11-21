@@ -1,6 +1,6 @@
 [package]
 name = "sidenotes"
-version = "0.7.4"
+version = "0.7.5"
 description = "SideNotes 本地快速记录工具"
 authors = ["LiMuhua"]
 edition = "2021"
