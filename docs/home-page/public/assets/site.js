@@ -1,4 +1,4 @@
-/* global document, matchMedia, fetch, setTimeout, clearTimeout, URL */
+/* global document, matchMedia, fetch, setTimeout, clearTimeout, URL, localStorage */
 /**
  * SideNotes 官网的交互。全部是锦上添花：没有脚本时内容完整，首屏的出场动画也由 CSS 播放。
  *
@@ -172,25 +172,52 @@
   /* ---------- 3. 下载 ---------- */
   const downloads = document.querySelectorAll('[data-download]');
   if (downloads.length) {
-    fetch('https://api.github.com/repos/LiMuhua/SideNotes/releases/latest', { headers: { Accept: 'application/vnd.github+json' } })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((release) => {
-        if (!release) return;
-        const assets = Array.isArray(release.assets) ? release.assets : [];
-        const installer =
-          assets.find((asset) => /setup\.exe$/i.test(asset.name)) ??
-          assets.find((asset) => /\.exe$/i.test(asset.name)) ??
-          assets.find((asset) => /\.msi$/i.test(asset.name));
-        if (installer) downloads.forEach((link) => (link.href = installer.browser_download_url));
-        const version = String(release.tag_name ?? '').replace(/^v/i, '');
-        if (version) {
-          document.querySelectorAll('[data-release]').forEach((note) => {
-            note.textContent = note.dataset.template.replace('{version}', version);
-          });
-        }
-      })
-      .catch(() => {
-        // 取不到发布信息时保留指向发布页的链接。
-      });
+    // GitHub 接口匿名访问每小时 60 次：结果（包括「还没有发布版」）在本机记一小时，翻页、重开不再重复查询。
+    const CACHE_KEY = 'sidenotes-site:release';
+    const CACHE_MS = 60 * 60 * 1000;
+    const show = (release) => {
+      if (!release) return;
+      const assets = Array.isArray(release.assets) ? release.assets : [];
+      const installer =
+        assets.find((asset) => /setup\.exe$/i.test(asset.name)) ??
+        assets.find((asset) => /\.exe$/i.test(asset.name)) ??
+        assets.find((asset) => /\.msi$/i.test(asset.name));
+      if (installer) downloads.forEach((link) => (link.href = installer.browser_download_url));
+      const version = String(release.tag_name ?? '').replace(/^v/i, '');
+      if (version) {
+        document.querySelectorAll('[data-release]').forEach((note) => {
+          note.textContent = note.dataset.template.replace('{version}', version);
+        });
+      }
+    };
+    let cached = null;
+    try {
+      cached = JSON.parse(localStorage.getItem(CACHE_KEY) ?? 'null');
+    } catch {
+      // 浏览器禁用了本地存储时每次都查询。
+    }
+    if (cached && Date.now() - cached.at < CACHE_MS) {
+      show(cached.release);
+    } else {
+      fetch('https://api.github.com/repos/LiMuhua/SideNotes/releases/latest', { headers: { Accept: 'application/vnd.github+json' } })
+        .then((response) => {
+          // 404 是还没有发布版，可以记下；限流（403）等其它错误不记，下次再试。
+          if (response.ok) return response.json();
+          if (response.status === 404) return null;
+          throw new Error(String(response.status));
+        })
+        .then((data) => {
+          const release = data && { tag_name: data.tag_name, assets: (data.assets ?? []).map(({ name, browser_download_url }) => ({ name, browser_download_url })) };
+          try {
+            localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), release }));
+          } catch {
+            // 存不下就算了，不影响显示。
+          }
+          show(release);
+        })
+        .catch(() => {
+          // 取不到发布信息时保留指向发布页的链接。
+        });
+    }
   }
 })();
