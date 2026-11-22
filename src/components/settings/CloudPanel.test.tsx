@@ -3,7 +3,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as bridge from '../../core/bridge';
 import { normalizeSettings } from '../../core/settings';
-import type { CloudOverview, CloudSettings, Settings } from '../../core/types';
+import type { CloudBackup, CloudOverview, CloudSettings, Settings } from '../../core/types';
 import { CloudGroup } from './CloudPanel';
 
 const toast = vi.fn();
@@ -30,8 +30,8 @@ function overview(connected: Partial<Record<'synology' | 'onedrive' | 'google', 
   return {
     providers: { synology: state(connected.synology), onedrive: state(connected.onedrive), google: state(connected.google) },
     running: false,
+    syncing: '',
     lastSuccess: 0,
-    lastProvider: '',
     nextRun: null,
     resendKey,
   };
@@ -182,7 +182,71 @@ describe('云端同步', () => {
     expect(button('打开登录页')).toBeTruthy();
   });
 
-  it('断开连接时自动同步一并关掉', async () => {
+  it('上面两行对所有服务（自动同步、上次同步与立即同步），卡片在它们下面；快照份数跟在远程文件夹后面', async () => {
+    const backup = { id: '1', createdAt: 1, reason: 'manual', dataDirectory: '', noteCount: 3, attachments: [], missing: [], size: 10 } as unknown as CloudBackup;
+    vi.mocked(bridge.listCloudBackups).mockResolvedValueOnce([backup]);
+    await render({ provider: 'google', folders: { synology: '', onedrive: '', google: '/Test' } }, overview({ google: true }));
+    const group = query('.cloud-group');
+    const cards = query('.sync-provider-grid');
+    const before = (node: Element) => Boolean(node.compareDocumentPosition(cards) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(before(toggle('自动同步'))).toBe(true);
+    expect(before(button('立即同步'))).toBe(true);
+    expect(before(query('code[aria-label="远程文件夹"]'))).toBe(false);
+    // 立即同步紧跟在上次同步的时间后面，同在一行里。
+    expect(button('立即同步').closest('.settings-row')?.textContent).toContain('上次同步');
+    const row = query('[data-cloud-snapshots]').closest('.cloud-field-grid');
+    expect(row?.textContent).toContain('远程文件夹');
+    expect(query('[data-cloud-snapshots]').textContent).toBe('1 份');
+    expect(group.textContent).not.toContain('云端快照');
+  });
+
+  it('连着几个服务时立即同步发往所有服务：选中的没连接也照样同步，提示写明同步到了哪些服务', async () => {
+    vi.mocked(bridge.cloudBackupNow).mockResolvedValue([
+      { provider: 'onedrive', noteCount: 167, error: '' },
+      { provider: 'google', noteCount: 167, error: '' },
+    ]);
+    await render({ provider: 'synology', folders: { synology: '', onedrive: '/Test', google: '/Test' } }, overview({ onedrive: true, google: true }));
+    await act(async () => button('立即同步').click());
+    expect(bridge.cloudBackupNow).toHaveBeenCalledTimes(1);
+    expect(dialogTitle()).toBeNull();
+    expect(toast).toHaveBeenCalledWith('已同步 167 条记录到 OneDrive、Google Drive', null, false);
+  });
+
+  it('一家失败不影响别家：提示哪家同步了、哪家没有与原因', async () => {
+    vi.mocked(bridge.cloudBackupNow).mockResolvedValue([
+      { provider: 'onedrive', noteCount: 167, error: '' },
+      { provider: 'google', noteCount: 0, error: '网络不通：连接超时' },
+    ]);
+    await render({ provider: 'google', folders: { synology: '', onedrive: '/Test', google: '/Test' } }, overview({ onedrive: true, google: true }));
+    await act(async () => button('立即同步').click());
+    expect(toast).toHaveBeenCalledWith('已同步到 OneDrive；Google Drive 没有同步：网络不通：连接超时', null, true);
+  });
+
+  it('一个服务都没连上时立即同步：弹出选中服务的连接弹窗并写明原因', async () => {
+    await render({ provider: 'synology' });
+    await act(async () => button('立即同步').click());
+    expect(bridge.cloudBackupNow).not.toHaveBeenCalled();
+    expect(dialogTitle()).toBe('连接群晖 NAS');
+    expect(notice()).toBe('先连接群晖 NAS，再同步。');
+  });
+
+  it('别的服务连着时，选中的没连接也能打开自动同步', async () => {
+    await render({ provider: 'synology', folders: { synology: '', onedrive: '/Test', google: '' } }, overview({ onedrive: true }));
+    await act(async () => toggle('自动同步').click());
+    expect(save).toHaveBeenCalledWith({ cloud: expect.objectContaining({ enabled: true }) });
+    expect(dialogTitle()).toBeNull();
+  });
+
+  it('退出其中一个服务时，还有别的服务可同步，自动同步不关', async () => {
+    vi.spyOn(bridge, 'cloudDisconnect').mockResolvedValue();
+    await render({ provider: 'onedrive', enabled: true, folders: { synology: '', onedrive: '/Test', google: '/Test' } }, overview({ onedrive: true, google: true }));
+    await act(async () => button('退出登录').click());
+    expect(bridge.cloudDisconnect).toHaveBeenCalledWith('onedrive');
+    expect(save).not.toHaveBeenCalled();
+    expect(toast).toHaveBeenCalledWith('已退出登录；云端的快照还在');
+  });
+
+  it('断开最后一个能同步的服务时自动同步一并关掉', async () => {
     vi.spyOn(bridge, 'cloudDisconnect').mockResolvedValue();
     await render({ provider: 'synology', enabled: true, folders: { synology: '/backup/Test', onedrive: '', google: '' } }, overview({ synology: true }));
     await act(async () => button('断开连接').click());

@@ -127,9 +127,10 @@ export type WebDavOutcome =
 export interface CloudOverview {
   providers: Record<CloudProvider, CloudProviderState>;
   running: boolean;
-  /** 上次成功备份的时间（毫秒），0 表示没有。 */
+  /** 正在同步的服务；没在同步时为空。 */
+  syncing: CloudProvider | '';
+  /** 最近一次同步里至少一个服务成功的时间（毫秒），0 表示没有。 */
   lastSuccess: number;
-  lastProvider: string;
   /** 下次自动备份的时间；没开或时间表写错时为 null。 */
   nextRun: number | null;
   /** 保存了 Resend 的密钥。 */
@@ -138,6 +139,13 @@ export interface CloudOverview {
 
 /** 一份云端备份。 */
 export type CloudBackup = DataSnapshot & { size: number };
+
+/** 一次同步里一个服务的结果：成功时有记录条数，失败时有原因。 */
+export interface CloudSyncResult {
+  provider: CloudProvider;
+  noteCount: number;
+  error: string;
+}
 
 /** 应用设置。 */
 export interface Settings {

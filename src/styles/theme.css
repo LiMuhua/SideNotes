@@ -6363,7 +6363,7 @@ body.is-dragging-attachment * {
   }
 }
 
-/* 两行各放两项（账户与远程文件夹、自动同步与失败通知），不折行（第十二轮反馈）：前一项按内容的宽度、写全，
+/* 两行不折行（第十二轮反馈）：自动同步与失败通知；账户、远程文件夹与快照份数。前一项按内容的宽度、写全，
  * 放不下时由后一项让出，后一项里的路径与邮箱末尾省略。 */
 .settings-modal .cloud-field-grid {
   flex-wrap: nowrap;
@@ -6372,6 +6372,44 @@ body.is-dragging-attachment * {
 
 .settings-modal .cloud-field-grid > :first-child {
   flex: none;
+}
+
+/* 账户、远程文件夹之后的快照份数（第十二轮反馈）：写全，放不下时由远程文件夹的路径让出。 */
+.settings-modal .cloud-field-grid > .cloud-snapshot-count {
+  flex: none;
+}
+
+/* 账户一行放不下时，先让远程文件夹的路径末尾省略（同数据目录），路径让完再让账户；名称、按钮与图标不缩，不会叠在一起。
+ * 收缩按「系数 × 原宽」分摊：远程文件夹的系数大得多，先缩；缩到头被冻结后，剩下的全由账户承担
+ * （系数之和小于 1 时只分摊那一部分，所以账户的系数取 1，不取一个很小的数）。两项的取值改用网格：文字那一列最小为 0，
+ * 这一项的最小宽度就只算名称、按钮与图标（min-content）。 */
+.settings-modal .cloud-service-row > :first-child {
+  flex: 0 1 auto;
+}
+
+.settings-modal .cloud-service-row > :nth-child(2) {
+  flex-shrink: 1000;
+}
+
+.settings-modal .cloud-service-row > :is(:first-child, :nth-child(2)) {
+  min-width: min-content;
+}
+
+.settings-modal .cloud-service-row .settings-inline-value:has(> :is(.cloud-account, .settings-path)) {
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-template-columns: minmax(0, auto) auto;
+}
+
+.settings-modal .cloud-account {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 服务卡片像标签页，只管下面的内容（技术决策第 70 条）：上方离对所有服务的两行远一些，下方贴着选中服务的账户一行。 */
+.settings-modal .cloud-group .sync-provider-grid {
+  margin: var(--sn-space-6) 0 0;
 }
 
 .settings-modal .cloud-group .settings-inline-value .settings-path {

@@ -2,8 +2,10 @@
  * 设置 → 数据与同步 → 云端同步（第十一轮反馈，技术决策第 63 条）。原名「云端备份」：之后的跨设备自动同步也用这个模块，
  * 所以界面上一律叫「同步」，云端存的每一份叫「快照」（第十二轮反馈）。现在的同步是把本机的记录存成一份云端快照，可以从任意一份恢复。
  *
- * 服务卡片在上（卡片角上的点是连接状态，异常为红色、悬停看原因），下面两行各放两项、不折行（第十二轮反馈）：
- * 账户与远程文件夹、自动同步与失败通知，最后是云端快照（立即同步，列表里逐份恢复）。
+ * 同步对所有连上了、选了远程文件夹的服务（第十二轮反馈：连着几个服务时一键同步，技术决策第 70 条），所以分成两段：
+ * 上面是对所有服务的自动同步、失败通知，上次同步与「立即同步」；下面是服务卡片（像标签页，角上的点是连接状态，
+ * 异常为红色、悬停看原因；正在同步的那家闪烁）与选中服务的账户、远程文件夹、快照份数（一行、不折行，路径放不下时末尾省略），
+ * 最后是这个服务的快照列表，逐份恢复。
  * 群晖 NAS 在弹窗里填地址、用户名与密码后连接，证书上的名字与地址对不上时问用户是否按证书上的名字验证；
  * OneDrive 与 Google Drive 点「登录」直接在浏览器里登录，登录后自动完成（技术决策第 66 条），没跳回来时可以把授权码粘贴回来。
  * 远程文件夹按服务分别存，没有默认值：没连接时显示根目录，连上之后弹出选择框（第十二轮反馈 3）。
@@ -11,7 +13,17 @@
  * 自动同步用「频率 + 时间」选，也可以选自定义直接写 crontab。凭据与运行状态都在后端（cloud 模块），这里只存设置里的配置。
  */
 
-import { useCallback, useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from 'react';
 import { createPortal } from 'react-dom';
 import * as bridge from '../../core/bridge';
 import * as store from '../../core/store';
@@ -19,7 +31,7 @@ import { formatBytes } from '../../core/files';
 import { DEFAULT_CLOUD_SCHEDULE, normalizeRemoteFolder } from '../../core/settings';
 import { snapshotTime } from '../../core/snapshots';
 import { MONTH_DAYS, SCHEDULE_KINDS, WEEKDAYS, buildSchedule, formatTime, parseSchedule, parseTime, type ScheduleKind } from '../../core/schedule';
-import type { CloudBackup, CloudOverview, CloudProvider, CloudProviderState, CloudSettings, Settings, WebDavOutcome } from '../../core/types';
+import type { CloudBackup, CloudOverview, CloudProvider, CloudProviderState, CloudSettings, CloudSyncResult, Settings, WebDavOutcome } from '../../core/types';
 import { useToast } from '../../hooks/useToast';
 import { Floating } from '../Floating';
 import { Icon } from '../Icon';
@@ -55,6 +67,28 @@ const PROVIDER_MARKS: Record<CloudProvider, { viewBox: string; paths: string }> 
 
 /** 云端快照的创建原因。 */
 const BACKUP_REASONS: Record<string, string> = { auto: '自动', manual: '手动' };
+
+/** 文字放不下、末尾省略时，悬停显示全文（账户与收件邮箱）。 */
+function titleWhenClipped(full: string): (event: ReactMouseEvent<HTMLElement>) => void {
+  return (event) => {
+    const node = event.currentTarget;
+    node.title = node.scrollWidth > node.clientWidth ? full : '';
+  };
+}
+
+function nameOf(provider: CloudProvider): string {
+  return PROVIDERS.find(([key]) => key === provider)?.[1] ?? provider;
+}
+
+/** 一次同步的提示：都成功时写条数与服务；有失败时写哪家同步了、哪家没有与原因。 */
+function syncSummary(results: CloudSyncResult[]): { text: string; failed: boolean } {
+  const done = results.filter((result) => !result.error);
+  const failed = results.filter((result) => result.error);
+  const names = (list: CloudSyncResult[]): string => list.map((result) => nameOf(result.provider)).join('、');
+  if (!failed.length) return { text: `已同步 ${done[0]?.noteCount ?? 0} 条记录到 ${names(done)}`, failed: false };
+  const parts = failed.map((result) => `${nameOf(result.provider)} 没有同步：${result.error}`);
+  return { text: [done.length ? `已同步到 ${names(done)}` : '', ...parts].filter(Boolean).join('；'), failed: true };
+}
 
 function ProviderMark({ provider }: { provider: CloudProvider }) {
   const mark = PROVIDER_MARKS[provider];
@@ -731,9 +765,11 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
   const current = overview?.providers[cloud.provider];
   const connected = Boolean(current?.connected);
   const running = Boolean(overview?.running) || busy === 'backup';
-  const name = PROVIDERS.find(([provider]) => provider === cloud.provider)?.[1] ?? '';
+  const name = nameOf(cloud.provider);
   // 当前服务的远程文件夹；空的表示还没有选。
   const folder = cloud.folders[cloud.provider];
+  // 同步发往的服务：连上了、选了远程文件夹的（同后端的 targets）。
+  const targets = PROVIDERS.map(([provider]) => provider).filter((provider) => overview?.providers[provider]?.connected && cloud.folders[provider]);
 
   // 云端快照：连上了、选了文件夹才读；换了服务、远程文件夹或又同步了一次之后重读。
   const listKey = `${cloud.provider}|${folder}|${overview?.lastSuccess ?? 0}|${revision}`;
@@ -802,8 +838,9 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
     setBusy('disconnect');
     try {
       await bridge.cloudDisconnect(cloud.provider);
-      // 自动同步要连着才能打开，断开时一并关掉，免得到点就报失败。
-      const stopped = cloud.enabled && (await saveCloud({ enabled: false }));
+      // 自动同步要有服务可同步：断开的是最后一个时一并关掉，免得到点就报失败。
+      const left = targets.filter((provider) => provider !== cloud.provider);
+      const stopped = cloud.enabled && !left.length && (await saveCloud({ enabled: false }));
       toast(`${cloud.provider === 'synology' ? '已断开群晖 NAS' : '已退出登录'}${stopped ? '，自动同步已关闭' : ''}；云端的快照还在`);
     } catch (problem) {
       toast(bridge.errorText(problem, '没能断开'), null, true);
@@ -825,16 +862,25 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
     return saved;
   };
 
-  /** 打开自动同步要先连上、选好远程文件夹；缺哪样就弹出哪个弹窗，开关不打开（第十二轮反馈 4）。 */
+  /**
+   * 同步之前缺了什么（第十二轮反馈 4）：选中的服务连上了却没选远程文件夹，或者一个能同步的服务都没有。
+   * 缺哪样就弹出选中服务的那个弹窗、写明原因，返回 true；别的服务连着、选中的这个没连接时照样同步。
+   */
+  const lacking = (folderNotice: string, connectNotice: (who: string) => string): boolean => {
+    if (connected && !folder) {
+      open('folder', folderNotice);
+      return true;
+    }
+    if (!targets.length) {
+      askConnect(connectNotice(cloud.provider === 'synology' ? '连接群晖 NAS' : `登录 ${name}`));
+      return true;
+    }
+    return false;
+  };
+
+  /** 打开自动同步要有服务可同步；缺了就弹出对应的弹窗，开关不打开。 */
   const switchAuto = async (enabled: boolean): Promise<void> => {
-    if (enabled && !connected) {
-      askConnect(`要打开自动同步，先${cloud.provider === 'synology' ? '连接群晖 NAS' : `登录 ${name}`}。`);
-      return;
-    }
-    if (enabled && !folder) {
-      open('folder', '要打开自动同步，先选远程文件夹。');
-      return;
-    }
+    if (enabled && lacking('要打开自动同步，先选远程文件夹。', (who) => `要打开自动同步，先${who}。`)) return;
     await saveCloud({ enabled });
     refresh();
   };
@@ -865,15 +911,14 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
     return saved;
   };
 
+  /** 立即同步：发往所有连上了、选了远程文件夹的服务，一家失败不影响别家。 */
   const backupNow = async (): Promise<void> => {
-    if (!folder) {
-      open('folder', '先选远程文件夹，再同步。');
-      return;
-    }
+    if (lacking('先选远程文件夹，再同步。', (who) => `先${who}，再同步。`)) return;
     setBusy('backup');
     try {
-      const backup = await bridge.cloudBackupNow();
-      toast(`已同步 ${backup.noteCount} 条记录`);
+      const results = await bridge.cloudBackupNow();
+      const { text, failed } = syncSummary(results);
+      toast(text, null, failed);
     } catch (problem) {
       toast(`同步没有完成：${bridge.errorText(problem)}`, null, true);
     } finally {
@@ -907,21 +952,21 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
     });
   };
 
-  // 云端快照一行的取值：份数、上次成功与下次自动同步。
-  const summary = [
-    backups ? `${backups.length} 份` : '',
-    overview?.lastSuccess && overview.lastProvider === cloud.provider ? `上次 ${snapshotTime(overview.lastSuccess)}` : '',
-    cloud.enabled && overview?.nextRun ? `下次 ${snapshotTime(overview.nextRun)}` : '',
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  // 上次同步（任何一个服务成功的时间）与下次自动同步。
+  const lastSync = overview
+    ? [overview.lastSuccess ? snapshotTime(overview.lastSuccess) : '从未', cloud.enabled && overview.nextRun ? `下次 ${snapshotTime(overview.nextRun)}` : '']
+        .filter(Boolean)
+        .join(' · ')
+    : '';
 
   const account = (): ReactNode => {
     if (cloud.provider === 'synology') {
       if (connected) {
         return (
           <>
-            <span className="settings-value cloud-account" data-cloud-account="">{`${cloud.account} · ${hostOf(cloud.endpoint)}`}</span>
+            <span className="settings-value cloud-account" data-cloud-account="" onMouseEnter={titleWhenClipped(`${cloud.account} · ${hostOf(cloud.endpoint)}`)}>
+              {`${cloud.account} · ${hostOf(cloud.endpoint)}`}
+            </span>
             <ActionButton label="断开连接" icon="cloud-off" disabled={busy !== null} onClick={() => void disconnect()} />
           </>
         );
@@ -931,7 +976,9 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
     if (connected) {
       return (
         <>
-          <span className="settings-value cloud-account" data-cloud-account="">{current?.account}</span>
+          <span className="settings-value cloud-account" data-cloud-account="" onMouseEnter={titleWhenClipped(current?.account ?? '')}>
+            {current?.account}
+          </span>
           <ActionButton label="退出登录" icon="cloud-off" disabled={busy !== null} onClick={() => void disconnect()} />
         </>
       );
@@ -951,6 +998,28 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
 
   return (
     <Group title="云端同步" className="settings-wide cloud-group">
+      {/* 上面两行对所有连上的服务：自动同步与失败通知、上次同步与立即同步（按钮紧跟在时间后面）。 */}
+      <div className="settings-field-grid cloud-field-grid">
+        <DataRow title="自动同步">
+          <Toggle label="自动同步" checked={cloud.enabled} onChange={(enabled) => void switchAuto(enabled)} />
+          <ScheduleField value={cloud.schedule} onSave={commitSchedule} />
+        </DataRow>
+        <DataRow title="失败通知">
+          <Toggle label="同步失败时通知" checked={cloud.notifications} onChange={(enabled) => void switchNotifications(enabled)} />
+          {/* 邮箱同远程文件夹：文字加图标按钮，放不下时末尾省略，被截断时悬停显示完整的邮箱。 */}
+          {cloud.email ? (
+            <span className="settings-value cloud-email" data-cloud-email="" onMouseEnter={titleWhenClipped(cloud.email)}>
+              {cloud.email}
+            </span>
+          ) : null}
+          <ActionButton label="失败通知邮件" icon="mail" className="icon-button" onClick={() => open('email')} />
+        </DataRow>
+      </div>
+      <DataRow title="上次同步">
+        {lastSync ? <span className="settings-value" data-cloud-last="">{lastSync}</span> : null}
+        <ActionButton label={running ? '正在同步…' : '立即同步'} icon="upload" disabled={running || busy !== null} onClick={() => void backupNow()} />
+      </DataRow>
+      {/* 下面只属于选中的服务：卡片像标签页。 */}
       <div className="sync-provider-grid" role="group" aria-label="同步服务">
         {PROVIDERS.map(([provider, providerName, protocol]) => {
           const active = cloud.provider === provider;
@@ -969,52 +1038,26 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
               <ProviderMark provider={provider} />
               <span className="sync-provider-name">{providerName}</span>
               <small>{protocol}</small>
-              <StatusDot state={state} running={running && active} />
+              <StatusDot state={state} running={overview?.syncing === provider} />
             </button>
           );
         })}
       </div>
       {listProblem ? <p className="settings-notice is-error">{`云端的快照读取失败：${listProblem}`}</p> : null}
-      <div className="settings-field-grid cloud-field-grid">
+      <div className="settings-field-grid cloud-field-grid cloud-service-row">
         <DataRow title="账户">{account()}</DataRow>
         <DataRow title="远程文件夹">
           {/* 没连接或还没选时是根目录：不给默认的文件夹（第十二轮反馈 3）。 */}
           <PathText label="远程文件夹" path={connected && folder ? folder : '/'} />
           <ActionButton label="选择远程文件夹" icon="folder" className="icon-button" disabled={!connected} onClick={() => open('folder')} />
         </DataRow>
+        {/* 快照份数跟在远程文件夹后面，写全；一行放不下时由路径让出（末尾省略，同数据目录）。 */}
+        {backups ? (
+          <DataRow title="快照" className="cloud-snapshot-count">
+            <span className="settings-value" data-cloud-snapshots="">{`${backups.length} 份`}</span>
+          </DataRow>
+        ) : null}
       </div>
-      <div className="settings-field-grid cloud-field-grid">
-        <DataRow title="自动同步">
-          <Toggle label="自动同步" checked={cloud.enabled} onChange={(enabled) => void switchAuto(enabled)} />
-          <ScheduleField value={cloud.schedule} onSave={commitSchedule} />
-        </DataRow>
-        <DataRow title="失败通知">
-          <Toggle label="同步失败时通知" checked={cloud.notifications} onChange={(enabled) => void switchNotifications(enabled)} />
-          {/* 邮箱同远程文件夹：文字加图标按钮，放不下时末尾省略，被截断时悬停显示完整的邮箱。 */}
-          {cloud.email ? (
-            <span
-              className="settings-value cloud-email"
-              data-cloud-email=""
-              onMouseEnter={(event) => {
-                const node = event.currentTarget;
-                node.title = node.scrollWidth > node.clientWidth ? cloud.email : '';
-              }}
-            >
-              {cloud.email}
-            </span>
-          ) : null}
-          <ActionButton label="失败通知邮件" icon="mail" className="icon-button" onClick={() => open('email')} />
-        </DataRow>
-      </div>
-      <DataRow title="云端快照">
-        {summary ? <span className="settings-value">{summary}</span> : null}
-        <ActionButton
-          label={running ? '正在同步…' : '立即同步'}
-          icon="upload"
-          disabled={!connected || running || busy !== null}
-          onClick={() => void backupNow()}
-        />
-      </DataRow>
       {backups?.length ? (
         <ul className="snapshot-list cloud-backup-list" aria-label="云端快照列表">
           {backups.map((backup) => (

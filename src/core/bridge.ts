@@ -18,6 +18,7 @@ import type {
   CloudBackup,
   CloudOverview,
   CloudProvider,
+  CloudSyncResult,
   WebDavOutcome,
   CleanupReport,
   DataSnapshot,
@@ -236,8 +237,8 @@ const OFFLINE_CLOUD: CloudOverview = {
     google: { connected: false, account: '', error: '', available: false },
   },
   running: false,
+  syncing: '',
   lastSuccess: 0,
-  lastProvider: '',
   nextRun: null,
   resendKey: false,
 };
@@ -293,9 +294,9 @@ export function createCloudFolder(parent: string, name: string): Promise<string>
   return call<string>('cloud_create_folder', { parent, name });
 }
 
-/** 立即备份一次。 */
-export function cloudBackupNow(): Promise<CloudBackup> {
-  return call<CloudBackup>('cloud_backup_now');
+/** 立即同步一次：发往每个连上了、选了远程文件夹的服务，返回各服务的结果。 */
+export function cloudBackupNow(): Promise<CloudSyncResult[]> {
+  return call<CloudSyncResult[]>('cloud_backup_now');
 }
 
 /** 列出远程文件夹里的备份（最新的在前）。 */

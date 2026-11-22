@@ -5,8 +5,9 @@
 //!   凭据（密码、登录令牌、Resend 密钥）加密存在本机（secrets），不进设置。
 //! - 运行状态（各服务登录的账户、上次备份的结果）存在本机应用数据目录的 `cloud-status.json`，
 //!   有变化时向各窗口广播 `sidenotes://cloud-status`，设置页据此画服务卡片角上的状态点。
-//! - 后台线程每 30 秒看一次：自动备份开着、按 crontab 的时间到了（或错过了上一次）就备份。
-//! - 备份失败时按设置发系统通知与邮件（notify），同样的原因只通知一次。
+//! - 同步一次就依次发往每个连上了、选了远程文件夹的服务（立即同步与自动同步都是），一家失败不影响别家。
+//! - 后台线程每 30 秒看一次：自动同步开着、按 crontab 的时间到了（或错过了上一次）就同步。
+//! - 哪个服务同步失败，就按设置为它发系统通知与邮件（notify），同一个服务同样的原因只通知一次。
 
 mod certificate;
 pub mod cron;
@@ -59,6 +60,8 @@ struct Config {
     tls_name: String,
     /// 当前服务的远程文件夹（设置里按服务分别存在 `folders` 下）；空的表示还没有选。
     folder: String,
+    /// 各服务的远程文件夹：同步时发往每个连上了、选了文件夹的服务（第十二轮反馈：连着几个服务时一键同步）。
+    folders: BTreeMap<String, String>,
     schedule: String,
     notifications: bool,
     email: String,
@@ -71,10 +74,17 @@ impl Config {
         let text = |key: &str| cloud.get(key).and_then(|value| value.as_str()).unwrap_or_default().trim().to_string();
         let provider = Some(text("provider")).filter(|provider| PROVIDERS.contains(&provider.as_str())).unwrap_or_else(|| "synology".into());
         // 远程文件夹按服务分别存（第十二轮反馈 3）；旧设置只有一个，归当时选中的服务。
-        let folder = match cloud.get("folders").filter(|folders| folders.is_object()) {
-            Some(folders) => folders.get(&provider).and_then(|value| value.as_str()).unwrap_or_default().trim().to_string(),
-            None => Some(text("folder")).filter(|folder| folder != LEGACY_DEFAULT_FOLDER).unwrap_or_default(),
+        let folders: BTreeMap<String, String> = match cloud.get("folders").filter(|folders| folders.is_object()) {
+            Some(folders) => PROVIDERS
+                .iter()
+                .map(|name| (name.to_string(), folders.get(*name).and_then(|value| value.as_str()).unwrap_or_default().trim().to_string()))
+                .collect(),
+            None => {
+                let legacy = Some(text("folder")).filter(|folder| folder != LEGACY_DEFAULT_FOLDER).unwrap_or_default();
+                PROVIDERS.iter().map(|name| (name.to_string(), if *name == provider { legacy.clone() } else { String::new() })).collect()
+            }
         };
+        let folder = folders.get(&provider).cloned().unwrap_or_default();
         Config {
             enabled: cloud.get("enabled").and_then(|value| value.as_bool()).unwrap_or(false),
             provider,
@@ -82,6 +92,7 @@ impl Config {
             account: text("account"),
             tls_name: text("tlsName"),
             folder,
+            folders,
             schedule: Some(text("schedule")).filter(|value| !value.is_empty()).unwrap_or_else(|| DEFAULT_SCHEDULE.into()),
             notifications: cloud.get("notifications").and_then(|value| value.as_bool()).unwrap_or(false),
             email: text("email"),
@@ -98,15 +109,15 @@ struct Status {
     accounts: BTreeMap<String, String>,
     /// 各服务最近一次的错误；成功或重新连接后清掉。
     errors: BTreeMap<String, String>,
-    /// 最近一次尝试与成功的时间（毫秒）。
+    /// 最近一次同步的时间，与其中至少一个服务成功的时间（毫秒）。
     last_attempt: i64,
     last_success: i64,
-    /// 最近一次成功备份到的服务。
-    last_provider: String,
-    /// 开始按时间表备份的时刻：从没备份过时，从这里算第一次。
+    /// 各服务最近一次同步成功的时间，写进失败通知邮件。
+    successes: BTreeMap<String, i64>,
+    /// 开始按时间表同步的时刻：从没同步过时，从这里算第一次。
     baseline: i64,
-    /// 已经通知过的错误，同样的原因不再通知。
-    notified: String,
+    /// 各服务已经通知过的错误，同样的原因不再通知。0.8.2 之前的 `notified`（一个字符串）与 `lastProvider` 读到时忽略。
+    notified_by: BTreeMap<String, String>,
 }
 
 /// 云端同步的共享状态。
@@ -115,6 +126,8 @@ pub struct CloudState {
     status_path: PathBuf,
     status: Mutex<Status>,
     running: AtomicBool,
+    /// 正在同步的服务（设置页让它卡片角上的点闪烁）；没在同步时为空。
+    syncing: Mutex<String>,
     login_cancel: AtomicBool,
     /// 用户粘贴回来的授权码或回调网址，正在等的登录取走（oauth::login）。
     pasted: Mutex<Option<String>>,
@@ -131,6 +144,7 @@ impl CloudState {
             status_path,
             status: Mutex::new(status),
             running: AtomicBool::new(false),
+            syncing: Mutex::new(String::new()),
             login_cancel: AtomicBool::new(false),
             pasted: Mutex::new(None),
             temp_dir: cache_dir.join("cloud"),
@@ -225,8 +239,34 @@ fn provider_ready(provider: &str) -> bool {
     }
 }
 
+/// 这个服务有没有凭据（连接过或登录过）。
+fn has_credentials(cloud: &CloudState, config: &Config, provider: &str) -> bool {
+    match provider {
+        "onedrive" => cloud.secrets.get(secrets::ONEDRIVE_TOKEN).is_some(),
+        "google" => cloud.secrets.get(secrets::GOOGLE_TOKEN).is_some(),
+        _ => cloud.secrets.get(secrets::WEBDAV_PASSWORD).is_some() && !config.endpoint.is_empty() && !config.account.is_empty(),
+    }
+}
+
+/// 同步要发往的服务与远程文件夹：连上了（`connected`）、选了远程文件夹（不是根目录）的服务，按卡片的顺序。
+fn targets(config: &Config, connected: impl Fn(&str) -> bool) -> Vec<(String, String)> {
+    let mut found = Vec::new();
+    for provider in PROVIDERS {
+        let folder = config.folders.get(provider).and_then(|folder| remote::normalize_folder(folder).ok()).unwrap_or_default();
+        if connected(provider) && !folder.is_empty() && folder != "/" {
+            found.push((provider.to_string(), folder));
+        }
+    }
+    found
+}
+
+/// 当前服务的连接（选择远程文件夹、列出快照与恢复用）。
 fn connect(cloud: &CloudState, config: &Config) -> Result<Connection, RemoteError> {
-    match config.provider.as_str() {
+    connect_to(cloud, config, &config.provider)
+}
+
+fn connect_to(cloud: &CloudState, config: &Config, provider: &str) -> Result<Connection, RemoteError> {
+    match provider {
         "onedrive" => {
             let token = cloud.secrets.get(secrets::ONEDRIVE_TOKEN).ok_or_else(|| RemoteError::Config("还没有登录 OneDrive".into()))?;
             Ok(Connection::OneDrive(onedrive::OneDrive::new(client()?, oauth_provider("onedrive"), token)))
@@ -268,18 +308,20 @@ fn broadcast(app: &AppHandle) {
     let _ = app.emit(STATUS_EVENT, ());
 }
 
-/// 备份失败时通知：系统通知与邮件（配置了的话）。同样的原因只通知一次。
-fn notify_failure(app: &AppHandle, config: &Config, reason: &str, trigger: &str) {
+/// 一个服务同步失败时通知：系统通知与邮件（配置了的话）。同一个服务同样的原因只通知一次。
+fn notify_failure(app: &AppHandle, config: &Config, provider: &str, folder: &str, reason: &str, trigger: &str) {
     let cloud = app.state::<CloudState>();
     let status = cloud.snapshot();
-    if !config.notifications || status.notified == reason {
+    if !config.notifications || status.notified_by.get(provider).is_some_and(|notified| notified == reason) {
         return;
     }
-    cloud.update(|status| status.notified = reason.to_string());
+    cloud.update(|status| {
+        status.notified_by.insert(provider.to_string(), reason.to_string());
+    });
     {
         use tauri_plugin_notification::NotificationExt;
         let body: String = notify::redact(reason).chars().take(200).collect();
-        let _ = app.notification().builder().title(format!("SideNotes 没能同步到 {}", provider_name(&config.provider))).body(body).show();
+        let _ = app.notification().builder().title(format!("SideNotes 没能同步到 {}", provider_name(provider))).body(body).show();
     }
     if config.email.is_empty() {
         return;
@@ -287,16 +329,16 @@ fn notify_failure(app: &AppHandle, config: &Config, reason: &str, trigger: &str)
     let Some(key) = cloud.secrets.get(secrets::RESEND_KEY) else {
         return;
     };
-    let account = match config.provider.as_str() {
+    let account = match provider {
         "synology" => format!("{}（{}）", config.account, config.endpoint),
         provider => status.accounts.get(provider).cloned().unwrap_or_default(),
     };
-    let folder = folder_of(config).unwrap_or_else(|_| config.folder.clone());
-    let last_success = if status.last_success > 0 { local_time(status.last_success) } else { "从未成功".into() };
+    let last = status.successes.get(provider).copied().unwrap_or(0);
+    let last_success = if last > 0 { local_time(last) } else { "从未成功".into() };
     let (subject, html) = notify::failure_mail(&notify::FailureMail {
-        provider: provider_name(&config.provider),
+        provider: provider_name(provider),
         account: &account,
-        folder: &folder,
+        folder,
         reason,
         failure_time: &local_time(now_millis()),
         last_success: &last_success,
@@ -308,53 +350,84 @@ fn notify_failure(app: &AppHandle, config: &Config, reason: &str, trigger: &str)
     }
 }
 
-/// 备份一次（在后台线程里调用）。`trigger` 是「自动」或「手动」，写进说明与通知。
-fn run_backup(app: &AppHandle, trigger: &str) -> Result<CloudBackup, String> {
+/// 一次同步里一个服务的结果。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncResult {
+    pub provider: String,
+    /// 同步的记录条数（成功时）。
+    pub note_count: i64,
+    /// 失败的原因；空的表示成功。
+    pub error: String,
+}
+
+fn set_syncing(cloud: &CloudState, provider: &str) {
+    if let Ok(mut syncing) = cloud.syncing.lock() {
+        *syncing = provider.to_string();
+    }
+}
+
+/// 同步一次（在后台线程里调用）：依次发往每个连上了、选了远程文件夹的服务，一家失败不影响别家，失败的那家单独通知。
+/// 几家的快照用同一个时间，编号相同。`trigger` 是「自动」或「手动」，写进说明与通知。
+fn run_backup(app: &AppHandle, trigger: &str) -> Result<Vec<SyncResult>, String> {
     let cloud = app.state::<CloudState>();
     if cloud.running.swap(true, Ordering::SeqCst) {
         return Err("正在同步".into());
     }
-    broadcast(app);
     let config = read_config(app);
+    let targets = targets(&config, |provider| has_credentials(&cloud, &config, provider));
+    if targets.is_empty() {
+        cloud.running.store(false, Ordering::SeqCst);
+        return Err("还没有连上服务并选好远程文件夹".into());
+    }
     let now = now_millis();
-    let result = (|| -> Result<CloudBackup, RemoteError> {
-        let folder = folder_of(&config)?;
-        let connection = connect(&cloud, &config)?;
-        let state = app.state::<AppState>();
-        job::clean_temp(&cloud.temp_dir);
-        let reason = if trigger == "自动" { "auto" } else { "manual" };
-        let result = job::backup(connection.remote(), &state.store, &folder, &cloud.temp_dir, reason, now);
-        connection.persist(&cloud);
-        result
-    })();
-    cloud.update(|status| {
-        status.last_attempt = now;
-        match &result {
+    let state = app.state::<AppState>();
+    let reason = if trigger == "自动" { "auto" } else { "manual" };
+    let mut results = Vec::new();
+    for (provider, folder) in &targets {
+        set_syncing(&cloud, provider);
+        broadcast(app);
+        let result = (|| -> Result<CloudBackup, RemoteError> {
+            let connection = connect_to(&cloud, &config, provider)?;
+            job::clean_temp(&cloud.temp_dir);
+            let result = job::backup(connection.remote(), &state.store, folder, &cloud.temp_dir, reason, now);
+            connection.persist(&cloud);
+            result
+        })();
+        cloud.update(|status| match &result {
             Ok(_) => {
-                status.last_success = now;
-                status.last_provider = config.provider.clone();
-                status.errors.remove(&config.provider);
-                status.notified.clear();
+                status.successes.insert(provider.clone(), now);
+                status.errors.remove(provider);
+                status.notified_by.remove(provider);
             }
             Err(error) => {
-                status.errors.insert(config.provider.clone(), error.to_string());
+                status.errors.insert(provider.clone(), error.to_string());
+            }
+        });
+        match result {
+            Ok(backup) => {
+                crate::diag::log(format!("云端同步（{trigger}）完成：{}，{} 条记录", provider_name(provider), backup.info.note_count));
+                results.push(SyncResult { provider: provider.clone(), note_count: backup.info.note_count, error: String::new() });
+            }
+            Err(error) => {
+                let reason = error.to_string();
+                crate::diag::log(format!("云端同步（{trigger}）失败：{}：{}", provider_name(provider), notify::redact(&reason)));
+                notify_failure(app, &config, provider, folder, &reason, trigger);
+                results.push(SyncResult { provider: provider.clone(), note_count: 0, error: reason });
             }
         }
+    }
+    let succeeded = results.iter().any(|result| result.error.is_empty());
+    cloud.update(|status| {
+        status.last_attempt = now;
+        if succeeded {
+            status.last_success = now;
+        }
     });
+    set_syncing(&cloud, "");
     cloud.running.store(false, Ordering::SeqCst);
     broadcast(app);
-    match result {
-        Ok(backup) => {
-            crate::diag::log(format!("云端同步（{trigger}）完成：{}，{} 条记录", provider_name(&config.provider), backup.info.note_count));
-            Ok(backup)
-        }
-        Err(error) => {
-            let reason = error.to_string();
-            crate::diag::log(format!("云端同步（{trigger}）失败：{}", notify::redact(&reason)));
-            notify_failure(app, &config, &reason, trigger);
-            Err(reason)
-        }
-    }
+    Ok(results)
 }
 
 /// 启动后台的定时检查。
@@ -424,8 +497,10 @@ pub struct ProviderState {
 pub struct Overview {
     pub providers: BTreeMap<String, ProviderState>,
     pub running: bool,
+    /// 正在同步的服务；没在同步时为空。
+    pub syncing: String,
+    /// 最近一次同步里至少一个服务成功的时间（毫秒），0 表示没有。
     pub last_success: i64,
-    pub last_provider: String,
     pub next_run: Option<i64>,
     /// 保存了 Resend 的密钥。
     pub resend_key: bool,
@@ -438,11 +513,7 @@ pub fn cloud_overview(app: AppHandle, cloud: State<'_, CloudState>) -> Overview 
     let status = cloud.snapshot();
     let mut providers = BTreeMap::new();
     for provider in PROVIDERS {
-        let connected = match provider {
-            "onedrive" => cloud.secrets.get(secrets::ONEDRIVE_TOKEN).is_some(),
-            "google" => cloud.secrets.get(secrets::GOOGLE_TOKEN).is_some(),
-            _ => cloud.secrets.get(secrets::WEBDAV_PASSWORD).is_some() && !config.endpoint.is_empty() && !config.account.is_empty(),
-        };
+        let connected = has_credentials(&cloud, &config, provider);
         let account = if provider == "synology" { config.account.clone() } else { status.accounts.get(provider).cloned().unwrap_or_default() };
         let error = status.errors.get(provider).cloned().unwrap_or_default();
         providers.insert(provider.to_string(), ProviderState { connected, account, error, available: provider_ready(provider) });
@@ -450,8 +521,8 @@ pub fn cloud_overview(app: AppHandle, cloud: State<'_, CloudState>) -> Overview 
     Overview {
         providers,
         running: cloud.running.load(Ordering::SeqCst),
+        syncing: cloud.syncing.lock().map(|syncing| syncing.clone()).unwrap_or_default(),
         last_success: status.last_success,
-        last_provider: status.last_provider.clone(),
         next_run: next_run(&config, &status),
         resend_key: cloud.secrets.get(secrets::RESEND_KEY).is_some(),
     }
@@ -505,7 +576,7 @@ pub async fn cloud_connect_webdav(app: AppHandle, endpoint: String, username: St
         cloud.secrets.set(secrets::WEBDAV_PASSWORD, Some(&password)).map_err(|error| RemoteError::Config(error.to_string()))?;
         cloud.update(|status| {
             status.errors.remove("synology");
-            status.notified.clear();
+            status.notified_by.remove("synology");
         });
         broadcast(&app);
         Ok(ConnectOutcome::Connected { account: username.trim().to_string() })
@@ -547,7 +618,7 @@ pub async fn cloud_login(app: AppHandle, provider: String) -> AppResult<String> 
         cloud.update(|status| {
             status.accounts.insert(provider.clone(), account.clone());
             status.errors.remove(&provider);
-            status.notified.clear();
+            status.notified_by.remove(&provider);
         });
         broadcast(&app);
         Ok(account)
@@ -589,6 +660,7 @@ pub async fn cloud_disconnect(app: AppHandle, provider: String) -> AppResult<()>
         cloud.update(|status| {
             status.accounts.remove(&provider);
             status.errors.remove(&provider);
+            status.notified_by.remove(&provider);
         });
         broadcast(&app);
         Ok(())
@@ -633,9 +705,9 @@ pub async fn cloud_create_folder(app: AppHandle, parent: String, name: String) -
     result.map_err(|error| other(error.to_string()))
 }
 
-/// 立即备份一次。
+/// 立即同步一次：发往每个连上了、选了远程文件夹的服务，返回各服务的结果。
 #[tauri::command]
-pub async fn cloud_backup_now(app: AppHandle) -> AppResult<CloudBackup> {
+pub async fn cloud_backup_now(app: AppHandle) -> AppResult<Vec<SyncResult>> {
     blocking(move || run_backup(&app, "手动")).await?.map_err(other)
 }
 
@@ -748,6 +820,34 @@ mod tests {
         assert!(folder_of(&config).is_err());
         config.folder = "Test".into();
         assert_eq!(folder_of(&config).unwrap(), "/Test");
+    }
+
+    #[test]
+    fn syncs_to_every_connected_provider_with_a_folder() {
+        let config = Config::from_settings(&serde_json::json!({
+            "cloud": { "provider": "synology", "folders": { "synology": "", "onedrive": "/Test", "google": "Test" } }
+        }));
+        let pair = |provider: &str, folder: &str| (provider.to_string(), folder.to_string());
+        // 都连着：没选文件夹的群晖 NAS 不算，选中的是哪个服务都一样。
+        assert_eq!(targets(&config, |_| true), vec![pair("onedrive", "/Test"), pair("google", "/Test")]);
+        // Google Drive 没连接：只剩 OneDrive。
+        assert_eq!(targets(&config, |provider| provider == "onedrive"), vec![pair("onedrive", "/Test")]);
+        // 选的是根目录也不算。
+        let root = Config::from_settings(&serde_json::json!({ "cloud": { "folders": { "onedrive": "/" } } }));
+        assert!(targets(&root, |_| true).is_empty());
+        // 0.8.1 的设置：一个 folder，归当时选中的服务。
+        let old = Config::from_settings(&serde_json::json!({ "cloud": { "provider": "google", "folder": "/Notes" } }));
+        assert_eq!(targets(&old, |_| true), vec![pair("google", "/Notes")]);
+    }
+
+    #[test]
+    fn old_status_files_still_load() {
+        // 0.8.2 之前的 cloud-status.json：notified 是一个字符串，还有 lastProvider；读进来不丢登录的账户。
+        let old = r#"{ "accounts": { "google": "a@b.com" }, "errors": {}, "lastAttempt": 1, "lastSuccess": 2, "lastProvider": "google", "baseline": 0, "notified": "网络不通" }"#;
+        let status: Status = serde_json::from_str(old).unwrap();
+        assert_eq!(status.accounts.get("google").map(String::as_str), Some("a@b.com"));
+        assert_eq!((status.last_attempt, status.last_success), (1, 2));
+        assert!(status.notified_by.is_empty() && status.successes.is_empty());
     }
 
     #[test]
