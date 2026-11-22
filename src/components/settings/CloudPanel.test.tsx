@@ -197,6 +197,8 @@ describe('云端同步', () => {
     const row = query('[data-cloud-snapshots]').closest('.cloud-field-grid');
     expect(row?.textContent).toContain('远程文件夹');
     expect(query('[data-cloud-snapshots]').textContent).toBe('1 份');
+    // 列快照时指明服务，不靠后端读设置里选中的那个（刚换卡片时可能还没存好）。
+    expect(bridge.listCloudBackups).toHaveBeenCalledWith('google');
     expect(group.textContent).not.toContain('云端快照');
   });
 

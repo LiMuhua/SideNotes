@@ -53,14 +53,12 @@ const LEGACY_DEFAULT_FOLDER: &str = "/SideNotes";
 #[derive(Debug, Clone, Default)]
 struct Config {
     enabled: bool,
-    provider: String,
     endpoint: String,
     account: String,
     /// 按证书上的这个名字验证 NAS 的证书（地址是 IP、证书是给域名的时候），见 webdav::build_client。
     tls_name: String,
-    /// 当前服务的远程文件夹（设置里按服务分别存在 `folders` 下）；空的表示还没有选。
-    folder: String,
-    /// 各服务的远程文件夹：同步时发往每个连上了、选了文件夹的服务（第十二轮反馈：连着几个服务时一键同步）。
+    /// 各服务的远程文件夹，空的表示还没有选：同步时发往每个连上了、选了文件夹的服务（第十二轮反馈：连着几个服务时一键同步）。
+    /// 设置里选中的服务只在迁移 0.8.1 的旧设置时用到；按服务的命令由前端指明服务（见 known_provider）。
     folders: BTreeMap<String, String>,
     schedule: String,
     notifications: bool,
@@ -84,14 +82,11 @@ impl Config {
                 PROVIDERS.iter().map(|name| (name.to_string(), if *name == provider { legacy.clone() } else { String::new() })).collect()
             }
         };
-        let folder = folders.get(&provider).cloned().unwrap_or_default();
         Config {
             enabled: cloud.get("enabled").and_then(|value| value.as_bool()).unwrap_or(false),
-            provider,
             endpoint: text("endpoint"),
             account: text("account"),
             tls_name: text("tlsName"),
-            folder,
             folders,
             schedule: Some(text("schedule")).filter(|value| !value.is_empty()).unwrap_or_else(|| DEFAULT_SCHEDULE.into()),
             notifications: cloud.get("notifications").and_then(|value| value.as_bool()).unwrap_or(false),
@@ -260,11 +255,6 @@ fn targets(config: &Config, connected: impl Fn(&str) -> bool) -> Vec<(String, St
     found
 }
 
-/// 当前服务的连接（选择远程文件夹、列出快照与恢复用）。
-fn connect(cloud: &CloudState, config: &Config) -> Result<Connection, RemoteError> {
-    connect_to(cloud, config, &config.provider)
-}
-
 fn connect_to(cloud: &CloudState, config: &Config, provider: &str) -> Result<Connection, RemoteError> {
     match provider {
         "onedrive" => {
@@ -290,13 +280,24 @@ fn read_config(app: &AppHandle) -> Config {
     Config::from_settings(&state.store.settings().unwrap_or_default())
 }
 
-/// 当前服务的远程文件夹。没有选（或选的是根目录）时报错，不往根目录里写。
-fn folder_of(config: &Config) -> Result<String, RemoteError> {
-    let folder = remote::normalize_folder(&config.folder).map_err(RemoteError::Config)?;
+/// 这个服务的远程文件夹。没有选（或选的是根目录）时报错，不往根目录里写。
+fn folder_for(config: &Config, provider: &str) -> Result<String, RemoteError> {
+    let folder = config.folders.get(provider).map(String::as_str).unwrap_or_default();
+    let folder = remote::normalize_folder(folder).map_err(RemoteError::Config)?;
     if folder == "/" {
         return Err(RemoteError::Config("还没有选远程文件夹".into()));
     }
     Ok(folder)
+}
+
+/// 前端指明的服务：只认这三个。列快照、恢复与选文件夹都由前端指明服务，不读设置里选中的那个：
+/// 设置页刚换了卡片时，新的设置可能还没存进后端，读到的会是上一个服务。
+fn known_provider(provider: &str) -> Result<(), RemoteError> {
+    if PROVIDERS.contains(&provider) {
+        Ok(())
+    } else {
+        Err(RemoteError::Config(format!("不认识的服务：{provider}")))
+    }
 }
 
 /// 在后台线程里做会阻塞的网络操作（reqwest 的同步接口不能在异步线程里用）。
@@ -670,12 +671,13 @@ pub async fn cloud_disconnect(app: AppHandle, provider: String) -> AppResult<()>
 
 /// 远程文件夹选择框里的一层：子文件夹的名字。
 #[tauri::command]
-pub async fn cloud_list_folders(app: AppHandle, path: String) -> AppResult<Vec<String>> {
+pub async fn cloud_list_folders(app: AppHandle, provider: String, path: String) -> AppResult<Vec<String>> {
     let result = blocking(move || -> Result<Vec<String>, RemoteError> {
         let cloud = app.state::<CloudState>();
         let config = read_config(&app);
+        known_provider(&provider)?;
         let path = remote::normalize_folder(&path).map_err(RemoteError::Config)?;
-        let connection = connect(&cloud, &config)?;
+        let connection = connect_to(&cloud, &config, &provider)?;
         let mut names: Vec<String> = connection.remote().list(&path)?.into_iter().filter(|entry| entry.is_dir).map(|entry| entry.name).collect();
         connection.persist(&cloud);
         names.sort_by_key(|name| name.to_lowercase());
@@ -687,7 +689,7 @@ pub async fn cloud_list_folders(app: AppHandle, path: String) -> AppResult<Vec<S
 
 /// 在远程文件夹选择框里新建一个文件夹，返回它的路径。
 #[tauri::command]
-pub async fn cloud_create_folder(app: AppHandle, parent: String, name: String) -> AppResult<String> {
+pub async fn cloud_create_folder(app: AppHandle, provider: String, parent: String, name: String) -> AppResult<String> {
     let result = blocking(move || -> Result<String, RemoteError> {
         let cloud = app.state::<CloudState>();
         let config = read_config(&app);
@@ -695,8 +697,9 @@ pub async fn cloud_create_folder(app: AppHandle, parent: String, name: String) -
         if name.is_empty() || name.contains(['/', '\\']) {
             return Err(RemoteError::Config("文件夹名不能为空，也不能有斜杠".into()));
         }
+        known_provider(&provider)?;
         let path = remote::normalize_folder(&remote::join(&parent, name)).map_err(RemoteError::Config)?;
-        let connection = connect(&cloud, &config)?;
+        let connection = connect_to(&cloud, &config, &provider)?;
         connection.remote().ensure_dir(&path)?;
         connection.persist(&cloud);
         Ok(path)
@@ -711,19 +714,20 @@ pub async fn cloud_backup_now(app: AppHandle) -> AppResult<Vec<SyncResult>> {
     blocking(move || run_backup(&app, "手动")).await?.map_err(other)
 }
 
-/// 列出远程文件夹里的备份（最新的在前）。
+/// 列出一个服务的远程文件夹里的快照（最新的在前）。
 #[tauri::command]
-pub async fn cloud_list_backups(app: AppHandle) -> AppResult<Vec<CloudBackup>> {
+pub async fn cloud_list_backups(app: AppHandle, provider: String) -> AppResult<Vec<CloudBackup>> {
     let result = blocking(move || -> Result<Vec<CloudBackup>, RemoteError> {
         let cloud = app.state::<CloudState>();
         let config = read_config(&app);
-        let folder = folder_of(&config)?;
-        let connection = connect(&cloud, &config)?;
+        known_provider(&provider)?;
+        let folder = folder_for(&config, &provider)?;
+        let connection = connect_to(&cloud, &config, &provider)?;
         let backups = job::read_index(connection.remote(), &folder);
         connection.persist(&cloud);
         if let Err(RemoteError::Auth(reason)) = &backups {
             cloud.update(|status| {
-                status.errors.insert(config.provider.clone(), reason.clone());
+                status.errors.insert(provider.clone(), reason.clone());
             });
             broadcast(&app);
         }
@@ -733,9 +737,9 @@ pub async fn cloud_list_backups(app: AppHandle) -> AppResult<Vec<CloudBackup>> {
     result.map_err(|error| other(error.to_string()))
 }
 
-/// 从云端的一份备份恢复记录：恢复前在本机快照目录（`snapshot_directory`，空的是默认位置）建一份快照，各窗口需要重新读库。
+/// 从一个服务的一份云端快照恢复记录：恢复前在本机快照目录（`snapshot_directory`，空的是默认位置）建一份快照，各窗口需要重新读库。
 #[tauri::command]
-pub async fn cloud_restore(app: AppHandle, id: String, snapshot_directory: String) -> AppResult<RestoreReport> {
+pub async fn cloud_restore(app: AppHandle, provider: String, id: String, snapshot_directory: String) -> AppResult<RestoreReport> {
     let result = blocking(move || -> Result<RestoreReport, RemoteError> {
         let cloud = app.state::<CloudState>();
         if cloud.running.swap(true, Ordering::SeqCst) {
@@ -743,8 +747,9 @@ pub async fn cloud_restore(app: AppHandle, id: String, snapshot_directory: Strin
         }
         let outcome = (|| {
             let config = read_config(&app);
-            let folder = folder_of(&config)?;
-            let connection = connect(&cloud, &config)?;
+            known_provider(&provider)?;
+            let folder = folder_for(&config, &provider)?;
+            let connection = connect_to(&cloud, &config, &provider)?;
             let state = app.state::<AppState>();
             let root = snapshot_root(&state, &snapshot_directory);
             job::clean_temp(&cloud.temp_dir);
@@ -793,33 +798,39 @@ mod tests {
         });
         let config = Config::from_settings(&settings);
         assert!(config.enabled && config.notifications);
-        assert_eq!(config.provider, "google");
-        assert_eq!(config.folder, "/Test");
+        assert_eq!(config.folders.get("google").map(String::as_str), Some("/Test"));
+        assert_eq!(config.folders.get("synology").map(String::as_str), Some("/backup/Test"));
         assert_eq!(config.schedule, DEFAULT_SCHEDULE);
         assert_eq!((config.email.as_str(), config.email_from.as_str()), ("a@b.com", "n@b.com"));
-        assert_eq!(Config::from_settings(&serde_json::json!({ "cloud": { "provider": "dropbox" } })).provider, "synology");
+        // 不认识的服务当作群晖 NAS：0.8.1 的旧文件夹归它。
+        let unknown = Config::from_settings(&serde_json::json!({ "cloud": { "provider": "dropbox", "folder": "/X" } }));
+        assert_eq!(unknown.folders.get("synology").map(String::as_str), Some("/X"));
         assert!(!Config::from_settings(&serde_json::json!({})).enabled);
     }
 
     #[test]
     fn each_provider_has_its_own_folder_and_old_settings_migrate() {
-        let read = |cloud: serde_json::Value| Config::from_settings(&serde_json::json!({ "cloud": cloud })).folder;
+        let read = |cloud: serde_json::Value, provider: &str| {
+            Config::from_settings(&serde_json::json!({ "cloud": cloud })).folders.get(provider).cloned().unwrap_or_default()
+        };
         // 换到没选过文件夹的服务：空的，不沿用别的服务的。
-        assert_eq!(read(serde_json::json!({ "provider": "onedrive", "folders": { "synology": "/backup/Test" } })), "");
+        assert_eq!(read(serde_json::json!({ "provider": "onedrive", "folders": { "synology": "/backup/Test" } }), "onedrive"), "");
         // 0.8.1 的设置：一个 folder，归当时选中的服务；没选过时的默认 /SideNotes 当作没选。
-        assert_eq!(read(serde_json::json!({ "provider": "synology", "folder": "/backup/Test" })), "/backup/Test");
-        assert_eq!(read(serde_json::json!({ "provider": "synology", "folder": "/SideNotes" })), "");
-        assert_eq!(read(serde_json::json!({ "provider": "synology" })), "");
+        assert_eq!(read(serde_json::json!({ "provider": "synology", "folder": "/backup/Test" }), "synology"), "/backup/Test");
+        assert_eq!(read(serde_json::json!({ "provider": "synology", "folder": "/backup/Test" }), "onedrive"), "");
+        assert_eq!(read(serde_json::json!({ "provider": "synology", "folder": "/SideNotes" }), "synology"), "");
+        assert_eq!(read(serde_json::json!({ "provider": "synology" }), "synology"), "");
     }
 
     #[test]
     fn the_remote_folder_must_be_chosen_and_not_the_root() {
-        let mut config = Config { folder: "/".into(), ..Config::default() };
-        assert_eq!(folder_of(&config), Err(RemoteError::Config("还没有选远程文件夹".into())));
-        config.folder = String::new();
-        assert!(folder_of(&config).is_err());
-        config.folder = "Test".into();
-        assert_eq!(folder_of(&config).unwrap(), "/Test");
+        let config = |folder: &str| Config { folders: BTreeMap::from([("onedrive".to_string(), folder.to_string())]), ..Config::default() };
+        assert_eq!(folder_for(&config("/"), "onedrive"), Err(RemoteError::Config("还没有选远程文件夹".into())));
+        assert!(folder_for(&config(""), "onedrive").is_err());
+        // 按指明的服务取：别的服务的文件夹不算。
+        assert!(folder_for(&config("/Test"), "google").is_err());
+        assert_eq!(folder_for(&config("Test"), "onedrive").unwrap(), "/Test");
+        assert!(known_provider("google").is_ok() && known_provider("dropbox").is_err());
     }
 
     #[test]

@@ -284,14 +284,17 @@ export function cloudDisconnect(provider: CloudProvider): Promise<void> {
   return call<void>('cloud_disconnect', { provider });
 }
 
-/** 列出云端某个文件夹下的子文件夹（远程文件夹的选择框）。 */
-export function listCloudFolders(path: string): Promise<string[]> {
-  return call<string[]>('cloud_list_folders', { path });
+/**
+ * 列出一个服务里某个文件夹下的子文件夹（远程文件夹的选择框）。这几个按服务的命令都由前端指明服务：
+ * 设置页刚换了卡片时，新的设置可能还没存进后端，后端读到的选中服务会是上一个。
+ */
+export function listCloudFolders(provider: CloudProvider, path: string): Promise<string[]> {
+  return call<string[]>('cloud_list_folders', { provider, path });
 }
 
-/** 在云端新建一个文件夹，返回它的路径。 */
-export function createCloudFolder(parent: string, name: string): Promise<string> {
-  return call<string>('cloud_create_folder', { parent, name });
+/** 在一个服务里新建一个文件夹，返回它的路径。 */
+export function createCloudFolder(provider: CloudProvider, parent: string, name: string): Promise<string> {
+  return call<string>('cloud_create_folder', { provider, parent, name });
 }
 
 /** 立即同步一次：发往每个连上了、选了远程文件夹的服务，返回各服务的结果。 */
@@ -299,14 +302,14 @@ export function cloudBackupNow(): Promise<CloudSyncResult[]> {
   return call<CloudSyncResult[]>('cloud_backup_now');
 }
 
-/** 列出远程文件夹里的备份（最新的在前）。 */
-export function listCloudBackups(): Promise<CloudBackup[]> {
-  return call<CloudBackup[]>('cloud_list_backups');
+/** 列出一个服务的远程文件夹里的快照（最新的在前）。 */
+export function listCloudBackups(provider: CloudProvider): Promise<CloudBackup[]> {
+  return call<CloudBackup[]>('cloud_list_backups', { provider });
 }
 
-/** 从云端的一份备份恢复记录；恢复前在本机的快照目录（空的是默认位置）建一份快照。 */
-export function cloudRestore(id: string, snapshotDirectory: string): Promise<RestoreReport> {
-  return call<RestoreReport>('cloud_restore', { id, snapshotDirectory });
+/** 从一个服务的一份云端快照恢复记录；恢复前在本机的快照目录（空的是默认位置）建一份快照。 */
+export function cloudRestore(provider: CloudProvider, id: string, snapshotDirectory: string): Promise<RestoreReport> {
+  return call<RestoreReport>('cloud_restore', { provider, id, snapshotDirectory });
 }
 
 /** 保存 Resend 的 API 密钥（空的删除）。 */

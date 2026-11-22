@@ -463,13 +463,15 @@ function EmailDialog({
   );
 }
 
-/** 远程文件夹的选择框：逐层进入子文件夹，可以新建；根目录不能选。 */
+/** 远程文件夹的选择框：逐层进入子文件夹，可以新建；根目录不能选。`provider` 是在给哪个服务选。 */
 function FolderDialog({
+  provider,
   start,
   notice,
   onClose,
   onChoose,
 }: {
+  provider: CloudProvider;
   start: string;
   notice: string;
   onClose: () => void;
@@ -489,7 +491,7 @@ function FolderDialog({
     let alive = true;
     const initial = first.current;
     first.current = false;
-    bridge.listCloudFolders(path).then(
+    bridge.listCloudFolders(provider, path).then(
       (list) => {
         if (alive) setListing({ path, folders: list, error: '' });
       },
@@ -506,7 +508,7 @@ function FolderDialog({
     return () => {
       alive = false;
     };
-  }, [path]);
+  }, [provider, path]);
 
   const go = (next: string): void => {
     setActionError('');
@@ -519,7 +521,7 @@ function FolderDialog({
     if (!name.trim()) return;
     setBusy(true);
     try {
-      const created = await bridge.createCloudFolder(path, name.trim());
+      const created = await bridge.createCloudFolder(provider, path, name.trim());
       setName('');
       go(created);
     } catch (problem) {
@@ -776,10 +778,11 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
   const listable = connected && Boolean(folder);
   const backups = listable && listing?.key === listKey ? listing.backups : null;
   const listProblem = listable && listing?.key === listKey ? listing.problem : '';
+  const listProvider = cloud.provider;
   useEffect(() => {
     if (!listable) return;
     let alive = true;
-    bridge.listCloudBackups().then(
+    bridge.listCloudBackups(listProvider).then(
       (list) => {
         if (alive) setListing({ key: listKey, backups: list, problem: '' });
       },
@@ -790,7 +793,7 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
     return () => {
       alive = false;
     };
-  }, [listable, listKey]);
+  }, [listable, listKey, listProvider]);
 
   const saveCloud = (patch: Partial<CloudSettings>): Promise<boolean> => save({ cloud: { ...settings.cloud, ...patch } });
   const open = (kind: OpenDialog['kind'], notice = ''): void => setDialog({ kind, notice });
@@ -928,6 +931,8 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
   };
 
   const restore = (backup: CloudBackup): void => {
+    // 快照列表是这个服务的：记下来，确认期间换了卡片也恢复这个服务的快照。
+    const provider = cloud.provider;
     const when = snapshotTime(backup.createdAt);
     confirm({
       title: '从云端恢复',
@@ -936,7 +941,7 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
       icon: 'restore',
       run: async () => {
         try {
-          const report = await bridge.cloudRestore(backup.id, settings.snapshotDirectory);
+          const report = await bridge.cloudRestore(provider, backup.id, settings.snapshotDirectory);
           await store.reloadEverywhere();
           toast(
             report.missingAttachments
@@ -1091,6 +1096,7 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
       ) : null}
       {dialog?.kind === 'folder' ? (
         <FolderDialog
+          provider={cloud.provider}
           start={folder || '/'}
           notice={dialog.notice}
           onClose={closeDialog}
