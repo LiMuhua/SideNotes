@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="408" viewBox="0 0 880 408">
+  <!-- Entra 管理中心“应用注册”的示意：新注册表单、API 权限与概述页里要看的几项 -->
+  <style>
+    text { font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Source Han Sans SC", sans-serif; fill: #1f2328; }
+    .panel { fill: #ffffff; stroke: #d0d7de; }
+    .bar { fill: #f6f8fa; }
+    .field { fill: #ffffff; stroke: #8c959f; }
+    .pick { fill: #dafbe1; }
+    .h { font-size: 13px; font-weight: 700; }
+    .b { font-size: 13px; }
+    .s { font-size: 12px; fill: #59636e; }
+    .off { font-size: 13px; fill: #8c959f; }
+    .code { font-family: Consolas, "SF Mono", Menlo, monospace; font-size: 12.5px; }
+    .red { fill: #cf222e; }
+    .green { fill: #1a7f37; }
+    .line { stroke: #d0d7de; }
+  </style>
+  <rect width="880" height="408" fill="#ffffff"/>
+
+  <!-- 面板一：新注册 -->
+  <rect class="panel" x="15" y="15" width="850" height="245" rx="8"/>
+  <path class="bar" d="M15,49 V23 a8,8 0 0 1 8,-8 H857 a8,8 0 0 1 8,8 V49 z"/>
+  <path class="line" d="M15,49 H865"/>
+  <text class="s" x="31" y="37">Entra 管理中心 › 应用注册 › 新注册</text>
+
+  <text class="h" x="35" y="82">名称</text>
+  <rect class="field" x="200" y="65" width="300" height="26" rx="4"/>
+  <text class="b" x="210" y="83">SideNotes</text>
+
+  <text class="h" x="35" y="122">受支持的帐户类型</text>
+  <circle cx="206" cy="117.5" r="6" fill="#ffffff" stroke="#8c959f"/>
+  <text class="off" x="220" y="122">仅此组织目录中的帐户（单租户）</text>
+  <text class="s red" x="520" y="122">默认选中，个人账户登录不了</text>
+  <circle cx="206" cy="143.5" r="6" fill="#ffffff" stroke="#8c959f"/>
+  <text class="off" x="220" y="148">任何组织目录中的帐户（多租户）</text>
+  <rect class="pick" x="196" y="158" width="306" height="24" rx="4"/>
+  <circle cx="206" cy="169.5" r="6" fill="#ffffff" stroke="#1a7f37"/>
+  <circle cx="206" cy="169.5" r="3" fill="#1a7f37"/>
+  <text class="h" x="220" y="174">任何组织目录中的帐户和个人 Microsoft 帐户</text>
+  <text class="s green" x="520" y="174">选这个：个人 OneDrive 要能登录</text>
+  <circle cx="206" cy="195.5" r="6" fill="#ffffff" stroke="#8c959f"/>
+  <text class="off" x="220" y="200">仅个人 Microsoft 帐户</text>
+
+  <text class="h" x="35" y="239">重定向 URI</text>
+  <rect class="field" x="200" y="221" width="250" height="26" rx="4"/>
+  <text class="b" x="210" y="239">公共客户端/本机(移动和桌面)</text>
+  <text class="b" x="434" y="239">▾</text>
+  <rect class="field" x="460" y="221" width="180" height="26" rx="4"/>
+  <text class="code" x="470" y="239">http://localhost</text>
+  <text class="s" x="655" y="239">localhost 不比较端口</text>
+
+  <!-- 面板二：API 权限 -->
+  <rect class="panel" x="15" y="275" width="420" height="118" rx="8"/>
+  <path class="bar" d="M15,309 V283 a8,8 0 0 1 8,-8 H427 a8,8 0 0 1 8,8 V309 z"/>
+  <path class="line" d="M15,309 H435"/>
+  <text class="s" x="31" y="297">API 权限 › 添加权限 › Microsoft Graph › 委托的权限</text>
+  <g fill="#0969da">
+    <rect x="35" y="323" width="12" height="12" rx="2"/>
+    <rect x="35" y="345" width="12" height="12" rx="2"/>
+    <rect x="35" y="367" width="12" height="12" rx="2"/>
+  </g>
+  <path d="M38,329 l2.5,2.5 l4,-5 M38,351 l2.5,2.5 l4,-5 M38,373 l2.5,2.5 l4,-5" stroke="#ffffff" stroke-width="1.6" fill="none"/>
+  <text class="code" x="55" y="334">Files.ReadWrite</text>
+  <text class="code" x="55" y="356">User.Read</text>
+  <text class="code" x="55" y="378">offline_access</text>
+  <text class="s" x="180" y="378">少了它拿不到刷新令牌</text>
+
+  <!-- 面板三：概述 -->
+  <rect class="panel" x="445" y="275" width="420" height="118" rx="8"/>
+  <path class="bar" d="M445,309 V283 a8,8 0 0 1 8,-8 H857 a8,8 0 0 1 8,8 V309 z"/>
+  <path class="line" d="M445,309 H865"/>
+  <text class="s" x="461" y="297">概述</text>
+  <text class="s" x="465" y="334">应用程序(客户端) ID</text>
+  <text class="code" x="465" y="356">xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</text>
+  <text class="b" x="465" y="378">填进 <tspan class="code">oauth-clients.json</tspan> 的 <tspan class="code">onedrive.clientId</tspan></text>
+</svg>

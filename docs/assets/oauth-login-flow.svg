@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="210" viewBox="0 0 880 210">
+  <!-- 上排是登录的四步，下排红框是各步的坑，括号里是 cloud-oauth-pitfalls.md 的小节号 -->
+  <style>
+    text { font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Source Han Sans SC", sans-serif; fill: #1f2328; }
+    .step { fill: #ddf4ff; stroke: #54aeff; }
+    .pit { fill: #ffebe9; stroke: #ff8182; }
+    .h { font-size: 14px; font-weight: 700; }
+    .b { font-size: 13px; }
+    .code { font-family: Consolas, "SF Mono", Menlo, monospace; font-size: 12.5px; }
+    .warn { font-size: 13px; font-weight: 700; fill: #cf222e; }
+    .flow { stroke: #59636e; stroke-width: 1.5; fill: none; }
+    .link { stroke: #ff8182; stroke-width: 1.2; stroke-dasharray: 4 3; fill: none; }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#59636e"/>
+    </marker>
+  </defs>
+  <rect width="880" height="210" fill="#ffffff"/>
+
+  <!-- 上排：登录的四步 -->
+  <rect class="step" x="15" y="15" width="190" height="66" rx="8"/>
+  <text class="h" x="110" y="42" text-anchor="middle">① SideNotes</text>
+  <text class="b" x="110" y="64" text-anchor="middle">开本机端口，打开登录页</text>
+
+  <rect class="step" x="235" y="15" width="190" height="66" rx="8"/>
+  <text class="h" x="330" y="42" text-anchor="middle">② 浏览器</text>
+  <text class="b" x="330" y="64" text-anchor="middle">登录微软或 Google 账户</text>
+
+  <rect class="step" x="455" y="15" width="190" height="66" rx="8"/>
+  <text class="h" x="550" y="42" text-anchor="middle">③ 跳回本机</text>
+  <text class="code" x="550" y="64" text-anchor="middle">http://localhost:端口</text>
+
+  <rect class="step" x="675" y="15" width="190" height="66" rx="8"/>
+  <text class="h" x="770" y="42" text-anchor="middle">④ SideNotes</text>
+  <text class="b" x="770" y="64" text-anchor="middle">用授权码换令牌</text>
+
+  <path class="flow" d="M205,48 H233" marker-end="url(#arrow)"/>
+  <path class="flow" d="M425,48 H453" marker-end="url(#arrow)"/>
+  <path class="flow" d="M645,48 H673" marker-end="url(#arrow)"/>
+
+  <!-- 下排：各步的坑 -->
+  <path class="link" d="M110,81 V111 M330,81 V111 M550,81 V111 M770,81 V111"/>
+
+  <rect class="pit" x="15" y="111" width="410" height="84" rx="8"/>
+  <text class="warn" x="31" y="135">客户端要先注册好</text>
+  <text class="b" x="31" y="158">微软：个人账户先有目录，再注册应用（二）</text>
+  <text class="b" x="31" y="180">Google：测试状态只放行测试用户，7 天失效（3.4、3.5）</text>
+
+  <rect class="pit" x="455" y="111" width="190" height="84" rx="8"/>
+  <text class="warn" x="471" y="135">回调要与登记的一致</text>
+  <text class="b" x="471" y="158">Google 的 Web 应用类型</text>
+  <text class="b" x="471" y="180">不认 127.0.0.1（3.2）</text>
+
+  <rect class="pit" x="675" y="111" width="190" height="84" rx="8"/>
+  <text class="warn" x="691" y="135">换令牌</text>
+  <text class="b" x="691" y="158">Google 要带密钥（3.3）</text>
+  <text class="b" x="691" y="180">国内要走系统代理（四）</text>
+</svg>

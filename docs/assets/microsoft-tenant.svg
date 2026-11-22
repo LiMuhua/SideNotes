@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="250" viewBox="0 0 880 250">
+  <!-- 个人微软账户直接登录会落到微软的租户；注册 Azure 后才有自己的目录 -->
+  <style>
+    text { font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Source Han Sans SC", sans-serif; fill: #1f2328; }
+    .me { fill: #f6f8fa; stroke: #d0d7de; }
+    .bad { fill: #ffebe9; stroke: #ff8182; }
+    .good { fill: #dafbe1; stroke: #4ac26b; }
+    .h { font-size: 14px; font-weight: 700; }
+    .b { font-size: 13px; }
+    .s { font-size: 12px; fill: #59636e; }
+    .code { font-family: Consolas, "SF Mono", Menlo, monospace; font-size: 12.5px; }
+    .red { fill: #cf222e; }
+    .green { fill: #1a7f37; }
+    .flow { stroke: #59636e; stroke-width: 1.5; fill: none; }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#59636e"/>
+    </marker>
+  </defs>
+  <rect width="880" height="250" fill="#ffffff"/>
+
+  <!-- 左：个人账户 -->
+  <rect class="me" x="15" y="85" width="190" height="80" rx="8"/>
+  <text class="h" x="110" y="118" text-anchor="middle">个人微软账户</text>
+  <text class="code" x="110" y="142" text-anchor="middle">xxx@outlook.com</text>
+
+  <!-- 连线 -->
+  <path class="flow" d="M205,110 H245 V65 H328" marker-end="url(#arrow)"/>
+  <text class="s" x="287" y="57" text-anchor="middle">直接登录</text>
+  <path class="flow" d="M205,140 H245 V185 H328" marker-end="url(#arrow)"/>
+  <text class="s" x="287" y="177" text-anchor="middle">注册 Azure</text>
+
+  <!-- 右上：微软的租户 -->
+  <rect class="bad" x="330" y="15" width="535" height="100" rx="8"/>
+  <text class="h red" x="348" y="40">Microsoft Services 租户：微软的，不是你的</text>
+  <text class="b" x="348" y="62">直接用个人账户打开 Azure 门户、My Sign-ins 时落到这里</text>
+  <text class="b" x="348" y="84">报错：所选的用户帐户在租户“Microsoft Services”中不存在⋯⋯</text>
+  <text class="b" x="348" y="106">在这里注册不了应用，也不要申请加入</text>
+
+  <!-- 右下：自己的目录 -->
+  <rect class="good" x="330" y="135" width="535" height="100" rx="8"/>
+  <text class="h green" x="348" y="160">默认目录（<tspan class="code">xxxoutlook.onmicrosoft.com</tspan>）：你的目录</text>
+  <text class="b" x="348" y="182">注册 Azure 时建好，你是成员和全局管理员</text>
+  <text class="b" x="348" y="204">UPN 形如 <tspan class="code">xxx_outlook.com#EXT#@xxxoutlook.onmicrosoft.com</tspan></text>
+  <text class="b" x="348" y="226">在这里的“应用注册”里注册 SideNotes</text>
+</svg>

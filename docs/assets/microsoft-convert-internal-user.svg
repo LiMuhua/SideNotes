@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="230" viewBox="0 0 880 230">
+  <!-- 把个人账户“转换为内部用户”前后的对比，以及恢复的步骤 -->
+  <style>
+    text { font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Source Han Sans SC", sans-serif; fill: #1f2328; }
+    .bad { fill: #ffebe9; stroke: #ff8182; }
+    .good { fill: #dafbe1; stroke: #4ac26b; }
+    .chip { fill: #ddf4ff; stroke: #54aeff; }
+    .h { font-size: 14px; font-weight: 700; }
+    .b { font-size: 13px; }
+    .s { font-size: 12px; fill: #59636e; }
+    .code { font-family: Consolas, "SF Mono", Menlo, monospace; font-size: 12.5px; }
+    .red { fill: #cf222e; }
+    .green { fill: #1a7f37; }
+    .flow { stroke: #59636e; stroke-width: 1.5; fill: none; }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#59636e"/>
+    </marker>
+  </defs>
+  <rect width="880" height="230" fill="#ffffff"/>
+
+  <!-- 转换前 -->
+  <rect class="good" x="15" y="15" width="395" height="132" rx="8"/>
+  <text class="h green" x="33" y="40">转换前：外部用户</text>
+  <text class="s" x="33" y="66">UPN</text>
+  <text class="code" x="33" y="86">xxx_outlook.com#EXT#@xxxoutlook.onmicrosoft.com</text>
+  <text class="s" x="33" y="112">登录身份</text>
+  <text class="b" x="33" y="132">个人账户 xxx@outlook.com，能登录</text>
+
+  <path class="flow" d="M410,81 H468" marker-end="url(#arrow)"/>
+  <text class="s" x="439" y="73" text-anchor="middle">转换</text>
+
+  <!-- 转换后 -->
+  <rect class="bad" x="470" y="15" width="395" height="132" rx="8"/>
+  <text class="h red" x="488" y="40">转换后：内部用户</text>
+  <text class="s" x="488" y="66">UPN</text>
+  <text class="code" x="488" y="86">xxx_outlook.com@xxxoutlook.onmicrosoft.com</text>
+  <text class="s" x="488" y="112">登录身份</text>
+  <text class="b" x="488" y="132">新 UPN ＋ 转换时设的密码；个人账户登不进去</text>
+
+  <!-- 恢复的步骤 -->
+  <text class="h" x="15" y="195">恢复</text>
+  <rect class="chip" x="60" y="173" width="166" height="34" rx="17"/>
+  <text class="b" x="143" y="195" text-anchor="middle">无痕窗口用新 UPN 登录</text>
+  <path class="flow" d="M226,190 H248" marker-end="url(#arrow)"/>
+  <rect class="chip" x="250" y="173" width="172" height="34" rx="17"/>
+  <text class="b" x="336" y="195" text-anchor="middle">邀请个人账户为外部用户</text>
+  <path class="flow" d="M422,190 H444" marker-end="url(#arrow)"/>
+  <rect class="chip" x="446" y="173" width="146" height="34" rx="17"/>
+  <text class="b" x="519" y="195" text-anchor="middle">给它分配全局管理员</text>
+  <path class="flow" d="M592,190 H614" marker-end="url(#arrow)"/>
+  <rect class="chip" x="616" y="173" width="166" height="34" rx="17"/>
+  <text class="b" x="699" y="195" text-anchor="middle">新 UPN 留作备用管理员</text>
+</svg>

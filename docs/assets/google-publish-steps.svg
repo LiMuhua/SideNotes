@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="142" viewBox="0 0 880 142">
+  <!-- Google 同意屏幕从测试状态到发布的五步；黄框是起点，绿框是终点 -->
+  <style>
+    text { font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Source Han Sans SC", sans-serif; fill: #1f2328; }
+    .now { fill: #fff8c5; stroke: #d4a72c; }
+    .step { fill: #f6f8fa; stroke: #d0d7de; }
+    .done { fill: #dafbe1; stroke: #4ac26b; }
+    .badge { fill: #0969da; }
+    .n { font-size: 12px; font-weight: 700; fill: #ffffff; }
+    .h { font-size: 13.5px; font-weight: 700; }
+    .b { font-size: 12.5px; }
+    .flow { stroke: #59636e; stroke-width: 1.5; fill: none; }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#59636e"/>
+    </marker>
+  </defs>
+  <rect width="880" height="142" fill="#ffffff"/>
+
+  <rect class="now" x="15" y="15" width="150" height="112" rx="8"/>
+  <circle class="badge" cx="35" cy="39" r="11"/>
+  <text class="n" x="35" y="43" text-anchor="middle">1</text>
+  <text class="h" x="53" y="44">测试状态</text>
+  <text class="b" x="29" y="73">只放行测试用户</text>
+  <text class="b" x="29" y="95">刷新令牌 7 天失效</text>
+
+  <rect class="step" x="190" y="15" width="150" height="112" rx="8"/>
+  <circle class="badge" cx="210" cy="39" r="11"/>
+  <text class="n" x="210" y="43" text-anchor="middle">2</text>
+  <text class="h" x="228" y="44">品牌页</text>
+  <text class="b" x="204" y="73">填主页、隐私政策</text>
+  <text class="b" x="204" y="95">和授权域名</text>
+  <text class="b" x="204" y="117">页面用英文写</text>
+
+  <rect class="step" x="365" y="15" width="150" height="112" rx="8"/>
+  <circle class="badge" cx="385" cy="39" r="11"/>
+  <text class="n" x="385" y="43" text-anchor="middle">3</text>
+  <text class="h" x="403" y="44">Search Console</text>
+  <text class="b" x="379" y="73">验证主页归你所有</text>
+  <text class="b" x="379" y="95">网址前缀，HTML 标记</text>
+
+  <rect class="step" x="540" y="15" width="150" height="112" rx="8"/>
+  <circle class="badge" cx="560" cy="39" r="11"/>
+  <text class="n" x="560" y="43" text-anchor="middle">4</text>
+  <text class="h" x="578" y="44">等 24 小时</text>
+  <text class="b" x="554" y="73">回品牌页</text>
+  <text class="b" x="554" y="95">重新提交品牌验证</text>
+
+  <rect class="done" x="715" y="15" width="150" height="112" rx="8"/>
+  <circle class="badge" cx="735" cy="39" r="11"/>
+  <text class="n" x="735" y="43" text-anchor="middle">5</text>
+  <text class="h" x="753" y="44">受众页</text>
+  <text class="b" x="729" y="73">点“发布应用”</text>
+  <text class="b" x="729" y="95">任何账户都能登录</text>
+
+  <path class="flow" d="M165,71 H188" marker-end="url(#arrow)"/>
+  <path class="flow" d="M340,71 H363" marker-end="url(#arrow)"/>
+  <path class="flow" d="M515,71 H538" marker-end="url(#arrow)"/>
+  <path class="flow" d="M690,71 H713" marker-end="url(#arrow)"/>
+</svg>
