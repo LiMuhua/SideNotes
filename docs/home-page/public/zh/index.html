@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="zh-CN" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SideNotes – 藏在屏幕边上的速记本</title>
+  <meta name="description" content="SideNotes 是面向 Windows 的免费开源速记工具：指针推到屏幕边缘，侧栏就滑出来，随手记下待办、命令、链接与截图。记录存在你自己的电脑上。">
+  <link rel="canonical" href="https://limuhua.github.io/SideNotes/zh/">
+  <link rel="alternate" hreflang="en" href="https://limuhua.github.io/SideNotes/">
+  <link rel="alternate" hreflang="zh-CN" href="https://limuhua.github.io/SideNotes/zh/">
+  <link rel="alternate" hreflang="x-default" href="https://limuhua.github.io/SideNotes/">
+  <meta name="theme-color" content="#1c2259">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="SideNotes">
+  <meta property="og:title" content="SideNotes – 藏在屏幕边上的速记本">
+  <meta property="og:description" content="面向 Windows 的免费开源速记工具：指针推到屏幕边缘，记录就滑出来。">
+  <meta property="og:url" content="https://limuhua.github.io/SideNotes/zh/">
+  <meta property="og:image" content="https://limuhua.github.io/SideNotes/assets/social-zh.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="../icon.png" type="image/png" sizes="256x256">
+  <link rel="apple-touch-icon" href="../icon.png">
+  <link rel="preload" href="../assets/fonts/maple-mono-700.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="../assets/site.css">
+  <script>document.documentElement.classList.replace('no-js', 'js');</script>
+  <script src="../assets/site.js" defer></script>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <!-- 应用图标里的便签（docs/design-system/assets/app-icon.svg），脸朝左，从右边的门缝探出来。 -->
+      <linearGradient id="note-fill" x1="9" y1="0" x2="-17" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff8cc"/><stop offset=".3" stop-color="#ffe170"/><stop offset="1" stop-color="#f3b744"/></linearGradient>
+      <linearGradient id="note-fold" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fffbe2"/><stop offset="1" stop-color="#efbf45"/></linearGradient>
+      <linearGradient id="note-rim" x1="9" y1="0" x2="-6" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fffbe6"/><stop offset="1" stop-color="#fffbe6" stop-opacity="0"/></linearGradient>
+      <filter id="note-blush" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation=".6"/></filter>
+      <symbol id="note" viewBox="-19 -19 38 38">
+        <path d="M-13.5 -17H13.5A3.5 3.5 0 0 1 17 -13.5V13.5A3.5 3.5 0 0 1 13.5 17H-8.4L-17 8.4V-13.5A3.5 3.5 0 0 1 -13.5 -17z" fill="url(#note-fill)"/>
+        <path d="M-17 8.4L-8.4 17L-7.4 11.2Z" fill="#6b4a0e" opacity=".24"/>
+        <path d="M-17 8.4L-8.4 17V8.4z" fill="url(#note-fold)"/>
+        <path d="M-13.5 -17H13.5A3.5 3.5 0 0 1 17 -13.5V13.5A3.5 3.5 0 0 1 13.5 17H-8.4" fill="none" stroke="url(#note-rim)" stroke-width="1"/>
+        <g fill="#ff9a6e" opacity=".26" filter="url(#note-blush)"><ellipse cx="-12.6" cy="1.7" rx="2" ry="1.1"/><ellipse cx="0.6" cy="1.7" rx="2" ry="1.1"/></g>
+        <g fill="#2b1d06"><ellipse cx="-10" cy="-3.8" rx="2.6" ry="3.4"/><ellipse cx="-1.6" cy="-3.8" rx="2.6" ry="3.4"/></g>
+        <g fill="#fff"><circle cx="-10.85" cy="-5.1" r=".95"/><circle cx="-2.45" cy="-5.1" r=".95"/></g>
+        <path d="M-7.4 1.9Q-5.8 3.4 -4.2 1.9" fill="none" stroke="#2b1d06" stroke-width="1" stroke-linecap="round"/>
+      </symbol>
+      <symbol id="folder" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.6l2 2.2h7.4a2 2 0 0 1 2 2v7.8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+      <symbol id="file" viewBox="0 0 24 24"><path d="M7 3.5h6.5l4.5 4.5v11a1.5 1.5 0 0 1-1.5 1.5h-9.5A1.5 1.5 0 0 1 5.5 19V5A1.5 1.5 0 0 1 7 3.5z M13.5 3.5V8H18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+      <path id="sparkle" d="M0 -4.2C.42 -1.512 1.512 -.42 4.2 0C1.512 .42 .42 1.512 0 4.2C-.42 1.512 -1.512 .42 -4.2 0C-1.512 -.42 -.42 -1.512 0 -4.2Z"/>
+      <g id="sky" fill="currentColor"><circle cx="473" cy="143" r="1.3" opacity=".22"/><circle cx="121" cy="468" r=".9" opacity=".55"/><circle cx="101" cy="444" r=".7" opacity=".22"/><circle cx="627" cy="75" r=".7" opacity=".55"/><circle cx="614" cy="714" r=".7" opacity=".3"/><circle cx="903" cy="508" r=".7" opacity=".55"/><circle cx="840" cy="58" r=".8" opacity=".22"/><circle cx="799" cy="128" r="1" opacity=".3"/><circle cx="777" cy="498" r="1.1" opacity=".7"/><circle cx="273" cy="507" r="1.3" opacity=".3"/><circle cx="541" cy="478" r=".7" opacity=".55"/><circle cx="103" cy="190" r="1.3" opacity=".55"/><circle cx="619" cy="281" r="1.1" opacity=".46"/><circle cx="526" cy="226" r=".8" opacity=".7"/><circle cx="1112" cy="85" r=".9" opacity=".55"/><circle cx="713" cy="306" r="1" opacity=".38"/><circle cx="873" cy="78" r="1.1" opacity=".46"/><circle cx="251" cy="305" r="1" opacity=".46"/><circle cx="75" cy="580" r="1.6" opacity=".55"/><circle cx="822" cy="755" r=".9" opacity=".38"/><circle cx="993" cy="518" r="1.1" opacity=".46"/><circle cx="116" cy="95" r=".9" opacity=".46"/><circle cx="996" cy="71" r="1.3" opacity=".7"/><circle cx="453" cy="504" r="1.3" opacity=".46"/><circle cx="418" cy="342" r="1.3" opacity=".38"/><circle cx="52" cy="406" r=".8" opacity=".55"/><circle cx="184" cy="66" r="1.6" opacity=".38"/><circle cx="201" cy="225" r="1" opacity=".46"/><circle cx="133" cy="395" r="1.1" opacity=".38"/><circle cx="1257" cy="707" r="1.6" opacity=".55"/><circle cx="410" cy="367" r=".9" opacity=".7"/><circle cx="1258" cy="824" r=".8" opacity=".22"/><circle cx="267" cy="212" r=".8" opacity=".22"/><circle cx="699" cy="513" r=".9" opacity=".38"/></g>
+    </defs>
+  </svg>
+
+  <a class="skip" href="#main">跳到正文</a>
+
+  <header class="night hero">
+    <div class="room" aria-hidden="true"></div>
+    <svg class="stars" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+      <use href="#sky"/>
+      <use class="sparkle" href="#sparkle" transform="translate(1010 168) scale(2.6)" opacity=".9"/>
+      <use class="sparkle" href="#sparkle" transform="translate(930 262) scale(1.5)" opacity=".75"/>
+    </svg>
+
+    <nav class="nav" aria-label="网站">
+      <a class="brand" href="./" aria-current="page"><img src="../assets/icon.svg" alt="" width="34" height="34">SideNotes</a>
+      <ul>
+        <li class="nav-wide"><a href="#features">功能</a></li>
+        <li class="nav-wide"><a href="#themes">主题</a></li>
+        <li><a href="privacy.html">隐私政策</a></li>
+        <li><a href="../" hreflang="en" lang="en">English</a></li>
+      </ul>
+    </nav>
+
+    <div class="hero-copy">
+      <h1>SideNotes</h1>
+      <p class="lede">藏在屏幕边上的速记本</p>
+      <p>指针推到屏幕边缘，或按 <span class="keys"><kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd></span>，侧栏就滑出来。记一条待办、一行命令、一个链接；指针移开，它又滑回去，手头的工作原样还在。</p>
+      <div class="actions">
+        <a class="button button-primary" href="https://github.com/LiMuhua/SideNotes/releases/latest" data-download>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
+          下载 Windows 版
+        </a>
+        <a class="button button-quiet" href="https://github.com/LiMuhua/SideNotes">GitHub 上的源代码</a>
+        <p class="release" data-release data-template="版本 {version}"></p>
+      </div>
+      <ul class="facts">
+        <li>免费开源</li>
+        <li>支持 Windows 10 与 11</li>
+        <li>不用注册账号</li>
+      </ul>
+    </div>
+
+    <div class="edge" data-edge>
+      <figure class="panel" id="hero-panel">
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="../assets/shots/zh-hero-dark.webp">
+          <img src="../assets/shots/zh-hero-light.webp" width="400" height="1150" fetchpriority="high" alt="SideNotes 的侧栏：置顶的今日待办、一条存着两行命令的记录、稍后读的链接与周会纪要。">
+        </picture>
+      </figure>
+      <button class="seam" type="button" aria-controls="hero-panel" aria-expanded="true" aria-label="收起侧栏" data-label-show="滑出侧栏" data-label-hide="收起侧栏">
+        <svg class="peek" aria-hidden="true" focusable="false"><use href="#note"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="section" id="capture" aria-labelledby="capture-title">
+      <div class="wrap split">
+        <div class="copy">
+          <h2 id="capture-title">随时随地记一笔</h2>
+          <p>按 <span class="keys"><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd></span>，当前画面上弹出一个速记小窗。写完按 <span class="keys"><kbd>Ctrl</kbd> + <kbd>Enter</kbd></span>，这条记录就在侧栏里等你。</p>
+          <p>一句话越写越长时，转到侧栏里接着写，其他记录都在手边。</p>
+        </div>
+        <div class="desk capture-desk">
+          <svg class="stars" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false"><use href="#sky"/></svg>
+          <figure class="window">
+            <picture>
+              <source media="(prefers-color-scheme: dark)" srcset="../assets/shots/zh-capture-dark.webp">
+              <img src="../assets/shots/zh-capture-light.webp" width="560" height="420" loading="lazy" alt="SideNotes 的速记小窗，正在写一条记录：周五前把发票寄给财务。">
+            </picture>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="section features" id="features" aria-labelledby="features-title">
+      <div class="wrap">
+        <h2 id="features-title">零碎的记录，也井井有条</h2>
+        <ul class="feature-list">
+          <li>
+            <h3>Markdown 随手可用</h3>
+            <p>标题、列表、待办、代码块与链接都有快捷键；截图直接粘贴，文件直接拖进来。</p>
+          </li>
+          <li>
+            <h3>标签与页签</h3>
+            <p>在记录里随手写 #标签。重要的记录置顶，常用的标签固定成页签。</p>
+          </li>
+          <li>
+            <h3>搜索全部记录</h3>
+            <p><span class="keys"><kbd>Ctrl</kbd> + <kbd>F</kbd></span> 搜索全部记录：文字匹配标题、正文与附件名，#标签 只匹配标签，结果按页签分组。</p>
+          </li>
+          <li>
+            <h3>拖出成窗口</h3>
+            <p>把卡片拖出侧栏，就成了独立的记录窗口；可以置顶在其他程序之上，也可以把几个窗口合并成标签页。</p>
+          </li>
+          <li>
+            <h3>不挡道</h3>
+            <p>指针离开侧栏，它就滑回去；想让它留着就点固定。侧栏可以贴在屏幕左边或右边。</p>
+          </li>
+          <li>
+            <h3>快捷键由你定</h3>
+            <p>每个快捷键都能在设置里重新绑定；按键被其他程序占用时会告诉你，并保留原来的按键。</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section" id="themes" aria-labelledby="themes-title">
+      <div class="wrap split">
+        <div class="copy">
+          <h2 id="themes-title">五套主题，各有浅色与深色</h2>
+          <p>明暗跟随系统，也可以固定一种。字体、字号、侧栏宽度和应用图标也都能换。</p>
+          <div class="pickers" data-pickers>
+            <fieldset class="picker">
+              <legend class="visually-hidden">主题</legend>
+              <label><input type="radio" name="surface" value="terminal" checked><span>终端</span></label>
+              <label><input type="radio" name="surface" value="magazine"><span>杂志</span></label>
+              <label><input type="radio" name="surface" value="paper"><span>记录纸</span></label>
+              <label><input type="radio" name="surface" value="win11"><span>Windows 11</span></label>
+              <label><input type="radio" name="surface" value="glass"><span>磨砂玻璃</span></label>
+            </fieldset>
+            <fieldset class="picker">
+              <legend class="visually-hidden">明暗</legend>
+              <label><input type="radio" name="mode" value="light" checked><span>浅色</span></label>
+              <label><input type="radio" name="mode" value="dark"><span>深色</span></label>
+            </fieldset>
+          </div>
+        </div>
+        <div class="desk theme-desk" data-gallery data-shot-base="../assets/shots/zh-" data-alt="SideNotes 的{theme}主题，{mode}">
+          <svg class="stars" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false"><use href="#sky"/></svg>
+          <div class="theme-window" aria-hidden="true">
+            <i style="--w:30%"></i><i style="--w:52%;--x:1"></i><i style="--w:44%;--x:1"></i><i style="--w:24%;--x:2"></i><i style="--w:60%;--x:2"></i><i style="--w:36%;--x:1"></i><i style="--w:18%"></i><i style="--w:48%"></i><i style="--w:56%;--x:1"></i><i style="--w:40%;--x:2"></i><i style="--w:28%;--x:1"></i><i style="--w:34%"></i>
+          </div>
+          <figure class="shot">
+            <img src="../assets/shots/zh-terminal-light.webp" width="400" height="900" loading="lazy" alt="SideNotes 的终端主题，浅色">
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="data" aria-labelledby="data-title">
+      <div class="wrap split">
+        <div class="copy">
+          <h2 id="data-title">记录存在你自己的电脑上</h2>
+          <ul class="data-list">
+            <li>
+              <h3>不用注册</h3>
+              <p>记录、附件与设置存在你电脑上的本地数据库里；不开云端同步，什么都不会离开你的电脑。</p>
+            </li>
+            <li>
+              <h3>每天一份快照</h3>
+              <p>每天自动保存一份快照，导入备份这类操作之前也各存一份，可以从任意一份恢复。</p>
+            </li>
+            <li>
+              <h3>想同步时再同步</h3>
+              <p>云端同步默认关闭。设置好之后，SideNotes 把快照存到你自己的存储里：群晖 NAS（WebDAV）、OneDrive 或 Google Drive，按时自动同步，也可以随时手动同步。</p>
+            </li>
+            <li>
+              <h3>中间没有别人</h3>
+              <p>SideNotes 没有服务器，也不收集统计数据；数据从你的电脑直接传到你连接的服务。</p>
+            </li>
+          </ul>
+        </div>
+        <figure class="sync-shot">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="../assets/shots/sync-dark.webp">
+            <img src="../assets/shots/sync-light.webp" width="648" height="276" loading="lazy" alt="SideNotes 设置里的云端同步：可以选群晖 NAS、OneDrive 或 Google Drive，当前选中 Google Drive。">
+          </picture>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section" id="google-user-data" aria-labelledby="google-title">
+      <div class="wrap">
+        <article class="disclosure">
+          <h2 id="google-title">SideNotes 如何使用 Google 用户数据</h2>
+          <div class="disclosure-text">
+            <p>只有你在云端同步里选择 Google Drive 并用 Google 账户登录，SideNotes 才会访问 Google Drive。它只申请 <code>https://www.googleapis.com/auth/drive.file</code> 这一项权限，只能访问 SideNotes 自己在你网盘里建立的文件与文件夹。</p>
+            <h3>SideNotes 用这项权限做什么</h3>
+            <ul>
+              <li>建立你选定的快照文件夹，同步时把记录与附件的快照上传到里面。</li>
+              <li>恢复时列出并下载这些快照。</li>
+              <li>按保留规则删除这个文件夹里的旧快照。</li>
+              <li>读取你的 Google 账户邮箱，在设置里显示连接的是哪个账户。</li>
+            </ul>
+            <h3>它不会做什么</h3>
+            <ul>
+              <li>看不到、读不到也改不了你网盘里的其他文件。</li>
+              <li>没有服务器：数据只在你的电脑与 Google 之间直接传输。</li>
+              <li>不出售、不共享 Google 用户数据，不用于广告或训练人工智能模型，也没有任何人阅读这些数据。</li>
+            </ul>
+            <p>在设置里退出登录，会删除保存的登录令牌，并向 Google 撤销 SideNotes 的授权。你也可以随时在 <a href="https://myaccount.google.com/connections">Google 账户的第三方应用与服务</a>里移除 SideNotes。</p>
+            <p class="fine">SideNotes 对从 Google API 获得的信息的使用，以及向任何其他应用的传输，都遵守 <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API 服务用户数据政策</a>，包括有限使用要求。完整内容见<a href="privacy.html">隐私政策</a>。</p>
+          </div>
+          <figure class="drive">
+            <div class="drive-tree" aria-hidden="true">
+              <p>我的云端硬盘</p>
+              <ul>
+                <li class="off"><svg focusable="false"><use href="#folder"/></svg>照片</li>
+                <li class="off"><svg focusable="false"><use href="#folder"/></svg>工作</li>
+                <li class="off"><svg focusable="false"><use href="#file"/></svg>2026 预算.xlsx</li>
+                <li class="on"><svg focusable="false"><use href="#folder"/></svg>SideNotes
+                  <ul>
+                    <li><svg focusable="false"><use href="#folder"/></svg>database</li>
+                    <li><svg focusable="false"><use href="#folder"/></svg>attachments</li>
+                    <li><svg focusable="false"><use href="#file"/></svg>index.json</li>
+                  </ul>
+                </li>
+              </ul>
+            </div>
+            <figcaption>示例：SideNotes 只能打开它自己建立的快照文件夹，网盘里的其他内容它碰不到。</figcaption>
+          </figure>
+        </article>
+      </div>
+    </section>
+
+    <section class="night finale" id="download" aria-labelledby="download-title">
+      <div class="room" aria-hidden="true"></div>
+      <svg class="stars" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+        <use href="#sky"/>
+        <use class="sparkle" href="#sparkle" transform="translate(1180 140) scale(2)" opacity=".85"/>
+      </svg>
+      <div class="seam" aria-hidden="true"><svg class="peek" focusable="false"><use href="#note"/></svg></div>
+      <div class="finale-copy">
+        <h2 id="download-title">下载 SideNotes</h2>
+        <p>免费，以 GNU Affero 通用公共许可证第 3 版（AGPL-3.0）开源。</p>
+        <div class="actions">
+          <a class="button button-primary" href="https://github.com/LiMuhua/SideNotes/releases/latest" data-download>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
+            下载 Windows 版
+          </a>
+          <a class="button button-quiet" href="https://github.com/LiMuhua/SideNotes/releases">全部版本</a>
+          <p class="release" data-release data-template="版本 {version}"></p>
+        </div>
+        <dl class="specs">
+          <dt>系统</dt>
+          <dd>Windows 10 或 11（64 位）</dd>
+          <dt>安装包</dt>
+          <dd>安装程序（.exe）或 Windows Installer 安装包（.msi）</dd>
+          <dt>语言</dt>
+          <dd>界面为简体中文</dd>
+        </dl>
+      </div>
+    </section>
+  </main>
+
+  <footer class="night site-footer">
+    <div class="footer">
+      <a class="brand" href="./"><img src="../assets/icon.svg" alt="" width="26" height="26">SideNotes</a>
+      <ul>
+        <li><a href="privacy.html">隐私政策</a></li>
+        <li><a href="https://github.com/LiMuhua/SideNotes">源代码</a></li>
+        <li><a href="https://github.com/LiMuhua/SideNotes/blob/master/LICENSE">许可证 AGPL-3.0</a></li>
+        <li><a href="https://github.com/LiMuhua/SideNotes/issues">联系（GitHub Issues）</a></li>
+        <li><a href="../" hreflang="en" lang="en">English</a></li>
+      </ul>
+      <small>© 2026 LiMuhua</small>
+    </div>
+  </footer>
+</body>
+</html>

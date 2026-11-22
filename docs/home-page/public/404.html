@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SideNotes – page not found</title>
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#1c2259">
+  <!-- 不存在的地址都会显示这一页，路径可能在任意一层，资源一律用以 /SideNotes/ 开头的地址。 -->
+  <link rel="icon" href="/SideNotes/assets/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/SideNotes/assets/site.css">
+</head>
+<body class="night lost">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <linearGradient id="note-fill" x1="9" y1="0" x2="-17" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff8cc"/><stop offset=".3" stop-color="#ffe170"/><stop offset="1" stop-color="#f3b744"/></linearGradient>
+      <linearGradient id="note-fold" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fffbe2"/><stop offset="1" stop-color="#efbf45"/></linearGradient>
+      <linearGradient id="note-rim" x1="9" y1="0" x2="-6" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fffbe6"/><stop offset="1" stop-color="#fffbe6" stop-opacity="0"/></linearGradient>
+      <filter id="note-blush" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation=".6"/></filter>
+      <symbol id="note" viewBox="-19 -19 38 38">
+        <path d="M-13.5 -17H13.5A3.5 3.5 0 0 1 17 -13.5V13.5A3.5 3.5 0 0 1 13.5 17H-8.4L-17 8.4V-13.5A3.5 3.5 0 0 1 -13.5 -17z" fill="url(#note-fill)"/>
+        <path d="M-17 8.4L-8.4 17L-7.4 11.2Z" fill="#6b4a0e" opacity=".24"/>
+        <path d="M-17 8.4L-8.4 17V8.4z" fill="url(#note-fold)"/>
+        <path d="M-13.5 -17H13.5A3.5 3.5 0 0 1 17 -13.5V13.5A3.5 3.5 0 0 1 13.5 17H-8.4" fill="none" stroke="url(#note-rim)" stroke-width="1"/>
+        <g fill="#ff9a6e" opacity=".26" filter="url(#note-blush)"><ellipse cx="-12.6" cy="1.7" rx="2" ry="1.1"/><ellipse cx="0.6" cy="1.7" rx="2" ry="1.1"/></g>
+        <g fill="#2b1d06"><ellipse cx="-10" cy="-3.8" rx="2.6" ry="3.4"/><ellipse cx="-1.6" cy="-3.8" rx="2.6" ry="3.4"/></g>
+        <g fill="#fff"><circle cx="-10.85" cy="-5.1" r=".95"/><circle cx="-2.45" cy="-5.1" r=".95"/></g>
+        <path d="M-7.4 1.9Q-5.8 3.4 -4.2 1.9" fill="none" stroke="#2b1d06" stroke-width="1" stroke-linecap="round"/>
+      </symbol>
+    </defs>
+  </svg>
+  <div class="room" aria-hidden="true"></div>
+  <div class="seam" aria-hidden="true"><svg class="peek" focusable="false"><use href="#note"/></svg></div>
+  <main class="lost-copy">
+    <h1>Nothing here</h1>
+    <p>This page doesn't exist. It may have moved, or the address may be mistyped.</p>
+    <p lang="zh-CN">这个页面不存在，可能已经移走，或者地址输错了。</p>
+    <p class="actions">
+      <a class="button button-primary" href="/SideNotes/">SideNotes home</a>
+      <a class="button button-quiet" href="/SideNotes/zh/" lang="zh-CN">中文主页</a>
+    </p>
+  </main>
+</body>
+</html>

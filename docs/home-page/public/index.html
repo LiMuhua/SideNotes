@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Google Search Console 的归属验证（网址前缀 https://limuhua.github.io/SideNotes/）：OAuth 品牌验证要求主页归开发者所有，删掉会让验证失效。 -->
+  <meta name="google-site-verification" content="qOrjr-i7FGrhPsL0NkJM6zlQcxyKwFbJrHiOrz2LPEo">
+  <title>SideNotes – the notebook hidden at the edge of your screen</title>
+  <meta name="description" content="SideNotes is a free, open-source note-taking app for Windows. Push the pointer against the screen edge and a sidebar of notes slides out for to-dos, commands, links and screenshots. Notes stay on your computer.">
+  <link rel="canonical" href="https://limuhua.github.io/SideNotes/">
+  <link rel="alternate" hreflang="en" href="https://limuhua.github.io/SideNotes/">
+  <link rel="alternate" hreflang="zh-CN" href="https://limuhua.github.io/SideNotes/zh/">
+  <link rel="alternate" hreflang="x-default" href="https://limuhua.github.io/SideNotes/">
+  <meta name="theme-color" content="#1c2259">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="SideNotes">
+  <meta property="og:title" content="SideNotes – the notebook hidden at the edge of your screen">
+  <meta property="og:description" content="A free, open-source note-taking app for Windows. Push the pointer against the screen edge and your notes slide out.">
+  <meta property="og:url" content="https://limuhua.github.io/SideNotes/">
+  <meta property="og:image" content="https://limuhua.github.io/SideNotes/assets/social-en.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="icon.png" type="image/png" sizes="256x256">
+  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="preload" href="assets/fonts/maple-mono-700.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="assets/site.css">
+  <script>document.documentElement.classList.replace('no-js', 'js');</script>
+  <script src="assets/site.js" defer></script>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <!-- 应用图标里的便签（docs/design-system/assets/app-icon.svg），脸朝左，从右边的门缝探出来。 -->
+      <linearGradient id="note-fill" x1="9" y1="0" x2="-17" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff8cc"/><stop offset=".3" stop-color="#ffe170"/><stop offset="1" stop-color="#f3b744"/></linearGradient>
+      <linearGradient id="note-fold" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fffbe2"/><stop offset="1" stop-color="#efbf45"/></linearGradient>
+      <linearGradient id="note-rim" x1="9" y1="0" x2="-6" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fffbe6"/><stop offset="1" stop-color="#fffbe6" stop-opacity="0"/></linearGradient>
+      <filter id="note-blush" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation=".6"/></filter>
+      <symbol id="note" viewBox="-19 -19 38 38">
+        <path d="M-13.5 -17H13.5A3.5 3.5 0 0 1 17 -13.5V13.5A3.5 3.5 0 0 1 13.5 17H-8.4L-17 8.4V-13.5A3.5 3.5 0 0 1 -13.5 -17z" fill="url(#note-fill)"/>
+        <path d="M-17 8.4L-8.4 17L-7.4 11.2Z" fill="#6b4a0e" opacity=".24"/>
+        <path d="M-17 8.4L-8.4 17V8.4z" fill="url(#note-fold)"/>
+        <path d="M-13.5 -17H13.5A3.5 3.5 0 0 1 17 -13.5V13.5A3.5 3.5 0 0 1 13.5 17H-8.4" fill="none" stroke="url(#note-rim)" stroke-width="1"/>
+        <g fill="#ff9a6e" opacity=".26" filter="url(#note-blush)"><ellipse cx="-12.6" cy="1.7" rx="2" ry="1.1"/><ellipse cx="0.6" cy="1.7" rx="2" ry="1.1"/></g>
+        <g fill="#2b1d06"><ellipse cx="-10" cy="-3.8" rx="2.6" ry="3.4"/><ellipse cx="-1.6" cy="-3.8" rx="2.6" ry="3.4"/></g>
+        <g fill="#fff"><circle cx="-10.85" cy="-5.1" r=".95"/><circle cx="-2.45" cy="-5.1" r=".95"/></g>
+        <path d="M-7.4 1.9Q-5.8 3.4 -4.2 1.9" fill="none" stroke="#2b1d06" stroke-width="1" stroke-linecap="round"/>
+      </symbol>
+      <symbol id="folder" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.6l2 2.2h7.4a2 2 0 0 1 2 2v7.8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+      <symbol id="file" viewBox="0 0 24 24"><path d="M7 3.5h6.5l4.5 4.5v11a1.5 1.5 0 0 1-1.5 1.5h-9.5A1.5 1.5 0 0 1 5.5 19V5A1.5 1.5 0 0 1 7 3.5z M13.5 3.5V8H18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+      <path id="sparkle" d="M0 -4.2C.42 -1.512 1.512 -.42 4.2 0C1.512 .42 .42 1.512 0 4.2C-.42 1.512 -1.512 .42 -4.2 0C-1.512 -.42 -.42 -1.512 0 -4.2Z"/>
+      <g id="sky" fill="currentColor"><circle cx="473" cy="143" r="1.3" opacity=".22"/><circle cx="121" cy="468" r=".9" opacity=".55"/><circle cx="101" cy="444" r=".7" opacity=".22"/><circle cx="627" cy="75" r=".7" opacity=".55"/><circle cx="614" cy="714" r=".7" opacity=".3"/><circle cx="903" cy="508" r=".7" opacity=".55"/><circle cx="840" cy="58" r=".8" opacity=".22"/><circle cx="799" cy="128" r="1" opacity=".3"/><circle cx="777" cy="498" r="1.1" opacity=".7"/><circle cx="273" cy="507" r="1.3" opacity=".3"/><circle cx="541" cy="478" r=".7" opacity=".55"/><circle cx="103" cy="190" r="1.3" opacity=".55"/><circle cx="619" cy="281" r="1.1" opacity=".46"/><circle cx="526" cy="226" r=".8" opacity=".7"/><circle cx="1112" cy="85" r=".9" opacity=".55"/><circle cx="713" cy="306" r="1" opacity=".38"/><circle cx="873" cy="78" r="1.1" opacity=".46"/><circle cx="251" cy="305" r="1" opacity=".46"/><circle cx="75" cy="580" r="1.6" opacity=".55"/><circle cx="822" cy="755" r=".9" opacity=".38"/><circle cx="993" cy="518" r="1.1" opacity=".46"/><circle cx="116" cy="95" r=".9" opacity=".46"/><circle cx="996" cy="71" r="1.3" opacity=".7"/><circle cx="453" cy="504" r="1.3" opacity=".46"/><circle cx="418" cy="342" r="1.3" opacity=".38"/><circle cx="52" cy="406" r=".8" opacity=".55"/><circle cx="184" cy="66" r="1.6" opacity=".38"/><circle cx="201" cy="225" r="1" opacity=".46"/><circle cx="133" cy="395" r="1.1" opacity=".38"/><circle cx="1257" cy="707" r="1.6" opacity=".55"/><circle cx="410" cy="367" r=".9" opacity=".7"/><circle cx="1258" cy="824" r=".8" opacity=".22"/><circle cx="267" cy="212" r=".8" opacity=".22"/><circle cx="699" cy="513" r=".9" opacity=".38"/></g>
+    </defs>
+  </svg>
+
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="night hero">
+    <div class="room" aria-hidden="true"></div>
+    <svg class="stars" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+      <use href="#sky"/>
+      <use class="sparkle" href="#sparkle" transform="translate(1010 168) scale(2.6)" opacity=".9"/>
+      <use class="sparkle" href="#sparkle" transform="translate(930 262) scale(1.5)" opacity=".75"/>
+    </svg>
+
+    <nav class="nav" aria-label="Site">
+      <a class="brand" href="./" aria-current="page"><img src="assets/icon.svg" alt="" width="34" height="34">SideNotes</a>
+      <ul>
+        <li class="nav-wide"><a href="#features">Features</a></li>
+        <li class="nav-wide"><a href="#themes">Themes</a></li>
+        <li><a href="privacy.html">Privacy Policy</a></li>
+        <li><a href="zh/" hreflang="zh-CN" lang="zh-CN">中文</a></li>
+      </ul>
+    </nav>
+
+    <div class="hero-copy">
+      <h1>SideNotes</h1>
+      <p class="lede">The notebook hidden at the edge of your screen.</p>
+      <p>Push the pointer against the edge of your screen, or press <span class="keys"><kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd></span>, and SideNotes slides out. Jot down a to-do, a command or a link. Move the pointer away and it slides back, leaving your work just as it was.</p>
+      <div class="actions">
+        <a class="button button-primary" href="https://github.com/LiMuhua/SideNotes/releases/latest" data-download>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
+          Download for Windows
+        </a>
+        <a class="button button-quiet" href="https://github.com/LiMuhua/SideNotes">Source code on GitHub</a>
+        <p class="release" data-release data-template="Version {version}"></p>
+      </div>
+      <ul class="facts">
+        <li>Free and open source</li>
+        <li>Windows 10 and 11</li>
+        <li>No account needed</li>
+      </ul>
+    </div>
+
+    <div class="edge" data-edge>
+      <figure class="panel" id="hero-panel">
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="assets/shots/en-hero-dark.webp">
+          <img src="assets/shots/en-hero-light.webp" width="400" height="1150" fetchpriority="high" alt="The SideNotes sidebar: a pinned to-do list, a note with two commands, a reading list and meeting notes.">
+        </picture>
+      </figure>
+      <button class="seam" type="button" aria-controls="hero-panel" aria-expanded="true" aria-label="Slide the sidebar back" data-label-show="Slide the sidebar out" data-label-hide="Slide the sidebar back">
+        <svg class="peek" aria-hidden="true" focusable="false"><use href="#note"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="section" id="capture" aria-labelledby="capture-title">
+      <div class="wrap split">
+        <div class="copy">
+          <h2 id="capture-title">Catch a thought from anywhere</h2>
+          <p>Press <span class="keys"><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd></span> and a small capture window opens over whatever you're doing. Type, press <span class="keys"><kbd>Ctrl</kbd> + <kbd>Enter</kbd></span>, and the note is waiting in the sidebar.</p>
+          <p>When a line turns into a page, carry on in the sidebar with all your other notes around it.</p>
+        </div>
+        <div class="desk capture-desk">
+          <svg class="stars" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false"><use href="#sky"/></svg>
+          <figure class="window">
+            <picture>
+              <source media="(prefers-color-scheme: dark)" srcset="assets/shots/en-capture-dark.webp">
+              <img src="assets/shots/en-capture-light.webp" width="560" height="420" loading="lazy" alt="The SideNotes capture window with a note being written: send the invoices to finance by Friday.">
+            </picture>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="section features" id="features" aria-labelledby="features-title">
+      <div class="wrap">
+        <h2 id="features-title">Small notes, kept in order</h2>
+        <ul class="feature-list">
+          <li>
+            <h3>Markdown, one shortcut away</h3>
+            <p>Headings, lists, to-dos, code blocks and links all have shortcuts. Paste a screenshot or drop a file straight into a note.</p>
+          </li>
+          <li>
+            <h3>Tags and tabs</h3>
+            <p>Write a #tag anywhere in a note. Pin a note to keep it on top, and turn the tags you use most into tabs.</p>
+          </li>
+          <li>
+            <h3>Search every note</h3>
+            <p><span class="keys"><kbd>Ctrl</kbd> + <kbd>F</kbd></span> looks through all your notes. Words match titles, text and attachment names; #tags match tags. Results are grouped by tab.</p>
+          </li>
+          <li>
+            <h3>Notes in their own windows</h3>
+            <p>Drag a note out of the sidebar to open it in a window. Keep it on top of other apps, or merge several windows into tabs.</p>
+          </li>
+          <li>
+            <h3>Out of your way</h3>
+            <p>The sidebar slides away when the pointer leaves it. Pin it when you want it to stay, and dock it to the left or right edge.</p>
+          </li>
+          <li>
+            <h3>Shortcuts you choose</h3>
+            <p>Rebind any shortcut in Settings. If another app already uses a key, SideNotes tells you and keeps the old one.</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section" id="themes" aria-labelledby="themes-title">
+      <div class="wrap split">
+        <div class="copy">
+          <h2 id="themes-title">Five themes, each in light and dark</h2>
+          <p>SideNotes follows your system's light or dark mode, or stays in the one you pick. The font, text size, sidebar width and app icon are yours to change too.</p>
+          <div class="pickers" data-pickers>
+            <fieldset class="picker">
+              <legend class="visually-hidden">Theme</legend>
+              <label><input type="radio" name="surface" value="terminal" checked><span>Terminal</span></label>
+              <label><input type="radio" name="surface" value="magazine"><span>Magazine</span></label>
+              <label><input type="radio" name="surface" value="paper"><span>Paper</span></label>
+              <label><input type="radio" name="surface" value="win11"><span>Windows 11</span></label>
+              <label><input type="radio" name="surface" value="glass"><span>Frosted glass</span></label>
+            </fieldset>
+            <fieldset class="picker">
+              <legend class="visually-hidden">Mode</legend>
+              <label><input type="radio" name="mode" value="light" checked><span>Light</span></label>
+              <label><input type="radio" name="mode" value="dark"><span>Dark</span></label>
+            </fieldset>
+          </div>
+        </div>
+        <div class="desk theme-desk" data-gallery data-shot-base="assets/shots/en-" data-alt="SideNotes in the {theme} theme, {mode} mode">
+          <svg class="stars" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false"><use href="#sky"/></svg>
+          <div class="theme-window" aria-hidden="true">
+            <i style="--w:30%"></i><i style="--w:52%;--x:1"></i><i style="--w:44%;--x:1"></i><i style="--w:24%;--x:2"></i><i style="--w:60%;--x:2"></i><i style="--w:36%;--x:1"></i><i style="--w:18%"></i><i style="--w:48%"></i><i style="--w:56%;--x:1"></i><i style="--w:40%;--x:2"></i><i style="--w:28%;--x:1"></i><i style="--w:34%"></i>
+          </div>
+          <figure class="shot">
+            <img src="assets/shots/en-terminal-light.webp" width="400" height="900" loading="lazy" alt="SideNotes in the Terminal theme, light mode">
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="data" aria-labelledby="data-title">
+      <div class="wrap split">
+        <div class="copy">
+          <h2 id="data-title">Your notes stay on your computer</h2>
+          <ul class="data-list">
+            <li>
+              <h3>No account, no sign-up</h3>
+              <p>Notes, attachments and settings are kept in a local database on your computer. Nothing leaves it unless you turn on cloud sync.</p>
+            </li>
+            <li>
+              <h3>A snapshot every day</h3>
+              <p>SideNotes takes a snapshot of your notes every day and before steps like importing a backup, and can restore any of them.</p>
+            </li>
+            <li>
+              <h3>Cloud sync, only if you want it</h3>
+              <p>Cloud sync stays off until you set it up. Then SideNotes saves snapshots to storage you own, a Synology NAS over WebDAV, OneDrive or Google Drive, on a schedule or whenever you sync.</p>
+            </li>
+            <li>
+              <h3>Nobody in between</h3>
+              <p>SideNotes has no servers and collects no analytics. Your data goes straight from your computer to the service you connect.</p>
+            </li>
+          </ul>
+        </div>
+        <figure class="sync-shot">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="assets/shots/sync-dark.webp">
+            <img src="assets/shots/sync-light.webp" width="648" height="276" loading="lazy" alt="Cloud sync in SideNotes settings, with Synology NAS, OneDrive and Google Drive to choose from and Google Drive selected.">
+          </picture>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section" id="google-user-data" aria-labelledby="google-title">
+      <div class="wrap">
+        <article class="disclosure">
+          <h2 id="google-title">How SideNotes uses Google user data</h2>
+          <div class="disclosure-text">
+            <p>SideNotes accesses Google Drive only if you choose Google Drive for cloud sync and sign in with your Google account. It requests a single scope, <code>https://www.googleapis.com/auth/drive.file</code>, which gives it access only to the files and folders that SideNotes itself creates in your Google Drive.</p>
+            <h3>What SideNotes does with this access</h3>
+            <ul>
+              <li>Creates the folder you choose for your snapshots, and uploads snapshots of your notes and attachments into it when you sync.</li>
+              <li>Lists and downloads those snapshots when you restore your notes.</li>
+              <li>Deletes old snapshots from that folder according to the retention rule.</li>
+              <li>Reads your Google account's email address, to show in Settings which account is connected.</li>
+            </ul>
+            <h3>What it doesn't do</h3>
+            <ul>
+              <li>It can't see, read or change any other files in your Google Drive.</li>
+              <li>It has no servers: data travels directly between your computer and Google.</li>
+              <li>It doesn't sell or share Google user data, use it for advertising or to train AI models, and no person reads it.</li>
+            </ul>
+            <p>Signing out in Settings deletes the stored sign-in token and revokes SideNotes's access with Google. You can also remove SideNotes from your <a href="https://myaccount.google.com/connections">Google Account's third-party connections</a> at any time.</p>
+            <p class="fine">SideNotes's use and transfer of information received from Google APIs to any other app will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements. Read the full <a href="privacy.html">Privacy Policy</a>.</p>
+          </div>
+          <figure class="drive">
+            <div class="drive-tree" aria-hidden="true">
+              <p>My Drive</p>
+              <ul>
+                <li class="off"><svg focusable="false"><use href="#folder"/></svg>Photos</li>
+                <li class="off"><svg focusable="false"><use href="#folder"/></svg>Work</li>
+                <li class="off"><svg focusable="false"><use href="#file"/></svg>Budget 2026.xlsx</li>
+                <li class="on"><svg focusable="false"><use href="#folder"/></svg>SideNotes
+                  <ul>
+                    <li><svg focusable="false"><use href="#folder"/></svg>database</li>
+                    <li><svg focusable="false"><use href="#folder"/></svg>attachments</li>
+                    <li><svg focusable="false"><use href="#file"/></svg>index.json</li>
+                  </ul>
+                </li>
+              </ul>
+            </div>
+            <figcaption>An example Google Drive: SideNotes can open only the snapshot folder it created. The rest of your Drive is out of its reach.</figcaption>
+          </figure>
+        </article>
+      </div>
+    </section>
+
+    <section class="night finale" id="download" aria-labelledby="download-title">
+      <div class="room" aria-hidden="true"></div>
+      <svg class="stars" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+        <use href="#sky"/>
+        <use class="sparkle" href="#sparkle" transform="translate(1180 140) scale(2)" opacity=".85"/>
+      </svg>
+      <div class="seam" aria-hidden="true"><svg class="peek" focusable="false"><use href="#note"/></svg></div>
+      <div class="finale-copy">
+        <h2 id="download-title">Get SideNotes</h2>
+        <p>Free and open source under the GNU Affero General Public License v3.0.</p>
+        <div class="actions">
+          <a class="button button-primary" href="https://github.com/LiMuhua/SideNotes/releases/latest" data-download>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
+            Download for Windows
+          </a>
+          <a class="button button-quiet" href="https://github.com/LiMuhua/SideNotes/releases">All releases</a>
+          <p class="release" data-release data-template="Version {version}"></p>
+        </div>
+        <dl class="specs">
+          <dt>System</dt>
+          <dd>Windows 10 or 11, 64-bit</dd>
+          <dt>Installer</dt>
+          <dd>Setup program (.exe) or Windows Installer package (.msi)</dd>
+          <dt>Language</dt>
+          <dd>The app's interface is in Simplified Chinese</dd>
+        </dl>
+      </div>
+    </section>
+  </main>
+
+  <footer class="night site-footer">
+    <div class="footer">
+      <a class="brand" href="./"><img src="assets/icon.svg" alt="" width="26" height="26">SideNotes</a>
+      <ul>
+        <li><a href="privacy.html">Privacy Policy</a></li>
+        <li><a href="https://github.com/LiMuhua/SideNotes">Source code</a></li>
+        <li><a href="https://github.com/LiMuhua/SideNotes/blob/master/LICENSE">License: AGPL-3.0</a></li>
+        <li><a href="https://github.com/LiMuhua/SideNotes/issues">Contact</a></li>
+        <li><a href="zh/" hreflang="zh-CN" lang="zh-CN">中文</a></li>
+      </ul>
+      <small>© 2026 LiMuhua</small>
+    </div>
+  </footer>
+</body>
+</html>

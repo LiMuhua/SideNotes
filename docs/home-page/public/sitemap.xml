@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://limuhua.github.io/SideNotes/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://limuhua.github.io/SideNotes/"/>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://limuhua.github.io/SideNotes/zh/"/>
+  </url>
+  <url>
+    <loc>https://limuhua.github.io/SideNotes/zh/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://limuhua.github.io/SideNotes/"/>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://limuhua.github.io/SideNotes/zh/"/>
+  </url>
+  <url>
+    <loc>https://limuhua.github.io/SideNotes/privacy.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://limuhua.github.io/SideNotes/privacy.html"/>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://limuhua.github.io/SideNotes/zh/privacy.html"/>
+  </url>
+  <url>
+    <loc>https://limuhua.github.io/SideNotes/zh/privacy.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://limuhua.github.io/SideNotes/privacy.html"/>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://limuhua.github.io/SideNotes/zh/privacy.html"/>
+  </url>
+</urlset>

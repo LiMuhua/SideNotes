@@ -12,6 +12,12 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["exec", "vite", "--port", "1430", "--strictPort"],
       "port": 1430
+    },
+    {
+      "name": "home-page",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "1440", "--bind", "127.0.0.1", "--directory", "docs/home-page/public"],
+      "port": 1440
     }
   ]
 }

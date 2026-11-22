@@ -1,25 +1,25 @@
-# 把 site/（主页与隐私政策）发布到 GitHub Pages：https://limuhua.github.io/SideNotes/
-# Google 的 OAuth 同意屏幕要发布为正式版，品牌页必须填主页、隐私政策链接与授权域名（技术决策第 68 条）。
-# 推送 claude（开发分支）或 master 且改到 site/ 时发布，也可以在 Actions 页手动运行。
+# 把 docs/home-page/public（官网：主页与隐私政策，中英文）发布到 GitHub Pages：https://limuhua.github.io/SideNotes/
+# Google 的 OAuth 同意屏幕要发布为正式版，品牌页填的主页与隐私政策就在这个站上（技术决策第 68、71 条），这两个地址不能变。
+# 推送 claude（开发分支）或 master 且改到网站时发布；拉取请求只检查不发布；也可以在 Actions 页手动运行。
 name: 发布网站
 
 on:
   push:
     branches: [claude, master]
     paths:
-      - 'site/**'
+      - 'docs/home-page/public/**'
+      - 'docs/home-page/tools/check.mjs'
+      - '.github/workflows/pages.yml'
+  pull_request:
+    paths:
+      - 'docs/home-page/public/**'
+      - 'docs/home-page/tools/check.mjs'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
+# 默认只读；发布作业单独申请写 Pages 与签发身份令牌的权限。
 permissions:
   contents: read
-  pages: write
-  id-token: write
-
-# 同一时间只发布一次，新的推送排队等前一次发布完，不中途取消。
-concurrency:
-  group: pages
-  cancel-in-progress: false
 
 jobs:
   # 打包与发布分成两个作业：同一个作业里上传后立刻发布，偶尔读不到刚上传的包（Found 0 artifact(s)）。
@@ -27,14 +27,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          sparse-checkout: docs/home-page
+      # 检查 Google 品牌验证依赖的内容（验证标记、应用名、隐私政策链接、Google 用户数据的说明）与本地引用，不通过就不发布。
+      - name: 检查网站
+        run: node docs/home-page/tools/check.mjs
+      - if: github.event_name != 'pull_request'
+        uses: actions/configure-pages@v5
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/home-page/public
 
   deploy:
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    # 同一时间只发布一次，新的推送排队等前一次发布完，不中途取消。
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
