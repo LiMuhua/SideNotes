@@ -22,16 +22,22 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  # 打包与发布分成两个作业：同一个作业里上传后立刻发布，偶尔读不到刚上传的包（Found 0 artifact(s)）。
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v4
