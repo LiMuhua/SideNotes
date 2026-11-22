@@ -132,7 +132,7 @@ function DialogLayer({
   const dialog = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    dialog.current?.querySelector<HTMLElement>('input, .cloud-folder-item, .button.primary')?.focus({ preventScroll: true });
+    dialog.current?.querySelector<HTMLElement>('input, textarea, .cloud-folder-item, .button.primary')?.focus({ preventScroll: true });
   }, []);
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
@@ -144,7 +144,7 @@ function DialogLayer({
     }
     if (event.key !== 'Tab' || !dialog.current) return;
     event.stopPropagation();
-    const controls = Array.from(dialog.current.querySelectorAll<HTMLElement>('button, input, [tabindex]')).filter(
+    const controls = Array.from(dialog.current.querySelectorAll<HTMLElement>('button, input, textarea, [tabindex]')).filter(
       (node) => !(node as HTMLButtonElement).disabled && node.tabIndex >= 0 && node.getClientRects().length > 0,
     );
     if (!controls.length) return;
@@ -615,14 +615,21 @@ function LoginDialog({
               submit();
             }}
           >
+            {/* 回调网址有两三百个字符：用文本框，空着时三行高，粘贴后随内容长高（theme.css）；网址与授权码里没有换行，回车直接提交。 */}
             <FormField label="授权码">
-              <input
-                className="form-control"
-                type="text"
+              <textarea
+                className="form-control cloud-code"
+                rows={3}
                 value={code}
                 placeholder="浏览器没有跳回来时，粘贴地址栏里的网址或授权码"
                 autoComplete="off"
+                spellCheck={false}
                 onChange={(event) => setCode(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+                  event.preventDefault();
+                  submit();
+                }}
               />
             </FormField>
             <button type="submit" hidden aria-hidden="true" tabIndex={-1} />

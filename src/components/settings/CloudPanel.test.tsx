@@ -15,6 +15,7 @@ vi.mock('../../core/bridge', async (importOriginal) => ({
   listCloudBackups: vi.fn(async () => []),
   listCloudFolders: vi.fn(async () => []),
   cloudLogin: vi.fn(),
+  submitCloudCode: vi.fn(async () => {}),
   cloudBackupNow: vi.fn(),
   checkCloudSchedule: vi.fn(async () => ({ next: null, error: '' })),
 }));
@@ -155,6 +156,22 @@ describe('云端同步', () => {
     await act(async () => finish('me@example.com'));
     expect(dialogTitle()).toBe('选择远程文件夹');
     expect(notice()).toBe('已登录 me@example.com，选一个文件夹存放云端快照。');
+  });
+
+  it('浏览器没跳回来时，把地址栏里的网址粘贴进授权码的文本框，回车提交', async () => {
+    vi.mocked(bridge.cloudLogin).mockImplementation(() => new Promise<string>(() => {}));
+    await render({ provider: 'google' });
+    await act(async () => button('登录').click());
+    const code = query<HTMLTextAreaElement>('[role="dialog"] textarea');
+    expect(code.placeholder).toBe('浏览器没有跳回来时，粘贴地址栏里的网址或授权码');
+    expect(document.activeElement).toBe(code);
+    const url = 'http://localhost:61234/?state=s1&code=4%2F0AVMB&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fdrive.file';
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(code, `  ${url}  `);
+      code.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => code.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+    expect(bridge.submitCloudCode).toHaveBeenCalledWith(url);
   });
 
   it('登录不了时把原因写在弹窗里，可以再试', async () => {

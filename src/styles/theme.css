@@ -6426,7 +6426,7 @@ body.is-dragging-attachment * {
   white-space: nowrap;
 }
 
-.cloud-dialog input.form-control {
+.cloud-dialog :is(input, textarea).form-control {
   width: 100%;
   max-width: none;
   min-width: 0;
@@ -6439,7 +6439,7 @@ body.is-dragging-attachment * {
   font-size: var(--sn-font-size-sm);
 }
 
-.cloud-dialog input.form-control:focus {
+.cloud-dialog :is(input, textarea).form-control:focus {
   border-bottom-color: transparent;
   background-image: linear-gradient(var(--sn-color-accent), var(--sn-color-accent));
   background-position: bottom;
@@ -6447,6 +6447,26 @@ body.is-dragging-attachment * {
   background-size: 100% calc(var(--sn-border-width) * 2);
   background-origin: border-box;
   outline: none;
+}
+
+/* 登录弹窗的授权码：空着时三行高，粘贴进两三百字的回调网址后随内容长高，最多八行；标签对齐第一行。
+ * 回调网址没有空格，按字符折行，用等宽字体。 */
+.cloud-dialog textarea.form-control.cloud-code {
+  box-sizing: border-box;
+  field-sizing: content;
+  height: auto;
+  min-height: calc(var(--sn-font-size-sm) * var(--sn-line-height-normal) * 3 + var(--sn-space-2) * 2 + var(--sn-border-width) * 2);
+  max-height: calc(var(--sn-font-size-sm) * var(--sn-line-height-normal) * 8 + var(--sn-space-2) * 2 + var(--sn-border-width) * 2);
+  padding: var(--sn-space-2) var(--sn-space-4);
+  font-family: var(--sn-font-code);
+  line-height: var(--sn-line-height-normal);
+  word-break: break-all;
+  resize: none;
+}
+
+.cloud-dialog .cloud-form-row:has(.cloud-code) .cloud-form-label {
+  align-self: start;
+  padding-top: var(--sn-space-2);
 }
 
 .cloud-dialog .cloud-dialog-spacer {
