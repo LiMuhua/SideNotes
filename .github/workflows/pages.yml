@@ -1,0 +1,37 @@
+# 把 site/（主页与隐私政策）发布到 GitHub Pages：https://limuhua.github.io/SideNotes/
+# Google 的 OAuth 同意屏幕要发布为正式版，品牌页必须填主页、隐私政策链接与授权域名（技术决策第 68 条）。
+# 推送 claude（开发分支）或 master 且改到 site/ 时发布，也可以在 Actions 页手动运行。
+name: 发布网站
+
+on:
+  push:
+    branches: [claude, master]
+    paths:
+      - 'site/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时间只发布一次，新的推送排队等前一次发布完，不中途取消。
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4
