@@ -976,7 +976,7 @@ T144（第八轮反馈：伸缩太生涩）起，时长与缓动不再取主题�
 
 ## 68. 主页与隐私政策放在仓库的 site/，用 GitHub Pages 发布
 
-**决定**：`site/` 里放 SideNotes 的主页与隐私政策（中英文，纯 HTML 与一份样式），`.github/workflows/pages.yml` 在推送 claude 或 master 且改到 `site/` 时把它发布到 https://limuhua.github.io/SideNotes/ 。Google Auth Platform 的品牌页填这两个地址，授权域名填 `limuhua.github.io`。隐私政策照应用实际的做法写，数据的处理方式变了要同步改。
+**决定**：`site/` 里放 SideNotes 的主页与隐私政策，英文版在原地址（给 Google 审查），中文版在 `site/zh/`，两套互相切换（纯 HTML 与一份样式），`.github/workflows/pages.yml` 在推送 claude 或 master 且改到 `site/` 时把它发布到 https://limuhua.github.io/SideNotes/ 。Google Auth Platform 的品牌页填这两个地址，授权域名填 `limuhua.github.io`。隐私政策照应用实际的做法写，数据的处理方式变了要同步改。
 
 **原因**：Google 的同意屏幕要发布为正式版（测试状态下登录 7 天失效），品牌页必须先填主页、隐私政策链接与授权域名，即使只用 `drive.file`。项目开源，用户决定用 GitHub 的域名，不另买域名。纯静态页面不用构建，发布作业只打包 `site/`；打包与发布分成两个作业，同一个作业里上传后立刻发布偶尔读不到刚上传的包。
 
