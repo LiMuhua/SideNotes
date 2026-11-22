@@ -32,8 +32,6 @@ temp/
 .env
 .env.*
 !.env.example
-# Google 桌面应用的 OAuth 客户端密钥（见 src-tauri/build.rs），格式见 oauth-clients.local.example.json；客户端编号在 oauth-clients.json，进仓库。
-src-tauri/oauth-clients.local.json
 *.pem
 *.key
 *.p12
