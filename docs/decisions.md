@@ -981,3 +981,14 @@ T144（第八轮反馈：伸缩太生涩）起，时长与缓动不再取主题�
 **原因**：Google 的同意屏幕要发布为正式版（测试状态下登录 7 天失效），品牌页必须先填主页、隐私政策链接与授权域名，即使只用 `drive.file`。项目开源，用户决定用 GitHub 的域名，不另买域名。纯静态页面不用构建，发布作业只打包 `site/`；打包与发布分成两个作业，同一个作业里上传后立刻发布偶尔读不到刚上传的包。
 
 **代价**：github-pages 环境只允许 claude 与 master 发布，换分支要在仓库设置里加。如果之后要做 Google 的品牌验证，还要在 Search Console 验证 `limuhua.github.io`。
+
+## 69. 登录回调用 localhost；OneDrive 与 Google Drive 走系统代理，群晖 NAS 直连
+
+**决定**：
+- OneDrive 与 Google Drive 的登录回调都是 `http://localhost:随机端口`，监听同时绑 `127.0.0.1` 与 `::1` 的同一端口。第 66 条里的「127.0.0.1」作废。
+- Google 的客户端是用户注册的「Web 应用」类型，客户端编号与密钥都写在进仓库的 `src-tauri/oauth-clients.json`。第 66 条里「密钥放不进仓库的 `oauth-clients.local.json`」作废。
+- reqwest 打开 `system-proxy`：OneDrive、Google Drive 与 Resend 的请求同浏览器一样走系统代理（环境变量优先，其次 Windows 的代理服务器设置与绕过列表）；群晖 NAS 的连接与取证书都直连（`no_proxy`）。
+
+**原因**：第一次真实登录 Google 报 `redirect_uri_mismatch`。直接请求 Google 的授权接口试过：这个客户端认 `http://localhost` 的任意端口，不认 `127.0.0.1`、`[::1]` 与带路径的地址；按 Google 的文档，「桌面应用」类型两种都认，所以 localhost 对两种类型都能用，以后换客户端不用改代码。用户选 Web 应用是想以后安卓共用，但安卓要另建「Android」类型的客户端（包名加签名证书的 SHA-1）；同一个项目里的客户端共用同意屏幕、品牌验证与测试用户，选哪种都不妨碍安卓。密钥编进安装包谁都能读出来，用户决定不藏。登录后换令牌超时：在国内，浏览器经系统代理才连得上 Google，应用的请求不走代理就连不上，而 reqwest 关了默认特性，读系统代理的 `system-proxy` 跟着关了。群晖 NAS 多在局域网里；按证书上的名字验证时靠覆盖 DNS 解析把连接发往原来的地址，经过代理就失效，所以直连。
+
+**代价**：Google 要求 Web 应用类型的密钥保密，它现在公开在仓库里；Google 的文档里 Web 应用的回调要与登记的完全一致，认 localhost 的任意端口是实测的结果，Google 收紧时要换成「桌面应用」类型的客户端。Google 说 localhost 偶尔会被防火墙拦，拦了还能把地址栏里的网址粘贴回弹窗。只能经代理访问的远程 NAS 连不上（以前也不走系统代理）。

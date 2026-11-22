@@ -35,7 +35,8 @@ dunce = "1"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 # 云端同步（T159 起）：WebDAV、OneDrive、Google Drive 与 Resend 的 HTTP 请求，在后台线程里同步发出。
 # TLS 用系统自带的（Windows 上是 SChannel），不用默认的 rustls + aws-lc：后者在 Windows 上编译要装 cmake 与 NASM。
-reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "form", "query", "native-tls"] }
+# system-proxy：同浏览器一样走系统代理（Windows 的代理服务器设置与绕过列表），国内要经代理才连得上 Google。
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "form", "query", "native-tls", "system-proxy"] }
 # WebDAV 的 PROPFIND 回复是 XML（Tauri 已依赖同一版本）。
 quick-xml = "0.42"
 # OAuth 的 PKCE 校验码与邮件的幂等键（Tauri 已依赖同一版本）。

@@ -158,6 +158,7 @@ fn other(message: impl Into<String>) -> AppError {
     AppError::Other(message.into())
 }
 
+/// OneDrive、Google Drive 与 Resend 用的客户端：同浏览器一样走系统代理（见 Cargo.toml 里 reqwest 的 system-proxy）。
 fn client() -> Result<Client, RemoteError> {
     Client::builder()
         .connect_timeout(Duration::from_secs(15))
@@ -215,7 +216,7 @@ fn oauth_provider(provider: &str) -> oauth::Provider {
     }
 }
 
-/// 这个版本能不能连接这个服务：群晖 NAS 总能；OneDrive 要客户端编号，Google 的桌面应用客户端还要密钥。
+/// 这个版本能不能连接这个服务：群晖 NAS 总能；OneDrive 要客户端编号，Google 还要客户端密钥。
 fn provider_ready(provider: &str) -> bool {
     match provider {
         "onedrive" => !onedrive::BUILTIN_CLIENT.trim().is_empty(),

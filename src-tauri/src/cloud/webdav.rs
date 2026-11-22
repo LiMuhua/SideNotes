@@ -53,8 +53,10 @@ pub fn normalize_endpoint(endpoint: &str) -> Result<String, String> {
     Ok(endpoint.trim_end_matches('/').to_string())
 }
 
+/// 群晖 NAS 直连，不走系统代理：NAS 多在局域网里，代理连不到；按证书上的名字验证时靠覆盖 DNS 解析把连接发往原来的地址，
+/// 经过代理就不灵了。
 fn builder() -> reqwest::blocking::ClientBuilder {
-    Client::builder().connect_timeout(Duration::from_secs(15)).timeout(Duration::from_secs(300)).user_agent(super::USER_AGENT)
+    Client::builder().no_proxy().connect_timeout(Duration::from_secs(15)).timeout(Duration::from_secs(300)).user_agent(super::USER_AGENT)
 }
 
 /// 地址的主机与端口解析出的套接字地址（IP 直接用）。

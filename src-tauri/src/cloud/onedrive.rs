@@ -36,7 +36,6 @@ pub fn provider(client_id: &str) -> Provider {
         client_id: client_id.trim().to_string(),
         client_secret: None,
         scope: "Files.ReadWrite User.Read offline_access",
-        redirect_host: "localhost",
         extra: &[("prompt", "select_account")],
     }
 }

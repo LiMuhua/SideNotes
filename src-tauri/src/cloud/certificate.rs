@@ -132,7 +132,9 @@ fn fingerprint(certificate: &[u8]) -> String {
 
 /// 不验证证书、不带凭据握一次手，取出服务的证书（DER）。
 fn fetch_certificate(endpoint: &str) -> RemoteResult<Vec<u8>> {
+    // 同 WebDAV 的连接，直连 NAS、不走系统代理。
     let client = Client::builder()
+        .no_proxy()
         .connect_timeout(Duration::from_secs(10))
         .timeout(Duration::from_secs(15))
         .user_agent(super::USER_AGENT)

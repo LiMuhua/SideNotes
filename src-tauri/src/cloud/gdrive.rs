@@ -39,7 +39,6 @@ pub fn provider(client_id: &str, client_secret: &str) -> Provider {
         client_id: client_id.trim().to_string(),
         client_secret: Some(client_secret.trim().to_string()).filter(|value| !value.is_empty()),
         scope: "https://www.googleapis.com/auth/drive.file",
-        redirect_host: "127.0.0.1",
         // 要刷新令牌：access_type=offline；每次都给：prompt=consent。
         extra: &[("access_type", "offline"), ("prompt", "consent select_account")],
     }

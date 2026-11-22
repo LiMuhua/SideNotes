@@ -1,6 +1,6 @@
 //! OneDrive 与 Google Drive 的登录：OAuth 2.0 授权码流程加 PKCE，回调地址是本机的回环地址（RFC 8252）。
 //!
-//! 同 VS Code 等桌面应用登录 GitHub 的做法：「登录」时应用在 127.0.0.1 的随机端口上临时开一个回调服务，在默认浏览器里打开
+//! 同 VS Code 等桌面应用登录 GitHub 的做法：「登录」时应用在本机回环地址的随机端口上临时开一个回调服务，在默认浏览器里打开
 //! 服务的登录页；用户登录、同意之后浏览器跳回这个端口，应用拿到授权码自动换取令牌，用户不用复制粘贴。浏览器没能跳回来时
 //! （端口被拦），可以把地址栏里的回调网址或授权码粘贴回设置页。只保存刷新令牌（加密存在本机，见 secrets），访问令牌用时再换、
 //! 只放在内存里。客户端编号只用构建时写进程序的（见 build.rs），用户不用注册。
@@ -25,11 +25,9 @@ pub struct Provider {
     pub authorize_url: String,
     pub token_url: String,
     pub client_id: String,
-    /// Google 的桌面应用客户端也有密钥（随程序分发，不算机密）；Microsoft 的公共客户端没有。
+    /// Google 的客户端有密钥，换令牌时必须带上（随程序分发，公开在仓库里）；Microsoft 的公共客户端没有。
     pub client_secret: Option<String>,
     pub scope: &'static str,
-    /// 回调地址的主机名：Microsoft 登记的是 localhost，Google 推荐 127.0.0.1。
-    pub redirect_host: &'static str,
     /// 授权页额外的参数。
     pub extra: &'static [(&'static str, &'static str)],
 }
@@ -55,6 +53,11 @@ pub struct Tokens {
 
 /// 等回调或粘贴的最长时间。
 const LOGIN_TIMEOUT: Duration = Duration::from_secs(600);
+
+/// 回调地址的主机名，两家都用 localhost：Microsoft 的公共客户端登记的是 `http://localhost`；Google 的客户端是「Web 应用」类型，
+/// 只认登记过的 `http://localhost`（端口不限），`127.0.0.1` 报 redirect_uri_mismatch（「桌面应用」类型两种都认）。
+/// 监听同时绑了 IPv4 与 IPv6，浏览器把 localhost 解析成哪个都收得到。
+const REDIRECT_HOST: &str = "localhost";
 
 fn random_bytes<const N: usize>() -> [u8; N] {
     let mut bytes = [0u8; N];
@@ -247,7 +250,7 @@ pub fn login(
         return Err(RemoteError::Config(format!("这个版本还不能登录 {}：构建时没有带上客户端编号", provider.name)));
     }
     let (listeners, port) = listen()?;
-    let redirect = format!("http://{}:{port}", provider.redirect_host);
+    let redirect = format!("http://{REDIRECT_HOST}:{port}");
     let (verifier, challenge) = pkce();
     let state = base64url(&random_bytes::<16>());
     let mut url = url::Url::parse(&provider.authorize_url).map_err(|error| RemoteError::Config(error.to_string()))?;

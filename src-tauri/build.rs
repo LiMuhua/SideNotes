@@ -1,8 +1,8 @@
 //! 构建脚本：Tauri 的代码生成，以及把 OneDrive、Google Drive 登录用的 OAuth 客户端编进程序。
 //!
 //! 同 VS Code、rclone：客户端由开发者注册一次、编进程序，用户只管登录（技术决策第 66 条）。
-//! 客户端编号与 Google 桌面应用的「客户端密钥」都写在进仓库的 `oauth-clients.json`：它们都会编进安装包，谁都能从程序里读出来，
-//! Google 也说桌面应用的密钥算不上机密；但 Google 换令牌时必须带上它（不带时报 client_secret is missing）。
+//! 客户端编号与 Google 的「客户端密钥」都写在进仓库的 `oauth-clients.json`：它们都会编进安装包，谁都能从程序里读出来，藏不住；
+//! Google 换令牌时又必须带上密钥（不带时报 client_secret is missing）。
 //! 构建时的环境变量 `SIDENOTES_ONEDRIVE_CLIENT_ID`、`SIDENOTES_ONEDRIVE_TENANT`、`SIDENOTES_GOOGLE_CLIENT_ID`、
 //! `SIDENOTES_GOOGLE_CLIENT_SECRET` 优先于文件（例如换成自己注册的客户端）。都没有时这一项为空，登录时提示这个版本还不能登录。
 
