@@ -32,8 +32,8 @@ temp/
 .env
 .env.*
 !.env.example
-# OneDrive、Google Drive 登录用的 OAuth 客户端（见 src-tauri/build.rs），格式见 oauth-clients.example.json。
-src-tauri/oauth-clients.json
+# Google 桌面应用的 OAuth 客户端密钥（见 src-tauri/build.rs），格式见 oauth-clients.local.example.json；客户端编号在 oauth-clients.json，进仓库。
+src-tauri/oauth-clients.local.json
 *.pem
 *.key
 *.p12

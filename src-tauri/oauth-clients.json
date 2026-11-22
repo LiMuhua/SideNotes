@@ -1,0 +1,9 @@
+{
+  "onedrive": {
+    "clientId": "b16a840d-d477-469d-82bf-09d952384ca0",
+    "tenant": "common"
+  },
+  "google": {
+    "clientId": ""
+  }
+}
