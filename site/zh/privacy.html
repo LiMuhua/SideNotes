@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SideNotes 隐私政策</title>
+  <meta name="description" content="SideNotes 桌面应用如何处理你的数据，包括用 Google Drive 做云端同步时访问的 Google 用户数据。">
+  <link rel="icon" href="../icon.png">
+  <link rel="alternate" hreflang="en" href="https://limuhua.github.io/SideNotes/privacy.html">
+  <link rel="alternate" hreflang="zh-CN" href="https://limuhua.github.io/SideNotes/zh/privacy.html">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <main>
+    <header class="brand">
+      <img src="../icon.png" alt="SideNotes 图标">
+      <div>
+        <h1>SideNotes 隐私政策</h1>
+    <p class="tagline"><a href="./">SideNotes</a> · <a href="../privacy.html" hreflang="en" lang="en">English</a></p>
+      </div>
+    </header>
+
+    <p class="meta">生效日期：2026 年 11 月 22 日</p>
+    <p>本政策说明 SideNotes 桌面应用如何处理你的信息。SideNotes 是面向 Windows 的免费开源应用，由 LiMuhua 在 GitHub 上开发与维护（<a href="https://github.com/LiMuhua/SideNotes">源代码</a>）。SideNotes 没有自己的服务器，也没有用户账号；不收集统计、崩溃报告、广告标识、位置、联系人或任何使用数据。</p>
+
+    <h2>一、处理哪些信息</h2>
+    <ul>
+      <li><strong>你写的记录</strong>：记录、附件、设置与本机快照存在你电脑上的数据目录里；不开云端同步就不会发到任何地方。</li>
+      <li><strong>Google 用户数据（连接 Google Drive 时）</strong>：只申请 <code>https://www.googleapis.com/auth/drive.file</code>。SideNotes 通过 Drive API 读取你的 Google 账户邮箱；只访问它自己在你网盘里建的文件与文件夹，即你选的快照文件夹，以及里面的记录快照（记录数据库的副本、附件、记下每份快照时间与条数的索引文件）。看不到、读不到、也改不了网盘里的其他文件。</li>
+      <li><strong>Microsoft 账户数据（连接 OneDrive 时）</strong>：申请 Microsoft Graph 的 <code>Files.ReadWrite</code>、<code>User.Read</code> 与 <code>offline_access</code>；读取账户名，只在你选的远程文件夹里读写文件。</li>
+      <li><strong>群晖 NAS（连接时）</strong>：用你填的地址、用户名与密码通过 WebDAV 连接，只在你选的远程文件夹里读写。</li>
+      <li><strong>凭据</strong>：为了保持同步，保存登录令牌（OAuth 刷新令牌）、NAS 密码，以及你填写的 Resend 密钥。</li>
+    </ul>
+
+    <h2>二、如何使用</h2>
+    <p>Google 用户数据只用来提供你在应用里看得到、控制得了的云端同步：你点「立即同步」或自动同步按你设的时间运行时上传快照；恢复时列出并下载快照；按下面的保留规则删除旧快照；在设置里显示连接的 Google 账户邮箱。不用于广告、用户画像、市场调研或训练人工智能、机器学习模型，也没有任何人阅读这些数据。</p>
+
+    <h2>三、共享与披露</h2>
+    <p>SideNotes 不出售、出租、交换或共享你的数据。数据只在你的电脑与你自己连接的服务（Google、Microsoft 或你的 NAS）之间通过加密的 HTTPS 直接传输，中间没有 SideNotes 的服务器。唯一的例外是你自己设置的失败通知邮件：填写收件邮箱与你自己的 Resend 密钥后，同步失败时 SideNotes 通过 Resend（resend.com）给你发一封邮件，内容包括服务名称、连接的账户（Google Drive 是你的 Google 账户邮箱）、远程文件夹、出错原因与时间。不设置就不会向 Resend 发送任何内容。</p>
+
+    <h2>四、存储与安全</h2>
+    <p>记录与设置存在你电脑上的数据目录里。登录令牌、NAS 密码与 Resend 密钥用 Windows 的 DPAPI 加密后保存，只有同一台电脑上的同一个 Windows 用户能解开；不写进设置，也不随本地备份导出。短期的访问令牌用时再换、只放在内存里。所有网络连接都用 HTTPS。</p>
+
+    <h2>五、保留与删除</h2>
+    <ul>
+      <li>本机的记录在你删除之前一直保留在你的电脑上。</li>
+      <li>云端文件夹里，SideNotes 保留最近 24 小时的全部快照、7 天内每天一份、35 天内每周一份，并总是保留最新的 3 份，更早的自动删除。</li>
+      <li>在设置里点「退出登录」或「断开连接」删除保存的凭据；Google Drive 的访问令牌同时向 Google 撤销。</li>
+      <li>在 Google Drive、OneDrive 或 NAS 里删除远程文件夹，即删除全部云端快照。</li>
+      <li>随时可以在 <a href="https://myaccount.google.com/connections">Google 账户的第三方应用与服务</a>、<a href="https://account.live.com/consent/Manage">Microsoft 账户的应用和服务</a> 里撤销 SideNotes 的授权。</li>
+      <li>卸载 SideNotes 并删除它的数据目录，即删除全部本机数据。</li>
+    </ul>
+
+    <h2>六、Google API 服务用户数据政策</h2>
+    <p>SideNotes 对从 Google API 获得的信息的使用，以及向任何其他应用的传输，都遵守 <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API 服务用户数据政策</a>，包括有限使用要求：只用来提供应用里明显可见的功能；只在提供这些功能（你设置的失败通知邮件）、遵守法律或保障安全所必需时传输；不用于广告；不让任何人阅读。</p>
+
+    <h2>七、儿童</h2>
+    <p>SideNotes 不面向 13 岁以下的儿童，也不会有意收集儿童的任何个人信息。</p>
+
+    <h2>八、政策变更</h2>
+    <p>本政策变更时，新版本会发布在此页并更新生效日期，重要的变化会写在应用的更新日志里。</p>
+
+    <h2>九、联系</h2>
+    <p>对本政策或你的数据有疑问，请在 <a href="https://github.com/LiMuhua/SideNotes/issues">GitHub Issues</a> 提出。</p>
+
+    <footer>
+    <p><a href="./">SideNotes</a> · <a href="https://github.com/LiMuhua/SideNotes">源代码</a></p>
+    </footer>
+  </main>
+</body>
+</html>

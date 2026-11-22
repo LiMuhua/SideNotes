@@ -1,46 +1,57 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SideNotes：贴边侧栏速记</title>
-  <meta name="description" content="SideNotes 是面向 Windows 的开源本地速记工具：指针碰到屏幕边缘唤出侧栏，随手记下待办、命令、链接与想法。">
+  <title>SideNotes – quick notes in a sidebar for Windows</title>
+  <meta name="description" content="SideNotes is a free, open-source note-taking app for Windows. Slide out a sidebar from the screen edge and jot down to-dos, commands, links and ideas. Notes stay on your computer.">
   <link rel="icon" href="icon.png">
+  <link rel="alternate" hreflang="en" href="https://limuhua.github.io/SideNotes/">
+  <link rel="alternate" hreflang="zh-CN" href="https://limuhua.github.io/SideNotes/zh/">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <main>
     <header class="brand">
-      <img src="icon.png" alt="SideNotes 图标">
+      <img src="icon.png" alt="SideNotes icon">
       <div>
         <h1>SideNotes</h1>
-        <p class="tagline">贴边侧栏速记 · Side-docked quick notes for Windows</p>
+        <p class="tagline">Quick notes in a sidebar for Windows · <a href="zh/" hreflang="zh-CN" lang="zh-CN">中文</a></p>
       </div>
     </header>
 
-    <p>SideNotes 是面向 Windows 的开源本地速记工具。指针碰到屏幕边缘唤出侧栏，或按快捷键打开速记浮窗，随手记下临时待办、命令、链接、想法与截图；记完侧栏收起，回到原来的工作。</p>
+    <p>SideNotes is a free, open-source note-taking app for Windows. Move the pointer to the edge of the screen, or press a shortcut, to slide out a sidebar; jot down to-dos, commands, links, ideas and screenshots; and the sidebar slides away again so you can get back to work. Your notes are stored on your own computer.</p>
 
-    <section class="card">
-      <ul>
-        <li>记录存在你自己的电脑上（SQLite），不需要注册账号。</li>
-        <li>卡片可以拖出侧栏，成为能置顶、能合并成标签页的记录窗口。</li>
-        <li>五套主题：终端、杂志、记录纸、Windows 11、磨砂玻璃，各有浅色与深色。</li>
-        <li>本机每天自动快照，可以从任意一份恢复。</li>
-        <li>可选的云端同步：把记录的快照存到你自己的群晖 NAS（WebDAV）、OneDrive 或 Google Drive，从任意一份恢复。</li>
-      </ul>
-    </section>
+    <h2>What SideNotes does</h2>
+    <ul>
+      <li>Keeps your notes in a local database on your computer. No account or sign-up is required.</li>
+      <li>Lets you drag a note out of the sidebar into its own window, keep it on top, or group notes as tabs.</li>
+      <li>Offers five themes — Terminal, Magazine, Paper, Windows 11 and Frosted glass — each in light and dark.</li>
+      <li>Takes a local snapshot of your notes every day, and restores any snapshot.</li>
+      <li>Optional cloud sync: stores snapshots of your notes in storage you own — a Synology NAS (WebDAV), Microsoft OneDrive or Google Drive — and restores any of them.</li>
+    </ul>
 
-    <p lang="en">SideNotes is an open-source, local-first note-taking tool for Windows. Move the pointer to the screen edge to slide out a sidebar, jot down to-dos, commands, links and ideas, and get back to work. Notes stay on your computer; optional cloud sync stores snapshots in your own Synology NAS, OneDrive or Google Drive.</p>
+    <h2>How SideNotes uses Google user data</h2>
+    <p>SideNotes accesses Google Drive only if you choose Google Drive for cloud sync and sign in. It requests a single scope, <code>https://www.googleapis.com/auth/drive.file</code>, which lets it access only the files and folders that SideNotes itself creates in your Google Drive. SideNotes uses this access to:</p>
+    <ul>
+      <li>create the folder you choose for your snapshots, and upload snapshots of your notes and attachments into it when you sync;</li>
+      <li>list and download those snapshots when you restore your notes;</li>
+      <li>delete old snapshots from that folder according to the retention rule;</li>
+      <li>read your Google account's email address, to show in Settings which account is connected.</li>
+    </ul>
+    <p>SideNotes cannot see any other files in your Google Drive. Data travels directly between your computer and Google: SideNotes has no servers, and it does not sell, share or use Google user data for advertising. See the <a href="privacy.html">Privacy Policy</a> for details.</p>
 
     <nav class="links">
-      <a href="https://github.com/LiMuhua/SideNotes">源代码 Source code</a>
-      <a href="https://github.com/LiMuhua/SideNotes/releases">下载 Releases</a>
-      <a href="privacy.html">隐私政策 Privacy policy</a>
-      <a href="https://github.com/LiMuhua/SideNotes/blob/master/LICENSE">许可证 AGPL-3.0</a>
+      <a href="https://github.com/LiMuhua/SideNotes">Source code</a>
+      <a href="https://github.com/LiMuhua/SideNotes/releases">Download</a>
+      <a href="privacy.html">Privacy Policy</a>
+      <a href="https://github.com/LiMuhua/SideNotes/blob/master/LICENSE">License: AGPL-3.0</a>
+      <a href="https://github.com/LiMuhua/SideNotes/issues">Contact (GitHub Issues)</a>
     </nav>
 
+
     <footer>
-      <p>问题与建议请到 <a href="https://github.com/LiMuhua/SideNotes/issues">GitHub Issues</a>。</p>
+      <p>SideNotes · Open source under AGPL-3.0 · <a href="https://github.com/LiMuhua/SideNotes/issues">GitHub Issues</a></p>
     </footer>
   </main>
 </body>
