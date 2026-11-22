@@ -1,9 +1,9 @@
 //! OneDrive 与 Google Drive 的登录：OAuth 2.0 授权码流程加 PKCE，回调地址是本机的回环地址（RFC 8252）。
 //!
-//! 「登录」在默认浏览器里打开服务的登录页，应用在 127.0.0.1 的随机端口上等回调，拿到授权码后自动换取令牌；
-//! 浏览器没能跳回来时（端口被拦、换了台设备登录），用户可以把地址栏里的回调网址或授权码粘贴回设置页（同 Koodo Reader 的做法）。
-//! 只保存刷新令牌（加密存在本机，见 secrets），访问令牌用时再换、只放在内存里。客户端编号在构建时写进程序（见 build.rs），
-//! 没有时用设置页里填的。
+//! 同 VS Code 等桌面应用登录 GitHub 的做法：「登录」时应用在 127.0.0.1 的随机端口上临时开一个回调服务，在默认浏览器里打开
+//! 服务的登录页；用户登录、同意之后浏览器跳回这个端口，应用拿到授权码自动换取令牌，用户不用复制粘贴。浏览器没能跳回来时
+//! （端口被拦），可以把地址栏里的回调网址或授权码粘贴回设置页。只保存刷新令牌（加密存在本机，见 secrets），访问令牌用时再换、
+//! 只放在内存里。客户端编号只用构建时写进程序的（见 build.rs），用户不用注册。
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
@@ -244,7 +244,7 @@ pub fn login(
     open: impl FnOnce(&str) -> Result<(), String>,
 ) -> RemoteResult<Tokens> {
     if provider.client_id.is_empty() {
-        return Err(RemoteError::Config(format!("请先填写 {} 的应用（客户端）ID", provider.name)));
+        return Err(RemoteError::Config(format!("这个版本还不能登录 {}：构建时没有带上客户端编号", provider.name)));
     }
     let (listeners, port) = listen()?;
     let redirect = format!("http://{}:{port}", provider.redirect_host);
@@ -281,7 +281,7 @@ pub fn login(
 /// 用刷新令牌换新的访问令牌。
 pub fn refresh(client: &Client, provider: &Provider, refresh_token: &str) -> RemoteResult<Tokens> {
     if provider.client_id.is_empty() {
-        return Err(RemoteError::Config(format!("{} 的应用（客户端）ID 不见了，请重新登录", provider.name)));
+        return Err(RemoteError::Config(format!("这个版本没有带上 {} 的客户端编号，登录不了", provider.name)));
     }
     let mut form = vec![("grant_type", "refresh_token"), ("refresh_token", refresh_token)];
     // Microsoft 刷新时要再写一遍范围。

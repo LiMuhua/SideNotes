@@ -20,7 +20,7 @@ const SIMPLE_LIMIT: u64 = 4 * 1024 * 1024;
 /// 分块上传每块的大小：320 KiB 的 16 倍。
 const CHUNK: u64 = 320 * 1024 * 16;
 
-/// 构建时写进程序的客户端编号；空的表示没有，要用设置页里填的。
+/// 构建时写进程序的客户端编号（build.rs）；空的表示这个版本登录不了 OneDrive。
 pub const BUILTIN_CLIENT: &str = match option_env!("SIDENOTES_ONEDRIVE_CLIENT_ID") {
     Some(value) => value,
     None => "",

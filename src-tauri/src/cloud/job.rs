@@ -227,12 +227,12 @@ fn prune(remote: &dyn Remote, folder: &str, index: Vec<CloudBackup>, now: i64, p
 /// 从一份云端备份恢复：数据库与本机没有的附件先下载到 `temp_dir`，再照快照恢复（恢复前在本机快照目录 `snapshot_root` 建一份快照）。
 pub fn restore(remote: &dyn Remote, store: &Store, folder: &str, id: &str, snapshot_root: &Path, temp_dir: &Path, now: i64) -> RemoteResult<RestoreReport> {
     if id.is_empty() || !id.chars().all(|character| character.is_ascii_digit()) {
-        return Err(RemoteError::Config("备份编号无效".into()));
+        return Err(RemoteError::Config("快照编号无效".into()));
     }
     let backup = read_index(remote, folder)?
         .into_iter()
         .find(|backup| backup.info.id == id)
-        .ok_or_else(|| RemoteError::Config("云端找不到这份备份，可能已被清理".into()))?;
+        .ok_or_else(|| RemoteError::Config("云端找不到这份快照，可能已被清理".into()))?;
     let work = temp_dir.join(format!("restore-{now}"));
     let _ = std::fs::remove_dir_all(&work);
     std::fs::create_dir_all(&work).map_err(local)?;

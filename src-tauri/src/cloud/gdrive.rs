@@ -20,7 +20,7 @@ const DRIVE: &str = "https://www.googleapis.com/drive/v3";
 const UPLOAD: &str = "https://www.googleapis.com/upload/drive/v3";
 const FOLDER: &str = "application/vnd.google-apps.folder";
 
-/// 构建时写进程序的客户端编号与密钥；空的表示没有，要用设置页里填的。
+/// 构建时写进程序的客户端编号与密钥（build.rs）；任一个空的表示这个版本登录不了 Google Drive。
 pub const BUILTIN_CLIENT: &str = match option_env!("SIDENOTES_GOOGLE_CLIENT_ID") {
     Some(value) => value,
     None => "",

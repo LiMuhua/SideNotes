@@ -94,7 +94,7 @@ fn fill(template: &str, values: &[(&str, String)], raw: &[&str]) -> String {
     content
 }
 
-/// 渲染备份失败的邮件，返回（主题, HTML）。
+/// 渲染同步失败的邮件，返回（主题, HTML）。
 pub fn failure_mail(mail: &FailureMail) -> (String, String) {
     let reason = redact(mail.reason);
     let rows: String = [("服务", mail.provider), ("账户", mail.account), ("远程文件夹", mail.folder), ("触发", mail.trigger)]
@@ -121,13 +121,13 @@ pub fn failure_mail(mail: &FailureMail) -> (String, String) {
         &["detail_rows"],
     );
     let short: String = reason.chars().take(60).collect();
-    (format!("[备份失败] SideNotes → {}：{short}", mail.provider), content)
+    (format!("[同步失败] SideNotes → {}：{short}", mail.provider), content)
 }
 
 /// 渲染测试邮件。
 pub fn test_mail(from: &str, send_time: &str) -> (String, String) {
     let content = fill(TEST_TEMPLATE, &[("computer", computer_name()), ("send_time", send_time.to_string()), ("from", from.to_string())], &[]);
-    ("[测试] SideNotes 备份失败通知".into(), content)
+    ("[测试] SideNotes 同步失败通知".into(), content)
 }
 
 /// 粗查邮箱的写法（同 app.py 的 EMAIL_PATTERN：`^[^@\s]+@[^@\s]+\.[^@\s]+$`）。
@@ -213,7 +213,7 @@ mod tests {
         assert_eq!(redact("api_key=12345 next"), "api_key=[REDACTED] next");
         assert_eq!(redact("{\"refresh_token\":\"xyz\"}"), "{\"refresh_token\":\"[REDACTED]\"}");
         assert_eq!(redact("key re_ABCDEFGHIJKLmnop done"), "key [REDACTED] done");
-        assert_eq!(redact("备份失败：连不上服务器"), "备份失败：连不上服务器");
+        assert_eq!(redact("同步失败：连不上服务器"), "同步失败：连不上服务器");
         assert_eq!(redact("password"), "password");
         assert_eq!(redact("invalid token in request"), "invalid token in request");
     }
@@ -239,7 +239,7 @@ mod tests {
             last_success: "从未成功",
             trigger: "自动",
         });
-        assert!(subject.starts_with("[备份失败] SideNotes → 群晖 NAS："));
+        assert!(subject.starts_with("[同步失败] SideNotes → 群晖 NAS："));
         assert!(html.contains("li &lt;admin&gt;"));
         assert!(html.contains("token=[REDACTED] &lt;script&gt;"));
         assert!(!html.contains("abc123"));

@@ -16,10 +16,6 @@ pub const WEBDAV_PASSWORD: &str = "synology.password";
 pub const ONEDRIVE_TOKEN: &str = "onedrive.refreshToken";
 pub const GOOGLE_TOKEN: &str = "google.refreshToken";
 pub const RESEND_KEY: &str = "resend.apiKey";
-/// 构建时没有写进客户端编号时，设置页里填的 OneDrive、Google 客户端（Google 的桌面应用还有一个密钥）。
-pub const ONEDRIVE_CLIENT: &str = "onedrive.clientId";
-pub const GOOGLE_CLIENT: &str = "google.clientId";
-pub const GOOGLE_CLIENT_SECRET: &str = "google.clientSecret";
 
 const FILE: &str = "cloud-secrets.dat";
 

@@ -45,6 +45,9 @@ const PROVIDERS: [&str; 3] = ["synology", "onedrive", "google"];
 /// 默认的自动备份时间：每天 3 点（电脑那时关着的话，下次打开应用时补上）。
 pub const DEFAULT_SCHEDULE: &str = "0 3 * * *";
 
+/// 0.8.1 的设置只有一个远程文件夹 `folder`，没选过时存的是默认的 /SideNotes；读到旧设置时当作没选（同前端的 normalizeCloud）。
+const LEGACY_DEFAULT_FOLDER: &str = "/SideNotes";
+
 /// 设置里的云端同步配置（与前端 core/settings 的 normalizeCloud 对应）。
 #[derive(Debug, Clone, Default)]
 struct Config {
@@ -54,6 +57,7 @@ struct Config {
     account: String,
     /// 按证书上的这个名字验证 NAS 的证书（地址是 IP、证书是给域名的时候），见 webdav::build_client。
     tls_name: String,
+    /// 当前服务的远程文件夹（设置里按服务分别存在 `folders` 下）；空的表示还没有选。
     folder: String,
     schedule: String,
     notifications: bool,
@@ -65,14 +69,19 @@ impl Config {
     fn from_settings(settings: &serde_json::Value) -> Self {
         let cloud = settings.get("cloud").cloned().unwrap_or_default();
         let text = |key: &str| cloud.get(key).and_then(|value| value.as_str()).unwrap_or_default().trim().to_string();
-        let provider = text("provider");
+        let provider = Some(text("provider")).filter(|provider| PROVIDERS.contains(&provider.as_str())).unwrap_or_else(|| "synology".into());
+        // 远程文件夹按服务分别存（第十二轮反馈 3）；旧设置只有一个，归当时选中的服务。
+        let folder = match cloud.get("folders").filter(|folders| folders.is_object()) {
+            Some(folders) => folders.get(&provider).and_then(|value| value.as_str()).unwrap_or_default().trim().to_string(),
+            None => Some(text("folder")).filter(|folder| folder != LEGACY_DEFAULT_FOLDER).unwrap_or_default(),
+        };
         Config {
             enabled: cloud.get("enabled").and_then(|value| value.as_bool()).unwrap_or(false),
-            provider: if PROVIDERS.contains(&provider.as_str()) { provider } else { "synology".into() },
+            provider,
             endpoint: text("endpoint"),
             account: text("account"),
             tls_name: text("tlsName"),
-            folder: text("folder"),
+            folder,
             schedule: Some(text("schedule")).filter(|value| !value.is_empty()).unwrap_or_else(|| DEFAULT_SCHEDULE.into()),
             notifications: cloud.get("notifications").and_then(|value| value.as_bool()).unwrap_or(false),
             email: text("email"),
@@ -197,32 +206,33 @@ impl Connection {
     }
 }
 
-/// OneDrive 的客户端：构建时写进程序的优先，没有时用设置页里填的。
-fn onedrive_provider(cloud: &CloudState) -> oauth::Provider {
-    let id = Some(onedrive::BUILTIN_CLIENT.to_string()).filter(|id| !id.is_empty()).or_else(|| cloud.secrets.get(secrets::ONEDRIVE_CLIENT));
-    onedrive::provider(&id.unwrap_or_default())
+/// OneDrive 与 Google Drive 的客户端：只用构建时写进程序的（build.rs），同 VS Code 等桌面应用，用户只管登录，
+/// 不用自己注册（第十二轮反馈 5）。没有写进时编号为空，这个版本登录不了（`provider_ready`）。
+fn oauth_provider(provider: &str) -> oauth::Provider {
+    match provider {
+        "google" => gdrive::provider(gdrive::BUILTIN_CLIENT, gdrive::BUILTIN_SECRET),
+        _ => onedrive::provider(onedrive::BUILTIN_CLIENT),
+    }
 }
 
-/// Google 的客户端与密钥：同上。
-fn google_provider(cloud: &CloudState) -> oauth::Provider {
-    if !gdrive::BUILTIN_CLIENT.is_empty() {
-        return gdrive::provider(gdrive::BUILTIN_CLIENT, gdrive::BUILTIN_SECRET);
+/// 这个版本能不能连接这个服务：群晖 NAS 总能；OneDrive 要客户端编号，Google 的桌面应用客户端还要密钥。
+fn provider_ready(provider: &str) -> bool {
+    match provider {
+        "onedrive" => !onedrive::BUILTIN_CLIENT.trim().is_empty(),
+        "google" => !gdrive::BUILTIN_CLIENT.trim().is_empty() && !gdrive::BUILTIN_SECRET.trim().is_empty(),
+        _ => true,
     }
-    gdrive::provider(
-        &cloud.secrets.get(secrets::GOOGLE_CLIENT).unwrap_or_default(),
-        &cloud.secrets.get(secrets::GOOGLE_CLIENT_SECRET).unwrap_or_default(),
-    )
 }
 
 fn connect(cloud: &CloudState, config: &Config) -> Result<Connection, RemoteError> {
     match config.provider.as_str() {
         "onedrive" => {
             let token = cloud.secrets.get(secrets::ONEDRIVE_TOKEN).ok_or_else(|| RemoteError::Config("还没有登录 OneDrive".into()))?;
-            Ok(Connection::OneDrive(onedrive::OneDrive::new(client()?, onedrive_provider(cloud), token)))
+            Ok(Connection::OneDrive(onedrive::OneDrive::new(client()?, oauth_provider("onedrive"), token)))
         }
         "google" => {
             let token = cloud.secrets.get(secrets::GOOGLE_TOKEN).ok_or_else(|| RemoteError::Config("还没有登录 Google Drive".into()))?;
-            Ok(Connection::Google(gdrive::GoogleDrive::new(client()?, google_provider(cloud), token)))
+            Ok(Connection::Google(gdrive::GoogleDrive::new(client()?, oauth_provider("google"), token)))
         }
         _ => {
             if config.endpoint.is_empty() || config.account.is_empty() {
@@ -239,10 +249,11 @@ fn read_config(app: &AppHandle) -> Config {
     Config::from_settings(&state.store.settings().unwrap_or_default())
 }
 
+/// 当前服务的远程文件夹。没有选（或选的是根目录）时报错，不往根目录里写。
 fn folder_of(config: &Config) -> Result<String, RemoteError> {
-    let folder = remote::normalize_folder(if config.folder.is_empty() { "/SideNotes" } else { &config.folder }).map_err(RemoteError::Config)?;
+    let folder = remote::normalize_folder(&config.folder).map_err(RemoteError::Config)?;
     if folder == "/" {
-        return Err(RemoteError::Config("远程文件夹不能是根目录，请选一个文件夹".into()));
+        return Err(RemoteError::Config("还没有选远程文件夹".into()));
     }
     Ok(folder)
 }
@@ -267,7 +278,7 @@ fn notify_failure(app: &AppHandle, config: &Config, reason: &str, trigger: &str)
     {
         use tauri_plugin_notification::NotificationExt;
         let body: String = notify::redact(reason).chars().take(200).collect();
-        let _ = app.notification().builder().title(format!("SideNotes 没能备份到 {}", provider_name(&config.provider))).body(body).show();
+        let _ = app.notification().builder().title(format!("SideNotes 没能同步到 {}", provider_name(&config.provider))).body(body).show();
     }
     if config.email.is_empty() {
         return;
@@ -300,7 +311,7 @@ fn notify_failure(app: &AppHandle, config: &Config, reason: &str, trigger: &str)
 fn run_backup(app: &AppHandle, trigger: &str) -> Result<CloudBackup, String> {
     let cloud = app.state::<CloudState>();
     if cloud.running.swap(true, Ordering::SeqCst) {
-        return Err("备份正在进行".into());
+        return Err("正在同步".into());
     }
     broadcast(app);
     let config = read_config(app);
@@ -333,12 +344,12 @@ fn run_backup(app: &AppHandle, trigger: &str) -> Result<CloudBackup, String> {
     broadcast(app);
     match result {
         Ok(backup) => {
-            crate::diag::log(format!("云端同步：备份（{trigger}）完成：{}，{} 条记录", provider_name(&config.provider), backup.info.note_count));
+            crate::diag::log(format!("云端同步（{trigger}）完成：{}，{} 条记录", provider_name(&config.provider), backup.info.note_count));
             Ok(backup)
         }
         Err(error) => {
             let reason = error.to_string();
-            crate::diag::log(format!("云端同步：备份（{trigger}）失败：{}", notify::redact(&reason)));
+            crate::diag::log(format!("云端同步（{trigger}）失败：{}", notify::redact(&reason)));
             notify_failure(app, &config, &reason, trigger);
             Err(reason)
         }
@@ -402,12 +413,8 @@ pub struct ProviderState {
     pub account: String,
     /// 最近的错误，空的表示正常。
     pub error: String,
-    /// 有没有客户端编号（构建时写进程序的，或设置页里填的）；群晖 NAS 总是 true。
+    /// 这个版本能不能连接（`provider_ready`）：OneDrive 与 Google Drive 要构建时写进客户端编号。
     pub available: bool,
-    /// 客户端编号是构建时写进程序的（设置页不用再填）。
-    pub builtin: bool,
-    /// 设置页里填过的客户端编号（构建时写进程序的不给出）。
-    pub client: String,
 }
 
 /// 设置页要的全部状态。
@@ -430,35 +437,14 @@ pub fn cloud_overview(app: AppHandle, cloud: State<'_, CloudState>) -> Overview 
     let status = cloud.snapshot();
     let mut providers = BTreeMap::new();
     for provider in PROVIDERS {
-        let account = status.accounts.get(provider).cloned().unwrap_or_default();
-        let state = match provider {
-            "onedrive" => ProviderState {
-                connected: cloud.secrets.get(secrets::ONEDRIVE_TOKEN).is_some(),
-                account,
-                error: String::new(),
-                available: !onedrive_provider(&cloud).client_id.is_empty(),
-                builtin: !onedrive::BUILTIN_CLIENT.is_empty(),
-                client: if onedrive::BUILTIN_CLIENT.is_empty() { cloud.secrets.get(secrets::ONEDRIVE_CLIENT).unwrap_or_default() } else { String::new() },
-            },
-            "google" => ProviderState {
-                connected: cloud.secrets.get(secrets::GOOGLE_TOKEN).is_some(),
-                account,
-                error: String::new(),
-                available: !google_provider(&cloud).client_id.is_empty(),
-                builtin: !gdrive::BUILTIN_CLIENT.is_empty(),
-                client: if gdrive::BUILTIN_CLIENT.is_empty() { cloud.secrets.get(secrets::GOOGLE_CLIENT).unwrap_or_default() } else { String::new() },
-            },
-            _ => ProviderState {
-                connected: cloud.secrets.get(secrets::WEBDAV_PASSWORD).is_some() && !config.endpoint.is_empty() && !config.account.is_empty(),
-                account: config.account.clone(),
-                error: String::new(),
-                available: true,
-                builtin: true,
-                client: String::new(),
-            },
+        let connected = match provider {
+            "onedrive" => cloud.secrets.get(secrets::ONEDRIVE_TOKEN).is_some(),
+            "google" => cloud.secrets.get(secrets::GOOGLE_TOKEN).is_some(),
+            _ => cloud.secrets.get(secrets::WEBDAV_PASSWORD).is_some() && !config.endpoint.is_empty() && !config.account.is_empty(),
         };
+        let account = if provider == "synology" { config.account.clone() } else { status.accounts.get(provider).cloned().unwrap_or_default() };
         let error = status.errors.get(provider).cloned().unwrap_or_default();
-        providers.insert(provider.to_string(), ProviderState { error, ..state });
+        providers.insert(provider.to_string(), ProviderState { connected, account, error, available: provider_ready(provider) });
     }
     Overview {
         providers,
@@ -527,50 +513,35 @@ pub async fn cloud_connect_webdav(app: AppHandle, endpoint: String, username: St
     result.map_err(|error| other(error.to_string()))
 }
 
-/// 登录 OneDrive 或 Google Drive：在浏览器里打开登录页，等回调（或用户粘贴的授权码），存下刷新令牌，返回登录的账户。
-/// 构建时没有写进客户端编号时，用这次填的 `client_id`（Google 还有 `client_secret`），存在本机供以后刷新令牌。
+/// 登录 OneDrive 或 Google Drive：本机临时开一个端口等回调，在默认浏览器里打开登录页；用户登录、同意之后浏览器跳回本机，
+/// 自动换取令牌（没跳回来时也可以把授权码粘贴回来），存下刷新令牌，返回登录的账户。用的是构建时写进程序的客户端。
 #[tauri::command]
-pub async fn cloud_login(app: AppHandle, provider: String, client_id: String, client_secret: String) -> AppResult<String> {
+pub async fn cloud_login(app: AppHandle, provider: String) -> AppResult<String> {
     let result = blocking(move || -> Result<String, RemoteError> {
         let cloud = app.state::<CloudState>();
+        if !matches!(provider.as_str(), "onedrive" | "google") {
+            return Err(RemoteError::Config("这个服务不用登录".into()));
+        }
+        if !provider_ready(&provider) {
+            return Err(RemoteError::Config(format!("这个版本还不能登录 {}：构建时没有带上客户端编号", provider_name(&provider))));
+        }
         cloud.login_cancel.store(false, Ordering::SeqCst);
         if let Ok(mut slot) = cloud.pasted.lock() {
             *slot = None;
-        }
-        let save = |key: &str, value: &str| cloud.secrets.set(key, Some(value.trim())).map_err(|error| RemoteError::Config(error.to_string()));
-        match provider.as_str() {
-            "onedrive" if onedrive::BUILTIN_CLIENT.is_empty() && !client_id.trim().is_empty() => save(secrets::ONEDRIVE_CLIENT, &client_id)?,
-            "google" if gdrive::BUILTIN_CLIENT.is_empty() && !client_id.trim().is_empty() => {
-                save(secrets::GOOGLE_CLIENT, &client_id)?;
-                if !client_secret.trim().is_empty() {
-                    save(secrets::GOOGLE_CLIENT_SECRET, &client_secret)?;
-                }
-            }
-            _ => {}
         }
         let http = client()?;
         let open = |url: &str| {
             use tauri_plugin_opener::OpenerExt;
             app.opener().open_url(url, None::<&str>).map_err(|error| error.to_string())
         };
-        let (account, token, key) = match provider.as_str() {
-            "onedrive" => {
-                let provider = onedrive_provider(&cloud);
-                let tokens = oauth::login(&http, &provider, &cloud.login_cancel, &cloud.pasted, open)?;
-                let drive = onedrive::OneDrive::with_tokens(http.clone(), provider, &tokens);
-                (drive.account()?, tokens.refresh.unwrap_or_default(), secrets::ONEDRIVE_TOKEN)
-            }
-            "google" => {
-                let provider = google_provider(&cloud);
-                if provider.client_secret.is_none() {
-                    return Err(RemoteError::Config("请填写 Google 客户端的密钥".into()));
-                }
-                let tokens = oauth::login(&http, &provider, &cloud.login_cancel, &cloud.pasted, open)?;
-                let drive = gdrive::GoogleDrive::with_tokens(http.clone(), provider, &tokens);
-                (drive.account()?, tokens.refresh.unwrap_or_default(), secrets::GOOGLE_TOKEN)
-            }
-            _ => return Err(RemoteError::Config("这个服务不用登录".into())),
+        let endpoints = oauth_provider(&provider);
+        let tokens = oauth::login(&http, &endpoints, &cloud.login_cancel, &cloud.pasted, open)?;
+        let (account, key) = if provider == "google" {
+            (gdrive::GoogleDrive::with_tokens(http.clone(), endpoints, &tokens).account()?, secrets::GOOGLE_TOKEN)
+        } else {
+            (onedrive::OneDrive::with_tokens(http.clone(), endpoints, &tokens).account()?, secrets::ONEDRIVE_TOKEN)
         };
+        let token = tokens.refresh.unwrap_or_default();
         cloud.secrets.set(key, Some(&token)).map_err(|error| RemoteError::Config(error.to_string()))?;
         cloud.update(|status| {
             status.accounts.insert(provider.clone(), account.clone());
@@ -695,7 +666,7 @@ pub async fn cloud_restore(app: AppHandle, id: String, snapshot_directory: Strin
     let result = blocking(move || -> Result<RestoreReport, RemoteError> {
         let cloud = app.state::<CloudState>();
         if cloud.running.swap(true, Ordering::SeqCst) {
-            return Err(RemoteError::Config("备份正在进行，稍后再恢复".into()));
+            return Err(RemoteError::Config("正在同步，稍后再恢复".into()));
         }
         let outcome = (|| {
             let config = read_config(&app);
@@ -742,7 +713,10 @@ mod tests {
     #[test]
     fn reads_the_cloud_config_from_settings() {
         let settings = serde_json::json!({
-            "cloud": { "enabled": true, "provider": "google", "folder": " /Test ", "schedule": "", "email": "a@b.com", "emailFrom": "n@b.com", "notifications": true }
+            "cloud": {
+                "enabled": true, "provider": "google", "folders": { "google": " /Test ", "synology": "/backup/Test" },
+                "schedule": "", "email": "a@b.com", "emailFrom": "n@b.com", "notifications": true
+            }
         });
         let config = Config::from_settings(&settings);
         assert!(config.enabled && config.notifications);
@@ -755,13 +729,31 @@ mod tests {
     }
 
     #[test]
-    fn the_remote_folder_must_not_be_the_root() {
+    fn each_provider_has_its_own_folder_and_old_settings_migrate() {
+        let read = |cloud: serde_json::Value| Config::from_settings(&serde_json::json!({ "cloud": cloud })).folder;
+        // 换到没选过文件夹的服务：空的，不沿用别的服务的。
+        assert_eq!(read(serde_json::json!({ "provider": "onedrive", "folders": { "synology": "/backup/Test" } })), "");
+        // 0.8.1 的设置：一个 folder，归当时选中的服务；没选过时的默认 /SideNotes 当作没选。
+        assert_eq!(read(serde_json::json!({ "provider": "synology", "folder": "/backup/Test" })), "/backup/Test");
+        assert_eq!(read(serde_json::json!({ "provider": "synology", "folder": "/SideNotes" })), "");
+        assert_eq!(read(serde_json::json!({ "provider": "synology" })), "");
+    }
+
+    #[test]
+    fn the_remote_folder_must_be_chosen_and_not_the_root() {
         let mut config = Config { folder: "/".into(), ..Config::default() };
-        assert!(folder_of(&config).is_err());
+        assert_eq!(folder_of(&config), Err(RemoteError::Config("还没有选远程文件夹".into())));
         config.folder = String::new();
-        assert_eq!(folder_of(&config).unwrap(), "/SideNotes");
+        assert!(folder_of(&config).is_err());
         config.folder = "Test".into();
         assert_eq!(folder_of(&config).unwrap(), "/Test");
+    }
+
+    #[test]
+    fn webdav_is_always_ready_and_the_drives_need_a_builtin_client() {
+        assert!(provider_ready("synology"));
+        assert_eq!(provider_ready("onedrive"), !onedrive::BUILTIN_CLIENT.trim().is_empty());
+        assert_eq!(provider_ready("google"), !gdrive::BUILTIN_CLIENT.trim().is_empty() && !gdrive::BUILTIN_SECRET.trim().is_empty());
     }
 
     #[test]
