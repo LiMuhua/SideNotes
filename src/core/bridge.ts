@@ -228,12 +228,12 @@ export function restoreSnapshot(directory: string, id: string): Promise<RestoreR
 
 /* ==================== 云端同步（第十一轮反馈；现在是备份与恢复） ==================== */
 
-/** 浏览器预览里的云端状态：都没连接。 */
+/** 浏览器预览里的云端状态：都没连接，OneDrive 与 Google Drive 登录不了。 */
 const OFFLINE_CLOUD: CloudOverview = {
   providers: {
-    synology: { connected: false, account: '', error: '', available: true, builtin: true, client: '' },
-    onedrive: { connected: false, account: '', error: '', available: false, builtin: false, client: '' },
-    google: { connected: false, account: '', error: '', available: false, builtin: false, client: '' },
+    synology: { connected: false, account: '', error: '', available: true },
+    onedrive: { connected: false, account: '', error: '', available: false },
+    google: { connected: false, account: '', error: '', available: false },
   },
   running: false,
   lastSuccess: 0,
@@ -261,11 +261,11 @@ export function connectWebDav(endpoint: string, username: string, password: stri
 }
 
 /**
- * 在浏览器里登录 OneDrive 或 Google Drive，返回登录的账户。构建时没有写进客户端编号时带上用户填的（Google 还有密钥）。
- * 浏览器没能跳回来时，用 submitCloudCode 把授权码或回调网址交给这次登录。
+ * 登录 OneDrive 或 Google Drive，返回登录的账户：后端在本机临时开一个端口等回调，在浏览器里打开登录页，登录后自动完成。
+ * 用的是构建时写进程序的客户端。浏览器没能跳回来时，用 submitCloudCode 把授权码或回调网址交给这次登录。
  */
-export function cloudLogin(provider: Exclude<CloudProvider, 'synology'>, clientId: string, clientSecret: string): Promise<string> {
-  return call<string>('cloud_login', { provider, clientId, clientSecret });
+export function cloudLogin(provider: Exclude<CloudProvider, 'synology'>): Promise<string> {
+  return call<string>('cloud_login', { provider });
 }
 
 /** 把粘贴的授权码或回调网址交给正在等的登录。 */

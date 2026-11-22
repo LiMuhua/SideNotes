@@ -28,7 +28,7 @@ const TOKEN_NAMES = new Set(TOKENS.map((token) => token.name));
 /**
  * 脚本写在元素上的运行时变量：App.tsx 的侧栏宽度与卡片高度，Sidebar 量出的列表滚动条宽度，
  * DialogWindow 量出的屏幕高度、App 写入的磨砂玻璃侧栏背景与着色倍数，Overlay 按屏幕缩放写入的系统圆角与系统边框，
- * 磨砂玻璃记录窗口打开时垫在底下的截图（NoteWindow 与 Overlay 写在窗口元素上），
+ * 磨砂玻璃记录窗口打开时垫在底下的截图（NoteWindow 与 Overlay 写在窗口元素上），云端同步的 crontab 输入框按写法的字数给宽度（CloudPanel），
  * 以及原型脚本写的整页缩放、出入动画与搜索框收起宽度（桌面端不设时按回退值计算）。
  */
 const RUNTIME_VARIABLES = new Set([
@@ -47,6 +47,7 @@ const RUNTIME_VARIABLES = new Set([
   '--copy-system-radius',
   '--copy-system-border',
   '--note-backdrop',
+  '--cron-length',
 ]);
 
 const referenced = (css: string): string[] => [...css.matchAll(/var\(\s*(--[\w-]+)/g)].map((match) => match[1]);

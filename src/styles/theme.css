@@ -6363,38 +6363,44 @@ body.is-dragging-attachment * {
   }
 }
 
-/* 两行各放两项（账户与远程文件夹、自动备份与失败通知），放不下时整项折到下一行，同「数据目录」的一行。
- * 前一项至少占一半宽，后一项在两行里对齐；前一项更宽（每周、自定义的时间）时后一项往后挪或折行。 */
+/* 两行各放两项（账户与远程文件夹、自动同步与失败通知），不折行（第十二轮反馈）：前一项按内容的宽度、写全，
+ * 放不下时由后一项让出，后一项里的路径与邮箱末尾省略。 */
 .settings-modal .cloud-field-grid {
+  flex-wrap: nowrap;
   margin-top: var(--sn-space-2);
 }
 
 .settings-modal .cloud-field-grid > :first-child {
-  min-width: 52%;
+  flex: none;
 }
 
 .settings-modal .cloud-group .settings-inline-value .settings-path {
   max-width: calc(var(--sn-dialog-width) * 0.3);
 }
 
-.settings-modal .cloud-account {
-  max-width: calc(var(--sn-dialog-width) * 0.4);
+/* 失败通知的收件邮箱：同远程文件夹的路径，等宽小字，放不下时末尾省略。 */
+.settings-modal .cloud-email {
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
+  font-family: var(--sn-font-code);
+  font-size: var(--sn-font-size-xs);
   text-overflow: ellipsis;
 }
 
-/* 自动备份的时间（HH:MM）与自定义的 crontab：输入框按内容的长短给宽度，用等宽字体。 */
+/* 自动同步的时间（HH:MM）与自定义的 crontab：输入框按内容的长短给宽度，用等宽字体。 */
 .settings-modal .settings-inline-value :is(.cloud-time, .cloud-cron) input.form-control:not([type='number']) {
   flex: none;
   font-family: var(--sn-font-code);
 }
 
 .settings-modal .settings-inline-value .cloud-time input.form-control:not([type='number']) {
-  width: 6em;
+  width: calc(6ch + var(--sn-space-4) * 2);
 }
 
+/* crontab 按写法的字数给宽度（--cron-length，至少 9 个字符，再留一个字符给光标），1ch 是等宽字体一个字符的宽度。 */
 .settings-modal .settings-inline-value .cloud-cron input.form-control:not([type='number']) {
-  width: 11em;
+  width: calc((var(--cron-length, 9) + 1) * 1ch + var(--sn-space-4) * 2);
 }
 
 .settings-modal .cloud-backup-list {

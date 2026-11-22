@@ -94,8 +94,8 @@ export interface CloudSettings {
   account: string;
   /** 按证书上的这个名字验证 NAS 的证书（地址是 IP、证书是给域名的时候）；空的按地址里的主机名验证。 */
   tlsName: string;
-  /** 远程文件夹，以 / 开头。 */
-  folder: string;
+  /** 各服务的远程文件夹，以 / 开头；空的表示还没有选（第十二轮反馈 3：没有默认的文件夹，连上之后再选）。 */
+  folders: Record<CloudProvider, string>;
   /** 自动备份的时间：crontab 的五段写法。 */
   schedule: string;
   /** 备份失败时通知（系统通知；填了邮箱时还发邮件）。 */
@@ -114,12 +114,8 @@ export interface CloudProviderState {
   account: string;
   /** 最近的错误；空的表示正常。 */
   error: string;
-  /** 有没有客户端编号（构建时写进程序的，或设置页里填的）。 */
+  /** 这个版本能不能连接：群晖 NAS 总能；OneDrive 与 Google Drive 要构建时写进客户端编号。 */
   available: boolean;
-  /** 客户端编号是构建时写进程序的，登录时不用再填。 */
-  builtin: boolean;
-  /** 设置页里填过的客户端编号。 */
-  client: string;
 }
 
 /** 连接群晖 NAS 的结果：连上了，或证书上的名字与地址对不上，要问用户是否按证书上的名字验证。 */

@@ -9,7 +9,7 @@ import { normalizeAppIcon } from './appIcons';
 import { normalizeBindings } from './shortcuts';
 import { normalizeSurface } from './surfaces';
 import { tagKey } from './tags';
-import type { CloudSettings, Settings } from './types';
+import type { CloudProvider, CloudSettings, Settings } from './types';
 
 /** 侧栏宽度范围（按 13px 字号计，见 sidebarWindowWidth）。 */
 export const WIDTH_RANGE = { min: 360, max: 720, step: 4 } as const;
@@ -103,28 +103,40 @@ function clampInt(value: unknown, min: number, max: number, fallback: number): n
 /** 自动备份的默认时间：每天 3 点（电脑关着的话，下次打开应用时补上）。与后端 cloud::DEFAULT_SCHEDULE 一致。 */
 export const DEFAULT_CLOUD_SCHEDULE = '0 3 * * *';
 
-/** 规范远程文件夹：以 / 开头，反斜杠当作斜杠，去掉多余与末尾的斜杠；空的用 /SideNotes。 */
+/** 规范远程文件夹：以 / 开头，反斜杠当作斜杠，去掉多余与末尾的斜杠；空的与根目录返回空字符串，表示还没有选。 */
 export function normalizeRemoteFolder(value: unknown): string {
   const segments = String(value ?? '')
     .split(/[\\/]+/)
     .map((segment) => segment.trim())
     .filter(Boolean);
-  return segments.length ? `/${segments.join('/')}`.slice(0, 300) : '/SideNotes';
+  return segments.length ? `/${segments.join('/')}`.slice(0, 300) : '';
 }
 
-/** 校验云端同步配置。旧版的 lastBackup、lastError 改由后端记录，读到时丢掉。 */
+/** 云端同步的服务。 */
+const CLOUD_PROVIDERS: readonly CloudProvider[] = ['synology', 'onedrive', 'google'];
+
+/** 0.8.1 只有一个远程文件夹，没选过时存的是默认的 /SideNotes，读到时当作没选（第十二轮反馈 3，同后端 cloud::Config）。 */
+const LEGACY_DEFAULT_FOLDER = '/SideNotes';
+
+/**
+ * 校验云端同步配置。旧版的 lastBackup、lastError 改由后端记录，读到时丢掉。远程文件夹按服务分别存；
+ * 旧版只有一个 folder，归当时选中的服务。
+ */
 function normalizeCloud(value: unknown): CloudSettings {
   const input = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
   const schedule = String(input.schedule ?? '').trim();
+  const provider = CLOUD_PROVIDERS.includes(input.provider as CloudProvider) ? (input.provider as CloudProvider) : 'synology';
+  const stored = input.folders && typeof input.folders === 'object' ? (input.folders as Record<string, unknown>) : null;
+  const legacy = normalizeRemoteFolder(input.folder);
+  const folderOf = (name: CloudProvider): string =>
+    normalizeRemoteFolder(stored ? stored[name] : name === provider && legacy !== LEGACY_DEFAULT_FOLDER ? legacy : '');
   return {
     enabled: input.enabled === true,
-    provider: ['synology', 'google', 'onedrive'].includes(input.provider as string)
-      ? (input.provider as CloudSettings['provider'])
-      : 'synology',
+    provider,
     endpoint: String(input.endpoint ?? '').slice(0, 1000),
     account: String(input.account ?? '').slice(0, 160),
     tlsName: String(input.tlsName ?? '').trim().slice(0, 253),
-    folder: normalizeRemoteFolder(input.folder),
+    folders: { synology: folderOf('synology'), onedrive: folderOf('onedrive'), google: folderOf('google') },
     schedule: (schedule || DEFAULT_CLOUD_SCHEDULE).slice(0, 120),
     notifications: input.notifications === true,
     email: String(input.email ?? '').trim().slice(0, 254),

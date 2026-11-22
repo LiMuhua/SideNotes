@@ -975,7 +975,21 @@ button.sn-shortcut-key:hover {
   box-shadow: 0 0 0 var(--sn-space-1) var(--sn-color-danger-subtle);
 }
 
-/* 自动备份的时间（HH:MM）与自定义的 crontab：输入框按内容的长短给宽度，用等宽字体。 */
+/* 云端同步的两行（账户与远程文件夹、自动同步与失败通知）不折行，同现有应用第十二轮反馈：
+ * 前一项按内容写全，放不下时由后一项让出，后一项里的路径与邮箱末尾省略。 */
+.sn-provider-grid ~ .sn-set-row {
+  flex-wrap: nowrap;
+}
+
+.sn-provider-grid ~ .sn-set-row > :first-child {
+  flex: none;
+}
+
+.sn-provider-grid ~ .sn-set-row > :last-child {
+  min-width: 0;
+}
+
+/* 自动同步的时间（HH:MM）与自定义的 crontab：输入框按内容的长短给宽度，用等宽字体。 */
 .sn-set-time,
 .sn-set-cron {
   flex: none;
@@ -983,11 +997,11 @@ button.sn-shortcut-key:hover {
 }
 
 .sn-set-time {
-  width: 6em;
+  width: calc(6ch + var(--sn-space-4) * 2);
 }
 
 .sn-set-cron {
-  width: 11em;
+  width: calc(10ch + var(--sn-space-4) * 2);
 }
 
 .sn-provider-name {

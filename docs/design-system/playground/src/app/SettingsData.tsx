@@ -3,7 +3,7 @@
  *
  * 分组、设置项、说明文字与操作沿用现有应用 0.7.3（`DataPanel.tsx`、`TrashPanel.tsx`、`AboutPanel.tsx`）。
  * 「数据与同步」按外观页的写法排得紧凑：名称后紧跟取值与操作，相关的两项放在同一行；云端备份的输入框较多，名称单独成列以便对齐。
- * 云端同步（原名云端备份）的布局与现有应用第十一轮反馈后的一致，只演示，不连接云端。
+ * 云端同步（原名云端备份）的布局与现有应用第十二轮反馈后的一致：一律叫「同步」，云端的每一份叫「快照」；只演示，不连接云端。
  * Playground 不访问文件系统，目录、快照与附件都是示例数值，操作只给出提示。
  */
 
@@ -47,7 +47,7 @@ const PROVIDERS: ReadonlyArray<{ id: CloudProvider; name: string; protocol: stri
   { id: 'google', name: 'Google Drive', protocol: 'Google 账户' },
 ];
 
-/** 各备份服务的标识，图形取自现有应用（DataPanel 的 PROVIDER_MARKS）。内容为固定常量，不含外部输入。 */
+/** 各同步服务的标识，图形取自现有应用（DataPanel 的 PROVIDER_MARKS）。内容为固定常量，不含外部输入。 */
 const PROVIDER_MARKS: Record<CloudProvider, { viewBox: string; paths: string }> = {
   synology: {
     viewBox: '0 0 24 24',
@@ -86,7 +86,23 @@ export function DataPanel() {
   // 演示用的连接状态：点「连接」「登录」后显示一个示例账户。
   const [accounts, setAccounts] = useState<Record<CloudProvider, string>>({ synology: '', onedrive: '', google: '' });
   const account = accounts[cloud.provider];
-  const schedule = parseSchedule(cloud.schedule);
+  const providerName = PROVIDERS.find((provider) => provider.id === cloud.provider)?.name ?? '';
+  // 远程文件夹按服务分别存，没有默认值；没连接时显示根目录（现有应用第十二轮反馈 3）。
+  const folder = cloud.folders[cloud.provider];
+  // 选「自定义」只换成输入框、不改时间表，记下这次选的是自定义（现有应用第十二轮反馈 2）。
+  const [customSchedule, setCustomSchedule] = useState(false);
+  const parsedSchedule = parseSchedule(cloud.schedule);
+  const schedule = customSchedule ? { ...parsedSchedule, kind: 'custom' as const } : parsedSchedule;
+  // 打开自动同步、失败通知时缺了配置：开关不打开，提示先补上（现有应用第十二轮反馈 4，那里弹出对应的弹窗）。
+  const switchAuto = (enabled: boolean) => {
+    if (enabled && !account) toast({ message: `要打开自动同步，先${cloud.provider === 'synology' ? '连接群晖 NAS' : `登录 ${providerName}`}`, tone: 'danger' });
+    else if (enabled && !folder) toast({ message: '要打开自动同步，先选远程文件夹', tone: 'danger' });
+    else saveCloud({ enabled });
+  };
+  const switchNotifications = (notifications: boolean) => {
+    if (notifications && !cloud.email) toast({ message: '要打开失败通知，先填好收件邮箱与 Resend 密钥', tone: 'danger' });
+    else saveCloud({ notifications });
+  };
 
   return (
     <SettingsPage title="数据与同步">
@@ -195,12 +211,13 @@ export function DataPanel() {
         </FieldRow>
       </SettingsCard>
 
-      {/* 云端同步（现有应用第十一轮反馈，原名云端备份）：服务卡片角上的点是连接状态，异常为红色、悬停看原因；下面一行放两项、
-       * 放不下时折行：账户与远程文件夹、自动备份与失败通知，最后是已有备份。群晖 NAS 在弹窗里填地址、用户名与密码，
-       * OneDrive 与 Google Drive 在浏览器里登录，登录后显示账户、按钮改为退出登录；远程文件夹是路径加文件夹按钮；
-       * 自动备份选频率与时间，或自定义 crontab；失败通知可以发邮件（Resend）。Playground 只演示，不连接云端。 */}
+      {/* 云端同步（现有应用第十一、十二轮反馈，原名云端备份）：服务卡片角上的点是连接状态，异常为红色、悬停看原因；下面两行各放两项、
+       * 不折行：账户与远程文件夹、自动同步与失败通知，最后是云端快照。群晖 NAS 在弹窗里填地址、用户名与密码，
+       * OneDrive 与 Google Drive 在浏览器里登录，登录后显示账户、按钮改为退出登录；远程文件夹是路径加文件夹按钮，按服务分别存、
+       * 没有默认值；自动同步选频率与时间，或自定义 crontab；失败通知可以发邮件（Resend）。缺了配置时开关不打开。
+       * Playground 只演示，不连接云端。 */}
       <SettingsCard title="云端同步">
-        <div className="sn-provider-grid" role="group" aria-label="备份服务">
+        <div className="sn-provider-grid" role="group" aria-label="同步服务">
           {PROVIDERS.map((provider) => (
             <button
               key={provider.id}
@@ -238,19 +255,30 @@ export function DataPanel() {
             )}
           </Field>
           <Field label="远程文件夹">
-            <PathText label="远程文件夹" path={cloud.folder} />
-            <IconButton icon="folder" label="选择远程文件夹" disabled={!account} onClick={() => demo('选择远程文件夹')} />
+            <PathText label="远程文件夹" path={account && folder ? folder : '/'} />
+            <IconButton
+              icon="folder"
+              label="选择远程文件夹"
+              disabled={!account}
+              onClick={() => {
+                saveCloud({ folders: { ...cloud.folders, [cloud.provider]: cloud.provider === 'synology' ? '/backup/SideNotes' : '/SideNotes' } });
+                demo('选择远程文件夹');
+              }}
+            />
           </Field>
         </FieldRow>
         <FieldRow>
-          <Field label="自动备份">
-            <Switch label="自动备份" hideLabel checked={cloud.enabled} onChange={(enabled) => saveCloud({ enabled })} />
+          <Field label="自动同步">
+            <Switch label="自动同步" hideLabel checked={cloud.enabled} onChange={switchAuto} />
             <Select
-              aria-label="自动备份的频率"
+              aria-label="自动同步的频率"
               size="sm"
               value={schedule.kind}
               options={SCHEDULE_KINDS.map(([value, label]) => ({ value, label }))}
-              onChange={(kind) => saveCloud({ schedule: kind === 'custom' ? cloud.schedule : buildSchedule({ ...schedule, kind }) })}
+              onChange={(kind) => {
+                setCustomSchedule(kind === 'custom');
+                if (kind !== 'custom') saveCloud({ schedule: buildSchedule({ ...parsedSchedule, kind }) });
+              }}
             />
             {schedule.kind === 'weekly' ? (
               <Select
@@ -296,15 +324,26 @@ export function DataPanel() {
             ) : null}
           </Field>
           <Field label="失败通知">
-            <Switch label="备份失败时通知" hideLabel checked={cloud.notifications} onChange={(notifications) => saveCloud({ notifications })} />
-            <Button variant="secondary" icon="mail" onClick={() => demo('设置失败通知邮件')}>
-              {cloud.email || '通知邮件'}
-            </Button>
+            <Switch label="同步失败时通知" hideLabel checked={cloud.notifications} onChange={switchNotifications} />
+            {/* 收件邮箱同路径：等宽小字，放不下时末尾省略，被截断时悬停显示全文。 */}
+            {cloud.email ? (
+              <code
+                className="sn-set-path"
+                aria-label="收件邮箱"
+                onMouseEnter={(event) => {
+                  const node = event.currentTarget;
+                  node.title = node.scrollWidth > node.clientWidth ? cloud.email : '';
+                }}
+              >
+                {cloud.email}
+              </code>
+            ) : null}
+            <IconButton icon="mail" label="失败通知邮件" onClick={() => demo('设置失败通知邮件')} />
           </Field>
         </FieldRow>
-        <Field label="已有备份">
-          <Button variant="secondary" icon="upload" disabled={!account} onClick={() => demo('立即备份')}>
-            立即备份
+        <Field label="云端快照">
+          <Button variant="secondary" icon="upload" disabled={!account} onClick={() => demo('立即同步')}>
+            立即同步
           </Button>
         </Field>
       </SettingsCard>

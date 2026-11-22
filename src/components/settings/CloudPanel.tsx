@@ -1,15 +1,17 @@
 /**
  * 设置 → 数据与同步 → 云端同步（第十一轮反馈，技术决策第 63 条）。原名「云端备份」：之后的跨设备自动同步也用这个模块，
- * 现在做的是把记录备份到云端、从云端恢复，所以各项操作仍叫「备份」。
+ * 所以界面上一律叫「同步」，云端存的每一份叫「快照」（第十二轮反馈）。现在的同步是把本机的记录存成一份云端快照，可以从任意一份恢复。
  *
- * 服务卡片在上（卡片角上的点是连接状态，异常为红色、悬停看原因），下面一行放两项、放不下时折行（同「数据目录」）：
- * 账户与远程文件夹、自动备份与失败通知，最后是已有备份（立即备份，列表里逐份恢复）。
+ * 服务卡片在上（卡片角上的点是连接状态，异常为红色、悬停看原因），下面两行各放两项、不折行（第十二轮反馈）：
+ * 账户与远程文件夹、自动同步与失败通知，最后是云端快照（立即同步，列表里逐份恢复）。
  * 群晖 NAS 在弹窗里填地址、用户名与密码后连接，证书上的名字与地址对不上时问用户是否按证书上的名字验证；
- * OneDrive 与 Google Drive 在弹窗里点「打开登录页」，浏览器登录后自动回填授权码，没跳回来时可以把授权码粘贴回来。
- * 自动备份用「频率 + 时间」选，也可以选自定义直接写 crontab。凭据与运行状态都在后端（cloud 模块），这里只存设置里的配置。
+ * OneDrive 与 Google Drive 点「登录」直接在浏览器里登录，登录后自动完成（技术决策第 66 条），没跳回来时可以把授权码粘贴回来。
+ * 远程文件夹按服务分别存，没有默认值：没连接时显示根目录，连上之后弹出选择框（第十二轮反馈 3）。
+ * 打开自动同步、失败通知或立即同步时，缺的配置（连接、远程文件夹、邮箱与密钥）先补上：不打开，弹出对应的弹窗并写明原因（第十二轮反馈 4）。
+ * 自动同步用「频率 + 时间」选，也可以选自定义直接写 crontab。凭据与运行状态都在后端（cloud 模块），这里只存设置里的配置。
  */
 
-import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import * as bridge from '../../core/bridge';
 import * as store from '../../core/store';
@@ -25,14 +27,14 @@ import { useConfirm } from './confirm';
 import { ActionButton, DataRow, Group, SelectField, Toggle, TextField, classes, type SaveSettings } from './controls';
 import { PathText } from './PathText';
 
-/** 备份服务：名称与连接方式。OneDrive 排在 Google Drive 之前（第十轮反馈 3）。 */
+/** 同步服务：名称与连接方式。OneDrive 排在 Google Drive 之前（第十轮反馈 3）。 */
 const PROVIDERS: ReadonlyArray<readonly [CloudProvider, string, string]> = [
   ['synology', '群晖 NAS', 'WebDAV'],
   ['onedrive', 'OneDrive', 'Microsoft 账户'],
   ['google', 'Google Drive', 'Google 账户'],
 ];
 
-/** 各备份服务的品牌标识，图形取自原型。内容为固定常量，不含外部输入。 */
+/** 各同步服务的品牌标识，图形取自原型。内容为固定常量，不含外部输入。 */
 const PROVIDER_MARKS: Record<CloudProvider, { viewBox: string; paths: string }> = {
   synology: {
     viewBox: '0 0 24 24',
@@ -51,7 +53,7 @@ const PROVIDER_MARKS: Record<CloudProvider, { viewBox: string; paths: string }> 
   },
 };
 
-/** 云端备份的创建原因。 */
+/** 云端快照的创建原因。 */
 const BACKUP_REASONS: Record<string, string> = { auto: '自动', manual: '手动' };
 
 function ProviderMark({ provider }: { provider: CloudProvider }) {
@@ -68,7 +70,7 @@ function ProviderMark({ provider }: { provider: CloudProvider }) {
 }
 
 /**
- * 服务卡片角上的点：连接正常是绿色，正在备份是强调色，异常是红色（悬停显示原因）；没有连接过的不画。
+ * 服务卡片角上的点：连接正常是绿色，正在同步是强调色，异常是红色（悬停显示原因）；没有连接过的不画。
  */
 function StatusDot({ state, running }: { state: CloudProviderState | undefined; running: boolean }) {
   const anchor = useRef<HTMLSpanElement>(null);
@@ -106,10 +108,12 @@ function hostOf(endpoint: string): string {
 
 /**
  * 叠在设置窗口上的弹窗：与回收站确认、调整应用图标同一层（settings-confirm-backdrop）。
- * Esc 与点背景关闭（忙的时候不关）；焦点在弹窗里循环。
+ * Esc 与点背景关闭（忙的时候不关）；焦点在弹窗里循环。`notice` 写在标题下，说明为什么弹出（例如先连接才能打开自动同步）：
+ * 设置窗口的提示条在弹窗底下，弹窗开着时看不到，所以消息都写在弹窗里。
  */
 function DialogLayer({
   title,
+  notice,
   busy,
   className,
   onClose,
@@ -117,6 +121,7 @@ function DialogLayer({
   footer,
 }: {
   title: string;
+  notice?: string;
   busy?: boolean;
   className?: string;
   onClose: () => void;
@@ -168,6 +173,11 @@ function DialogLayer({
           <h3 id={headingId}>{title}</h3>
           <ActionButton label="关闭" icon="x" className="icon-button" disabled={busy} onClick={onClose} />
         </header>
+        {notice ? (
+          <p className="cloud-dialog-note" role="status" data-cloud-notice="">
+            {notice}
+          </p>
+        ) : null}
         {children}
         <footer className="settings-confirm-actions">{footer}</footer>
       </section>
@@ -187,15 +197,17 @@ function FormField({ label, children }: { label: string; children: ReactNode }) 
 }
 
 /**
- * 连接群晖 NAS：地址、用户名与密码；连接成功才关闭，密码由后端加密存在本机。
+ * 连接群晖 NAS：地址、用户名与密码；连接成功后交给 `onConnected`（关闭弹窗，或换成远程文件夹的选择框），密码由后端加密存在本机。
  * 证书上的名字与地址对不上（NAS 用 IP 访问、证书是给域名的）时，列出证书上的名字与指纹，用户确认后按证书上的名字验证。
  */
 function WebDavDialog({
   cloud,
+  notice,
   onClose,
   onConnected,
 }: {
   cloud: CloudSettings;
+  notice: string;
   onClose: () => void;
   onConnected: (endpoint: string, username: string, tlsName: string) => Promise<void>;
 }) {
@@ -222,7 +234,6 @@ function WebDavDialog({
         return;
       }
       await onConnected(address, outcome.account, tlsName);
-      onClose();
     } catch (problem) {
       setError(bridge.errorText(problem, '没能连接'));
       setBusy(false);
@@ -239,6 +250,7 @@ function WebDavDialog({
   return (
     <DialogLayer
       title="连接群晖 NAS"
+      notice={notice}
       busy={busy}
       onClose={onClose}
       footer={
@@ -296,27 +308,33 @@ function WebDavDialog({
   );
 }
 
-/** 失败通知的邮件：收件邮箱、发件地址（可空）与 Resend 的 API 密钥；可以先发一封测试邮件。 */
+/**
+ * 失败通知的邮件：收件邮箱、发件地址（可空）与 Resend 的 API 密钥；可以先发一封测试邮件，结果写在弹窗里。
+ * 失败通知要靠它们，打开开关时缺了就弹出这里（`notice` 写明原因）。
+ */
 function EmailDialog({
   cloud,
   hasKey,
+  notice,
   onClose,
   onSave,
 }: {
   cloud: CloudSettings;
   hasKey: boolean;
+  notice: string;
   onClose: () => void;
   onSave: (email: string, from: string, key: string) => Promise<boolean>;
 }) {
-  const toast = useToast();
   const [email, setEmail] = useState(cloud.email);
   const [from, setFrom] = useState(cloud.emailFrom);
   const [key, setKey] = useState('');
   const [busy, setBusy] = useState<'test' | 'save' | null>(null);
   const [error, setError] = useState('');
+  const [sent, setSent] = useState('');
   const validEmail = (value: string): boolean => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value);
 
   const check = (): boolean => {
+    setSent('');
     if (email.trim() && !validEmail(email.trim())) {
       setError('收件邮箱的写法不对');
       return false;
@@ -335,6 +353,7 @@ function EmailDialog({
 
   const test = async (): Promise<void> => {
     if (!email.trim()) {
+      setSent('');
       setError('请先填写收件邮箱');
       return;
     }
@@ -342,7 +361,7 @@ function EmailDialog({
     setBusy('test');
     try {
       await bridge.sendTestEmail(email.trim(), from.trim(), key.trim());
-      toast(`测试邮件已发到 ${email.trim()}`);
+      setSent(`测试邮件已发到 ${email.trim()}`);
     } catch (problem) {
       setError(bridge.errorText(problem, '测试邮件没有发出'));
     } finally {
@@ -363,6 +382,7 @@ function EmailDialog({
   return (
     <DialogLayer
       title="失败通知邮件"
+      notice={notice}
       busy={busy !== null}
       onClose={onClose}
       footer={
@@ -399,6 +419,9 @@ function EmailDialog({
         </FormField>
         <button type="submit" hidden aria-hidden="true" tabIndex={-1} />
       </form>
+      <p className="cloud-dialog-note" role="status" hidden={!sent}>
+        {sent}
+      </p>
       <p className="settings-confirm-error" role="alert" hidden={!error}>
         {error}
       </p>
@@ -407,7 +430,17 @@ function EmailDialog({
 }
 
 /** 远程文件夹的选择框：逐层进入子文件夹，可以新建；根目录不能选。 */
-function FolderDialog({ start, onClose, onChoose }: { start: string; onClose: () => void; onChoose: (path: string) => Promise<boolean> }) {
+function FolderDialog({
+  start,
+  notice,
+  onClose,
+  onChoose,
+}: {
+  start: string;
+  notice: string;
+  onClose: () => void;
+  onChoose: (path: string) => Promise<boolean>;
+}) {
   const [path, setPath] = useState(start);
   // 读到的一层：记下是哪个路径的，换了路径之后、新的结果回来之前显示「正在读取」。
   const [listing, setListing] = useState<{ path: string; folders: string[]; error: string } | null>(null);
@@ -474,6 +507,7 @@ function FolderDialog({ start, onClose, onChoose }: { start: string; onClose: ()
   return (
     <DialogLayer
       title="选择远程文件夹"
+      notice={notice}
       busy={busy}
       className="cloud-folder-dialog"
       onClose={onClose}
@@ -519,46 +553,32 @@ function FolderDialog({ start, onClose, onChoose }: { start: string; onClose: ()
   );
 }
 
+/** 登录 OneDrive、Google Drive 的进度：正在浏览器里登录，或上次没成功的原因。 */
+interface LoginState {
+  waiting: boolean;
+  error: string;
+}
+
 /**
- * 登录 OneDrive 或 Google Drive：点「打开登录页」在浏览器里登录，回调到本机后自动回填授权码；浏览器没能跳回来时，
- * 把地址栏里的网址或授权码粘贴到这里（同 Koodo Reader 的做法）。构建时没有写进客户端编号时，先填应用（客户端）ID。
+ * 登录 OneDrive 或 Google Drive（第十二轮反馈 5，技术决策第 66 条）：同 VS Code 登录 GitHub，后端在本机临时开一个端口等回调，
+ * 在浏览器里打开登录页；用户登录、同意之后浏览器跳回本机，自动完成，弹窗随之关闭。账户一行的「登录」直接开始；
+ * 从别处弹出（例如先登录才能打开自动同步）时先写明原因，点「打开登录页」再开始。浏览器没能跳回来时，
+ * 可以把地址栏里的网址或授权码粘贴到这里。登录的状态在 CloudGroup 里，这里只管显示。
  */
 function LoginDialog({
-  provider,
-  state,
+  name,
+  notice,
+  login,
+  onStart,
   onClose,
-  onLoggedIn,
 }: {
-  provider: Exclude<CloudProvider, 'synology'>;
-  state: CloudProviderState | undefined;
+  name: string;
+  notice: string;
+  login: LoginState;
+  onStart: () => void;
   onClose: () => void;
-  onLoggedIn: (account: string) => void;
 }) {
-  const name = provider === 'onedrive' ? 'OneDrive' : 'Google Drive';
-  const needsClient = !state?.builtin;
-  const [clientId, setClientId] = useState(state?.client ?? '');
-  const [secret, setSecret] = useState('');
-  const [waiting, setWaiting] = useState(false);
   const [code, setCode] = useState('');
-  const [error, setError] = useState('');
-
-  const start = async (): Promise<void> => {
-    if (needsClient && !clientId.trim()) {
-      setError('请填写应用（客户端）ID');
-      return;
-    }
-    setWaiting(true);
-    setError('');
-    try {
-      const account = await bridge.cloudLogin(provider, clientId.trim(), secret.trim());
-      onLoggedIn(account);
-      onClose();
-    } catch (problem) {
-      setWaiting(false);
-      const text = bridge.errorText(problem, '登录没有完成');
-      if (text !== '已取消登录') setError(text);
-    }
-  };
 
   const submit = (): void => {
     if (!code.trim()) return;
@@ -566,57 +586,26 @@ function LoginDialog({
     setCode('');
   };
 
-  const close = (): void => {
-    if (waiting) void bridge.cancelCloudLogin();
-    onClose();
-  };
-
   return (
     <DialogLayer
       title={`登录 ${name}`}
-      onClose={close}
+      notice={login.waiting ? '' : notice}
+      onClose={onClose}
       footer={
-        waiting ? (
+        login.waiting ? (
           <>
-            <ActionButton label="取消登录" onClick={close} />
+            <ActionButton label="取消登录" onClick={onClose} />
             <ActionButton label="确定" icon="check" className="button primary compact" disabled={!code.trim()} onClick={submit} />
           </>
         ) : (
           <>
-            <ActionButton label="取消" onClick={close} />
-            <ActionButton label="打开登录页" icon="external" className="button primary compact" onClick={() => void start()} />
+            <ActionButton label="取消" onClick={onClose} />
+            <ActionButton label="打开登录页" icon="external" className="button primary compact" onClick={onStart} />
           </>
         )
       }
     >
-      {needsClient ? (
-        <form
-          className="cloud-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (!waiting) void start();
-          }}
-        >
-          <FormField label="应用（客户端）ID">
-            <input className="form-control" type="text" value={clientId} disabled={waiting} autoComplete="off" onChange={(event) => setClientId(event.target.value)} />
-          </FormField>
-          {provider === 'google' ? (
-            <FormField label="客户端密钥">
-              <input
-                className="form-control"
-                type="password"
-                value={secret}
-                disabled={waiting}
-                placeholder={state?.client ? '已保存，不换就留空' : ''}
-                autoComplete="off"
-                onChange={(event) => setSecret(event.target.value)}
-              />
-            </FormField>
-          ) : null}
-          <button type="submit" hidden aria-hidden="true" tabIndex={-1} />
-        </form>
-      ) : null}
-      {waiting ? (
+      {login.waiting ? (
         <>
           <p className="cloud-dialog-note">已在浏览器里打开登录页，登录后自动完成。</p>
           <form
@@ -640,24 +629,30 @@ function LoginDialog({
           </form>
         </>
       ) : null}
-      <p className="settings-confirm-error" role="alert" hidden={!error}>
-        {error}
+      <p className="settings-confirm-error" role="alert" hidden={!login.error}>
+        {login.error}
       </p>
     </DialogLayer>
   );
 }
 
-/** 自动备份的时间：频率加时间，或自定义 crontab；改了就保存（onSave 检查写法并返回是否保存）。 */
+/**
+ * 自动同步的时间：频率加时间，或自定义 crontab；改了就保存（onSave 检查写法并返回是否保存）。
+ * 选「自定义」只换成输入框、不改时间表：常用组合的写法读回来仍是那个频率，所以记下这次选的是自定义（第十二轮反馈 2）。
+ */
 function ScheduleField({ value, onSave }: { value: string; onSave: (cron: string) => Promise<boolean> }) {
   const toast = useToast();
-  const form = parseSchedule(value);
+  const [custom, setCustom] = useState(false);
+  const parsed = parseSchedule(value);
+  const form = custom ? { ...parsed, kind: 'custom' as const } : parsed;
   const changeKind = (kind: ScheduleKind): void => {
-    // 换到自定义时从现在的写法改起；从自定义换回来时用默认的 03:00、星期一、1 号。
-    void onSave(kind === 'custom' ? buildSchedule(form) || value : buildSchedule({ ...form, kind }));
+    setCustom(kind === 'custom');
+    // 从自定义换回常用的频率时，自定义的写法拆不开，用默认的 03:00、星期一、1 号。
+    if (kind !== 'custom') void onSave(buildSchedule({ ...parsed, kind }));
   };
   return (
     <>
-      <SelectField label="自动备份的频率" options={SCHEDULE_KINDS} value={form.kind} onChange={(kind) => changeKind(kind as ScheduleKind)} />
+      <SelectField label="自动同步的频率" options={SCHEDULE_KINDS} value={form.kind} onChange={(kind) => changeKind(kind as ScheduleKind)} />
       {form.kind === 'weekly' ? (
         <SelectField label="星期几" options={WEEKDAYS} value={form.weekday} onChange={(weekday) => void onSave(buildSchedule({ ...form, weekday: Number(weekday) }))} />
       ) : null}
@@ -665,7 +660,8 @@ function ScheduleField({ value, onSave }: { value: string; onSave: (cron: string
         <SelectField label="每月的哪一天" options={MONTH_DAYS} value={form.day} onChange={(day) => void onSave(buildSchedule({ ...form, day: Number(day) }))} />
       ) : null}
       {form.kind === 'custom' ? (
-        <span className="cloud-cron">
+        // 输入框按写法的长短给宽度（等宽字体），一行放得下自动同步与失败通知。
+        <span className="cloud-cron" style={{ '--cron-length': Math.max(form.cron.length, 9) } as CSSProperties}>
           <TextField label="crontab（分 时 日 月 周）" value={form.cron} placeholder={DEFAULT_CLOUD_SCHEDULE} onCommit={onSave} />
         </span>
       ) : form.kind !== 'hourly' ? (
@@ -689,16 +685,23 @@ function ScheduleField({ value, onSave }: { value: string; onSave: (cron: string
   );
 }
 
+/** 打开着的弹窗与弹出的原因（写在弹窗标题下；用户自己点开的没有原因）。 */
+interface OpenDialog {
+  kind: 'webdav' | 'login' | 'email' | 'folder';
+  notice: string;
+}
+
 /** 云端同步分组。 */
 export function CloudGroup({ settings, save }: { settings: Settings; save: SaveSettings }) {
   const toast = useToast();
   const confirm = useConfirm();
   const cloud = settings.cloud;
   const [overview, setOverview] = useState<CloudOverview | null>(null);
-  // 读到的备份列表：记下是哪个服务、文件夹与哪次备份之后读的，条件变了之后、新的结果回来之前不显示。
+  // 读到的快照列表：记下是哪个服务、文件夹与哪次同步之后读的，条件变了之后、新的结果回来之前不显示。
   const [listing, setListing] = useState<{ key: string; backups: CloudBackup[]; problem: string } | null>(null);
   const [busy, setBusy] = useState<'backup' | 'disconnect' | null>(null);
-  const [dialog, setDialog] = useState<'webdav' | 'login' | 'email' | 'folder' | null>(null);
+  const [dialog, setDialog] = useState<OpenDialog | null>(null);
+  const [login, setLogin] = useState<LoginState>({ waiting: false, error: '' });
   // 后端广播状态变化、或这里做了操作之后重新读取。
   const [revision, setRevision] = useState(0);
   const refresh = useCallback(() => setRevision((value) => value + 1), []);
@@ -721,34 +724,80 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
   const current = overview?.providers[cloud.provider];
   const connected = Boolean(current?.connected);
   const running = Boolean(overview?.running) || busy === 'backup';
+  const name = PROVIDERS.find(([provider]) => provider === cloud.provider)?.[1] ?? '';
+  // 当前服务的远程文件夹；空的表示还没有选。
+  const folder = cloud.folders[cloud.provider];
 
-  // 已有备份：连上了才读；换了服务、远程文件夹或又备份了一次之后重读。
-  const listKey = `${cloud.provider}|${cloud.folder}|${overview?.lastSuccess ?? 0}|${revision}`;
-  const backups = connected && listing?.key === listKey ? listing.backups : null;
-  const listProblem = connected && listing?.key === listKey ? listing.problem : '';
+  // 云端快照：连上了、选了文件夹才读；换了服务、远程文件夹或又同步了一次之后重读。
+  const listKey = `${cloud.provider}|${folder}|${overview?.lastSuccess ?? 0}|${revision}`;
+  const listable = connected && Boolean(folder);
+  const backups = listable && listing?.key === listKey ? listing.backups : null;
+  const listProblem = listable && listing?.key === listKey ? listing.problem : '';
   useEffect(() => {
-    if (!connected) return;
+    if (!listable) return;
     let alive = true;
     bridge.listCloudBackups().then(
       (list) => {
         if (alive) setListing({ key: listKey, backups: list, problem: '' });
       },
       (problem: unknown) => {
-        if (alive) setListing({ key: listKey, backups: [], problem: bridge.errorText(problem, '读不出云端的备份') });
+        if (alive) setListing({ key: listKey, backups: [], problem: bridge.errorText(problem, '读不出云端的快照') });
       },
     );
     return () => {
       alive = false;
     };
-  }, [connected, listKey]);
+  }, [listable, listKey]);
 
   const saveCloud = (patch: Partial<CloudSettings>): Promise<boolean> => save({ cloud: { ...settings.cloud, ...patch } });
+  const open = (kind: OpenDialog['kind'], notice = ''): void => setDialog({ kind, notice });
+
+  /** 弹出连接群晖 NAS 或登录的弹窗，`notice` 写明为什么要先连接。 */
+  const askConnect = (notice: string): void => {
+    if (cloud.provider !== 'synology') setLogin({ waiting: false, error: '' });
+    open(cloud.provider === 'synology' ? 'webdav' : 'login', notice);
+  };
+
+  /** 连上之后：还没选远程文件夹就弹出选择框，否则只提示连上了。 */
+  const afterConnect = (provider: CloudProvider, done: string): void => {
+    refresh();
+    if (cloud.folders[provider]) {
+      setDialog(null);
+      toast(done);
+    } else {
+      open('folder', `${done}，选一个文件夹存放云端快照。`);
+    }
+  };
+
+  /** 在浏览器里登录（后端开本机回调、打开登录页），登录完自动回来。 */
+  const startLogin = (): void => {
+    if (cloud.provider === 'synology') return;
+    const provider = cloud.provider;
+    setLogin({ waiting: true, error: '' });
+    bridge.cloudLogin(provider).then(
+      (account) => {
+        setLogin({ waiting: false, error: '' });
+        afterConnect(provider, `已登录 ${account}`);
+      },
+      (problem: unknown) => {
+        const text = bridge.errorText(problem, '登录没有完成');
+        setLogin({ waiting: false, error: text === '已取消登录' ? '' : text });
+      },
+    );
+  };
+
+  const closeDialog = (): void => {
+    if (dialog?.kind === 'login' && login.waiting) void bridge.cancelCloudLogin();
+    setDialog(null);
+  };
 
   const disconnect = async (): Promise<void> => {
     setBusy('disconnect');
     try {
       await bridge.cloudDisconnect(cloud.provider);
-      toast(cloud.provider === 'synology' ? '已断开群晖 NAS；云端的备份还在' : '已退出登录；云端的备份还在');
+      // 自动同步要连着才能打开，断开时一并关掉，免得到点就报失败。
+      const stopped = cloud.enabled && (await saveCloud({ enabled: false }));
+      toast(`${cloud.provider === 'synology' ? '已断开群晖 NAS' : '已退出登录'}${stopped ? '，自动同步已关闭' : ''}；云端的快照还在`);
     } catch (problem) {
       toast(bridge.errorText(problem, '没能断开'), null, true);
     } finally {
@@ -769,17 +818,34 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
     return saved;
   };
 
+  /** 打开自动同步要先连上、选好远程文件夹；缺哪样就弹出哪个弹窗，开关不打开（第十二轮反馈 4）。 */
   const switchAuto = async (enabled: boolean): Promise<void> => {
+    if (enabled && !connected) {
+      askConnect(`要打开自动同步，先${cloud.provider === 'synology' ? '连接群晖 NAS' : `登录 ${name}`}。`);
+      return;
+    }
+    if (enabled && !folder) {
+      open('folder', '要打开自动同步，先选远程文件夹。');
+      return;
+    }
     await saveCloud({ enabled });
     refresh();
   };
 
-  /** 打开失败通知时顺带申请系统通知的权限；没允许也照样打开（邮件不受影响）。 */
+  /**
+   * 失败通知要有收件邮箱与 Resend 密钥，缺了就弹出通知邮件的弹窗，开关不打开（第十二轮反馈 4）。
+   * 打开时顺带申请系统通知的权限；没允许也照样打开（邮件不受影响）。
+   */
   const switchNotifications = async (enabled: boolean): Promise<void> => {
+    if (enabled && (!cloud.email || !overview?.resendKey)) {
+      open('email', '要打开失败通知，先填好收件邮箱与 Resend 密钥。');
+      return;
+    }
     if (enabled) await bridge.requestNotifications().catch(() => false);
     await saveCloud({ notifications: enabled });
   };
 
+  /** 保存通知邮件；收件邮箱清空时失败通知一并关掉。 */
   const saveEmail = async (email: string, from: string, key: string): Promise<boolean> => {
     try {
       if (key) await bridge.setResendKey(key);
@@ -787,18 +853,22 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
       toast(`密钥没有保存：${bridge.errorText(problem)}`, null, true);
       return false;
     }
-    const saved = await saveCloud({ email, emailFrom: from });
+    const saved = await saveCloud({ email, emailFrom: from, ...(email ? {} : { notifications: false }) });
     refresh();
     return saved;
   };
 
   const backupNow = async (): Promise<void> => {
+    if (!folder) {
+      open('folder', '先选远程文件夹，再同步。');
+      return;
+    }
     setBusy('backup');
     try {
       const backup = await bridge.cloudBackupNow();
-      toast(`已备份 ${backup.noteCount} 条记录`);
+      toast(`已同步 ${backup.noteCount} 条记录`);
     } catch (problem) {
-      toast(`备份没有完成：${bridge.errorText(problem)}`, null, true);
+      toast(`同步没有完成：${bridge.errorText(problem)}`, null, true);
     } finally {
       setBusy(null);
       refresh();
@@ -809,7 +879,7 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
     const when = snapshotTime(backup.createdAt);
     confirm({
       title: '从云端恢复',
-      message: `将用${when} 的云端备份（${backup.noteCount} 条记录）替换当前全部记录，包括回收站。恢复前会先为当前数据在本机创建一份快照，可以随时换回；设置与草稿保持不变。`,
+      message: `将用${when} 的云端快照（${backup.noteCount} 条记录）替换当前全部记录，包括回收站。恢复前会先为当前数据在本机创建一份快照，可以随时换回；设置与草稿保持不变。`,
       confirmLabel: '恢复',
       icon: 'restore',
       run: async () => {
@@ -818,8 +888,8 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
           await store.reloadEverywhere();
           toast(
             report.missingAttachments
-              ? `已恢复到${when} 的云端备份；${report.missingAttachments} 个附件在云端也找不到`
-              : `已恢复到${when} 的云端备份`,
+              ? `已恢复到${when} 的云端快照；${report.missingAttachments} 个附件在云端也找不到`
+              : `已恢复到${when} 的云端快照`,
           );
           return true;
         } catch (problem) {
@@ -830,9 +900,9 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
     });
   };
 
-  // 已有备份一行的取值：份数、上次成功与下次自动备份。
+  // 云端快照一行的取值：份数、上次成功与下次自动同步。
   const summary = [
-    connected && backups ? `${backups.length} 份` : '',
+    backups ? `${backups.length} 份` : '',
     overview?.lastSuccess && overview.lastProvider === cloud.provider ? `上次 ${snapshotTime(overview.lastSuccess)}` : '',
     cloud.enabled && overview?.nextRun ? `下次 ${snapshotTime(overview.nextRun)}` : '',
   ]
@@ -849,7 +919,7 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
           </>
         );
       }
-      return <ActionButton label="连接" icon="link" onClick={() => setDialog('webdav')} />;
+      return <ActionButton label="连接" icon="link" onClick={() => open('webdav')} />;
     }
     if (connected) {
       return (
@@ -859,13 +929,23 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
         </>
       );
     }
-    return <ActionButton label="登录" icon="external" disabled={busy !== null} onClick={() => setDialog('login')} />;
+    return (
+      <ActionButton
+        label="登录"
+        icon="external"
+        disabled={busy !== null}
+        onClick={() => {
+          open('login');
+          startLogin();
+        }}
+      />
+    );
   };
 
   return (
     <Group title="云端同步" className="settings-wide cloud-group">
-      <div className="sync-provider-grid" role="group" aria-label="备份服务">
-        {PROVIDERS.map(([provider, name, protocol]) => {
+      <div className="sync-provider-grid" role="group" aria-label="同步服务">
+        {PROVIDERS.map(([provider, providerName, protocol]) => {
           const active = cloud.provider === provider;
           const state = overview?.providers[provider];
           const status = state?.error ? `，连接异常：${state.error}` : state?.connected ? '，已连接' : '';
@@ -875,50 +955,61 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
               type="button"
               className={classes('sync-provider', active && 'active selected')}
               data-provider={provider}
-              aria-label={`${name}，${protocol}${status}`}
+              aria-label={`${providerName}，${protocol}${status}`}
               aria-pressed={active}
               onClick={() => void saveCloud({ provider })}
             >
               <ProviderMark provider={provider} />
-              <span className="sync-provider-name">{name}</span>
+              <span className="sync-provider-name">{providerName}</span>
               <small>{protocol}</small>
               <StatusDot state={state} running={running && active} />
             </button>
           );
         })}
       </div>
-      {listProblem ? <p className="settings-notice is-error">{`云端的备份读取失败：${listProblem}`}</p> : null}
+      {listProblem ? <p className="settings-notice is-error">{`云端的快照读取失败：${listProblem}`}</p> : null}
       <div className="settings-field-grid cloud-field-grid">
         <DataRow title="账户">{account()}</DataRow>
         <DataRow title="远程文件夹">
-          <PathText label="远程文件夹" path={cloud.folder} />
-          <ActionButton label="选择远程文件夹" icon="folder" className="icon-button" disabled={!connected} onClick={() => setDialog('folder')} />
+          {/* 没连接或还没选时是根目录：不给默认的文件夹（第十二轮反馈 3）。 */}
+          <PathText label="远程文件夹" path={connected && folder ? folder : '/'} />
+          <ActionButton label="选择远程文件夹" icon="folder" className="icon-button" disabled={!connected} onClick={() => open('folder')} />
         </DataRow>
       </div>
       <div className="settings-field-grid cloud-field-grid">
-        <DataRow title="自动备份">
-          <Toggle label="自动备份" checked={cloud.enabled} onChange={(enabled) => void switchAuto(enabled)} />
+        <DataRow title="自动同步">
+          <Toggle label="自动同步" checked={cloud.enabled} onChange={(enabled) => void switchAuto(enabled)} />
           <ScheduleField value={cloud.schedule} onSave={commitSchedule} />
         </DataRow>
         <DataRow title="失败通知">
-          <Toggle label="备份失败时通知" checked={cloud.notifications} onChange={(enabled) => void switchNotifications(enabled)} />
-          <ActionButton label="失败通知邮件" onClick={() => setDialog('email')}>
-            <Icon name="mail" />
-            {cloud.email || '通知邮件'}
-          </ActionButton>
+          <Toggle label="同步失败时通知" checked={cloud.notifications} onChange={(enabled) => void switchNotifications(enabled)} />
+          {/* 邮箱同远程文件夹：文字加图标按钮，放不下时末尾省略，被截断时悬停显示完整的邮箱。 */}
+          {cloud.email ? (
+            <span
+              className="settings-value cloud-email"
+              data-cloud-email=""
+              onMouseEnter={(event) => {
+                const node = event.currentTarget;
+                node.title = node.scrollWidth > node.clientWidth ? cloud.email : '';
+              }}
+            >
+              {cloud.email}
+            </span>
+          ) : null}
+          <ActionButton label="失败通知邮件" icon="mail" className="icon-button" onClick={() => open('email')} />
         </DataRow>
       </div>
-      <DataRow title="已有备份">
+      <DataRow title="云端快照">
         {summary ? <span className="settings-value">{summary}</span> : null}
         <ActionButton
-          label={running ? '正在备份…' : '立即备份'}
+          label={running ? '正在同步…' : '立即同步'}
           icon="upload"
           disabled={!connected || running || busy !== null}
           onClick={() => void backupNow()}
         />
       </DataRow>
-      {connected && backups?.length ? (
-        <ul className="snapshot-list cloud-backup-list" aria-label="云端备份列表">
+      {backups?.length ? (
+        <ul className="snapshot-list cloud-backup-list" aria-label="云端快照列表">
           {backups.map((backup) => (
             <li key={backup.id} className="snapshot-item">
               <span className="snapshot-time">{snapshotTime(backup.createdAt)}</span>
@@ -931,38 +1022,31 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
           ))}
         </ul>
       ) : null}
-      {dialog === 'webdav' ? (
+      {dialog?.kind === 'webdav' ? (
         <WebDavDialog
           cloud={cloud}
-          onClose={() => setDialog(null)}
+          notice={dialog.notice}
+          onClose={closeDialog}
           onConnected={async (endpoint, username, tlsName) => {
             await saveCloud({ endpoint, account: username, tlsName });
-            toast(`已连接 ${hostOf(endpoint)}`);
-            refresh();
+            afterConnect('synology', `已连接 ${hostOf(endpoint)}`);
           }}
         />
       ) : null}
-      {dialog === 'login' && cloud.provider !== 'synology' ? (
-        <LoginDialog
-          provider={cloud.provider}
-          state={current}
-          onClose={() => setDialog(null)}
-          onLoggedIn={(name) => {
-            toast(`已登录 ${name}`);
-            refresh();
-          }}
-        />
+      {dialog?.kind === 'login' && cloud.provider !== 'synology' ? (
+        <LoginDialog name={name} notice={dialog.notice} login={login} onStart={startLogin} onClose={closeDialog} />
       ) : null}
-      {dialog === 'email' ? (
-        <EmailDialog cloud={cloud} hasKey={Boolean(overview?.resendKey)} onClose={() => setDialog(null)} onSave={saveEmail} />
+      {dialog?.kind === 'email' ? (
+        <EmailDialog cloud={cloud} hasKey={Boolean(overview?.resendKey)} notice={dialog.notice} onClose={closeDialog} onSave={saveEmail} />
       ) : null}
-      {dialog === 'folder' ? (
+      {dialog?.kind === 'folder' ? (
         <FolderDialog
-          start={cloud.folder}
-          onClose={() => setDialog(null)}
+          start={folder || '/'}
+          notice={dialog.notice}
+          onClose={closeDialog}
           onChoose={async (path) => {
-            const saved = await saveCloud({ folder: normalizeRemoteFolder(path) });
-            if (saved) toast(`之后备份到 ${path}`);
+            const saved = await saveCloud({ folders: { ...cloud.folders, [cloud.provider]: normalizeRemoteFolder(path) } });
+            if (saved) toast(`之后同步到 ${path}`);
             return saved;
           }}
         />

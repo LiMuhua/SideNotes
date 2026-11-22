@@ -152,17 +152,27 @@ describe('设置校验', () => {
 
   it('云端同步：远程文件夹以 / 开头，时间表缺省为每天 3 点，旧版的上次备份与错误丢掉', () => {
     const cloud = normalizeSettings({
-      cloud: { folder: 'SideNotes', schedule: '  ', lastBackup: 5, lastError: 'x', email: ' a@b.com ', notifications: true },
+      cloud: { folders: { synology: 'backup/Test', google: '/' }, schedule: '  ', lastBackup: 5, lastError: 'x', email: ' a@b.com ', notifications: true },
     }).cloud;
-    expect(cloud.folder).toBe('/SideNotes');
+    expect(cloud.folders).toEqual({ synology: '/backup/Test', onedrive: '', google: '' });
     expect(cloud.schedule).toBe(DEFAULT_CLOUD_SCHEDULE);
     expect(cloud.email).toBe('a@b.com');
     expect(cloud.notifications).toBe(true);
     expect(cloud).not.toHaveProperty('lastBackup');
     expect(cloud).not.toHaveProperty('lastError');
     expect(normalizeRemoteFolder('\\Test\\\\备份\\')).toBe('/Test/备份');
-    expect(normalizeRemoteFolder('')).toBe('/SideNotes');
+    expect(normalizeRemoteFolder('')).toBe('');
+    expect(normalizeRemoteFolder('/')).toBe('');
     expect(normalizeSettings({ cloud: { schedule: '*/30 * * * *' } }).cloud.schedule).toBe('*/30 * * * *');
+  });
+
+  it('云端同步：没有默认的远程文件夹；0.8.1 的 folder 归当时选中的服务，默认的 /SideNotes 当作没选', () => {
+    expect(normalizeSettings({}).cloud.folders).toEqual({ synology: '', onedrive: '', google: '' });
+    expect(normalizeSettings({ cloud: { provider: 'onedrive', folder: '/Test' } }).cloud.folders).toEqual({ synology: '', onedrive: '/Test', google: '' });
+    expect(normalizeSettings({ cloud: { provider: 'synology', folder: '/SideNotes' } }).cloud.folders.synology).toBe('');
+    // 已经按服务分开存的，不再看旧的 folder。
+    expect(normalizeSettings({ cloud: { folder: '/Old', folders: { onedrive: '/New' } } }).cloud.folders).toEqual({ synology: '', onedrive: '/New', google: '' });
+    expect(normalizeSettings({}).cloud).not.toHaveProperty('folder');
   });
 
   it('宽度按步长 4 取整', () => {
