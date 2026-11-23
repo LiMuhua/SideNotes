@@ -25,8 +25,8 @@ pub struct Provider {
     pub authorize_url: String,
     pub token_url: String,
     pub client_id: String,
-    /// 客户端密钥，有就在换令牌时带上，没有就不带。Google「Web 应用」类型的客户端必须带（不带时报 client_secret is missing）；
-    /// 「桌面应用」类型的可以不带：Google 的文档写明桌面应用是公开客户端、藏不住密钥，换令牌与刷新时密钥可选，靠 PKCE 防截获。
+    /// 客户端密钥，有就在换令牌与刷新时带上。Google 的客户端必须带（「Web 应用」与「桌面应用」类型都是，不带报
+    /// client_secret is missing.，文档写的「可选」不成立；密钥随程序分发，Google 认为桌面应用的密钥不算机密）。
     /// Microsoft 的公共客户端没有密钥。
     pub client_secret: Option<String>,
     pub scope: &'static str,

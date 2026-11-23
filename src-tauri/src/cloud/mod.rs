@@ -226,11 +226,11 @@ fn oauth_provider(provider: &str) -> oauth::Provider {
     }
 }
 
-/// 这个版本能不能连接这个服务：群晖 NAS 总能；OneDrive 与 Google Drive 要客户端编号（Google 的密钥可以没有，见 gdrive::BUILTIN_SECRET）。
+/// 这个版本能不能连接这个服务：群晖 NAS 总能；OneDrive 要客户端编号，Google 还要客户端密钥（「桌面应用」类型也要，见 build.rs）。
 fn provider_ready(provider: &str) -> bool {
     match provider {
         "onedrive" => !onedrive::BUILTIN_CLIENT.trim().is_empty(),
-        "google" => !gdrive::BUILTIN_CLIENT.trim().is_empty(),
+        "google" => !gdrive::BUILTIN_CLIENT.trim().is_empty() && !gdrive::BUILTIN_SECRET.trim().is_empty(),
         _ => true,
     }
 }
@@ -634,7 +634,8 @@ pub async fn cloud_login(app: AppHandle, provider: String) -> AppResult<String> 
             return Err(RemoteError::Config("这个服务不用登录".into()));
         }
         if !provider_ready(&provider) {
-            return Err(RemoteError::Config(format!("这个版本还不能登录 {}：构建时没有带上客户端编号", provider_name(&provider))));
+            let missing = if provider == "google" { "客户端编号或密钥" } else { "客户端编号" };
+            return Err(RemoteError::Config(format!("这个版本还不能登录 {}：构建时没有带上{missing}", provider_name(&provider))));
         }
         cloud.login_cancel.store(false, Ordering::SeqCst);
         if let Ok(mut slot) = cloud.pasted.lock() {
@@ -919,8 +920,8 @@ mod tests {
     fn webdav_is_always_ready_and_the_drives_need_a_builtin_client() {
         assert!(provider_ready("synology"));
         assert_eq!(provider_ready("onedrive"), !onedrive::BUILTIN_CLIENT.trim().is_empty());
-        // Google 的密钥可以没有（桌面应用类型的客户端），只看编号。
-        assert_eq!(provider_ready("google"), !gdrive::BUILTIN_CLIENT.trim().is_empty());
+        // Google 要编号与密钥（桌面应用类型的客户端也要密钥）。
+        assert_eq!(provider_ready("google"), !gdrive::BUILTIN_CLIENT.trim().is_empty() && !gdrive::BUILTIN_SECRET.trim().is_empty());
     }
 
     #[test]

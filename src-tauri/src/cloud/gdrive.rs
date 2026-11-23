@@ -20,8 +20,8 @@ const DRIVE: &str = "https://www.googleapis.com/drive/v3";
 const UPLOAD: &str = "https://www.googleapis.com/upload/drive/v3";
 const FOLDER: &str = "application/vnd.google-apps.folder";
 
-/// 构建时写进程序的客户端编号与密钥（build.rs）。编号空的表示这个版本登录不了 Google Drive；
-/// 密钥可以空：「桌面应用」类型的客户端换令牌时不用密钥（见 oauth::Provider::client_secret）。
+/// 构建时写进程序的客户端编号与密钥（build.rs；仓库里的密钥是异或过的，构建时还原）。任一个空的表示这个版本登录不了 Google Drive：
+/// 「桌面应用」类型的客户端换令牌时也要密钥（见 oauth::Provider::client_secret）。
 pub const BUILTIN_CLIENT: &str = match option_env!("SIDENOTES_GOOGLE_CLIENT_ID") {
     Some(value) => value,
     None => "",

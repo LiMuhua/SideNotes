@@ -4,6 +4,7 @@
     "tenant": "common"
   },
   "google": {
-    "clientId": "714305640268-p5m0uivggdjf8jg8rmrt42kmoahlvcka.apps.googleusercontent.com"
+    "clientId": "714305640268-3u7g501lhr519lhk00q03mg5dgn88e14.apps.googleusercontent.com",
+    "obscured": "142627361e3759323d6b1c0c0d2c506513595d51172b26792f192027231f3426245a05"
   }
 }
