@@ -20,7 +20,8 @@ const DRIVE: &str = "https://www.googleapis.com/drive/v3";
 const UPLOAD: &str = "https://www.googleapis.com/upload/drive/v3";
 const FOLDER: &str = "application/vnd.google-apps.folder";
 
-/// 构建时写进程序的客户端编号与密钥（build.rs）；任一个空的表示这个版本登录不了 Google Drive。
+/// 构建时写进程序的客户端编号与密钥（build.rs）。编号空的表示这个版本登录不了 Google Drive；
+/// 密钥可以空：「桌面应用」类型的客户端换令牌时不用密钥（见 oauth::Provider::client_secret）。
 pub const BUILTIN_CLIENT: &str = match option_env!("SIDENOTES_GOOGLE_CLIENT_ID") {
     Some(value) => value,
     None => "",
@@ -39,6 +40,7 @@ pub fn provider(client_id: &str, client_secret: &str) -> Provider {
         client_id: client_id.trim().to_string(),
         client_secret: Some(client_secret.trim().to_string()).filter(|value| !value.is_empty()),
         scope: "https://www.googleapis.com/auth/drive.file",
+        refresh_scope: false,
         // 要刷新令牌：access_type=offline；每次都给：prompt=consent。
         extra: &[("access_type", "offline"), ("prompt", "consent select_account")],
     }

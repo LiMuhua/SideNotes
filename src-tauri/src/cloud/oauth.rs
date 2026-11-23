@@ -25,9 +25,13 @@ pub struct Provider {
     pub authorize_url: String,
     pub token_url: String,
     pub client_id: String,
-    /// Google 的客户端有密钥，换令牌时必须带上（随程序分发，公开在仓库里）；Microsoft 的公共客户端没有。
+    /// 客户端密钥，有就在换令牌时带上，没有就不带。Google「Web 应用」类型的客户端必须带（不带时报 client_secret is missing）；
+    /// 「桌面应用」类型的可以不带：Google 的文档写明桌面应用是公开客户端、藏不住密钥，换令牌与刷新时密钥可选，靠 PKCE 防截获。
+    /// Microsoft 的公共客户端没有密钥。
     pub client_secret: Option<String>,
     pub scope: &'static str,
+    /// 刷新令牌时要不要再写一遍范围（微软要，Google 不用）。
+    pub refresh_scope: bool,
     /// 授权页额外的参数。
     pub extra: &'static [(&'static str, &'static str)],
 }
@@ -287,8 +291,7 @@ pub fn refresh(client: &Client, provider: &Provider, refresh_token: &str) -> Rem
         return Err(RemoteError::Config(format!("这个版本没有带上 {} 的客户端编号，登录不了", provider.name)));
     }
     let mut form = vec![("grant_type", "refresh_token"), ("refresh_token", refresh_token)];
-    // Microsoft 刷新时要再写一遍范围。
-    if provider.client_secret.is_none() {
+    if provider.refresh_scope {
         form.push(("scope", provider.scope));
     }
     token_request(client, provider, &form)

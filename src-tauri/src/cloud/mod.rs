@@ -226,11 +226,11 @@ fn oauth_provider(provider: &str) -> oauth::Provider {
     }
 }
 
-/// 这个版本能不能连接这个服务：群晖 NAS 总能；OneDrive 要客户端编号，Google 还要客户端密钥。
+/// 这个版本能不能连接这个服务：群晖 NAS 总能；OneDrive 与 Google Drive 要客户端编号（Google 的密钥可以没有，见 gdrive::BUILTIN_SECRET）。
 fn provider_ready(provider: &str) -> bool {
     match provider {
         "onedrive" => !onedrive::BUILTIN_CLIENT.trim().is_empty(),
-        "google" => !gdrive::BUILTIN_CLIENT.trim().is_empty() && !gdrive::BUILTIN_SECRET.trim().is_empty(),
+        "google" => !gdrive::BUILTIN_CLIENT.trim().is_empty(),
         _ => true,
     }
 }
@@ -919,7 +919,8 @@ mod tests {
     fn webdav_is_always_ready_and_the_drives_need_a_builtin_client() {
         assert!(provider_ready("synology"));
         assert_eq!(provider_ready("onedrive"), !onedrive::BUILTIN_CLIENT.trim().is_empty());
-        assert_eq!(provider_ready("google"), !gdrive::BUILTIN_CLIENT.trim().is_empty() && !gdrive::BUILTIN_SECRET.trim().is_empty());
+        // Google 的密钥可以没有（桌面应用类型的客户端），只看编号。
+        assert_eq!(provider_ready("google"), !gdrive::BUILTIN_CLIENT.trim().is_empty());
     }
 
     #[test]
