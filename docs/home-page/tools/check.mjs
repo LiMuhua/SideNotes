@@ -62,6 +62,15 @@ for (const file of PAGES.filter((page) => existsSync(join(ROOT, page)))) {
   for (const [img] of html.matchAll(/<img\b[^>]*>/g)) {
     if (!/\salt="/.test(img)) fail(file, `图片缺少 alt：${img.slice(0, 80)}`);
   }
+  // 主题截图的地址由脚本拼出（site.js：data-shot-base + 主题 + 明暗，磨砂玻璃另有各块的遮罩），上面查不到，这里逐个查。
+  const base = html.match(/\sdata-shot-base="([^"]+)"/)?.[1];
+  if (base) {
+    const surfaces = [...html.matchAll(/name="surface" value="([^"]+)"/g)].map((match) => match[1]);
+    const modes = [...html.matchAll(/name="mode" value="([^"]+)"/g)].map((match) => match[1]);
+    const shots = surfaces.flatMap((surface) => modes.map((mode) => `${base}${surface}-${mode}.webp`));
+    if (surfaces.includes('glass')) shots.push(`${base}glass-mask.webp`);
+    for (const shot of shots) checkLocal(file, shot);
+  }
 }
 
 const css = existsSync(join(ROOT, 'assets/site.css')) ? read('assets/site.css') : '';

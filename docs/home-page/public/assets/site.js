@@ -1,11 +1,12 @@
-/* global document, matchMedia, fetch, setTimeout, clearTimeout, URL, localStorage */
+/* global document, window, matchMedia, fetch, setTimeout, clearTimeout, requestAnimationFrame, performance, URL, localStorage */
 /**
  * SideNotes 官网的交互。全部是锦上添花：没有脚本时内容完整，首屏的出场动画也由 CSS 播放。
  *
- * 1. 首屏的屏幕边缘：指针碰到右边缘或悬停门缝时侧栏滑出，离开侧栏 0.6 秒后滑回（与应用的默认值相同）；
+ * 1. 首屏的屏幕边缘：指针碰到右边缘或门缝里的便签时侧栏滑出，离开侧栏 0.6 秒后滑回（与应用的默认值相同）；
  *    点击门缝或按 Alt+Shift+S 切换，这样打开的不会自动收起。
- * 2. 主题：选主题与明暗，原来的侧栏滑回，换上新主题再滑出。
- * 3. 下载：GitHub 上有发布版时，下载按钮直接指向 Windows 安装程序，并写出版本号。
+ * 2. 便签的眼睛跟着指针看。
+ * 3. 主题：选主题与明暗，原来的侧栏滑回，换上新主题再滑出；桌面跟着明暗换成白天或夜里。
+ * 4. 下载：按钮直接链接最新发布版的安装程序；查到还没有发布版时改指向发布页，有发布版时写出版本号。
  */
 (() => {
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -19,10 +20,13 @@
     const panel = edge.querySelector('.panel');
     const HIDE_DELAY = 600;
     const EDGE_ZONE = 24;
+    const CLICK_GRACE = 1500;
     let shown = true;
     let ready = false; // 出场动画放完之前不接管，免得打断它
     let armed = false; // 指针进过侧栏之后才自动收起，刚打开页面时不会自己收走
     let sticky = false;
+    let suppress = false; // 点门缝或按快捷键收起后，指针离开边缘之前不因碰到边缘再滑出
+    let slidAt = -Infinity; // 指针碰到边缘让侧栏滑出的时刻
     let timer = 0;
 
     const render = () => {
@@ -54,6 +58,17 @@
       const rect = edge.getBoundingClientRect();
       return y >= rect.top && y <= rect.bottom;
     };
+    const slideOut = () => {
+      armed = true;
+      slidAt = performance.now();
+      set(true, false);
+    };
+    // 点击或快捷键：打开的留着不自动收起；收起后要等指针离开边缘，免得马上又碰出来。
+    const toggle = () => {
+      const next = !shown;
+      set(next, true);
+      suppress = !next;
+    };
 
     // 出场动画结束（或减少动态效果时立即）后，由脚本接管状态。
     const takeOver = () => {
@@ -67,15 +82,16 @@
 
     document.addEventListener('pointermove', (event) => {
       if (event.pointerType === 'touch') return;
-      const overPanel = panel.contains(event.target) || seam.contains(event.target);
+      const overSeam = seam.contains(event.target);
+      const overPanel = overSeam || panel.contains(event.target);
       if (overPanel) {
         if (shown) armed = true;
         cancel();
       }
       const atEdge = event.clientX >= document.documentElement.clientWidth - EDGE_ZONE && inHero(event.clientY);
-      if (atEdge && !shown) {
-        armed = true;
-        set(true, false);
+      if (suppress && !atEdge && !overSeam) suppress = false;
+      if ((atEdge || overSeam) && !shown && !suppress) {
+        slideOut();
       } else if (!overPanel && !atEdge) {
         scheduleHide();
       }
@@ -83,50 +99,101 @@
 
     // 指针从右边移出窗口（滑到滚动条或屏幕边上）也算碰到边缘。
     document.documentElement.addEventListener('mouseleave', (event) => {
-      if (event.clientX >= document.documentElement.clientWidth - 2 && inHero(event.clientY) && !shown) {
-        armed = true;
-        set(true, false);
-      }
+      if (event.clientX >= document.documentElement.clientWidth - 2 && inHero(event.clientY) && !shown && !suppress) slideOut();
     });
 
-    seam.addEventListener('click', () => set(!shown, true));
+    // 指针碰到便签时侧栏已经滑出，紧接着的这一下点击是想让它留着，不是收起。
+    seam.addEventListener('click', () => {
+      if (shown && !sticky && performance.now() - slidAt < CLICK_GRACE) {
+        sticky = true;
+        cancel();
+        return;
+      }
+      toggle();
+    });
 
     document.addEventListener('keydown', (event) => {
       if (!event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey || event.code !== 'KeyS') return;
       if (edge.getBoundingClientRect().bottom <= 0) return;
       event.preventDefault();
-      set(!shown, true);
+      toggle();
     });
+
+    // 便签下面的键帽跟着访客按下的键按下去。
+    const caps = new Map([...edge.querySelectorAll('.edge-keys kbd')].map((cap) => [cap.dataset.key, cap]));
+    const press = (event, down) => {
+      const cap = caps.get(event.key === 'Alt' || event.key === 'Shift' ? event.key : event.code);
+      if (cap) cap.toggleAttribute('data-down', down);
+    };
+    document.addEventListener('keydown', (event) => press(event, true));
+    document.addEventListener('keyup', (event) => press(event, false));
+    window.addEventListener('blur', () => caps.forEach((cap) => cap.removeAttribute('data-down')));
   }
 
-  /* ---------- 2. 主题 ---------- */
+  /* ---------- 2. 便签的眼睛 ---------- */
+  // 眼睛画在便签图形里（页面开头的 #note），位移经 --look-x、--look-y 传进去，单位是图形自己的坐标。
+  const peeks = [...document.querySelectorAll('.peek')];
+  if (peeks.length) {
+    const TILT = (9 * Math.PI) / 180; // 便签逆时针转了 9°，把指针的方向换到便签自己的坐标里
+    let frame = 0;
+    let pointerX = 0;
+    let pointerY = 0;
+    const look = () => {
+      frame = 0;
+      for (const peek of peeks) {
+        const box = peek.getBoundingClientRect();
+        if (box.bottom < 0 || box.top > window.innerHeight) continue;
+        const dx = pointerX - (box.left + box.width * 0.35);
+        const dy = pointerY - (box.top + box.height * 0.4);
+        const distance = Math.hypot(dx, dy) || 1;
+        const reach = Math.min(1, distance / 240); // 指针离得近时只稍微转过去
+        const x = ((dx * Math.cos(TILT) - dy * Math.sin(TILT)) / distance) * reach;
+        const y = ((dx * Math.sin(TILT) + dy * Math.cos(TILT)) / distance) * reach;
+        peek.style.setProperty('--look-x', `${(x * 1.2).toFixed(2)}px`);
+        peek.style.setProperty('--look-y', `${(y * 0.9).toFixed(2)}px`);
+      }
+    };
+    document.addEventListener(
+      'pointermove',
+      (event) => {
+        if (event.pointerType === 'touch') return;
+        pointerX = event.clientX;
+        pointerY = event.clientY;
+        if (!frame) frame = requestAnimationFrame(look);
+      },
+      { passive: true },
+    );
+  }
+
+  /* ---------- 3. 主题 ---------- */
   const gallery = document.querySelector('[data-gallery]');
   const pickers = document.querySelector('[data-pickers]');
   if (gallery && pickers) {
-    const TRANSLUCENT = new Set(['win11', 'glass']);
     const value = (name) => pickers.querySelector(`input[name="${name}"]:checked`).value;
-    const label = (name, current) => pickers.querySelector(`input[name="${name}"][value="${current}"]`).nextElementSibling.textContent.trim();
+    const label = (name, current) => pickers.querySelector(`input[name="${name}"][value="${current}"]`).closest('label').textContent.trim();
+    const absolute = (url) => new URL(url, document.baseURI).href;
     let figure = gallery.querySelector('.shot');
     let running = false;
     let queued = false;
 
     const apply = (target, surface, mode) => {
-      const url = `${gallery.dataset.shotBase}${surface}-${mode}.webp`;
       const img = target.querySelector('img');
-      img.src = url;
+      img.src = `${gallery.dataset.shotBase}${surface}-${mode}.webp`;
       img.alt = gallery.dataset.alt.replace('{theme}', label('surface', surface)).replace('{mode}', label('mode', mode).toLowerCase());
-      if (TRANSLUCENT.has(surface)) {
-        target.dataset.translucent = '';
-        // 自定义属性里的相对地址会按样式表所在的目录解析，这里先换成绝对地址。
-        target.style.setProperty('--shape', `url("${new URL(url, document.baseURI).href}")`);
-      } else {
-        delete target.dataset.translucent;
-        target.style.removeProperty('--shape');
-      }
+      target.dataset.surface = surface;
+      // 磨砂玻璃只模糊各块底下：遮罩是另截的各块形状。自定义属性里的相对地址按样式表的目录解析，先换成绝对地址。
+      if (surface === 'glass') target.style.setProperty('--shape', `url("${absolute(`${gallery.dataset.shotBase}glass-mask.webp`)}")`);
+      else target.style.removeProperty('--shape');
+    };
+    // 桌面与主题小样跟着明暗换成白天或夜里。
+    const paint = (mode) => {
+      gallery.dataset.mode = mode;
+      pickers.dataset.mode = mode;
     };
 
     // 切换时只换到最后一次选中的组合；动画进行中再点，放完这一轮接着换。
     const swap = async () => {
+      paint(value('mode'));
       if (running) {
         queued = true;
         return;
@@ -164,25 +231,37 @@
     // 明暗默认跟随访客的系统。
     if (matchMedia('(prefers-color-scheme: dark)').matches) {
       pickers.querySelector('input[name="mode"][value="dark"]').checked = true;
-      apply(figure, value('surface'), 'dark');
     }
+    apply(figure, value('surface'), value('mode'));
+    paint(value('mode'));
     pickers.addEventListener('change', swap);
   }
 
-  /* ---------- 3. 下载 ---------- */
+  /* ---------- 4. 下载 ---------- */
   const downloads = document.querySelectorAll('[data-download]');
   if (downloads.length) {
+    // 按钮在网页里直接链接最新发布版的安装程序（固定文件名，见 .github/workflows/release.yml），不靠脚本也能下载。
+    // 这里只查一下最新发布版：还没有发布版时改指向发布页，免得点出 404；有就写出版本号。
     // GitHub 接口匿名访问每小时 60 次：结果（包括「还没有发布版」）在本机记一小时，翻页、重开不再重复查询。
     const CACHE_KEY = 'sidenotes-site:release';
     const CACHE_MS = 60 * 60 * 1000;
+    const RELEASES = 'https://github.com/LiMuhua/SideNotes/releases';
     const show = (release) => {
-      if (!release) return;
+      if (!release) {
+        downloads.forEach((link) => (link.href = RELEASES));
+        return;
+      }
+      // 发布版里没有按钮链接的那个文件（例如改过名）时，退回最像安装程序的文件，再不行就打开这个发布版的页面。
       const assets = Array.isArray(release.assets) ? release.assets : [];
-      const installer =
-        assets.find((asset) => /setup\.exe$/i.test(asset.name)) ??
-        assets.find((asset) => /\.exe$/i.test(asset.name)) ??
-        assets.find((asset) => /\.msi$/i.test(asset.name));
-      if (installer) downloads.forEach((link) => (link.href = installer.browser_download_url));
+      downloads.forEach((link) => {
+        const file = decodeURIComponent(new URL(link.href).pathname.split('/').pop());
+        if (assets.some((asset) => asset.name === file)) return;
+        const installer =
+          assets.find((asset) => /setup\.exe$/i.test(asset.name)) ??
+          assets.find((asset) => /\.exe$/i.test(asset.name)) ??
+          assets.find((asset) => /\.msi$/i.test(asset.name));
+        link.href = installer ? installer.browser_download_url : release.html_url || RELEASES;
+      });
       const version = String(release.tag_name ?? '').replace(/^v/i, '');
       if (version) {
         document.querySelectorAll('[data-release]').forEach((note) => {
@@ -207,7 +286,11 @@
           throw new Error(String(response.status));
         })
         .then((data) => {
-          const release = data && { tag_name: data.tag_name, assets: (data.assets ?? []).map(({ name, browser_download_url }) => ({ name, browser_download_url })) };
+          const release = data && {
+            tag_name: data.tag_name,
+            html_url: data.html_url,
+            assets: (data.assets ?? []).map(({ name, browser_download_url }) => ({ name, browser_download_url })),
+          };
           try {
             localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), release }));
           } catch {
@@ -216,7 +299,7 @@
           show(release);
         })
         .catch(() => {
-          // 取不到发布信息时保留指向发布页的链接。
+          // 查不到时保留网页里写的链接。
         });
     }
   }

@@ -65,6 +65,45 @@ const CONTENT = {
 const SURFACES = ['terminal', 'magazine', 'paper', 'win11', 'glass'];
 const MODES = ['light', 'dark'];
 
+/**
+ * 官网主题桌面上侧栏背后的明暗（相对亮度的第 5、第 95 百分位）：浅色截图摆在白天的桌面上，深色摆在夜里的桌面上。
+ * 照应用的做法量出（glass.rs 的 tone_of 与 gap_tone：按 12px 模糊后取百分位，再与不模糊的取更宽的范围），
+ * 桌面的样式（site.css 的 .theme-desk）改了要重新量。
+ */
+const TONES = { light: { low: 0.56, high: 0.97 }, dark: { low: 0.015, high: 0.067 } };
+
+/**
+ * 磨砂玻璃照应用打开实时模糊时的样子截（App.tsx）：各块背后的模糊换成透明（官网在截图底下实时模糊桌面），
+ * 各块的着色按背后的明暗调淡，倍数用应用自己的 tintScale 算（core/glassTone.ts，文字色与 App.tsx 的 GLASS_TEXT_TOKENS 相同）。
+ */
+function glassScript(theme) {
+  return `(async () => {
+    const root = document.documentElement;
+    root.style.setProperty('--glass-backdrop', 'linear-gradient(transparent, transparent)');
+    root.dataset.glassBackdrop = '';
+    const { tintScale, cssColor } = await import('/src/core/glassTone.ts');
+    const tokens = getComputedStyle(root);
+    const card = cssColor(tokens.getPropertyValue('--sn-color-card'));
+    const texts = ['--sn-color-text', '--sn-color-text-secondary', '--sn-color-text-muted', '--sn-color-accent-text']
+      .map((name) => cssColor(tokens.getPropertyValue(name)))
+      .filter(Boolean);
+    const scale = tintScale(${JSON.stringify(TONES[theme])}, card, texts);
+    root.style.setProperty('--glass-tint-scale', String(scale));
+    await new Promise((done) => setTimeout(done, 1000));
+    return 'tint ' + scale;
+  })()`;
+}
+
+/** 磨砂玻璃各块的形状：块涂成不透明、去掉文字与投影再截一张，官网只在这些地方模糊桌面（site.css 的 --shape）。 */
+const MASK_SCRIPT = `(async () => {
+  document.documentElement.style.setProperty('--glass-backdrop', 'linear-gradient(#000, #000)');
+  const style = document.createElement('style');
+  style.textContent = '*, *::before, *::after { color: transparent !important; text-shadow: none !important; box-shadow: none !important; outline: none !important; border-color: transparent !important; } img, svg { visibility: hidden !important; }';
+  document.head.append(style);
+  await new Promise((done) => setTimeout(done, 400));
+  return true;
+})()`;
+
 /** 截图任务：clip 为网页像素的截取范围，clipSelector 截取元素所在的矩形。 */
 function jobs() {
   const list = [];
@@ -77,7 +116,8 @@ function jobs() {
       // 速记浮窗，带一段草稿。
       list.push({ name: `${lang}-capture-${theme}`, width: 560, height: 420, query: '?window=capture&debug-data=1', settings: base('terminal', theme), ...content, draft: { text: content.draft, images: [], updatedAt: Date.now() } });
       for (const surface of SURFACES) {
-        list.push({ name: `${lang}-${surface}-${theme}`, width: 400, height: 900, query: '?debug-data=1', settings: base(surface, theme), ...content });
+        const glass = surface === 'glass' ? { script: glassScript(theme), ...(theme === 'light' ? { mask: `${lang}-glass-mask` } : {}) } : {};
+        list.push({ name: `${lang}-${surface}-${theme}`, width: 400, height: 900, query: '?debug-data=1', settings: base(surface, theme), ...content, ...glass });
       }
     }
   }
@@ -246,7 +286,7 @@ async function main() {
     await loaded;
     await evaluate('document.fonts.ready.then(() => true)');
     await sleep(1500);
-    if (job.script) await evaluate(job.script);
+    const note = job.script ? await evaluate(job.script) : null;
     let clip = job.clip ? { ...job.clip, scale: 1 } : undefined;
     if (job.clipSelector) {
       const rect = await evaluate(`(() => { const r = document.querySelector(${JSON.stringify(job.clipSelector)}).getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; })()`);
@@ -256,7 +296,13 @@ async function main() {
     const shot = await send('Page.captureScreenshot', { format: 'webp', quality: QUALITY, captureBeyondViewport: false, ...(clip ? { clip } : {}) });
     const file = join(OUT, `${job.name}.webp`);
     writeFileSync(file, Buffer.from(shot.data, 'base64'));
-    console.log('已截图', job.name, clip ? `${Math.round(clip.width)}×${Math.round(clip.height)}` : `${job.width}×${job.height}`);
+    console.log('已截图', job.name, clip ? `${Math.round(clip.width)}×${Math.round(clip.height)}` : `${job.width}×${job.height}`, typeof note === 'string' ? note : '');
+    if (job.mask) {
+      await evaluate(MASK_SCRIPT);
+      const mask = await send('Page.captureScreenshot', { format: 'webp', quality: QUALITY, captureBeyondViewport: false });
+      writeFileSync(join(OUT, `${job.mask}.webp`), Buffer.from(mask.data, 'base64'));
+      console.log('已截图', job.mask);
+    }
   }
 
   ws.close();

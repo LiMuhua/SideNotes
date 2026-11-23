@@ -1067,11 +1067,3 @@ T144（第八轮反馈：伸缩太生涩）起，时长与缓动不再取主题�
 **原因**：用户反馈磨砂玻璃不够透，要和应用一样。应用里块的着色随背后的明暗变（T131），浅色背景上能淡到令牌的 0.2 倍；原来的截图是浏览器预览里的默认样子（最浓的一档），网页又拿截图本身的透明度当遮罩，块越透、模糊越弱，背后反而看得清。夜里的桌面上，浅色玻璃按 4.5:1 的规则只能偏浓，所以浅色配白天的桌面，也和平常用浅色模式时的桌面相符。
 
 **代价**：倍数取决于官网桌面的样子，`shots.mjs` 里写着量出来的明暗（TONES），改了桌面的颜色要重新量、重截。网页上是一次 CSS 模糊，应用里是系统的宿主背景再叠 12px，强弱只是接近。多两张遮罩图（每张约 18 KB）。
-
-## 75. 发布流水线：构建与发布分成两个作业，安装程序用固定文件名
-
-**决定**：推送 `v*` 标签时，`.github/workflows/release.yml` 在 `windows-latest` 上用锁文件里的 Tauri CLI 构建（`pnpm tauri build`，打出 NSIS 与 MSI），把安装程序改名为不带版本号的 `SideNotes_x64-setup.exe` 与 `SideNotes_x64_en-US.msi`，存为工作流产物；另一个作业在 Ubuntu 上用 `gh release create` 发布正式版 Release「SideNotes 版本号」，标为 Latest，正文取 `src/core/changelog.ts` 第一条的概述。构建前核对标签与五处版本号（`package.json`、`tauri.conf.json`、`Cargo.toml`、`Cargo.lock`、更新日志第一条）一致。手动运行只构建、不发布。运行器上删掉 `.cargo/config.toml`，用官方 crates.io。
-
-**原因**：官网的下载按钮要用 `releases/latest/download/<文件名>` 这样不随版本变的地址，Tauri 打出的文件名带版本号，必须改名；只上传改名后的一份，Release 页上没有重复的安装程序。没有用 tauri-action 发布：它在运行依赖包安装与编译脚本的同一个作业里拿着写仓库的令牌，而且先公开 Release 再上传，上传期间或失败后，官网的地址会指向缺文件的 Release。`gh release create` 先建草稿、传完再公开，失败就删掉草稿；发布作业不运行项目代码，只有它申请 `contents: write`。更新日志每版一条，单元测试保证首条与版本一致，正好作正文。中科大镜像是给国内开发机用的，海外的运行器直接用官方源。
-
-**代价**：文件名里的 `SideNotes`、`x64`、`en-US` 写死在流水线与官网的链接里，改 `productName`、加架构或换 MSI 的语言时要一起改。更新日志按固定写法读取（`{ version: '…', summary: '…' }`，概述是一个完整的字符串），改了写法流水线就失败。`package.json` 没有 `packageManager` 与 `engines`，Node 22 与 pnpm 11.14.0 写死在流水线里；以后写上 `packageManager`，就删掉流水线里 pnpm 的 `version`（两处不同时 pnpm/action-setup 会报错）。标签上的运行只读得到 master 与同一个标签存下的 Rust 缓存，每个新标签第一次构建基本是从零开始。以后启用自动更新时，`latest.json` 里的地址要指向改名后的文件，签名私钥放进仓库的 Secrets。安装程序没有代码签名。

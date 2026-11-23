@@ -47,6 +47,8 @@
   --muted: #535a8c;
   --line: #dde0f1;
   --link: #3140b0;
+  /* 键盘焦点：浅色纸面上用深蓝，夜色与深色里用便签黄。 */
+  --focus: #3140b0;
   --code: #eceefa;
   --shadow: 0 1px 2px rgb(23 28 76 / 0.08), 0 18px 48px -18px rgb(23 28 76 / 0.32);
 
@@ -69,6 +71,7 @@
     --muted: #a8aedc;
     --line: #2b316d;
     --link: #ffe08a;
+    --focus: var(--note);
     --code: #222861;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 18px 48px -18px rgb(0 0 0 / 0.7);
   }
@@ -117,7 +120,7 @@ a:hover {
 }
 
 :focus-visible {
-  outline: 2px solid var(--note);
+  outline: 2px solid var(--focus);
   outline-offset: 3px;
   border-radius: 4px;
 }
@@ -211,6 +214,7 @@ kbd {
 /* ==================== 夜里的屋子（首屏与页尾共用） ==================== */
 
 .night {
+  --focus: var(--note);
   position: relative;
   isolation: isolate;
   overflow: clip;
@@ -238,14 +242,17 @@ kbd {
     linear-gradient(180deg, #252d76 0%, #1c2259 52%, #161a47 100%);
 }
 
+/* 星空铺满整块夜色，压在文字与链接下面，也不接收指针（否则盖住导航与按钮，点不动）。 */
 .stars {
   position: absolute;
+  z-index: -1;
   inset: 0;
   width: 100%;
   height: 100%;
   max-width: none;
   color: #fff3c4;
   fill: currentColor;
+  pointer-events: none;
 }
 
 .stars .sparkle {
@@ -487,6 +494,184 @@ kbd {
   width: var(--panel-w);
 }
 
+/* 门缝透进屋里的光：侧栏收起时亮起来，便签周围一团暖光，外面一圈淡紫的余光，几粒浮尘在光里慢慢往上飘。
+ * 压在文字下面，不接收指针。 */
+.edge-light {
+  position: absolute;
+  z-index: -1;
+  inset: 0 0 0 -60%;
+  background:
+    radial-gradient(16% 22% at 100% 44%, rgb(255 222 140 / 0.42), transparent 72%),
+    radial-gradient(56% 44% at 100% 46%, rgb(122 108 226 / 0.3), transparent 76%),
+    linear-gradient(to left, rgb(255 234 178 / 0.1), transparent 18%);
+  /* 上下两头淡出：窄屏上这块边缘在首屏中间开始，不留一道硬边。 */
+  -webkit-mask: linear-gradient(to bottom, transparent, #000 18%, #000 82%, transparent);
+  mask: linear-gradient(to bottom, transparent, #000 18%, #000 82%, transparent);
+  opacity: 0.4;
+  pointer-events: none;
+  transition: opacity 700ms var(--ease-out);
+}
+
+.edge[data-state="hidden"] .edge-light {
+  opacity: 1;
+}
+
+.edge-light i {
+  position: absolute;
+  top: calc(var(--y) * 1%);
+  right: calc(var(--x) * 1%);
+  width: var(--s, 3px);
+  height: var(--s, 3px);
+  border-radius: 50%;
+  background: #fff8dc;
+  box-shadow: 0 0 8px 2px rgb(255 214 120 / 0.8);
+  opacity: 0.6;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .edge-light i {
+    opacity: 0;
+    animation: mote var(--d) linear var(--t) infinite;
+  }
+}
+
+@keyframes mote {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0);
+  }
+
+  18% {
+    opacity: 1;
+  }
+
+  65% {
+    opacity: 0.7;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-36px, -110px);
+  }
+}
+
+/* 侧栏收起后的两句提示：指向便签的「指针推到这里」，便签下面的快捷键。只写怎么做；侧栏滑回去之后才出现，
+ * 滑出时先收掉，被滑出的侧栏盖在下面。 */
+.edge-hint,
+.edge-keys {
+  position: absolute;
+  margin: 0;
+  color: var(--glow);
+  font: 400 14.5px/1.2 var(--font-display);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  text-shadow: 0 0 16px rgb(255 214 102 / 0.55);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(10px);
+  transition:
+    opacity 160ms ease,
+    transform 160ms var(--ease-in);
+}
+
+.edge-hint {
+  top: calc(36% - 20px);
+  right: 100px;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.edge-hint svg {
+  flex: none;
+  width: 58px;
+  height: 42px;
+  margin-top: 6px;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 6px rgb(255 214 102 / 0.5));
+}
+
+.edge-keys {
+  top: calc(36% + 168px);
+  right: 56px;
+  display: grid;
+  justify-items: end;
+  gap: 10px;
+  color: var(--on-night-muted);
+  font-size: 13.5px;
+  text-shadow: none;
+}
+
+.edge-keys span {
+  display: flex;
+  gap: 8px;
+}
+
+/* 按键做成立体的键帽；访客真按下这几个键时跟着按下去（脚本加 data-down）。 */
+.edge-keys kbd {
+  min-width: 46px;
+  padding: 9px 12px 8px;
+  border: 1px solid rgb(238 240 255 / 0.22);
+  border-bottom-width: 4px;
+  border-bottom-color: rgb(8 10 40 / 0.55);
+  border-radius: 10px;
+  background: linear-gradient(180deg, #3b4596, #2a3176);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.18),
+    0 8px 18px -8px rgb(4 6 30 / 0.8);
+  color: var(--on-night);
+  font: 400 14.5px/1 var(--font-display);
+  transition:
+    transform 90ms ease,
+    border-bottom-width 90ms ease,
+    background-color 90ms ease,
+    box-shadow 90ms ease;
+}
+
+.edge-keys kbd[data-down] {
+  transform: translateY(3px);
+  border-bottom-width: 1px;
+  border-color: rgb(255 234 178 / 0.7);
+  background: linear-gradient(180deg, #4a54a8, #353d88);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.2),
+    0 0 18px rgb(255 214 102 / 0.45);
+  color: var(--glow);
+}
+
+.edge[data-state="hidden"] :is(.edge-hint, .edge-keys) {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 420ms var(--ease-out) 380ms,
+    transform 420ms var(--ease-out) 380ms;
+}
+
+.edge[data-state="hidden"] .edge-keys {
+  transition-delay: 520ms;
+}
+
+/* 触屏没有指针也没有键盘：提示改成点一下，不写快捷键。 */
+.hint-touch {
+  display: none;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .hint-pointer,
+  .edge-keys {
+    display: none;
+  }
+
+  .hint-touch {
+    display: inline;
+  }
+}
+
 .panel {
   position: absolute;
   inset: 0;
@@ -503,9 +688,11 @@ kbd {
   height: auto;
 }
 
+/* 首屏的便签是门缝按钮的一部分：指针碰到它侧栏就滑出，点它让侧栏留着。 */
 .edge .peek {
   transform: translateX(125%) rotate(-9deg);
   transition: transform 260ms var(--ease-in);
+  pointer-events: auto;
 }
 
 .edge .seam::before {
@@ -568,6 +755,10 @@ kbd {
 @media (prefers-reduced-motion: reduce) {
   .panel,
   .edge .peek,
+  .edge-light,
+  .edge-hint,
+  .edge-keys,
+  .edge-keys kbd,
   .seam::before {
     transition-duration: 1ms !important;
     transition-delay: 0ms !important;
@@ -678,9 +869,43 @@ kbd {
   color: var(--muted);
 }
 
-/* 主题：左边选主题与明暗，右边一段桌面上换侧栏。 */
+/* 主题：左边选主题与明暗，右边一段桌面上换侧栏。桌面跟着明暗换成白天或夜里（脚本写 data-mode；没有脚本时是白天，
+ * 与默认的浅色截图一致），侧栏背后有几团颜色，半透明的主题能看出背后被模糊的样子。 */
 .theme-desk {
-  height: clamp(600px, 78vh, 860px);
+  --desk-h: clamp(600px, 78vh, 860px);
+  height: var(--desk-h);
+  background:
+    radial-gradient(22rem 18rem at calc(100% - 140px) 84%, rgb(158 112 232 / 0.4), transparent 70%),
+    radial-gradient(28rem 20rem at calc(100% - 160px) 24%, rgb(255 224 138 / 0.22), transparent 70%),
+    radial-gradient(36rem 26rem at 10% 110%, rgb(98 112 214 / 0.55), transparent 70%),
+    linear-gradient(160deg, #2a3383 0%, #1c2259 60%, #161a47 100%);
+}
+
+/* 白天的桌面铺在夜色上面，换到深色时淡出。 */
+.theme-desk::before {
+  content: "";
+  position: absolute;
+  z-index: -2;
+  inset: 0;
+  background:
+    radial-gradient(22rem 18rem at calc(100% - 130px) 86%, rgb(132 214 222 / 0.55), transparent 70%),
+    radial-gradient(26rem 20rem at calc(100% - 170px) 20%, rgb(255 214 140 / 0.7), transparent 70%),
+    radial-gradient(34rem 24rem at 12% 108%, rgb(255 186 214 / 0.5), transparent 70%),
+    linear-gradient(165deg, #e6e9ff 0%, #cdd4fb 50%, #bcc5f3 100%);
+  transition: opacity var(--slide) ease;
+}
+
+.theme-desk[data-mode="dark"]::before {
+  opacity: 0;
+}
+
+.theme-desk .stars {
+  opacity: 0;
+  transition: opacity var(--slide) ease;
+}
+
+.theme-desk[data-mode="dark"] .stars {
+  opacity: 0.7;
 }
 
 .theme-desk .shot {
@@ -708,34 +933,69 @@ kbd {
   height: 100%;
 }
 
-/* 半透明的两套主题（Windows 11、磨砂玻璃）：侧栏底下的桌面按截图的形状模糊，像应用里那样透出来。 */
-.shot[data-translucent]::before {
+/* Windows 11 的侧栏窗口本身就是面板：圆角与边框由系统画，离屏幕边缘 8 像素（令牌 --sn-panel-inset），
+ * 截图里只有面板。这里按桌面的高度把留白缩放出来（截图高 900，上下各留 8）。 */
+.theme-desk .shot[data-surface="win11"] {
+  --gap: calc(var(--desk-h) * 8 / 916);
+  top: var(--gap);
+  right: var(--gap);
+  height: calc(100% - 2 * var(--gap));
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.12),
+    0 18px 44px -14px rgb(4 6 30 / 0.55);
+}
+
+.theme-desk[data-mode="dark"] .shot[data-surface="win11"] {
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.1),
+    0 18px 44px -14px rgb(0 0 0 / 0.7);
+}
+
+/* 半透明的两套主题：侧栏底下的桌面实时模糊，像应用里那样透出来，模糊与饱和度取主题的令牌。
+ * Windows 11 是系统的亚克力（30px、1.25 倍）。磨砂玻璃是系统模糊之上再叠 12px 与 1.3 倍饱和度（glass_live.rs），
+ * 只模糊各块底下：遮罩是截图时另截的各块形状，块与块之间透出清楚的桌面。 */
+.shot[data-surface="win11"]::before,
+.shot[data-surface="glass"]::before {
   content: "";
   position: absolute;
   inset: 0;
-  -webkit-backdrop-filter: blur(22px) saturate(1.5);
-  backdrop-filter: blur(22px) saturate(1.5);
+}
+
+.shot[data-surface="win11"]::before {
+  -webkit-backdrop-filter: blur(30px) saturate(1.25);
+  backdrop-filter: blur(30px) saturate(1.25);
+}
+
+.shot[data-surface="glass"]::before {
+  -webkit-backdrop-filter: blur(32px) saturate(1.3);
+  backdrop-filter: blur(32px) saturate(1.3);
   -webkit-mask: var(--shape) center / 100% 100% no-repeat;
   mask: var(--shape) center / 100% 100% no-repeat;
 }
 
-/* 侧栏背后的一个编辑器窗口：半透明的主题能看出背后被模糊的内容。 */
+/* 侧栏背后的一个编辑器窗口：代码行伸进侧栏底下一小段，其余是彩色的桌面，半透明的主题两样都透得出来。
+ * 白天是浅色编辑器，夜里是深色。 */
 .theme-window {
   position: absolute;
   top: 15%;
-  left: 6%;
+  left: 5%;
   display: flex;
   flex-direction: column;
   gap: 13px;
-  width: 80%;
+  width: 70%;
   height: 60%;
   padding: 58px 30px 0;
   border-radius: 10px;
   overflow: hidden;
-  background: #1c2033;
+  background: #fbfcff;
   box-shadow:
-    0 0 0 1px rgb(255 255 255 / 0.06),
-    0 30px 70px -24px rgb(4 6 30 / 0.8);
+    0 0 0 1px rgb(23 28 76 / 0.08),
+    0 30px 70px -24px rgb(23 28 76 / 0.45);
+  transition:
+    background-color var(--slide) ease,
+    box-shadow var(--slide) ease;
 }
 
 .theme-window::before {
@@ -743,7 +1003,8 @@ kbd {
   position: absolute;
   inset: 0 0 auto;
   height: 34px;
-  background: #252a42;
+  background: #eceff9;
+  transition: background-color var(--slide) ease;
 }
 
 .theme-window i {
@@ -752,87 +1013,291 @@ kbd {
   height: 9px;
   margin-left: calc(var(--x, 0) * 26px);
   border-radius: 5px;
-  background: #7aa2f7;
+  background: #4a6cf0;
   opacity: 0.85;
+  transition: background-color var(--slide) ease;
 }
 
 .theme-window i:nth-child(5n + 2) {
-  background: #bb9af7;
+  background: #9a5ff0;
 }
 
 .theme-window i:nth-child(5n + 3) {
-  background: #9ece6a;
+  background: #3fa65a;
 }
 
 .theme-window i:nth-child(5n + 4) {
-  background: #e0af68;
+  background: #e09a26;
 }
 
 .theme-window i:nth-child(5n) {
+  background: #e85a72;
+}
+
+.theme-desk[data-mode="dark"] .theme-window {
+  background: #1c2033;
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.06),
+    0 30px 70px -24px rgb(4 6 30 / 0.8);
+}
+
+.theme-desk[data-mode="dark"] .theme-window::before {
+  background: #252a42;
+}
+
+.theme-desk[data-mode="dark"] .theme-window i {
+  background: #7aa2f7;
+}
+
+.theme-desk[data-mode="dark"] .theme-window i:nth-child(5n + 2) {
+  background: #bb9af7;
+}
+
+.theme-desk[data-mode="dark"] .theme-window i:nth-child(5n + 3) {
+  background: #9ece6a;
+}
+
+.theme-desk[data-mode="dark"] .theme-window i:nth-child(5n + 4) {
+  background: #e0af68;
+}
+
+.theme-desk[data-mode="dark"] .theme-window i:nth-child(5n) {
   background: #f7768e;
 }
 
+/* 选主题：五套主题竖排成一列，每行前面是这套主题的小样；明暗是下面的一个分段开关。 */
 .pickers {
   display: grid;
-  gap: 22px;
+  justify-items: start;
+  gap: 18px;
   margin-top: 36px;
 }
 
-.picker {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.theme-list,
+.mode-switch {
+  min-inline-size: 0;
   margin: 0;
   padding: 0;
   border: 0;
 }
 
-.picker label {
+.theme-list {
+  display: grid;
+  gap: 4px;
+  width: min(100%, 340px);
+}
+
+.theme-option,
+.mode-switch label {
   position: relative;
   cursor: pointer;
 }
 
-.picker input {
+.theme-option input,
+.mode-switch input {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
   opacity: 0;
   cursor: pointer;
 }
 
-.picker span {
+.theme-option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 54px;
+  padding: 8px 14px 8px 9px;
+  border-radius: 14px;
+  font: 400 15.5px/1.2 var(--font-display);
+  transition:
+    background-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.theme-option:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+/* 选中的一行浮起来，左边一道光，和首屏的门缝、网盘示意里选中的文件夹是同一个意思。 */
+.theme-option:has(input:checked) {
+  background: var(--surface);
+  box-shadow:
+    0 0 0 1px var(--line),
+    0 10px 24px -16px rgb(23 28 76 / 0.5);
+  font-weight: 700;
+}
+
+.theme-option:has(input:checked)::before {
+  content: "";
+  position: absolute;
+  top: 13px;
+  bottom: 13px;
+  left: -1px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--amber);
+  box-shadow: 0 0 10px rgb(243 183 68 / 0.8);
+}
+
+.theme-option:has(input:focus-visible),
+.mode-switch label:has(input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* 主题的小样：桌面上的侧栏，看得出贴边、浮动还是分块，以及底色、卡片与强调色（取自各主题的令牌），随明暗切换。 */
+.swatch {
+  --desk: linear-gradient(160deg, #e2e6ff, #c3cbf6);
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  overflow: hidden;
+  background: var(--desk);
+  box-shadow: inset 0 0 0 1px rgb(23 28 76 / 0.1);
+}
+
+.swatch::before {
+  content: "";
+  position: absolute;
+  inset: var(--inset, 4px 4px 4px 13px);
+  border-radius: var(--radius, 5px);
+  background:
+    linear-gradient(var(--accent), var(--accent)) 4px 5px / 8px 2px no-repeat,
+    linear-gradient(var(--card), var(--card)) 3px 10px / calc(100% - 6px) 8px no-repeat,
+    linear-gradient(var(--card), var(--card)) 3px 20px / calc(100% - 6px) 7px no-repeat,
+    var(--panel);
+  box-shadow: 0 1px 3px rgb(10 14 40 / 0.22);
+}
+
+.swatch[data-surface="terminal"] {
+  --inset: 0 0 0 14px;
+  --radius: 0;
+  --panel: #e3e6ea;
+  --card: #ffffff;
+  --accent: #a35f00;
+}
+
+.swatch[data-surface="magazine"] {
+  --panel: #f3ede3;
+  --card: #fffcf7;
+  --accent: #a4224f;
+}
+
+.swatch[data-surface="paper"] {
+  --panel: #e3e9e1;
+  --card: #f5f8f3;
+  --accent: #1f6b45;
+}
+
+.swatch[data-surface="win11"] {
+  --radius: 3px;
+  --panel: rgb(252 252 252 / 0.72);
+  --card: rgb(255 255 255 / 0.9);
+  --accent: #005fb8;
+}
+
+/* 磨砂玻璃是分开的几块，背后透出彩色的桌面。 */
+.swatch[data-surface="glass"] {
+  --desk: linear-gradient(150deg, #ffd79a, #b9c4ff 55%, #8fd8de);
+  --card: rgb(255 255 255 / 0.55);
+  --accent: #1f6f78;
+}
+
+.swatch[data-surface="glass"]::before {
+  border-radius: 3px;
+  background:
+    linear-gradient(var(--accent), var(--accent)) 4px 3px / 6px 2px no-repeat,
+    linear-gradient(var(--card), var(--card)) 0 0 / 100% 8px no-repeat,
+    linear-gradient(var(--card), var(--card)) 0 11px / 100% 8px no-repeat,
+    linear-gradient(var(--card), var(--card)) 0 22px / 100% 6px no-repeat;
+  box-shadow: none;
+}
+
+[data-mode="dark"] .swatch {
+  --desk: linear-gradient(160deg, #2e3888, #171c4c);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1);
+}
+
+[data-mode="dark"] .swatch[data-surface="terminal"] {
+  --panel: #101317;
+  --card: #1d2228;
+  --accent: #e5a54b;
+}
+
+[data-mode="dark"] .swatch[data-surface="magazine"] {
+  --panel: #1c1a17;
+  --card: #2b2823;
+  --accent: #f28aa8;
+}
+
+[data-mode="dark"] .swatch[data-surface="paper"] {
+  --panel: #0f1a17;
+  --card: #1a2c27;
+  --accent: #4ecb82;
+}
+
+[data-mode="dark"] .swatch[data-surface="win11"] {
+  --panel: rgb(44 44 44 / 0.86);
+  --card: rgb(255 255 255 / 0.09);
+  --accent: #60cdff;
+}
+
+[data-mode="dark"] .swatch[data-surface="glass"] {
+  --desk: linear-gradient(150deg, #8a63d6, #2e3888 55%, #227a80);
+  --card: rgb(18 22 24 / 0.45);
+  --accent: #72c7c1;
+}
+
+.mode-switch {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--surface);
+}
+
+.mode-switch label {
   display: inline-flex;
   align-items: center;
-  min-height: 42px;
-  padding: 0 16px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface);
-  color: var(--text);
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 16px 0 12px;
+  border-radius: 10px;
+  color: var(--muted);
   font: 400 15px/1 var(--font-display);
   transition:
-    border-color 160ms ease,
-    background-color 160ms ease;
+    background-color 160ms ease,
+    color 160ms ease;
 }
 
-.picker label:hover span {
-  border-color: var(--muted);
+.mode-switch label:hover {
+  color: var(--text);
 }
 
-.picker input:focus-visible + span {
-  outline: 2px solid var(--note);
-  outline-offset: 3px;
+.mode-switch svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.picker input:checked + span {
-  border-color: var(--night);
+.mode-switch label:has(input:checked) {
   background: var(--night);
   color: var(--on-night);
   font-weight: 700;
 }
 
 @media (prefers-color-scheme: dark) {
-  .picker input:checked + span {
-    border-color: var(--note);
+  .mode-switch label:has(input:checked) {
     background: var(--note);
     color: var(--note-ink);
   }
@@ -1365,7 +1830,7 @@ kbd {
   }
 
   .theme-desk {
-    height: 560px;
+    --desk-h: 560px;
   }
 
   .peek {

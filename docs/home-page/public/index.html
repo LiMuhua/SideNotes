@@ -43,8 +43,8 @@
         <path d="M-17 8.4L-8.4 17V8.4z" fill="url(#note-fold)"/>
         <path d="M-13.5 -17H13.5A3.5 3.5 0 0 1 17 -13.5V13.5A3.5 3.5 0 0 1 13.5 17H-8.4" fill="none" stroke="url(#note-rim)" stroke-width="1"/>
         <g fill="#ff9a6e" opacity=".26" filter="url(#note-blush)"><ellipse cx="-12.6" cy="1.7" rx="2" ry="1.1"/><ellipse cx="0.6" cy="1.7" rx="2" ry="1.1"/></g>
-        <g fill="#2b1d06"><ellipse cx="-10" cy="-3.8" rx="2.6" ry="3.4"/><ellipse cx="-1.6" cy="-3.8" rx="2.6" ry="3.4"/></g>
-        <g fill="#fff"><circle cx="-10.85" cy="-5.1" r=".95"/><circle cx="-2.45" cy="-5.1" r=".95"/></g>
+        <g fill="#2b1d06" style="transform:translate(var(--look-x,0px),var(--look-y,0px));transition:transform .2s ease-out"><ellipse cx="-10" cy="-3.8" rx="2.6" ry="3.4"/><ellipse cx="-1.6" cy="-3.8" rx="2.6" ry="3.4"/></g>
+        <g fill="#fff" style="transform:translate(calc(var(--look-x,0px)*1.3),calc(var(--look-y,0px)*1.3));transition:transform .2s ease-out"><circle cx="-10.85" cy="-5.1" r=".95"/><circle cx="-2.45" cy="-5.1" r=".95"/></g>
         <path d="M-7.4 1.9Q-5.8 3.4 -4.2 1.9" fill="none" stroke="#2b1d06" stroke-width="1" stroke-linecap="round"/>
       </symbol>
       <symbol id="folder" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.6l2 2.2h7.4a2 2 0 0 1 2 2v7.8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
@@ -79,7 +79,7 @@
       <p class="lede">The notebook hidden at the edge of your screen.</p>
       <p>Push the pointer against the edge of your screen, or press <span class="keys"><kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd></span>, and SideNotes slides out. Jot down a to-do, a command or a link. Move the pointer away and it slides back, leaving your work just as it was.</p>
       <div class="actions">
-        <a class="button button-primary" href="https://github.com/LiMuhua/SideNotes/releases/latest" data-download>
+        <a class="button button-primary" href="https://github.com/LiMuhua/SideNotes/releases/latest/download/SideNotes_x64-setup.exe" data-download>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
           Download for Windows
         </a>
@@ -94,6 +94,24 @@
     </div>
 
     <div class="edge" data-edge>
+      <div class="edge-light" aria-hidden="true">
+        <i style="--x:2;--y:52;--d:10s;--t:-4s;--s:3px"></i>
+        <i style="--x:4;--y:34;--d:13s;--t:-2s;--s:4px"></i>
+        <i style="--x:5;--y:68;--d:16s;--t:-11s;--s:2px"></i>
+        <i style="--x:8;--y:58;--d:14s;--t:-8s;--s:3px"></i>
+        <i style="--x:10;--y:24;--d:15s;--t:-13s;--s:2px"></i>
+        <i style="--x:13;--y:44;--d:11s;--t:-5s;--s:4px"></i>
+        <i style="--x:15;--y:78;--d:13s;--t:-6s;--s:3px"></i>
+        <i style="--x:18;--y:30;--d:14s;--t:-9s;--s:2px"></i>
+        <i style="--x:21;--y:62;--d:12s;--t:-3s;--s:3px"></i>
+        <i style="--x:25;--y:48;--d:17s;--t:-12s;--s:2px"></i>
+        <i style="--x:29;--y:20;--d:15s;--t:-1s;--s:3px"></i>
+        <i style="--x:32;--y:72;--d:16s;--t:-7s;--s:2px"></i>
+        <i style="--x:36;--y:40;--d:18s;--t:-15s;--s:3px"></i>
+        <i style="--x:40;--y:56;--d:14s;--t:-10s;--s:2px"></i>
+      </div>
+      <p class="edge-hint" aria-hidden="true"><span class="hint-pointer">Push your pointer here</span><span class="hint-touch">Tap here</span><svg viewBox="0 0 64 46" focusable="false"><path d="M3 9C22 2 44 6 55 34"/><path d="M56 25L55 34 48 28"/></svg></p>
+      <p class="edge-keys" aria-hidden="true">or press<span><kbd data-key="Alt">Alt</kbd><kbd data-key="Shift">Shift</kbd><kbd data-key="KeyS">S</kbd></span></p>
       <figure class="panel" id="hero-panel">
         <picture>
           <source media="(prefers-color-scheme: dark)" srcset="assets/shots/en-hero-dark.webp">
@@ -163,26 +181,26 @@
         <div class="copy">
           <h2 id="themes-title">Five themes, each in light and dark</h2>
           <p>SideNotes follows your system's light or dark mode, or stays in the one you pick. The font, text size, sidebar width and app icon are yours to change too.</p>
-          <div class="pickers" data-pickers>
-            <fieldset class="picker">
+          <div class="pickers" data-pickers data-mode="light">
+            <fieldset class="theme-list">
               <legend class="visually-hidden">Theme</legend>
-              <label><input type="radio" name="surface" value="terminal" checked><span>Terminal</span></label>
-              <label><input type="radio" name="surface" value="magazine"><span>Magazine</span></label>
-              <label><input type="radio" name="surface" value="paper"><span>Paper</span></label>
-              <label><input type="radio" name="surface" value="win11"><span>Windows 11</span></label>
-              <label><input type="radio" name="surface" value="glass"><span>Frosted glass</span></label>
+              <label class="theme-option"><input type="radio" name="surface" value="terminal" checked><span class="swatch" data-surface="terminal"></span>Terminal</label>
+              <label class="theme-option"><input type="radio" name="surface" value="magazine"><span class="swatch" data-surface="magazine"></span>Magazine</label>
+              <label class="theme-option"><input type="radio" name="surface" value="paper"><span class="swatch" data-surface="paper"></span>Paper</label>
+              <label class="theme-option"><input type="radio" name="surface" value="win11"><span class="swatch" data-surface="win11"></span>Windows 11</label>
+              <label class="theme-option"><input type="radio" name="surface" value="glass"><span class="swatch" data-surface="glass"></span>Frosted glass</label>
             </fieldset>
-            <fieldset class="picker">
+            <fieldset class="mode-switch">
               <legend class="visually-hidden">Mode</legend>
-              <label><input type="radio" name="mode" value="light" checked><span>Light</span></label>
-              <label><input type="radio" name="mode" value="dark"><span>Dark</span></label>
+              <label><input type="radio" name="mode" value="light" checked><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 2.8v2.1M12 19.1v2.1M4.9 4.9l1.5 1.5M17.6 17.6l1.5 1.5M2.8 12h2.1M19.1 12h2.1M4.9 19.1l1.5-1.5M17.6 6.4l1.5-1.5"/></svg>Light</label>
+              <label><input type="radio" name="mode" value="dark"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19.6 14.6A7.8 7.8 0 0 1 9.4 4.4a7.8 7.8 0 1 0 10.2 10.2z"/></svg>Dark</label>
             </fieldset>
           </div>
         </div>
-        <div class="desk theme-desk" data-gallery data-shot-base="assets/shots/en-" data-alt="SideNotes in the {theme} theme, {mode} mode">
+        <div class="desk theme-desk" data-gallery data-mode="light" data-shot-base="assets/shots/en-" data-alt="SideNotes in the {theme} theme, {mode} mode">
           <svg class="stars" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false"><use href="#sky"/></svg>
           <div class="theme-window" aria-hidden="true">
-            <i style="--w:30%"></i><i style="--w:52%;--x:1"></i><i style="--w:44%;--x:1"></i><i style="--w:24%;--x:2"></i><i style="--w:60%;--x:2"></i><i style="--w:36%;--x:1"></i><i style="--w:18%"></i><i style="--w:48%"></i><i style="--w:56%;--x:1"></i><i style="--w:40%;--x:2"></i><i style="--w:28%;--x:1"></i><i style="--w:34%"></i>
+            <i style="--w:34%"></i><i style="--w:72%;--x:1"></i><i style="--w:58%;--x:1"></i><i style="--w:26%;--x:2"></i><i style="--w:84%;--x:2"></i><i style="--w:46%;--x:1"></i><i style="--w:22%"></i><i style="--w:66%"></i><i style="--w:88%;--x:1"></i><i style="--w:50%;--x:2"></i><i style="--w:30%;--x:1"></i><i style="--w:40%"></i>
           </div>
           <figure class="shot">
             <img src="assets/shots/en-terminal-light.webp" width="400" height="900" loading="lazy" alt="SideNotes in the Terminal theme, light mode">
@@ -278,7 +296,7 @@
         <h2 id="download-title">Get SideNotes</h2>
         <p>Free and open source under the GNU Affero General Public License v3.0.</p>
         <div class="actions">
-          <a class="button button-primary" href="https://github.com/LiMuhua/SideNotes/releases/latest" data-download>
+          <a class="button button-primary" href="https://github.com/LiMuhua/SideNotes/releases/latest/download/SideNotes_x64-setup.exe" data-download>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
             Download for Windows
           </a>
@@ -289,7 +307,7 @@
           <dt>System</dt>
           <dd>Windows 10 or 11, 64-bit</dd>
           <dt>Installer</dt>
-          <dd>Setup program (.exe) or Windows Installer package (.msi)</dd>
+          <dd><a href="https://github.com/LiMuhua/SideNotes/releases/latest/download/SideNotes_x64-setup.exe" data-download>Setup program (.exe)</a> or <a href="https://github.com/LiMuhua/SideNotes/releases/latest/download/SideNotes_x64_en-US.msi" data-download>Windows Installer package (.msi)</a></dd>
           <dt>Language</dt>
           <dd>The app's interface is in Simplified Chinese</dd>
         </dl>

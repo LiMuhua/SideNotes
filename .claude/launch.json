@@ -16,7 +16,7 @@
     {
       "name": "home-page",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "1440", "--bind", "127.0.0.1", "--directory", "docs/home-page/public"],
+      "runtimeArgs": ["-I", "docs/home-page/tools/serve.py", "1440"],
       "port": 1440
     }
   ]

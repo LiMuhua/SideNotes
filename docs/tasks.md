@@ -208,7 +208,6 @@
 | T183 | Google 登录不用客户端密钥 | 中 | 阻塞 | 2026-11-23 第十三轮反馈 3：GitHub 与 GitGuardian 报 Google 的客户端密钥泄露。验收：换成「桌面应用」类型的客户端后，仓库里没有密钥，登录、同步与刷新令牌照常。阻塞：要用户在 Google Cloud 里新建客户端 |
 | T184 | 版本升到 0.8.3 | 低 | 已完成 | 2026-11-23 第十三轮反馈（每轮升一个小版本）。验收：`package.json`、`Cargo.toml`、`Cargo.lock`、`tauri.conf.json` 与更新日志的首条一致 |
 | T185 | 发布流水线：推送版本标签时构建 Windows 安装程序，发布到 GitHub Releases | 高 | 进行中 | 2026-11-23 用户要求另起一个子代理做 GitHub 流水线发布，官网的下载链接指过去。验收：推送 `v0.8.2` 这样的标签后，生成正式版、标为 Latest 的 Release「SideNotes 0.8.2」，正文是更新日志里这一版的概述，资产只有 `SideNotes_x64-setup.exe` 与 `SideNotes_x64_en-US.msi`，`releases/latest/download/` 加文件名能直接下载；标签与版本号不一致时流水线失败、不发布；手动运行只把安装程序存为工作流产物 |
-| T185 | 发布流水线：推送版本标签时构建 Windows 安装程序，发布到 GitHub Releases | 高 | 进行中 | 2026-11-23 用户要求另起一个子代理做 GitHub 流水线发布，官网的下载链接指过去。验收：推送 `v0.8.2` 这样的标签后，生成正式版、标为 Latest 的 Release「SideNotes 0.8.2」，正文是更新日志里这一版的概述，资产只有 `SideNotes_x64-setup.exe` 与 `SideNotes_x64_en-US.msi`，`releases/latest/download/` 加文件名能直接下载；标签与版本号不一致时流水线失败、不发布；手动运行只把安装程序存为工作流产物 |
 
 ## DS01 进度
 
@@ -1475,16 +1474,6 @@
   - 下载：按钮直接链接 T185 的固定地址 `releases/latest/download/SideNotes_x64-setup.exe`，页尾规格里的 .exe 与 .msi 各自可点；脚本查到还没有发布版时改指向发布页。`check.mjs` 加查主题截图与遮罩（地址由脚本拼出，原来查不到）。
   - 本地预览改用 `docs/home-page/tools/serve.py`：与线上一样以 `/SideNotes/` 为根，找不到的地址返回 404 页，响应不缓存（以前改完样式刷新，浏览器还用旧的）。
   - 验证：1920、1440、1280、820、390 宽度截图自审，浅色与深色；中英文主页各跑一遍用真实鼠标、键盘事件（CDP Input）的脚本，28 项都符合：出场后收起、提示出现、碰到便签滑出、离开收起、推到边缘滑出后点击留着、点门缝收起后不立刻再滑出、眼睛朝向、键帽按下与抬起、Alt+Shift+S、导航与下载按钮点得中、选磨砂玻璃与深色、方向键换主题、没有发布版时下载链接改指向发布页，控制台没有报错（GitHub 接口的 404 除外，还没有发布版）；`check.mjs` 通过，故意删掉一张截图与一张遮罩的副本能拦下；ESLint 通过。
-
-### T185 记录
-
-- 由子代理完成，我审阅后提交。文件：`.github/workflows/release.yml` 与 `.github/scripts/release-info.mjs`（核对版本号、取出更新日志），设计见技术决策第 75 条。
-- 发版：改 `package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 的版本号，`Cargo.lock` 随下一次 cargo 构建更新，在 `src/core/changelog.ts` 最前面补一条；提交后推送标签，例如 `git tag v0.8.3 && git push origin v0.8.3`。不用在 GitHub 上添加密钥：应用没有启用自动更新，OAuth 客户端在已提交的 `src-tauri/oauth-clients.json` 里。手动运行的按钮要等 `release.yml` 合进 master（默认分支）才出现。
-- 验证：
-  - YAML 能解析，6 个 Actions 的主版本标签存在、参数名正确。
-  - 版本核对脚本在临时副本里试了 15 种情形，五处版本号各自不一致、标签不符、更新日志改了写法都能拦下；ESLint 通过。在仓库里运行 `node .github/scripts/release-info.mjs v0.8.2` 通过。
-  - 把 HEAD 导出到 OneDrive 之外的临时目录，按流水线的步骤原样运行：pnpm 11.14.0 按锁文件安装、`pnpm tauri build`、改名，得到 `SideNotes_0.8.2_x64-setup.exe`（15.67 MiB）与 `SideNotes_0.8.2_x64_en-US.msi`（16.86 MiB），改名后与原文件逐字节相同。本机打包要从 GitHub 下载 NSIS 与 WiX，直连超时（`timeout: global`），经代理才成功；这次打包刷新了本机 `%LOCALAPPDATA%\tauri` 下的 NSIS 与 WixTools314。
-  - 没有实测：GitHub 上的实际运行、官方 crates.io、Rust 缓存、产物上传与下载、`gh release create` 发布。第一次推送标签后核对 Release 页与两个固定地址，通过后标为已完成。
 
 ### T185 记录
 
