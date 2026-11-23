@@ -44,12 +44,12 @@
   <rect class="chip" x="60" y="173" width="166" height="34" rx="17"/>
   <text class="b" x="143" y="195" text-anchor="middle">无痕窗口用新 UPN 登录</text>
   <path class="flow" d="M226,190 H248" marker-end="url(#arrow)"/>
-  <rect class="chip" x="250" y="173" width="172" height="34" rx="17"/>
-  <text class="b" x="336" y="195" text-anchor="middle">邀请个人账户为外部用户</text>
-  <path class="flow" d="M422,190 H444" marker-end="url(#arrow)"/>
-  <rect class="chip" x="446" y="173" width="146" height="34" rx="17"/>
-  <text class="b" x="519" y="195" text-anchor="middle">给它分配全局管理员</text>
-  <path class="flow" d="M592,190 H614" marker-end="url(#arrow)"/>
-  <rect class="chip" x="616" y="173" width="166" height="34" rx="17"/>
-  <text class="b" x="699" y="195" text-anchor="middle">新 UPN 留作备用管理员</text>
+  <rect class="chip" x="250" y="173" width="150" height="34" rx="17"/>
+  <text class="b" x="325" y="195" text-anchor="middle">邀请个人账户回目录</text>
+  <path class="flow" d="M400,190 H422" marker-end="url(#arrow)"/>
+  <rect class="chip" x="424" y="173" width="156" height="34" rx="17"/>
+  <text class="b" x="502" y="195" text-anchor="middle">交接三层权限（2.5）</text>
+  <path class="flow" d="M580,190 H602" marker-end="url(#arrow)"/>
+  <rect class="chip" x="604" y="173" width="160" height="34" rx="17"/>
+  <text class="b" x="684" y="195" text-anchor="middle">新 UPN 留作备用账户</text>
 </svg>
