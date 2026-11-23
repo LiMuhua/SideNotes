@@ -26,7 +26,7 @@
 | 所选的用户帐户在租户“默认目录”中不存在⋯⋯ | 把自己转换成了内部用户，又用个人账户登录 | 2.4 |
 | 个人账户已是全局管理员，仍看不到订阅或免费额度 | 没切换到“默认目录”，或订阅、计费的权限没交接 | 2.5 |
 | 错误 400：`redirect_uri_mismatch` | 回调地址与客户端登记的不一致 | 3.2 |
-| `client_secret is missing.` | 换令牌时没带客户端密钥 | 3.3 |
+| `client_secret is missing.` | 换令牌时没带客户端密钥（桌面应用类型也要） | 3.3 |
 | 错误 403：`access_denied` | 登录的账户不是测试用户 | 3.4 |
 | Google Drive 登录 7 天后失效 | 同意屏幕还是测试状态 | 3.4 |
 | 浏览器里登录成功，应用报“网络不通：连接超时” | 应用的请求没走系统代理 | 四 |
@@ -163,17 +163,17 @@
 1. 在 [Google Cloud 控制台](https://console.cloud.google.com)新建项目，在“API 和服务”的“库”里启用 Google Drive API。
 2. 在 Google Auth Platform 里，受众选“外部”，数据访问里加范围 `https://www.googleapis.com/auth/drive.file`，再把自己的账户加为测试用户。
 3. 在[客户端页](https://console.cloud.google.com/auth/clients)新建 OAuth 客户端，类型选“桌面应用”。
-4. 把客户端 ID 和密钥写进 `src-tauri/oauth-clients.json` 的 `google`。
+4. 把客户端 ID 写进 `src-tauri/oauth-clients.json` 的 `google.clientId`；密钥用[开发与验证命令](./tasks.md#开发与验证命令)里的命令异或后写进 `google.obscured`（明文会被密钥扫描报为泄露，见 3.3）。
 
 > **截图占位** `google-create-client.png`：新建 OAuth 客户端的页面，“应用类型”下拉框选中“桌面应用”，名称填 SideNotes。
 
-桌面应用类型不用登记重定向 URI，回环地址的任意端口都认。Google 文档里，桌面应用换令牌时的 `client_secret` 是可选的（未实测）。
+桌面应用类型不用登记重定向 URI，`localhost` 与 `127.0.0.1` 的任意端口都认（2026-11-23 实测）。Google 文档写桌面应用换令牌、刷新令牌时 `client_secret` 可选，实测不成立，见 3.3。
 
-现在用的客户端是“Web 应用”类型，当初想的是以后与安卓共用。其实安卓要另建“Android”类型的客户端，填包名和签名证书的 SHA-1。同一项目里的客户端共用同意屏幕、品牌验证和测试用户，选哪种都不妨碍安卓。
+2026-11-23 起用的是“桌面应用”类型的客户端。之前的客户端是“Web 应用”类型（当初想的是以后与安卓共用），已删掉。其实安卓要另建“Android”类型的客户端，填包名和签名证书的 SHA-1。同一项目里的客户端共用同意屏幕、品牌验证和测试用户，选哪种都不妨碍安卓。
 
 ### 3.2 回调地址用 localhost
 
-Web 应用类型只认登记过的回调地址。现在的客户端登记了 `http://localhost`，实测结果如下。
+Web 应用类型只认登记过的回调地址。之前的 Web 应用客户端登记了 `http://localhost`，实测结果如下。
 
 - `http://localhost:任意端口`：能登录。
 - `http://127.0.0.1:端口`、`http://[::1]:端口`、带路径的地址：报 `redirect_uri_mismatch`。
@@ -182,13 +182,13 @@ Web 应用类型只认登记过的回调地址。现在的客户端登记了 `ht
 
 所以两家的回调都用 `http://localhost:随机端口`，并在 `127.0.0.1` 与 `::1` 上监听同一个端口（`src-tauri/src/cloud/oauth.rs`）。桌面应用类型两种地址都认，换类型不用改代码。
 
-Google 的文档要求 Web 应用的回调与登记的完全一致，“认 localhost 的任意端口”只是实测结果。Google 收紧时，换成桌面应用类型的客户端。
+Google 的文档要求 Web 应用的回调与登记的完全一致，“认 localhost 的任意端口”只是实测结果。现在已换成桌面应用类型的客户端。
 
-### 3.3 Web 应用的客户端密钥省不掉
+### 3.3 客户端密钥省不掉，桌面应用类型也一样
 
-PKCE（Proof Key for Code Exchange，代码交换证明密钥）代替不了 Web 应用的客户端密钥。不带 `client_secret` 请求令牌接口，Google 返回 `client_secret is missing.`。
+PKCE（Proof Key for Code Exchange，代码交换证明密钥）代替不了客户端密钥。不带 `client_secret` 请求令牌接口，Web 应用与桌面应用类型的客户端都返回 `client_secret is missing.`；桌面应用类型是 2026-11-23 实测的，换令牌与刷新令牌都这样，Google 的文档写的是“可选”。
 
-密钥编进安装包，谁都能读出来，所以项目把它和客户端 ID 一起公开写进 `src-tauri/oauth-clients.json`（技术决策第 69 条）。推送时，GitHub 的推送保护会拦下这两项，按提示的链接标为误报后才能推上去。
+密钥编进安装包，谁都能读出来，Google 也认为桌面应用的密钥不算机密。可明文写进仓库会被 GitHub 与 GitGuardian 报为泄露，所以 `oauth-clients.json` 里存的是异或后的十六进制（`google.obscured`），构建时由 `src-tauri/build.rs` 还原（技术决策第 74 条）；之前明文写进仓库的 Web 应用客户端密钥已从仓库历史里抹掉，那个客户端也已删除。当时是明文：推送时 GitHub 的推送保护拦下了客户端 ID 与密钥，按提示的链接标为误报后才推上去，之后 GitHub 与 GitGuardian 发邮件报泄露。
 
 ### 3.4 测试状态只放行测试用户
 
