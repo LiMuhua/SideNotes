@@ -20,6 +20,7 @@ mod models;
 mod note_windows;
 mod panels;
 mod paths;
+mod popups;
 mod recorder;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod shortcuts;
@@ -140,6 +141,8 @@ pub fn run() {
             windows::disable_sidebar_transitions(&handle);
             // 置顶守护：丢了的置顶补回（见 topmost）。
             topmost::install(&handle);
+            // 别的程序从这里唤出的小窗（Ditto 的剪贴板历史）：让它盖在置顶的窗口上，页面不当作离开（见 popups）。
+            popups::install(&handle);
             // 启动稳定后建好一个备用的记录窗口，打开记录窗口时不用等 WebView 创建。
             note_windows::ensure_spare_later(&handle, std::time::Duration::from_secs(3));
 
@@ -221,6 +224,7 @@ pub fn run() {
             commands::set_ui_zoom,
             commands::set_window_material,
             commands::sidebar_holds_cursor,
+            popups::external_popup_open,
             commands::open_devtools,
             commands::system_fonts,
             commands::inspect_file,

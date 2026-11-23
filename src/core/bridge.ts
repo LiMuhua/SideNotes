@@ -67,6 +67,8 @@ export const APP_EVENTS = {
   shortcutRecorded: 'sidenotes://shortcut-recorded',
   /** 云端同步的状态变了（开始、结束、登录、断开），设置页重新读取 cloudOverview。 */
   cloudStatus: 'sidenotes://cloud-status',
+  /** 别的程序从这个窗口唤出的小窗（如 Ditto 的剪贴板历史）开着、关掉，载荷是还开着没有；只发给唤出它的窗口（后端的 popups）。 */
+  externalPopup: 'sidenotes://external-popup',
 } as const;
 
 /**
@@ -476,6 +478,17 @@ export function setWindowMaterial(material: WindowMaterial): Promise<void> {
 /** 指针是否在侧栏或它与屏幕边缘之间的留白里；侧栏到点收起前查询，留白里不收起（T84）。 */
 export function sidebarHoldsCursor(): Promise<boolean> {
   return call<boolean>('sidebar_holds_cursor', {}, false);
+}
+
+/** 别的程序从这个窗口唤出的小窗（如 Ditto 的剪贴板历史）是不是正开着：页面失焦时问一次，开着就不当作离开。 */
+export function externalPopupOpen(): Promise<boolean> {
+  return call<boolean>('external_popup_open', {}, false).catch(() => false);
+}
+
+/** 订阅别的程序从这个窗口唤出的小窗开着、关掉（载荷是还开着没有）。 */
+export async function onExternalPopup(handler: (open: boolean) => void): Promise<UnlistenFn> {
+  if (!isDesktop()) return () => {};
+  return listen<boolean>(APP_EVENTS.externalPopup, (event) => handler(event.payload));
 }
 
 /** 隐藏设置窗口。 */

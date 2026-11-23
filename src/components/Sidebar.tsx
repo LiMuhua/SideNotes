@@ -29,6 +29,7 @@ import { AttachmentDialog, type AttachmentSubject } from "./AttachmentDialog";
 import type { AttachmentPayload, MergePayload } from "./DialogWindow";
 import { useDialogWindow } from "../hooks/useDialogWindow";
 import { useLatest } from "../hooks/useLatest";
+import { useLeaveOnBlur } from "../hooks/useLeaveOnBlur";
 import { useStore } from "../hooks/useStore";
 import { useShortcut } from "../hooks/useShortcut";
 import { useToast } from "../hooks/useToast";
@@ -831,31 +832,28 @@ export function Sidebar() {
   // 整个侧栏失去焦点时，正在编辑的卡片先保存并回到预览，与在侧栏内点到别处一致；
   // 选择附件的对话框打开期间、附件还在读取时、附件弹窗等对话框开着时不算离开。
   // 弹窗窗口（T99）打开时焦点移到它上面，也不算离开：附件弹窗的修改要写回仍在编辑的卡片。
+  // 别的程序从侧栏唤出的小窗（Ditto 的剪贴板历史）抢走焦点也不算，小窗关掉、焦点回来后接着编辑（useLeaveOnBlur）。
   // 重新获得焦点（选完附件、很快又点回侧栏）时取消尚未执行的收起。
+  useLeaveOnBlur(() => {
+    if (
+      editingRef.current &&
+      !choosingFiles.current &&
+      store.getState().pendingAttachments === 0 &&
+      !document.querySelector(".modal-backdrop") &&
+      !windowDialogOpenRef.current
+    ) {
+      void commitEdit();
+    }
+    scheduleHide();
+  });
   useEffect(() => {
-    const handleBlur = (): void => {
-      if (
-        editingRef.current &&
-        !choosingFiles.current &&
-        store.getState().pendingAttachments === 0 &&
-        !document.querySelector(".modal-backdrop") &&
-        !windowDialogOpenRef.current
-      ) {
-        void commitEdit();
-      }
-      scheduleHide();
-    };
     const handleFocus = (): void => {
       choosingFiles.current = false;
       if (hidePending.current) cancelHide();
     };
-    window.addEventListener("blur", handleBlur);
     window.addEventListener("focus", handleFocus);
-    return () => {
-      window.removeEventListener("blur", handleBlur);
-      window.removeEventListener("focus", handleFocus);
-    };
-  }, [scheduleHide, cancelHide, commitEdit, windowDialogOpenRef]);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [cancelHide]);
 
   /* ==================== 设置窗口联动 ==================== */
   // 设置窗口打开期间侧栏保持展开（见 scheduleHide）。切到别的窗口时侧栏看起来像卡住不收，

@@ -70,6 +70,8 @@ windows = { version = "0.62", features = [
   "Win32_System_Threading",
   "Win32_System_WinRT",
   "Win32_System_WinRT_Composition",
+  # 盯着前台窗口的变化（SetWinEventHook）：别的程序从这里唤出的小窗盖在置顶的窗口上（popups）。
+  "Win32_UI_Accessibility",
   "Win32_UI_Controls",
   "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",

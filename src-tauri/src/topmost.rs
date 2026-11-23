@@ -9,8 +9,11 @@
 //!   藏起或丢了置顶，tao 仍以为它显示着，快捷键与贴边都不做事；上面的守护与下面的显示补救让它不再发生。
 //! - tao 记着自己的显示状态，窗口被系统藏起或最小化时它不知道，`show()` 什么也不做：显示与隐藏这几个窗口走这里的
 //!   `show`、`hide`，tao 没有真的显示（或隐藏）时直接补上；显示之前先还原被最小化的窗口（restore_if_minimized）。
+//! - 别的程序从本应用的窗口里唤出的小窗（Ditto 的剪贴板历史，见 popups）不置顶，会被置顶的窗口挡住：与它重叠的窗口暂时
+//!   排到它下面（`yield_to`），守护不补，小窗关掉后补回（`restore_yielded`）。
 
 use std::collections::HashMap;
+use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use tauri::{AppHandle, Manager, WebviewWindow};
@@ -21,6 +24,13 @@ use crate::windows::{CAPTURE_LABEL, SETTINGS_LABEL, SIDEBAR_LABEL};
 const GUARD_INTERVAL: Duration = Duration::from_millis(300);
 /// 同一个窗口反复丢置顶时，日志最多这么久写一行。
 const LOG_INTERVAL: Duration = Duration::from_secs(30);
+
+/// 暂时让到别的程序的小窗下面的窗口（标签）：守护不补它们的置顶，小窗关掉后由 restore_yielded 补回。
+static YIELDED: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+fn yielded() -> MutexGuard<'static, Vec<String>> {
+    YIELDED.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 
 /// 应当一直置顶的窗口，按检查的先后排列：动画层最后，补回置顶后它仍在最前面（它要盖住侧栏与记录窗口）。
 fn desired(app: &AppHandle) -> Vec<String> {
@@ -51,10 +61,14 @@ pub fn install(app: &AppHandle) {
     let _ = app;
 }
 
-/// 一次检查：显示着却丢了置顶的窗口补回置顶。
+/// 一次检查：显示着却丢了置顶的窗口补回置顶；让给别的程序小窗的不补。
 #[cfg(windows)]
 fn check(app: &AppHandle, logged: &mut HashMap<String, Instant>) {
+    let skipped = yielded().clone();
     for label in desired(app) {
+        if skipped.contains(&label) {
+            continue;
+        }
         let Some(window) = app.get_webview_window(&label) else { continue };
         if !window.is_visible().unwrap_or(false) || window.is_minimized().unwrap_or(false) || is_topmost(&window) {
             continue;
@@ -135,6 +149,60 @@ fn raise(window: &WebviewWindow, on: bool) {
     }
     #[cfg(not(windows))]
     let _ = window.set_always_on_top(on);
+}
+
+/// 别的程序的小窗 `popup`（句柄）从本应用唤出、不置顶时，与它重叠的置顶窗口不激活地排到它下面：置顶的窗口排到
+/// 不置顶的窗口后面时失去置顶。记下这些窗口，守护不补；小窗自己置顶时什么也不做，它本来就在上面。
+pub fn yield_to(app: &AppHandle, popup: isize) {
+    #[cfg(windows)]
+    {
+        use ::windows::Win32::Foundation::{HWND, RECT};
+        use ::windows::Win32::UI::WindowsAndMessaging::{
+            GetWindowLongPtrW, GetWindowRect, SetWindowPos, GWL_EXSTYLE, SWP_ASYNCWINDOWPOS, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, WS_EX_TOPMOST,
+        };
+        let popup = HWND(popup as *mut core::ffi::c_void);
+        let mut area = RECT::default();
+        // SAFETY：只读别的程序窗口的样式与位置；窗口已经没了时读不到，什么也不做。
+        let readable = unsafe { GetWindowRect(popup, &mut area) }.is_ok();
+        if !readable || unsafe { GetWindowLongPtrW(popup, GWL_EXSTYLE) } & WS_EX_TOPMOST.0 as isize != 0 {
+            return;
+        }
+        let mut list = yielded();
+        for label in desired(app) {
+            let Some(window) = app.get_webview_window(&label) else { continue };
+            if !window.is_visible().unwrap_or(false) || !is_topmost(&window) {
+                continue;
+            }
+            let Ok(hwnd) = window.hwnd() else { continue };
+            let mut own = RECT::default();
+            // SAFETY：hwnd 来自仍然存在的 Tauri 窗口，只读位置。
+            if unsafe { GetWindowRect(hwnd, &mut own) }.is_err()
+                || own.right <= area.left
+                || area.right <= own.left
+                || own.bottom <= area.top
+                || area.bottom <= own.top
+            {
+                continue;
+            }
+            // SAFETY：两个句柄都是现有的窗口，其余参数都是按值传入的常量；异步执行，不等窗口所在的线程。
+            let _ = unsafe { SetWindowPos(hwnd, Some(popup), 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_ASYNCWINDOWPOS) };
+            if !list.contains(&label) {
+                list.push(label);
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = (app, popup);
+}
+
+/// 别的程序的小窗关掉了：让出去的窗口补回置顶（按 desired 的先后，动画层仍在最前面）。
+pub fn restore_yielded(app: &AppHandle) {
+    let labels = std::mem::take(&mut *yielded());
+    for label in labels {
+        if let Some(window) = app.get_webview_window(&label) {
+            raise(&window, true);
+        }
+    }
 }
 
 /// 确保窗口置顶：tao 记着置顶时 `set_always_on_top(true)` 不做事，这里直接补上。

@@ -17,6 +17,7 @@ import { Icon, IconSprite } from './Icon';
 import { LiveEditor } from './LiveEditor';
 import { Markdown } from './Markdown';
 import { useStoreSlice } from '../hooks/useStore';
+import { useLeaveOnBlur } from '../hooks/useLeaveOnBlur';
 import { useToast } from '../hooks/useToast';
 import { useWindowMaterial } from '../hooks/useWindowMaterial';
 import * as bridge from '../core/bridge';
@@ -791,16 +792,6 @@ export function NoteWindow() {
     const onBlur = (): void => {
       setFront(false);
       hideTip();
-      // 全文浮窗点到别处就收回（T100），编辑中的内容在关闭流程里先保存。焦点很快又回来（被备用窗口短暂抢走）时不收回。
-      if (attachedRef.current && shownRef.current && !closingRef.current && !gestureRef.current) {
-        window.clearTimeout(blurTimer.current);
-        blurTimer.current = window.setTimeout(() => {
-          if (!document.hasFocus() && attachedRef.current && !closingRef.current) void closeWindow();
-        }, PEEK_BLUR_DELAY);
-        return;
-      }
-      // 点到窗口外保存（原型 focusout）。
-      if (editingRef.current && !document.querySelector('.modal-backdrop')) void finishEditing(true);
     };
     window.addEventListener('focus', onFocus);
     window.addEventListener('blur', onBlur);
@@ -810,6 +801,19 @@ export function NoteWindow() {
       window.removeEventListener('blur', onBlur);
     };
   }, [finishEditing, closeWindow, beginResizing, endResizing]);
+
+  // 点到窗口外：全文浮窗收回（T100），编辑中的内容在关闭流程里先保存，焦点很快又回来（被备用窗口短暂抢走）时不收回；
+  // 记录窗口保存编辑（原型 focusout）。别的程序从这里唤出的小窗（Ditto 的剪贴板历史）抢走焦点不算离开（useLeaveOnBlur）。
+  useLeaveOnBlur(() => {
+    if (attachedRef.current && shownRef.current && !closingRef.current && !gestureRef.current) {
+      window.clearTimeout(blurTimer.current);
+      blurTimer.current = window.setTimeout(() => {
+        if (!document.hasFocus() && attachedRef.current && !closingRef.current) void closeWindow();
+      }, PEEK_BLUR_DELAY);
+      return;
+    }
+    if (editingRef.current && !document.querySelector('.modal-backdrop')) void finishEditing(true);
+  });
 
   // 附着在卡片旁的全文浮窗一直描强调色边框（T122，方案 B：重点落在浮窗上，卡片只留淡淡的细边）。
   // 页面自己画外框的透明窗口（杂志、磨砂玻璃）不要系统的边框：系统按自己的小圆角把边框画在窗口边上，在页面的大圆角
