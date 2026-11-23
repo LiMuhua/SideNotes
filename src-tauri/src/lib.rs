@@ -107,7 +107,10 @@ pub fn run() {
             let hotkeys = commands::HotkeyState::default();
 
             // 云端同步：凭据与运行状态放在本机的应用数据目录（不随数据目录迁移），临时的数据库副本放在缓存目录。
-            app.manage(cloud::CloudState::new(&default_dir, &paths::resolve(&handle.path().app_cache_dir()?)));
+            // 开着却缺配置的开关（旧版设置升上来时）在窗口创建之前关掉。
+            let cloud_state = cloud::CloudState::new(&default_dir, &paths::resolve(&handle.path().app_cache_dir()?));
+            cloud::settle_switches(&store, &cloud_state);
+            app.manage(cloud_state);
 
             app.manage(AppState {
                 store,

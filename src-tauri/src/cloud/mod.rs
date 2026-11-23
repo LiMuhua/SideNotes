@@ -33,6 +33,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use crate::commands::{AppState, snapshot_root};
 use crate::error::{AppError, AppResult};
 use crate::snapshots::{RestoreReport, now_millis};
+use crate::store::Store;
 use job::CloudBackup;
 use remote::{Remote, RemoteError};
 use secrets::Secrets;
@@ -255,6 +256,40 @@ fn targets(config: &Config, connected: impl Fn(&str) -> bool) -> Vec<(String, St
     found
 }
 
+/// 开着却用不了的开关：自动同步没有能同步的服务（连上了、选了远程文件夹），失败通知缺收件邮箱或 Resend 密钥。
+/// 返回自动同步、失败通知各自是不是这样。
+fn unusable_switches(config: &Config, connected: impl Fn(&str) -> bool, has_key: bool) -> (bool, bool) {
+    let auto = config.enabled && targets(config, connected).is_empty();
+    let notify = config.notifications && (config.email.is_empty() || !has_key);
+    (auto, notify)
+}
+
+/// 启动时把开着却用不了的开关关掉、写回设置（第十三轮反馈 2：没配置同步，开关却开着）。在各窗口创建之前调用，窗口读到的就是关着的。
+/// 设置页里打开开关时缺了配置会先弹窗补上，断开最后一个服务时自动同步一并关掉，平时不会这样；0.8.1 的设置升上来会：
+/// 当时没选过的远程文件夹存的是默认的 /SideNotes，现在当作没选，失败通知那时也不要邮箱。
+pub fn settle_switches(store: &Store, cloud: &CloudState) {
+    let Ok(mut settings) = store.settings() else {
+        return;
+    };
+    let config = Config::from_settings(&settings);
+    let has_key = cloud.secrets.get(secrets::RESEND_KEY).is_some();
+    let (auto, notify) = unusable_switches(&config, |provider| has_credentials(cloud, &config, provider), has_key);
+    let Some(section) = settings.get_mut("cloud").and_then(|value| value.as_object_mut()).filter(|_| auto || notify) else {
+        return;
+    };
+    if auto {
+        section.insert("enabled".into(), false.into());
+    }
+    if notify {
+        section.insert("notifications".into(), false.into());
+    }
+    let names = [(auto, "自动同步"), (notify, "失败通知")].iter().filter(|(off, _)| *off).map(|(_, name)| *name).collect::<Vec<_>>().join("、");
+    match store.save_settings(&settings) {
+        Ok(()) => crate::diag::log(format!("云端同步：{names}开着却缺配置，已关掉")),
+        Err(error) => crate::diag::log(format!("云端同步：{names}开着却缺配置，没能关掉：{error}")),
+    }
+}
+
 fn connect_to(cloud: &CloudState, config: &Config, provider: &str) -> Result<Connection, RemoteError> {
     match provider {
         "onedrive" => {
@@ -459,7 +494,8 @@ fn next_run(config: &Config, status: &Status) -> Option<i64> {
 fn tick(app: &AppHandle) {
     let cloud = app.state::<CloudState>();
     let config = read_config(app);
-    if !config.enabled {
+    // 没有能同步的服务时当作没开：不去试、也不通知失败（启动时 settle_switches 已把这样的开关关掉）。
+    if !config.enabled || targets(&config, |provider| has_credentials(&cloud, &config, provider)).is_empty() {
         // 关掉后重新打开时从打开那一刻算起，不补关着期间错过的。
         if cloud.snapshot().baseline != 0 {
             cloud.update(|status| status.baseline = 0);
@@ -513,6 +549,7 @@ pub struct Overview {
 pub fn cloud_overview(app: AppHandle, cloud: State<'_, CloudState>) -> Overview {
     let config = read_config(&app);
     let status = cloud.snapshot();
+    let syncable = !targets(&config, |provider| has_credentials(&cloud, &config, provider)).is_empty();
     let mut providers = BTreeMap::new();
     for provider in PROVIDERS {
         let connected = has_credentials(&cloud, &config, provider);
@@ -525,7 +562,7 @@ pub fn cloud_overview(app: AppHandle, cloud: State<'_, CloudState>) -> Overview 
         running: cloud.running.load(Ordering::SeqCst),
         syncing: cloud.syncing.lock().map(|syncing| syncing.clone()).unwrap_or_default(),
         last_success: status.last_success,
-        next_run: next_run(&config, &status),
+        next_run: next_run(&config, &status).filter(|_| syncable),
         resend_key: cloud.secrets.get(secrets::RESEND_KEY).is_some(),
     }
 }
@@ -830,6 +867,24 @@ mod tests {
         assert!(chosen_folder("/backup/../Test").is_err());
         assert_eq!(chosen_folder("Test/").unwrap(), "/Test");
         assert!(known_provider("google").is_ok() && known_provider("dropbox").is_err());
+    }
+
+    #[test]
+    fn switches_that_cannot_work_are_turned_off() {
+        // 0.8.1 升上来的设置：远程文件夹是默认的 /SideNotes（当作没选），失败通知开着却没填邮箱。
+        let legacy = Config::from_settings(&serde_json::json!({
+            "cloud": { "enabled": true, "provider": "synology", "folder": "/SideNotes", "notifications": true, "email": "" }
+        }));
+        assert_eq!(unusable_switches(&legacy, |_| true, true), (true, true));
+        // 选好了文件夹、连着，邮箱与密钥都有：照旧开着。
+        let ready = Config::from_settings(&serde_json::json!({
+            "cloud": { "enabled": true, "folders": { "synology": "/backup/Test" }, "notifications": true, "email": "a@b.com" }
+        }));
+        assert_eq!(unusable_switches(&ready, |provider| provider == "synology", true), (false, false));
+        // 服务没连上、没存 Resend 密钥。
+        assert_eq!(unusable_switches(&ready, |_| false, false), (true, true));
+        // 本来就关着的不算。
+        assert_eq!(unusable_switches(&Config::default(), |_| false, false), (false, false));
     }
 
     #[test]
