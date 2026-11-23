@@ -141,4 +141,13 @@ describe('提示条', () => {
     act(() => vi.advanceTimersByTime(3500));
     expect(texts()).toEqual([]);
   });
+
+  it('出错的提示不自动消失，点关闭才收起', () => {
+    act(() => show('没能断开', null, true));
+    act(() => show('读取失败', { label: '重试', run: () => {} }, true));
+    act(() => vi.advanceTimersByTime(60_000));
+    expect(texts()).toEqual(['没能断开', '读取失败']);
+    act(() => container.querySelector<HTMLButtonElement>('.toast [aria-label="关闭提示"]')?.click());
+    expect(texts()).toEqual(['读取失败']);
+  });
 });

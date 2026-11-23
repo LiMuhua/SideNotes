@@ -4,8 +4,9 @@
  *
  * 同步对所有连上了、选了远程文件夹的服务（第十二轮反馈：连着几个服务时一键同步，技术决策第 70 条），所以分成两段：
  * 上面是对所有服务的自动同步、失败通知，上次同步与「立即同步」；下面是服务卡片（像标签页，角上的点是连接状态，
- * 异常为红色、悬停看原因；正在同步的那家闪烁）与选中服务的账户、远程文件夹、快照份数（一行、不折行，路径放不下时末尾省略），
- * 最后是这个服务的快照列表，逐份恢复。
+ * 异常为红色、悬停看原因；正在同步的那家闪烁）与选中服务的账户、远程文件夹、快照份数（一行、不折行，路径放不下时末尾省略；
+ * 账户只显示用户名，悬停看全），最后是这个服务的快照列表，逐份恢复。快照读的时候份数写「正在读取…」，读不出来时用提示条
+ * 写明原因、可以重试，不在页面里占位置（第十三轮反馈）。
  * 群晖 NAS 在弹窗里填地址、用户名与密码后连接，证书上的名字与地址对不上时问用户是否按证书上的名字验证；
  * OneDrive 与 Google Drive 点「登录」直接在浏览器里登录，登录后自动完成（技术决策第 66 条），没跳回来时可以把授权码粘贴回来。
  * 远程文件夹按服务分别存，没有默认值：没连接时显示根目录，连上之后弹出选择框（第十二轮反馈 3）。
@@ -68,12 +69,18 @@ const PROVIDER_MARKS: Record<CloudProvider, { viewBox: string; paths: string }> 
 /** 云端快照的创建原因。 */
 const BACKUP_REASONS: Record<string, string> = { auto: '自动', manual: '手动' };
 
-/** 文字放不下、末尾省略时，悬停显示全文（账户与收件邮箱）。 */
-function titleWhenClipped(full: string): (event: ReactMouseEvent<HTMLElement>) => void {
+/** 悬停显示完整的信息：显示的是缩写（账户只显示用户名），或文字放不下、末尾省略时（收件邮箱）。 */
+function titleOnHover(shown: string, full: string): (event: ReactMouseEvent<HTMLElement>) => void {
   return (event) => {
     const node = event.currentTarget;
-    node.title = node.scrollWidth > node.clientWidth ? full : '';
+    node.title = shown !== full || node.scrollWidth > node.clientWidth ? full : '';
   };
+}
+
+/** 账户只显示用户名，邮箱取 @ 前面的部分（第十三轮反馈：给远程文件夹的路径让出地方）。 */
+function userOf(account: string): string {
+  const at = account.indexOf('@');
+  return at > 0 ? account.slice(0, at) : account;
 }
 
 function nameOf(provider: CloudProvider): string {
@@ -740,8 +747,10 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
   const confirm = useConfirm();
   const cloud = settings.cloud;
   const [overview, setOverview] = useState<CloudOverview | null>(null);
-  // 读到的快照列表：记下是哪个服务、文件夹与哪次同步之后读的，条件变了之后、新的结果回来之前不显示。
-  const [listing, setListing] = useState<{ key: string; backups: CloudBackup[]; problem: string } | null>(null);
+  // 读到的快照列表：记下是哪个服务的哪个文件夹（target）；backups 为 null 表示没读出来（原因在提示条里）。
+  const [listing, setListing] = useState<{ target: string; backups: CloudBackup[] | null } | null>(null);
+  // 点提示条上的「重试」重读快照。
+  const [listAttempt, setListAttempt] = useState(0);
   const [busy, setBusy] = useState<'backup' | 'disconnect' | null>(null);
   const [dialog, setDialog] = useState<OpenDialog | null>(null);
   const [login, setLogin] = useState<LoginState>({ waiting: false, error: '' });
@@ -773,27 +782,39 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
   // 同步发往的服务：连上了、选了远程文件夹的（同后端的 targets）。
   const targets = PROVIDERS.map(([provider]) => provider).filter((provider) => overview?.providers[provider]?.connected && cloud.folders[provider]);
 
-  // 云端快照：连上了、选了文件夹才读；换了服务、远程文件夹或又同步了一次之后重读。
-  const listKey = `${cloud.provider}|${folder}|${overview?.lastSuccess ?? 0}|${revision}`;
+  // 云端快照：连上了、选了文件夹才读；换了服务、远程文件夹，又同步了一次，或点了「重试」之后重读。
+  // 服务与文件夹都由这里带给后端：设置先在界面上生效、合并一会儿才存进后端，刚选完文件夹时后端读到的还是没选（第十三轮反馈）。
+  // 又同步了一次之后重读时先留着旧的列表；换了服务或文件夹，新的结果回来之前是 undefined（份数写「正在读取…」）。
+  // 不跟着 revision 重读：读快照时遇到登录失效，后端会广播状态，跟着重读就会一直读下去。
   const listable = connected && Boolean(folder);
-  const backups = listable && listing?.key === listKey ? listing.backups : null;
-  const listProblem = listable && listing?.key === listKey ? listing.problem : '';
+  const listTarget = `${cloud.provider}|${folder}`;
+  const backups = listable && listing?.target === listTarget ? listing.backups : undefined;
   const listProvider = cloud.provider;
+  const lastSuccess = overview?.lastSuccess ?? 0;
   useEffect(() => {
     if (!listable) return;
     let alive = true;
-    bridge.listCloudBackups(listProvider).then(
+    const target = `${listProvider}|${folder}`;
+    bridge.listCloudBackups(listProvider, folder).then(
       (list) => {
-        if (alive) setListing({ key: listKey, backups: list, problem: '' });
+        if (alive) setListing({ target, backups: list });
       },
       (problem: unknown) => {
-        if (alive) setListing({ key: listKey, backups: [], problem: bridge.errorText(problem, '读不出云端的快照') });
+        if (!alive) return;
+        // 同一个文件夹先前读到的列表留着；提示条写明原因（出错的提示要点了才关），同一时间只留一条。
+        setListing((previous) => ({ target, backups: previous?.target === target ? previous.backups : null }));
+        toast(
+          `${nameOf(listProvider)} 的云端快照读取失败：${bridge.errorText(problem)}`,
+          { label: '重试', run: () => setListAttempt((value) => value + 1) },
+          true,
+          'cloud-list',
+        );
       },
     );
     return () => {
       alive = false;
     };
-  }, [listable, listKey, listProvider]);
+  }, [listable, listProvider, folder, lastSuccess, listAttempt, toast]);
 
   const saveCloud = (patch: Partial<CloudSettings>): Promise<boolean> => save({ cloud: { ...settings.cloud, ...patch } });
   const open = (kind: OpenDialog['kind'], notice = ''): void => setDialog({ kind, notice });
@@ -931,8 +952,9 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
   };
 
   const restore = (backup: CloudBackup): void => {
-    // 快照列表是这个服务的：记下来，确认期间换了卡片也恢复这个服务的快照。
+    // 快照列表是这个服务、这个文件夹的：记下来，确认期间换了卡片也恢复这里列出的快照。
     const provider = cloud.provider;
+    const from = folder;
     const when = snapshotTime(backup.createdAt);
     confirm({
       title: '从云端恢复',
@@ -941,7 +963,7 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
       icon: 'restore',
       run: async () => {
         try {
-          const report = await bridge.cloudRestore(provider, backup.id, settings.snapshotDirectory);
+          const report = await bridge.cloudRestore(provider, from, backup.id, settings.snapshotDirectory);
           await store.reloadEverywhere();
           toast(
             report.missingAttachments
@@ -964,14 +986,19 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
         .join(' · ')
     : '';
 
+  /** 账户只显示用户名，悬停显示完整的信息（NAS 带上地址，网盘是邮箱）。 */
+  const accountText = (shown: string, full: string): ReactNode => (
+    <span className="settings-value cloud-account" data-cloud-account="" onMouseEnter={titleOnHover(shown, full)}>
+      {shown}
+    </span>
+  );
+
   const account = (): ReactNode => {
     if (cloud.provider === 'synology') {
       if (connected) {
         return (
           <>
-            <span className="settings-value cloud-account" data-cloud-account="" onMouseEnter={titleWhenClipped(`${cloud.account} · ${hostOf(cloud.endpoint)}`)}>
-              {`${cloud.account} · ${hostOf(cloud.endpoint)}`}
-            </span>
+            {accountText(cloud.account, `${cloud.account} · ${hostOf(cloud.endpoint)}`)}
             <ActionButton label="断开连接" icon="cloud-off" disabled={busy !== null} onClick={() => void disconnect()} />
           </>
         );
@@ -981,9 +1008,7 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
     if (connected) {
       return (
         <>
-          <span className="settings-value cloud-account" data-cloud-account="" onMouseEnter={titleWhenClipped(current?.account ?? '')}>
-            {current?.account}
-          </span>
+          {accountText(userOf(current?.account ?? ''), current?.account ?? '')}
           <ActionButton label="退出登录" icon="cloud-off" disabled={busy !== null} onClick={() => void disconnect()} />
         </>
       );
@@ -1013,7 +1038,7 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
           <Toggle label="同步失败时通知" checked={cloud.notifications} onChange={(enabled) => void switchNotifications(enabled)} />
           {/* 邮箱同远程文件夹：文字加图标按钮，放不下时末尾省略，被截断时悬停显示完整的邮箱。 */}
           {cloud.email ? (
-            <span className="settings-value cloud-email" data-cloud-email="" onMouseEnter={titleWhenClipped(cloud.email)}>
+            <span className="settings-value cloud-email" data-cloud-email="" onMouseEnter={titleOnHover(cloud.email, cloud.email)}>
               {cloud.email}
             </span>
           ) : null}
@@ -1048,7 +1073,6 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
           );
         })}
       </div>
-      {listProblem ? <p className="settings-notice is-error">{`云端的快照读取失败：${listProblem}`}</p> : null}
       <div className="settings-field-grid cloud-field-grid cloud-service-row">
         <DataRow title="账户">{account()}</DataRow>
         <DataRow title="远程文件夹">
@@ -1056,10 +1080,10 @@ export function CloudGroup({ settings, save }: { settings: Settings; save: SaveS
           <PathText label="远程文件夹" path={connected && folder ? folder : '/'} />
           <ActionButton label="选择远程文件夹" icon="folder" className="icon-button" disabled={!connected} onClick={() => open('folder')} />
         </DataRow>
-        {/* 快照份数跟在远程文件夹后面，写全；一行放不下时由路径让出（末尾省略，同数据目录）。 */}
-        {backups ? (
+        {/* 快照份数跟在远程文件夹后面，写全；一行放不下时由路径让出（末尾省略，同数据目录）。读的时候写「正在读取…」，读不出来时不显示。 */}
+        {listable && backups !== null ? (
           <DataRow title="快照" className="cloud-snapshot-count">
-            <span className="settings-value" data-cloud-snapshots="">{`${backups.length} 份`}</span>
+            <span className="settings-value" data-cloud-snapshots="">{backups ? `${backups.length} 份` : '正在读取…'}</span>
           </DataRow>
         ) : null}
       </div>

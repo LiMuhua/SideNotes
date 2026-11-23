@@ -302,14 +302,14 @@ export function cloudBackupNow(): Promise<CloudSyncResult[]> {
   return call<CloudSyncResult[]>('cloud_backup_now');
 }
 
-/** 列出一个服务的远程文件夹里的快照（最新的在前）。 */
-export function listCloudBackups(provider: CloudProvider): Promise<CloudBackup[]> {
-  return call<CloudBackup[]>('cloud_list_backups', { provider });
+/** 列出一个服务的远程文件夹里的快照（最新的在前）。文件夹由前端带上：刚选完文件夹时新的设置还没存进后端。 */
+export function listCloudBackups(provider: CloudProvider, folder: string): Promise<CloudBackup[]> {
+  return call<CloudBackup[]>('cloud_list_backups', { provider, folder });
 }
 
-/** 从一个服务的一份云端快照恢复记录；恢复前在本机的快照目录（空的是默认位置）建一份快照。 */
-export function cloudRestore(provider: CloudProvider, id: string, snapshotDirectory: string): Promise<RestoreReport> {
-  return call<RestoreReport>('cloud_restore', { provider, id, snapshotDirectory });
+/** 从一个服务的远程文件夹里的一份云端快照恢复记录；恢复前在本机的快照目录（空的是默认位置）建一份快照。 */
+export function cloudRestore(provider: CloudProvider, folder: string, id: string, snapshotDirectory: string): Promise<RestoreReport> {
+  return call<RestoreReport>('cloud_restore', { provider, folder, id, snapshotDirectory });
 }
 
 /** 保存 Resend 的 API 密钥（空的删除）。 */

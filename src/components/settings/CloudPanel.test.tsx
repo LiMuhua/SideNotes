@@ -197,9 +197,56 @@ describe('云端同步', () => {
     const row = query('[data-cloud-snapshots]').closest('.cloud-field-grid');
     expect(row?.textContent).toContain('远程文件夹');
     expect(query('[data-cloud-snapshots]').textContent).toBe('1 份');
-    // 列快照时指明服务，不靠后端读设置里选中的那个（刚换卡片时可能还没存好）。
-    expect(bridge.listCloudBackups).toHaveBeenCalledWith('google');
+    // 列快照时指明服务与文件夹，不靠后端读设置（刚换卡片、刚选完文件夹时可能还没存好）。
+    expect(bridge.listCloudBackups).toHaveBeenCalledWith('google', '/Test');
     expect(group.textContent).not.toContain('云端快照');
+  });
+
+  it('选完远程文件夹就按新的文件夹列快照，不报没选', async () => {
+    vi.mocked(bridge.listCloudFolders).mockResolvedValueOnce(['backup']).mockResolvedValueOnce([]);
+    vi.mocked(bridge.listCloudBackups).mockClear();
+    await render({ provider: 'synology', endpoint: 'https://nas:5006', account: 'Lemon' }, overview({ synology: true }));
+    expect(bridge.listCloudBackups).not.toHaveBeenCalled();
+    await act(async () => button('选择远程文件夹').click());
+    await act(async () => query<HTMLButtonElement>('.cloud-folder-item').click());
+    await act(async () => button('选择这里').click());
+    expect(save).toHaveBeenCalledWith({ cloud: expect.objectContaining({ folders: expect.objectContaining({ synology: '/backup' }) }) });
+    expect(bridge.listCloudBackups).toHaveBeenCalledWith('synology', '/backup');
+    expect(query('[data-cloud-snapshots]').textContent).toBe('0 份');
+    expect(toast).toHaveBeenCalledWith('之后同步到 /backup');
+    expect(toast).toHaveBeenCalledTimes(1);
+  });
+
+  it('读快照时份数写「正在读取…」；读不出来时用提示条写明原因、可以重试，不在页面里占位置', async () => {
+    let fail: (reason: Error) => void = () => {};
+    vi.mocked(bridge.listCloudBackups).mockImplementationOnce(() => new Promise((_, reject) => (fail = reject)));
+    await render({ provider: 'synology', endpoint: 'https://nas:5006', account: 'Lemon', folders: { synology: '/backup/Test', onedrive: '', google: '' } }, overview({ synology: true }));
+    expect(query('[data-cloud-snapshots]').textContent).toBe('正在读取…');
+    await act(async () => fail(new Error('连接超时')));
+    expect(document.body.querySelector('[data-cloud-snapshots]')).toBeNull();
+    expect(document.body.querySelector('.cloud-group .settings-notice')).toBeNull();
+    expect(toast).toHaveBeenCalledWith('群晖 NAS 的云端快照读取失败：连接超时', expect.objectContaining({ label: '重试' }), true, 'cloud-list');
+    const retry = toast.mock.calls[0][1] as { run: () => void };
+    vi.mocked(bridge.listCloudBackups).mockResolvedValueOnce([]);
+    await act(async () => retry.run());
+    expect(bridge.listCloudBackups).toHaveBeenLastCalledWith('synology', '/backup/Test');
+    expect(query('[data-cloud-snapshots]').textContent).toBe('0 份');
+  });
+
+  it('账户只显示用户名，悬停显示完整的信息', async () => {
+    await render({ provider: 'synology', endpoint: 'https://192.168.31.5:5006', account: 'Lemon' }, overview({ synology: true }));
+    const account = query<HTMLElement>('[data-cloud-account]');
+    expect(account.textContent).toBe('Lemon');
+    await act(async () => account.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })));
+    expect(account.title).toBe('Lemon · 192.168.31.5:5006');
+    // 网盘的账户是邮箱：只显示 @ 前面的部分（换一份状态要重新挂载，状态只在挂载与后端广播时读）。
+    act(() => root.unmount());
+    root = createRoot(container);
+    await render({ provider: 'google' }, overview({ google: true }));
+    const mail = query<HTMLElement>('[data-cloud-account]');
+    expect(mail.textContent).toBe('a');
+    await act(async () => mail.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })));
+    expect(mail.title).toBe('a@b.com');
   });
 
   it('连着几个服务时立即同步发往所有服务：选中的没连接也照样同步，提示写明同步到了哪些服务', async () => {

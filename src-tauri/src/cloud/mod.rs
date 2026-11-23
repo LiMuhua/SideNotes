@@ -280,9 +280,10 @@ fn read_config(app: &AppHandle) -> Config {
     Config::from_settings(&state.store.settings().unwrap_or_default())
 }
 
-/// 这个服务的远程文件夹。没有选（或选的是根目录）时报错，不往根目录里写。
-fn folder_for(config: &Config, provider: &str) -> Result<String, RemoteError> {
-    let folder = config.folders.get(provider).map(String::as_str).unwrap_or_default();
+/// 前端指明的远程文件夹：没有选（或选的是根目录）时报错，不往根目录里写。
+/// 列快照与恢复都由前端带上文件夹，不读设置：设置页先显示新的设置、合并一会儿才存进后端，刚选完文件夹就去列快照时，
+/// 读到的还是没选的旧设置（第十三轮反馈：选完文件夹立刻报「还没有选远程文件夹」）。
+fn chosen_folder(folder: &str) -> Result<String, RemoteError> {
     let folder = remote::normalize_folder(folder).map_err(RemoteError::Config)?;
     if folder == "/" {
         return Err(RemoteError::Config("还没有选远程文件夹".into()));
@@ -714,14 +715,14 @@ pub async fn cloud_backup_now(app: AppHandle) -> AppResult<Vec<SyncResult>> {
     blocking(move || run_backup(&app, "手动")).await?.map_err(other)
 }
 
-/// 列出一个服务的远程文件夹里的快照（最新的在前）。
+/// 列出一个服务的远程文件夹（`folder`，见 chosen_folder）里的快照（最新的在前）。
 #[tauri::command]
-pub async fn cloud_list_backups(app: AppHandle, provider: String) -> AppResult<Vec<CloudBackup>> {
+pub async fn cloud_list_backups(app: AppHandle, provider: String, folder: String) -> AppResult<Vec<CloudBackup>> {
     let result = blocking(move || -> Result<Vec<CloudBackup>, RemoteError> {
         let cloud = app.state::<CloudState>();
         let config = read_config(&app);
         known_provider(&provider)?;
-        let folder = folder_for(&config, &provider)?;
+        let folder = chosen_folder(&folder)?;
         let connection = connect_to(&cloud, &config, &provider)?;
         let backups = job::read_index(connection.remote(), &folder);
         connection.persist(&cloud);
@@ -737,9 +738,9 @@ pub async fn cloud_list_backups(app: AppHandle, provider: String) -> AppResult<V
     result.map_err(|error| other(error.to_string()))
 }
 
-/// 从一个服务的一份云端快照恢复记录：恢复前在本机快照目录（`snapshot_directory`，空的是默认位置）建一份快照，各窗口需要重新读库。
+/// 从一个服务的远程文件夹（`folder`，同列快照）里的一份云端快照恢复记录：恢复前在本机快照目录（`snapshot_directory`，空的是默认位置）建一份快照，各窗口需要重新读库。
 #[tauri::command]
-pub async fn cloud_restore(app: AppHandle, provider: String, id: String, snapshot_directory: String) -> AppResult<RestoreReport> {
+pub async fn cloud_restore(app: AppHandle, provider: String, folder: String, id: String, snapshot_directory: String) -> AppResult<RestoreReport> {
     let result = blocking(move || -> Result<RestoreReport, RemoteError> {
         let cloud = app.state::<CloudState>();
         if cloud.running.swap(true, Ordering::SeqCst) {
@@ -748,7 +749,7 @@ pub async fn cloud_restore(app: AppHandle, provider: String, id: String, snapsho
         let outcome = (|| {
             let config = read_config(&app);
             known_provider(&provider)?;
-            let folder = folder_for(&config, &provider)?;
+            let folder = chosen_folder(&folder)?;
             let connection = connect_to(&cloud, &config, &provider)?;
             let state = app.state::<AppState>();
             let root = snapshot_root(&state, &snapshot_directory);
@@ -824,12 +825,10 @@ mod tests {
 
     #[test]
     fn the_remote_folder_must_be_chosen_and_not_the_root() {
-        let config = |folder: &str| Config { folders: BTreeMap::from([("onedrive".to_string(), folder.to_string())]), ..Config::default() };
-        assert_eq!(folder_for(&config("/"), "onedrive"), Err(RemoteError::Config("还没有选远程文件夹".into())));
-        assert!(folder_for(&config(""), "onedrive").is_err());
-        // 按指明的服务取：别的服务的文件夹不算。
-        assert!(folder_for(&config("/Test"), "google").is_err());
-        assert_eq!(folder_for(&config("Test"), "onedrive").unwrap(), "/Test");
+        assert_eq!(chosen_folder("/"), Err(RemoteError::Config("还没有选远程文件夹".into())));
+        assert!(chosen_folder("").is_err());
+        assert!(chosen_folder("/backup/../Test").is_err());
+        assert_eq!(chosen_folder("Test/").unwrap(), "/Test");
         assert!(known_provider("google").is_ok() && known_provider("dropbox").is_err());
     }
 

@@ -163,6 +163,7 @@ export function ConfirmDialog({ title, description, confirmLabel = '确认', onC
 
 /**
  * 一条提示：停留 6 秒，带操作的 9 秒；指针停在提示条上或焦点在提示条内时暂停计时，离开后接着计时（至少再停 1 秒）。
+ * 出错的提示不自动消失，点关闭（或点它的操作）才收起，免得没看到原因就没了（第十三轮反馈）。
  */
 function Toast({ item, onDismiss }: { item: ToastItem; onDismiss: (id: string) => void }) {
   const node = useRef<HTMLDivElement>(null);
@@ -172,14 +173,16 @@ function Toast({ item, onDismiss }: { item: ToastItem; onDismiss: (id: string) =
 
   const resume = useCallback(() => {
     window.clearTimeout(timer.current);
+    if (item.error) return;
     started.current = Date.now();
     timer.current = window.setTimeout(() => onDismiss(item.id), remaining.current);
-  }, [item.id, onDismiss]);
+  }, [item.id, item.error, onDismiss]);
 
   const pause = useCallback(() => {
     window.clearTimeout(timer.current);
+    if (item.error) return;
     remaining.current = Math.max(1000, remaining.current - (Date.now() - started.current));
-  }, []);
+  }, [item.error]);
 
   useEffect(() => {
     resume();
