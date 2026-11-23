@@ -1,0 +1,123 @@
+# 推送版本标签（如 v0.8.2）时在 Windows 上构建 x64 安装程序，发布为 GitHub Release 的正式版。
+# 官网的下载按钮链接 releases/latest/download/<文件名>，所以安装程序去掉文件名里的版本号，最新一版永远是同一个地址：
+#   https://github.com/LiMuhua/SideNotes/releases/latest/download/SideNotes_x64-setup.exe（NSIS 安装程序）
+#   https://github.com/LiMuhua/SideNotes/releases/latest/download/SideNotes_x64_en-US.msi（MSI，安装界面是英文）
+# 在 Actions 页手动运行时只构建，安装程序存为这次运行的产物，不发布：用来在打标签前试跑、下载安装包自测。
+# 发布只由推送标签触发；发布这一步失败时，在原来那次运行上「重新运行失败的作业」即可，不必删掉标签重推。
+name: 发布应用
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+# 默认只读；只有发布作业申请写 contents（创建 Release、上传安装程序）。
+permissions:
+  contents: read
+
+# 同一个标签同一时间只运行一次，后来的排队，不中途取消正在发布的那次；
+# 排到时这个标签已有 Release，发布这一步报错退出，同一个版本不会发两遍。
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # 构建与发布分成两个作业：构建要运行依赖包的安装与编译脚本，只给只读权限；能写仓库的发布作业不运行项目里的代码。
+  build:
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.info.outputs.version }}
+      notes: ${{ steps.info.outputs.notes }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # 构建不推送代码，令牌不留在工作区里。
+          persist-credentials: false
+
+      # package.json 没有写 packageManager 与 engines，Node 与 pnpm 取本机开发环境的版本：
+      # pnpm 11 要求 Node 22 以上，锁文件里 jsdom 等依赖要求 22.22.2 以上，22 的最新版都满足。
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # 标签与五处版本号一致才往下走（五处见脚本开头），同时取出这一版的更新日志作为 Release 的正文。
+      # 放在安装依赖之前，版本号不对时尽早失败。
+      - name: 核对版本号
+        id: info
+        env:
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: node .github/scripts/release-info.mjs "$env:TAG"
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.14.0
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      # .cargo/config.toml 把 crates.io 换成中科大的镜像，是给国内的开发机用的；GitHub 的运行器在海外，直接用官方源。
+      # 只删运行器上的这份副本。要在 Rust 缓存之前删：缓存的键会算上这个文件。
+      - name: 改用官方 crates.io
+        run: Remove-Item .cargo/config.toml
+
+      # 运行器自带 rustup，更新到最新的 stable 并设为默认即可。要在 Rust 缓存之前：缓存的键里有编译器的版本。
+      - name: 安装 Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+
+      # 只缓存依赖的编译结果。标签上的运行只读得到 master 与同一个标签存下的缓存，在 master 上手动运行一次可以给之后的发布预热。
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: 'src-tauri -> target'
+
+      # 用锁文件里的 Tauri CLI 构建（tauri-action 内部调用的也是它），按 tauri.conf.json 打出 NSIS 与 MSI 两种安装程序。
+      # OAuth 客户端从仓库里的 src-tauri/oauth-clients.json 编进程序（见 build.rs），不需要密钥。
+      - name: 构建
+        run: pnpm tauri build
+
+      # Tauri 打出的文件名带版本号（如 SideNotes_0.8.2_x64-setup.exe），去掉版本号，官网的地址才不随版本变。
+      # 应用没有启用自动更新（没有 tauri-plugin-updater 与 createUpdaterArtifacts），不生成 latest.json 与签名，改名不影响更新。
+      - name: 改成固定文件名
+        env:
+          VERSION: ${{ steps.info.outputs.version }}
+        run: |
+          $bundle = 'src-tauri/target/release/bundle'
+          New-Item -ItemType Directory -Force release | Out-Null
+          Copy-Item "$bundle/nsis/SideNotes_${env:VERSION}_x64-setup.exe" release/SideNotes_x64-setup.exe
+          Copy-Item "$bundle/msi/SideNotes_${env:VERSION}_x64_en-US.msi" release/SideNotes_x64_en-US.msi
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: SideNotes-${{ steps.info.outputs.version }}-windows-x64
+          path: release/
+          if-no-files-found: error
+
+  release:
+    # 只有推送标签才发布；手动运行到构建为止。
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: SideNotes-${{ needs.build.outputs.version }}-windows-x64
+          path: release
+
+      # gh 先建草稿，传完全部安装程序再公开，中途失败就删掉草稿：官网的地址不会指到缺文件的 Release。
+      # 这个标签已有 Release 时报错退出，不重复发布。不加 --draft、--prerelease 就是正式版，--latest 让 releases/latest 指向它。
+      - name: 发布
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.build.outputs.version }}
+          NOTES: ${{ needs.build.outputs.notes }}
+        run: |
+          gh release create "$TAG" release/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --latest \
+            --title "SideNotes $VERSION" \
+            --notes "$NOTES"
