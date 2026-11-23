@@ -241,8 +241,9 @@
   /* ---------- 4. 下载 ---------- */
   const downloads = document.querySelectorAll('[data-download]');
   if (downloads.length) {
-    // 按钮在网页里直接链接最新发布版的安装程序（固定文件名，见 .github/workflows/release.yml），不靠脚本也能下载。
-    // 这里只查一下最新发布版：还没有发布版时改指向发布页，免得点出 404；有就写出版本号。
+    // 网页里的链接先指向最新发布版的页面，不靠脚本、查不到接口时也不会点出 404。这里查一下最新发布版：
+    // 里面有链接写明的那个文件（data-download，固定文件名见 .github/workflows/release.yml）就改成直接下载，
+    // 并写出版本号；没有这个文件就打开这个发布版的页面；还没有发布版时打开发布列表。
     // GitHub 接口匿名访问每小时 60 次：结果（包括「还没有发布版」）在本机记一小时，翻页、重开不再重复查询。
     const CACHE_KEY = 'sidenotes-site:release';
     const CACHE_MS = 60 * 60 * 1000;
@@ -252,16 +253,10 @@
         downloads.forEach((link) => (link.href = RELEASES));
         return;
       }
-      // 发布版里没有按钮链接的那个文件（例如改过名）时，退回最像安装程序的文件，再不行就打开这个发布版的页面。
       const assets = Array.isArray(release.assets) ? release.assets : [];
       downloads.forEach((link) => {
-        const file = decodeURIComponent(new URL(link.href).pathname.split('/').pop());
-        if (assets.some((asset) => asset.name === file)) return;
-        const installer =
-          assets.find((asset) => /setup\.exe$/i.test(asset.name)) ??
-          assets.find((asset) => /\.exe$/i.test(asset.name)) ??
-          assets.find((asset) => /\.msi$/i.test(asset.name));
-        link.href = installer ? installer.browser_download_url : release.html_url || RELEASES;
+        const asset = assets.find((item) => item.name === link.dataset.download);
+        link.href = asset ? asset.browser_download_url : release.html_url || RELEASES;
       });
       const version = String(release.tag_name ?? '').replace(/^v/i, '');
       if (version) {

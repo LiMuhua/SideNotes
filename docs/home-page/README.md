@@ -39,7 +39,7 @@ python -I docs/home-page/tools/serve.py
 - 英文主页要保留这几项，检查程序据此判断：标题与 h1 里的应用名 SideNotes、功能说明、「How SideNotes uses Google user data」一节（含申请的权限 `drive.file`）、指向 `privacy.html` 的链接。
 - 隐私政策照应用实际的数据处理写。云端同步的权限、存储方式或第三方服务变了，中英文隐私政策与主页的 Google 用户数据一节一起改，并更新生效日期。
 - 中英文两套页面一起改。页面不从别的网站加载脚本、样式与字体，访客打开网站时不向第三方发请求；唯一的例外是下载按钮用 GitHub 的接口查询最新发布版。
-- 下载按钮直接链接 `https://github.com/LiMuhua/SideNotes/releases/latest/download/SideNotes_x64-setup.exe`，文件名来自发布流水线（`.github/workflows/release.yml`，技术决策第 75 条），两边一起改。还没有发布版时，脚本把按钮改指向发布页。
+- 下载链接在网页里先指向最新发布版的页面（`releases/latest`），`data-download` 写着要下载的文件；脚本查到发布版里有这个文件时改成直接下载。文件名来自发布流水线（`.github/workflows/release.yml`，技术决策第 75 条），两边一起改。
 - 改完运行检查：
 
 ```powershell
