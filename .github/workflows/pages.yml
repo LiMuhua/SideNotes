@@ -32,6 +32,18 @@ jobs:
       # 检查 Google 品牌验证依赖的内容（验证标记、应用名、隐私政策链接、Google 用户数据的说明）与本地引用，不通过就不发布。
       - name: 检查网站
         run: node docs/home-page/tools/check.mjs
+      # 网站不跟应用的版本号走，用构建来认：把这次运行的编号、提交与构建时间写进 site.js 的占位，
+      # 访客打开浏览器的控制台就看得到线上是哪一次构建（site.js 第 5 段）。找不到占位就失败，免得悄悄少了这一行。
+      - name: 写入构建信息
+        if: github.event_name != 'pull_request'
+        env:
+          RUN: ${{ github.run_number }}
+          SHA: ${{ github.sha }}
+        run: |
+          file=docs/home-page/public/assets/site.js
+          grep -q "__SITE_BUILD__" "$file" || { echo "::error::site.js 里找不到构建信息的占位"; exit 1; }
+          sed -i "s/__SITE_BUILD__/${RUN}/; s/__SITE_COMMIT__/${SHA:0:7}/; s/__SITE_BUILT_AT__/$(date -u +%Y-%m-%dT%H:%M:%SZ)/" "$file"
+          grep -n "const build = " "$file"
       - if: github.event_name != 'pull_request'
         uses: actions/configure-pages@v5
       - if: github.event_name != 'pull_request'

@@ -90,6 +90,8 @@ python -I docs/home-page/tools/social.py
 
 `.github/workflows/pages.yml` 在推送 `claude` 或 `master` 且改到 `docs/home-page/public/` 或检查脚本时，先运行 `check.mjs`，通过后把 `public/` 发布到 GitHub Pages；拉取请求只检查不发布，也可以在 Actions 页手动运行。仓库的 Pages 来源是 GitHub Actions，`github-pages` 环境只允许 `claude` 与 `master` 发布。
 
+网站不跟应用的版本号走，用构建来认：发布时流水线把这次运行的编号、提交与构建时间写进 `site.js` 的占位，打开浏览器的控制台会看到一行「SideNotes 官网 构建 #编号（提交 abc1234），构建于 2026-11-23 13:16:20 UTC+8」；本地预览没经过流水线，打的是「本地预览」。
+
 应用的安装程序由另一条流水线 `.github/workflows/release.yml` 发布：推送版本标签（如 `v0.8.2`）时构建，发布到 GitHub Releases，下载按钮链接的就是它。
 
 ## 设计

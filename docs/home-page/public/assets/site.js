@@ -1,4 +1,4 @@
-/* global document, window, matchMedia, fetch, setTimeout, clearTimeout, requestAnimationFrame, performance, URL, localStorage */
+/* global document, window, matchMedia, fetch, setTimeout, clearTimeout, requestAnimationFrame, performance, URL, localStorage, console */
 /**
  * SideNotes 官网的交互。全部是锦上添花：没有脚本时内容完整，首屏的出场动画也由 CSS 播放。
  *
@@ -7,6 +7,7 @@
  * 2. 便签的眼睛跟着指针看。
  * 3. 主题：选主题与明暗，原来的侧栏滑回，换上新主题再滑出；桌面跟着明暗换成白天或夜里。
  * 4. 下载：按钮直接链接最新发布版的安装程序；查到还没有发布版时改指向发布页，有发布版时写出版本号。
+ * 5. 构建信息：在浏览器的控制台里打出这一次构建的编号、提交与时间。
  */
 (() => {
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -302,5 +303,24 @@
           // 查不到时保留网页里写的链接。
         });
     }
+  }
+
+  /* ---------- 5. 构建信息 ---------- */
+  // 网站不跟应用的版本号走，用构建来认：发布网站的流水线（.github/workflows/pages.yml）把这次运行的编号、提交与
+  // 构建时间写进下面三个占位，这里在控制台打一行，看得出线上是哪一次构建。本地预览没经过流水线，占位原样留着。
+  const build = { number: '__SITE_BUILD__', commit: '__SITE_COMMIT__', builtAt: '__SITE_BUILT_AT__' };
+  const zh = document.documentElement.lang.startsWith('zh');
+  const badge = 'background:#232a6e;color:#ffe170;font-weight:700;padding:2px 6px;border-radius:4px';
+  if (build.number.startsWith('__')) {
+    console.info(`%cSideNotes%c ${zh ? '官网：本地预览，没有经过发布流水线' : 'website: local preview, not built by the pipeline'}`, badge, '');
+  } else {
+    // 按访客所在的时区写成「2026-11-23 13:14:32 UTC+8」，中英文同一个格式。
+    const at = new Date(build.builtAt);
+    const pad = (n) => String(n).padStart(2, '0');
+    const offset = -at.getTimezoneOffset();
+    const zone = `UTC${offset < 0 ? '-' : '+'}${Math.floor(Math.abs(offset) / 60)}${Math.abs(offset) % 60 ? `:${pad(Math.abs(offset) % 60)}` : ''}`;
+    const time = `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())} ${pad(at.getHours())}:${pad(at.getMinutes())}:${pad(at.getSeconds())} ${zone}`;
+    const text = zh ? `官网 构建 #${build.number}（提交 ${build.commit}），构建于 ${time}` : `website build #${build.number} (commit ${build.commit}), built ${time}`;
+    console.info(`%cSideNotes%c ${text}`, badge, '');
   }
 })();
